@@ -1,1436 +1,656 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Central de Auditoria | Ticket Manager & IA</title>
-<!-- Bibliotecas para Excel (.xlsx) e Gráficos Interativos (Chart.js) -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auditoria de Chamados · Ticket Manager</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 <style>
-:root{--navy:#142943;--blue:#2563eb;--bg:#f3f6fb;--line:#e2e8f0;--muted:#64748b;--ink:#17243a;--success:#16a34a;--danger:#dc2626;--priority-bg:#fef3c7;--priority-text:#b45309;--priority-border:#fde68a;--ai-bg:#f0f7ff;--ai-border:#bfdbfe}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 Segoe UI,Arial,sans-serif}
-.top{height:68px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px}
-.brand{font-size:18px;font-weight:750}.brand span{background:#2f6ce5;padding:9px 11px;border-radius:10px;margin-right:10px}
-.status{font-size:12px;color:#dbeafe}
-.btn{border:0;border-radius:9px;padding:10px 14px;font-weight:650;cursor:pointer}
-.primary{background:var(--blue);color:#fff}.secondary{background:#edf2f8;color:var(--ink);border:1px solid var(--line)}
-.ai-btn{background:linear-gradient(135deg, #1d4ed8, #2563eb);color:#fff;border:0;padding:10px 16px;border-radius:9px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
-.ai-btn:hover{opacity:0.95}
-.layout{display:grid;grid-template-columns:230px 1fr;min-height:calc(100vh - 68px)}
-aside{background:white;border-right:1px solid var(--line);padding:20px 12px}
-.nav{display:block;width:100%;text-align:left;border:0;background:transparent;padding:12px;border-radius:9px;color:#526178;margin:3px 0;cursor:pointer}
-.nav.active,.nav:hover{background:#eaf1ff;color:#1749ad}
-main{padding:26px;min-width:0}
-.head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px}
-.eyebrow{font-size:11px;letter-spacing:1.4px;color:var(--blue);font-weight:700}.head h1{font-size:27px;margin:4px 0}
-.muted{color:var(--muted)}
-.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
-.charts-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:20px}
-.metric,.panel,.chart-card{background:white;border:1px solid var(--line);border-radius:14px;box-shadow:0 6px 22px #1429430b}
-.chart-card{padding:18px}
-.chart-card h3{margin:0 0 14px 0;font-size:14px;color:var(--navy)}
-.metric{padding:17px}.metric label{color:var(--muted);font-size:12px}.value{font-size:28px;font-weight:800;margin:12px 0 4px}
-.panel{overflow:hidden;margin-bottom:18px}
-.panelhead{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-.panelhead h2{font-size:15px;margin:0}
-.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.field{padding:10px;border:1px solid #d6dfeb;border-radius:9px;background:#fff;min-width:130px}
-.search{min-width:230px}
-.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
-th{background:#f8fafd;color:#66758b;text-transform:uppercase;font-size:10px;letter-spacing:.5px;text-align:left}
-th,td{padding:12px 14px;border-bottom:1px solid #edf1f6;max-width:380px;overflow:hidden;text-overflow:ellipsis}
-tr:hover td{background:#f8fbff}
-.pill{display:inline-flex;align-items:center;gap:4px;background:#edf2f8;color:#4b5b72;padding:4px 8px;border-radius:20px;font-size:10px;font-weight:600}
-.pill.priority{background:var(--priority-bg);color:var(--priority-text);border:1px solid var(--priority-border)}
-.pill.bad{background:#fee2e2;color:#991b1b}
-.pill.warn{background:#fef3c7;color:#92400e}
-.pill.good{background:#dcfce7;color:#166534}
-.empty{padding:28px;text-align:center;color:var(--muted)}
-.notice{padding:12px;border-radius:9px;margin-bottom:14px;display:none;white-space:pre-wrap}
-.hidden{display:none!important}
-label{display:block;font-size:12px;font-weight:650;margin:13px 0 6px}
-input, textarea, select{width:100%;padding:10px;border:1px solid #d6dfeb;border-radius:9px;font-family:inherit}
-.form-group{margin-bottom:16px;max-width:600px}
-.foot{font-size:11px;color:#8793a5;padding:6px 0 20px}
-.priority-tag-list{display:flex;flex-wrap:wrap;gap:6px;padding:12px 18px;background:#fff8f0;border-bottom:1px solid var(--line)}
-.priority-tag{background:#fff;border:1px solid var(--priority-border);color:var(--priority-text);padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600}
-
-.report-card{padding:20px;border-bottom:1px solid var(--line)}
-.report-card h3{margin:0 0 10px;font-size:15px;color:var(--navy)}
-
-.ticket-btn {
-  background: transparent;
-  border: 0;
-  color: var(--blue);
-  font-weight: 700;
-  cursor: pointer;
-  padding: 0;
-  font-size: inherit;
-  text-decoration: underline;
-}
-.ticket-btn:hover { color: #1d4ed8; }
-
-.date-filter-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #f8fafc;
-  padding: 8px 14px;
-  border-radius: 9px;
-  border: 1px solid #d6dfeb;
-  flex-wrap: wrap;
-}
-.date-filter-group label { margin: 0; font-size: 12px; color: var(--muted); font-weight: 600; }
-.date-filter-group input, .date-filter-group select { padding: 6px 10px; width: auto; font-size: 12px; }
-
-.ai-alert-item { background: #fff; border-left: 4px solid #f59e0b; padding: 10px 14px; margin-bottom: 8px; border-radius: 6px; }
-.ai-alert-item.danger { border-left-color: #ef4444; }
-.ai-alert-item.info { border-left-color: #3b82f6; }
-
-.pivot-controls {
-  display: flex;
-  gap: 12px;
-  background: #f8fafc;
-  padding: 16px;
-  border-bottom: 1px solid var(--line);
-  flex-wrap: wrap;
-  align-items: center;
-}
-.pivot-controls div { flex: 1; min-width: 180px; }
-
-.ai-query-box {
-  background: linear-gradient(135deg, #eff6ff, #f0f9ff);
-  border: 1px solid var(--ai-border);
-  border-radius: 14px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-.ai-query-box h2 {
-  margin: 0 0 8px 0;
-  font-size: 16px;
-  color: #1e40af;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ai-input-group {
-  display: flex;
-  gap: 10px;
-  margin-top: 12px;
-}
-.ai-input-group input {
-  flex: 1;
-  font-size: 14px;
-  border: 1px solid #93c5fd;
-}
-
-@media print {
-  body { background: white; }
-  .top, aside, .tools, .foot, .date-filter-group, .ai-btn, .ai-query-box { display: none !important; }
-  .layout { display: block; }
-  main { padding: 0; }
-  .panel { border: none; box-shadow: none; }
-}
-
-@media(max-width:950px){.grid, .charts-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:700px){.layout{display:block}aside{display:flex;overflow:auto;padding:8px;border-right:0;border-bottom:1px solid var(--line)}.nav{width:auto;white-space:nowrap}main{padding:14px}.head{display:block}.head .tools{margin-top:12px}.grid,.charts-grid{gap:8px}.metric{padding:12px}.value{font-size:23px}.search{min-width:100%;}.top{padding:0 14px}}
-</style></head>
+:root{--navy:#0f172a;--blue:#2563eb;--bg:#f8fafc;--line:#e2e8f0;--muted:#64748b;--ink:#1e293b;--ok:#16a34a;--bad:#dc2626}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:var(--navy);color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+header b{font-size:17px}#status{font-size:12px;color:#94a3b8}
+nav{display:flex;gap:4px;padding:0 24px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{border:0;background:none;padding:12px 14px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+nav button.on{color:var(--blue);border-color:var(--blue)}
+main{padding:20px 24px;max-width:1400px;margin:auto}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+h3{margin:0 0 12px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:150px}
+.fg label{font-size:11px;font-weight:700;color:var(--muted)}
+input,select{padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fff}
+button.b{background:var(--blue);color:#fff;border:0;padding:9px 14px;border-radius:8px;font-weight:600;cursor:pointer}
+button.g{background:var(--ok)}button.s{background:#e2e8f0;color:var(--ink)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.kpis .card{margin:0}.kpis small{color:var(--muted);font-weight:600}.kpis div b{display:block;font-size:26px;color:var(--navy)}
+.tw{overflow-x:auto;max-height:560px}
+table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+th{position:sticky;top:0;background:#f1f5f9;color:var(--muted);text-align:left;padding:10px 12px;font-size:12px}
+td{padding:9px 12px;border-bottom:1px solid var(--line)}
+.pill{padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#f1f5f9}
+.pill.ok{background:#dcfce7;color:#166534}.pill.bad{background:#fee2e2;color:#991b1b}.pill.warn{background:#fef3c7;color:#92400e}
+.bar{display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:12px}
+.bar i{flex:1;height:10px;background:#e2e8f0;border-radius:5px;overflow:hidden}.bar u{display:block;height:100%;background:var(--blue)}
+.zone{border:2px dashed var(--blue);border-radius:10px;padding:18px;text-align:center;background:#eff6ff;cursor:pointer;font-weight:600;color:var(--blue)}
+#log{margin-top:10px;font-weight:600}.err{color:var(--bad)}.okc{color:var(--ok)}
+pre{background:#1e293b;color:#7dd3fc;padding:14px;border-radius:8px;max-height:380px;overflow:auto;font-size:12px}
+.hide{display:none!important}
+@media print{header,nav,.filters,.noprint,#rules{display:none!important}main{padding:0}}
+</style>
+</head>
 <body>
-<header class="top"><div class="brand"><span>✓</span>Central de Auditoria <span style="background:none;font-weight:400;color:#c4d3e9;padding:0">/ Ticket Manager & IA</span></div><div><span class="status" id="status">Sistema Local Ativo</span></div></header>
-
-<div id="appView" class="layout"><aside>
-  <button class="nav active" data-page="overview">▦ Visão geral</button>
-  <button class="nav" data-page="aiAssistant">👤 Consulta com IA (Empresas/Pessoas)</button>
-  <button class="nav" data-page="capacityAudit">⏱ Auditoria de Jornada & Ocupação (8h)</button>
-  <button class="nav" data-page="projectAudit">🚀 Auditoria Detalhada de Projetos</button>
-  <button class="nav" data-page="pivotTable">📊 Tabela Dinâmica</button>
-  <button class="nav" data-page="tickets">☷ Fila de chamados</button>
-  <button class="nav" data-page="people">◷ Horas por colaborador</button>
-  <button class="nav" data-page="priority">★ Clientes Prioritários</button>
-  <button class="nav" data-page="executiveReport">📋 Relatório Executivo (Diretoria)</button>
-  <button class="nav" data-page="crossAudit">🔍 Auditoria Cruzada (Fila & Riscos)</button>
-  <button class="nav" data-page="settings">⚙ Gerenciar Dados</button>
-  <button class="nav" data-page="guide">ⓘ Indicadores</button>
-</aside>
-<main><div class="head"><div><div class="eyebrow">QUALIDADE • OPERAÇÃO</div><h1 id="title">Visão geral</h1><div class="muted" id="subtitle">Acompanhe a fila e identifique onde concentrar a auditoria.</div></div><div class="tools"><button id="refresh" class="btn secondary">↻ Atualizar</button><button id="export" class="btn primary">Exportar CSV</button></div></div><div id="appNotice" class="notice"></div>
-
-<!-- BARRA DE FILTROS GLOBAIS DE DATA, SETOR E COLABORADOR -->
-<div class="date-filter-group" style="margin-bottom: 20px; background: white; padding: 12px 18px; border-radius: 12px;">
-  <label>🗓 Data Início:</label>
-  <input type="date" id="globalStartDate">
-  
-  <label>🗓 Data Fim:</label>
-  <input type="date" id="globalEndDate">
-  
-  <span style="color:#cbd5e1; margin:0 4px">|</span>
-
-  <label>🏢 Setor:</label>
-  <select id="globalSectorFilter">
-    <option value="todos">Todos os Setores</option>
-    <option value="operacao">⚙️ Operação & Suporte Técnico</option>
-    <option value="comercial">🎯 Comercial & Vendas</option>
-    <option value="financeiro">💰 Financeiro & Cobrança</option>
-    <option value="projetos">🚀 Implantação & Projetos</option>
-  </select>
-
-  <span style="color:#cbd5e1; margin:0 4px">|</span>
-
-  <label>👤 Colaborador:</label>
-  <select id="globalColabFilter">
-    <option value="todos">Todos os Colaboradores</option>
-  </select>
-
-  <button id="btnApplyGlobalFilters" class="btn primary" style="padding: 6px 14px;">Filtrar Dados</button>
-  <button id="btnResetGlobalFilters" class="btn secondary" style="padding: 6px 14px;">Limpar Filtros</button>
-</div>
-
-<!-- VISÃO GERAL -->
-<section id="overviewPage">
-<div class="grid">
-  <div class="metric"><label>Chamados pendentes</label><div id="pendingN" class="value">0</div><small>Exclui status de encerramento reconhecidos</small></div>
-  <div class="metric"><label>Com 7+ dias</label><div id="oldN" class="value">0</div><small>Desde a criação do chamado</small></div>
-  <div class="metric"><label>Sem horas apontadas</label><div id="noHoursN" class="value">0</div><small>Precisam de conferência</small></div>
-  <div class="metric"><label>Horas nos pendentes</label><div id="hoursN" class="value">0 h</div><small>Tempo acumulado</small></div>
-</div>
-
-<div class="charts-grid">
-  <div class="chart-card">
-    <h3>📊 Horas Apontadas por Responsável</h3>
-    <canvas id="chartHoursAgent" height="220"></canvas>
+<header><b>Auditoria de Chamados · Ticket Manager</b><span id="status">Aguardando dados</span></header>
+<nav id="tabs">
+  <button data-t="load" class="on">Carregar dados</button>
+  <button data-t="mgmt">Gestão</button>
+  <button data-t="vip">Clientes VIP</button>
+  <button data-t="overview">Visão geral</button>
+  <button data-t="charts">Gráficos</button>
+  <button data-t="entries">Lançamentos</button>
+  <button data-t="people">Colaboradores</button>
+  <button data-t="pivot">Tabela dinâmica</button>
+  <button data-t="proj">Projetos (meta/dia)</button>
+  <button data-t="budget">Carga do projeto</button>
+  <button data-t="occ">Horas apontadas</button>
+  <button data-t="diag">Diagnóstico</button>
+</nav>
+<main>
+  <div id="t-load">
+    <div class="card">
+      <h3>API Movidesk</h3>
+      <div class="row">
+        <div class="fg" style="flex:1;min-width:240px"><label>Domínio</label><input id="domain" placeholder="https://suaempresa.movidesk.com"></div>
+        <div class="fg" style="flex:1;min-width:240px"><label>Token da API</label><input id="token" type="password"></div>
+        <div class="fg"><label>Início</label><input type="date" id="startDate"></div>
+        <div class="fg"><label>Fim</label><input type="date" id="endDate"></div>
+        <div class="fg"><label>ID do campo "horas previstas" (opcional)</label><input id="cfId" placeholder="ex.: 12345"></div>
+        <button class="b g" onclick="sync()">Sincronizar</button>
+      </div>
+      <div id="log"></div>
+      <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. O token fica salvo apenas neste navegador.</p>
+    </div>
+    <div class="card">
+      <h3>Ou importe o CSV "Tempo trabalhado nos tickets"</h3>
+      <div class="zone" onclick="csvFile.click()">Clique para escolher o arquivo CSV</div>
+      <input type="file" id="csvFile" accept=".csv,.txt" class="hide" onchange="loadCSV(event)">
+    </div>
   </div>
-  <div class="chart-card">
-    <h3>📌 Distribuição de Chamados por Status</h3>
-    <canvas id="chartStatus" height="220"></canvas>
-  </div>
-</div>
 
-<div class="panel">
-  <div class="panelhead"><div><h2>Chamados prioritários e mais antigos</h2><small>Atenção especial para a lista dos 10 clientes prioritários.</small></div><button class="btn secondary" data-goto="tickets">Ver fila completa →</button></div>
-  <div class="tablewrap"><table><thead><tr><th>Chamado</th><th>Cliente</th><th>Status</th><th>Responsável</th><th>Horas</th><th>Idade</th><th>Atualização</th></tr></thead><tbody id="topRows"></tbody></table></div>
-  <div id="topEmpty" class="empty hidden">Nenhum chamado disponível.</div>
-</div>
-</section>
-
-<!-- AUDITORIA DE JORNADA E CAPACIDADE (8H DIÁRIAS) -->
-<section id="capacityAuditPage" class="hidden">
-  <div class="panel">
-    <div class="panelhead">
-      <div>
-        <h2>Auditoria de Carga Horária & Ocupação Trabalhista (8 Horas/Dia)</h2>
-        <small>Comparação minuciosa entre apontamentos reais e a jornada de <b>09:00 às 18:00 (8h líquidas)</b> para todos os setores.</small>
+  <div id="app" class="hide">
+    <div class="card filters">
+      <div class="row" id="filters">
+        <div class="fg"><label>Início</label><input type="date" id="fStart" onchange="applyFilters()"></div>
+        <div class="fg"><label>Fim</label><input type="date" id="fEnd" onchange="applyFilters()"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="s" onclick="resetFilters()">Limpar filtros</button>
+        <button class="g b" onclick="exportXLSX()">Excel da aba</button>
+        <button class="b" style="background:var(--bad)" onclick="exportPDF()">PDF da aba</button>
+        <button class="s" onclick="print()">Imprimir</button>
       </div>
     </div>
-    
-    <div class="grid" style="padding:18px; margin:0">
-      <div class="metric"><label>COLABORADORES AUDITADOS</label><div id="capColabCount" class="value">0</div></div>
-      <div class="metric"><label>DIAS COM APONTAMENTO EM FALTA</label><div id="capUnderDays" class="value">0</div><small>< 8.0 horas no dia</small></div>
-      <div class="metric"><label>TOTAL DE HORAS NÃO REGISTADAS</label><div id="capMissingHours" class="value">0 h</div><small>Diferença de jornada</small></div>
-      <div class="metric"><label>TAXA MÉDIA DE ADERÊNCIA</label><div id="capAvgAdherence" class="value">0%</div></div>
+    <div class="card hide" id="rules"><div class="row">
+      <div class="fg"><label>Meta diária por projeto (h)</label><input id="rMeta" type="number" step="0.5" value="4" onchange="rulesChanged()"></div>
+      <div class="fg"><label>Jornada diária (h)</label><input id="rJor" type="number" step="0.5" value="8" onchange="rulesChanged()"></div>
+      <div class="fg"><label>Mínimo de horas apontadas (%)</label><input id="rMin" type="number" value="80" onchange="rulesChanged()"></div>
+      <div class="fg"><label>Projeto identificado por</label><select id="rFld" onchange="rulesChanged()"><option value="service_name">Serviço</option><option value="category">Categoria</option><option value="sector">Equipe</option><option value="subject">Assunto</option><option value="activity">Atividade</option><option value="client_name">Cliente</option></select></div>
+      <div class="fg"><label>Contém o texto</label><input id="rKw" value="projeto" onchange="rulesChanged()"></div>
+      <div class="fg"><label>Carnaval e Corpus Christi como feriado</label><select id="rFac" onchange="rulesChanged()"><option value="0">Não</option><option value="1">Sim</option></select></div>
+      <div class="fg" style="flex:1;min-width:220px"><label>Feriados extras (dd/mm/aaaa, separados por vírgula)</label><input id="rHol" onchange="rulesChanged()"></div>
+      <div class="fg" style="flex:1;min-width:220px"><label>Ou números de tickets (separados por vírgula)</label><input id="rIds" onchange="rulesChanged()"></div>
+    </div></div>
+    <div class="kpis">
+      <div class="card"><small>Tickets</small><div><b id="kT">0</b></div></div>
+      <div class="card"><small>Horas apontadas</small><div><b id="kH">0</b></div></div>
+      <div class="card"><small>Colaboradores</small><div><b id="kA">0</b></div></div>
+      <div class="card"><small>Clientes</small><div><b id="kC">0</b></div></div>
     </div>
 
-    <div class="tablewrap">
-      <table id="tableCapacityAudit">
-        <thead>
-          <tr>
-            <th>Colaborador</th>
-            <th>Data da Jornada</th>
-            <th>Carga Contratual</th>
-            <th>Horas Apontadas</th>
-            <th>Diferença / Faltante</th>
-            <th>Percentual Aderência</th>
-            <th>Status da Jornada</th>
-            <th>Sugestão de Atividades Não Registadas (Escopo)</th>
-          </tr>
-        </thead>
-        <tbody id="capacityAuditRows"></tbody>
-      </table>
-    </div>
+    <div id="t-mgmt" class="hide"><div class="card"><h3>Relatório de gestão</h3><p id="mgInfo" style="margin:0 0 12px"></p><div class="kpis" id="mgKpi" style="margin:0"></div></div>
+      <div class="card"><h3>Empresas que mais consomem tempo</h3><div id="mgBars" style="margin-bottom:12px"></div><div class="tw"><table><thead><tr><th>Empresa</th><th>Horas</th><th>% do total</th><th>Chamados</th><th>Colaboradores</th><th>Em dias não úteis</th></tr></thead><tbody id="tMgCli"></tbody></table></div></div>
+      <div class="card"><h3>Chamados mais impactantes</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Empresa</th><th>Horas</th><th>% do total</th><th>Apontamentos</th><th>Colaboradores</th><th>Dias</th><th>Em dias não úteis</th><th>Status</th></tr></thead><tbody id="tMgTk"></tbody></table></div></div>
+      <div class="card"><h3>Colaboradores mais sobrecarregados</h3><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Horas apontadas</th><th>Capacidade</th><th>% da capacidade</th><th>Média por dia útil</th><th>Em dias não úteis</th><th>Situação</th></tr></thead><tbody id="tMgAg"></tbody></table></div></div></div>
+    <div id="t-vip" class="hide"><div class="card"><h3>Clientes VIP</h3>
+      <div class="fg"><label>Lista de clientes VIP (um por linha; basta uma parte do nome)</label><textarea id="vipList" rows="6" placeholder="Cole aqui os nomes dos clientes VIP" style="padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit" onchange="vipChanged()"></textarea></div>
+      <p id="vipInfo" style="margin:10px 0"></p><div class="kpis" id="vipKpi" style="margin:0"></div></div>
+      <div class="card"><h3>VIPs que mais consomem a carga</h3><div class="tw"><table><thead><tr><th>Cliente VIP</th><th>Horas</th><th>% do total</th><th>% da capacidade da equipe</th><th>Chamados</th><th>Colaboradores</th><th>Quem mais atende</th><th>Em dias não úteis</th></tr></thead><tbody id="tVip"></tbody></table></div></div>
+      <div class="card"><h3>Clientes não VIP que mais consomem (comparação)</h3><div class="tw"><table><thead><tr><th>Cliente</th><th>Horas</th><th>% do total</th><th>Chamados</th></tr></thead><tbody id="tVipOut"></tbody></table></div></div></div>
+    <div id="t-overview" class="hide"><div class="card"><h3>Horas por colaborador</h3><div id="bars"></div><canvas id="chart" height="90"></canvas></div></div>
+    <div id="t-entries" class="hide"><div class="card"><h3>Lançamentos de tempo</h3><div class="tw"><table>
+      <thead><tr><th>Ticket</th><th>Data</th><th>Cliente</th><th>Assunto</th><th>Colaborador</th><th>Equipe</th><th>Atividade</th><th>Status</th><th>Horas</th></tr></thead><tbody id="tEntries"></tbody></table></div><p id="cap" style="color:var(--muted)"></p></div></div>
+    <div id="t-people" class="hide"><div class="card"><h3>Desempenho e jornada de 8h por dia</h3><div class="tw"><table>
+      <thead><tr><th>Colaborador</th><th>Equipe</th><th>Lançamentos</th><th>Tickets</th><th>Clientes</th><th>Dias</th><th>Horas</th><th>Média/dia</th><th>Meta 8h</th></tr></thead><tbody id="tPeople"></tbody></table></div></div></div>
+    <div id="t-pivot" class="hide"><div class="card"><h3>Tabela dinâmica</h3>
+      <div class="row"><div class="fg"><label>Linhas</label><select id="pvRow" onchange="renderPivot()"></select></div>
+      <div class="fg"><label>Colunas</label><select id="pvCol" onchange="renderPivot()"></select></div>
+      <div class="fg"><label>Valor</label><select id="pvVal" onchange="renderPivot()"><option value="h">Horas</option><option value="n">Lançamentos</option><option value="t">Chamados distintos</option><option value="a">Colaboradores distintos</option></select></div></div>
+      <div class="tw" style="margin-top:12px"><table id="pvTable"></table></div><p id="pvNote" style="color:var(--muted)"></p></div></div>
+    <div id="t-charts" class="hide"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px">
+      <div class="card" style="grid-column:1/-1"><h3>Evolução diária de horas × capacidade</h3><canvas id="chDay" height="80"></canvas></div>
+      <div class="card"><h3>Horas por semana e equipe</h3><canvas id="chWeek"></canvas></div>
+      <div class="card"><h3>Empresas que mais consomem (laranja = VIP)</h3><canvas id="chCli"></canvas></div>
+      <div class="card"><h3>Colaboradores: horas × capacidade</h3><canvas id="chAg"></canvas></div>
+      <div class="card"><h3>Distribuição por atividade</h3><canvas id="chAct"></canvas></div></div></div>
+    <div id="t-proj" class="hide"><div class="card"><h3>Projetos: horas por dia × meta</h3><p style="color:var(--muted);margin:0 0 10px">Soma de todos os colaboradores no projeto, dia a dia, dentro do período filtrado. Tolerância de 15 min em torno da meta.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Dias</th><th>Total</th><th>Média/dia</th><th>Abaixo da meta</th><th>Na meta</th><th>Estourou</th></tr></thead><tbody id="tProj"></tbody></table></div></div>
+      <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Data</th><th>Quem trabalhou</th><th>Horas</th><th>Diferença</th><th>Situação</th></tr></thead><tbody id="tProjDay"></tbody></table></div></div></div>
+    <div id="t-budget" class="hide"><div class="card"><h3>Carga do projeto: previsto × trabalhado</h3><p style="color:var(--muted);margin:0 0 10px">Soma todo o histórico de apontamentos dos tickets carregados, sem filtro de período. Digite as horas previstas de cada projeto (ficam salvas neste navegador) ou informe o ID do campo personalizado ao sincronizar.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Previsto (h)</th><th>Trabalhado</th><th>% da carga</th><th>Saldo</th><th>Situação</th><th>Início</th><th>Último apontamento</th><th>Duração (dias)</th><th>Dias trabalhados</th></tr></thead><tbody id="tBudget"></tbody></table></div></div></div>
+    <div id="t-occ" class="hide"><div class="card"><h3>Horas apontadas por colaborador</h3><p id="occInfo" style="color:var(--muted);margin:0 0 10px"></p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Dias com apontamento</th><th>Horas apontadas</th><th>Em dias não úteis</th><th>Capacidade</th><th>% apontado</th><th>Situação</th></tr></thead><tbody id="tOcc"></tbody></table></div></div>
+      <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Horas</th><th>% da jornada</th><th>Situação</th></tr></thead><tbody id="tOccDay"></tbody></table></div></div></div>
+    <div id="t-diag" class="hide"><div class="card"><h3>Diagnóstico da extração</h3><div id="diagSummary"></div><pre id="rawJson">Sem dados.</pre></div></div>
   </div>
-</section>
-
-<!-- AUDITORIA DE PROJETOS E DIÁRIA -->
-<section id="projectAuditPage" class="hidden">
-  <div class="panel">
-    <div class="panelhead">
-      <div>
-        <h2>Análise Minuciosa de Chamados de Projetos & Apontamentos Diários</h2>
-        <small>Validação do limite de <b>4h/dia para Projetos</b> e estouro da <b>Estimativa/Cronograma do Projeto</b>.</small>
-      </div>
-    </div>
-    
-    <div class="grid" style="padding:18px; margin:0">
-      <div class="metric"><label>CHAMADOS DE PROJETOS</label><div id="projCount" class="value">0</div></div>
-      <div class="metric"><label>PROJETOS COM ESTOURO DE CRONOGRAMA</label><div id="projOverBudget" class="value">0</div><small>> Estimativa cadastrada</small></div>
-      <div class="metric"><label>APONTAMENTOS > 4H/DIA EM PROJETO</label><div id="projDailyExceeded" class="value">0</div><small>Dias que excederam 4h</small></div>
-      <div class="metric"><label>HORAS TOTAIS EM PROJETOS</label><div id="projTotalHours" class="value">0 h</div></div>
-    </div>
-
-    <div class="tablewrap">
-      <table id="tableProjectAudit">
-        <thead>
-          <tr>
-            <th>Chamado</th>
-            <th>Cliente / Demanda</th>
-            <th>Tipo</th>
-            <th>Responsável</th>
-            <th>Data Apont.</th>
-            <th>Horas do Dia</th>
-            <th>Limite Diário Proj. (4h)</th>
-            <th>Estimativa Total Projeto</th>
-            <th>Horas Acumuladas Proj.</th>
-            <th>Status Cronograma</th>
-          </tr>
-        </thead>
-        <tbody id="projectAuditRows"></tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<!-- MÓDULO IA DE CONSULTA POR EMPRESA OU COLABORADOR -->
-<section id="aiAssistantPage" class="hidden">
-  <div class="ai-query-box">
-    <h2>👤 Assistente Virtual Ticket Manager</h2>
-    <p class="muted" style="margin:0">Digite o nome de uma empresa (cliente) ou de um colaborador para consultar em tempo real todos os chamados de projetos, tempo trabalhado e tempo prometido/estimado.</p>
-    
-    <div class="ai-input-group">
-      <input type="text" id="aiQueryInput" placeholder="Ex: 40 Arquem, Dr Óculos, Lux, Felipe Cavassin, Davi Vinicius...">
-      <button id="btnSearchAI" class="ai-btn">🔍 Consultar IA</button>
-    </div>
-  </div>
-
-  <div id="aiQueryResult" class="panel hidden">
-    <div class="panelhead">
-      <div>
-        <h2 id="aiQueryTitle">Resultados da Leitura em Tempo Real</h2>
-        <small id="aiQuerySubtitle"></small>
-      </div>
-    </div>
-
-    <div class="grid" style="padding:18px 18px 0 18px; margin:0">
-      <div class="metric"><label>TOTAL DE CHAMADOS</label><div id="aiMetricTickets" class="value">0</div></div>
-      <div class="metric"><label>TEMPO TRABALHADO (HORAS)</label><div id="aiMetricWorked" class="value">0 h</div></div>
-      <div class="metric"><label>TEMPO PROMETIDO / ESTIMADO</label><div id="aiMetricPromised" class="value">0 h</div></div>
-      <div class="metric"><label>TAXA DE EXECUÇÃO / DESVIO</label><div id="aiMetricRatio" class="value">0%</div></div>
-    </div>
-
-    <div id="aiQueryAlerts" style="padding:18px"></div>
-
-    <div class="tablewrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Ticket</th>
-            <th>Cliente / Projeto</th>
-            <th>Assunto</th>
-            <th>Responsável</th>
-            <th>Status</th>
-            <th>Tempo Trabalhado</th>
-            <th>Tempo Prometido</th>
-            <th>Desvio</th>
-          </tr>
-        </thead>
-        <tbody id="aiQueryRows"></tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<!-- TABELA DINÂMICA (PIVOT TABLE) -->
-<section id="pivotTablePage" class="hidden">
-  <div class="panel">
-    <div class="panelhead">
-      <div><h2>Tabela Dinâmica de Análise Operacional</h2><small>Cruze dimensões, filtre métricas e agregue dados dinamicamente.</small></div>
-    </div>
-    <div class="pivot-controls">
-      <div>
-        <label>Agrupar Linhas por:</label>
-        <select id="pivotRowField" class="field">
-          <option value="client_name">Cliente</option>
-          <option value="owner_name">Responsável / Agente</option>
-          <option value="status">Status</option>
-          <option value="risk">Nível de Risco</option>
-        </select>
-      </div>
-      <div>
-        <label>Métrica de Agregação:</label>
-        <select id="pivotValueField" class="field">
-          <option value="total_hours_sum">Soma de Horas Apontadas</option>
-          <option value="total_hours_avg">Média de Horas por Chamado</option>
-          <option value="ticket_count">Contagem de Chamados</option>
-        </select>
-      </div>
-      <div style="display:flex; align-items:flex-end;">
-        <button id="btnGeneratePivot" class="btn primary" style="width:100%">Gerar Tabela Dinâmica</button>
-      </div>
-    </div>
-    <div class="tablewrap">
-      <table id="pivotResultTable">
-        <thead>
-          <tr id="pivotHeadRow"><th>Linha / Agrupamento</th><th>Métrica Calculada</th><th>% do Total</th></tr>
-        </thead>
-        <tbody id="pivotBodyRows"></tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<!-- TICKETS -->
-<section id="ticketsPage" class="hidden">
-<div class="panel">
-  <div class="panelhead">
-    <div><h2>Fila de auditoria</h2><small id="ticketCount"></small></div>
-    <div class="tools">
-      <input class="field search" id="search" placeholder="Buscar ID, assunto, cliente, responsável">
-      
-      <select class="field" id="clientFilter">
-        <option value="all">Todos os clientes</option>
-        <option value="priority">★ Somente Prioritários (10)</option>
-        <option value="other">Demais clientes</option>
-      </select>
-      <select class="field" id="hoursFilter">
-        <option value="all">Todas as horas</option>
-        <option value="none">Sem apontamentos</option>
-        <option value="with">Com apontamentos</option>
-      </select>
-    </div>
-  </div>
-  <div class="tablewrap"><table id="tableTickets"><thead><tr><th>ID</th><th>Assunto</th><th>Cliente</th><th>Status</th><th>Prioridade</th><th>Responsável</th><th>Horas</th><th>Idade (dias)</th><th>Sem Atualizar (dias)</th><th>Sincronizado / Data</th></tr></thead><tbody id="ticketRows"></tbody></table></div>
-  <div id="ticketEmpty" class="empty hidden">Nenhum resultado para os filtros selecionados.</div>
-</div>
-</section>
-
-<!-- HORAS POR COLABORADOR -->
-<section id="peoplePage" class="hidden">
-<div class="panel">
-  <div class="panelhead">
-    <div>
-      <h2>Horas e Alocação por Colaborador</h2>
-      <small>Jornada base de <b>09:00 às 18:00 (8h/dia)</b>. Limite em Projetos: <b>Máximo de 4h/dia por colaborador</b>.</small>
-    </div>
-  </div>
-  <div class="tablewrap">
-    <table id="tablePeople">
-      <thead>
-        <tr>
-          <th>Colaborador</th>
-          <th>Chamados Total</th>
-          <th>Chamados em Projetos</th>
-          <th>Horas em Projetos (Max 4h/dia)</th>
-          <th>Horas em Suporte/Op.</th>
-          <th>Horas Total Apontadas</th>
-          <th>Jornada Contratual</th>
-          <th>Status da Alocação</th>
-        </tr>
-      </thead>
-      <tbody id="peopleRows"></tbody>
-    </table>
-  </div>
-  <div id="peopleEmpty" class="empty hidden">Nenhum apontamento de colaborador encontrado.</div>
-</div>
-</section>
-
-<!-- RELATÓRIO CLIENTES PRIORITÁRIOS -->
-<section id="priorityPage" class="hidden">
-  <div class="panel">
-    <div class="panelhead">
-      <div><h2>Relatório dos 10 Clientes Prioritários</h2><small>Indicadores focados nos clientes monitorados.</small></div>
-    </div>
-    <div class="priority-tag-list">
-      <span class="priority-tag">Dr Óculos</span>
-      <span class="priority-tag">Ferri</span>
-      <span class="priority-tag">Instituto</span>
-      <span class="priority-tag">Paulo e Condah</span>
-      <span class="priority-tag">Atacadão do Óculos</span>
-      <span class="priority-tag">IMV</span>
-      <span class="priority-tag">Paschoal LAB</span>
-      <span class="priority-tag">Cardeal</span>
-      <span class="priority-tag">Sr dos Óculos</span>
-      <span class="priority-tag">Lux</span>
-    </div>
-    <div class="grid" style="padding:18px;margin:0">
-      <div class="metric"><label>Pendentes Prioritários</label><div id="pPendingN" class="value">0</div></div>
-      <div class="metric"><label>Com 7+ dias</label><div id="pOldN" class="value">0</div></div>
-      <div class="metric"><label>Sem atualização recente</label><div id="pStaleN" class="value">0</div></div>
-      <div class="metric"><label>Horas acumuladas</label><div id="pHoursN" class="value">0 h</div></div>
-    </div>
-    <div class="tablewrap">
-      <table>
-        <thead><tr><th>Cliente Prioritário</th><th>Pendentes</th><th>Com 7+ dias</th><th>Sem atualização</th><th>Horas Apontadas</th></tr></thead>
-        <tbody id="priorityClientRows"></tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<!-- RELATÓRIO EXECUTIVO -->
-<section id="executiveReportPage" class="hidden">
-  <div class="panel">
-    <div class="panelhead">
-      <div>
-        <h2>Relatório de Auditoria Operacional (Parecer Executivo)</h2>
-        <small>Estrutura oficial consolidada com filtro de período, nicho/setor e diagnóstico do Ticket Manager.</small>
-      </div>
-      <div class="tools">
-        <button id="btnRunAI" class="ai-btn">👤 Gerar Diagnóstico do Ticket Manager</button>
-        <button class="btn primary" onclick="window.print()">🖨 Imprimir / Salvar PDF</button>
-      </div>
-    </div>
-
-    <div id="aiAnalysisResult" class="report-card hidden" style="background:#f0fdf4; border-bottom: 2px solid #22c55e;">
-      <h3 style="color:#15803d; display:flex; align-items:center; gap:8px;">
-        👤 Diagnóstico de Gargalos & Recomendações do Ticket Manager
-      </h3>
-      <div id="aiContent"></div>
-    </div>
-
-    <div class="report-card">
-      <h3>Sumário Executivo & Diagnóstico Global</h3>
-      <p id="execSummaryText">No período selecionado, a auditoria registrou o volume total de horas aplicadas e acompanhamento dos chamados operacionais.</p>
-      <div class="grid" style="margin-top:14px">
-        <div class="metric"><label id="kpiLabel1">TOTAL HORAS AUDITADAS</label><div id="execTotalHours" class="value">0,00 h</div></div>
-        <div class="metric"><label id="kpiLabel2">TICKETS TRABALHADOS</label><div id="execTotalTickets" class="value">0</div></div>
-        <div class="metric"><label id="kpiLabel3">TAXA DE FECHAMENTO</label><div id="execClosureRate" class="value">0.0%</div></div>
-        <div class="metric"><label id="kpiLabel4">CONCENTRAÇÃO MAIOR CLIENTE</label><div id="execMaxClientConc" class="value">0.0%</div></div>
-      </div>
-    </div>
-
-    <div class="report-card">
-      <h3>1. Desempenho e Produtividade Real por Agente / Responsável</h3>
-      <div class="tablewrap">
-        <table>
-          <thead><tr><th>Agente / Responsável</th><th>Setor Predominante</th><th>Horas Total</th><th>% Alocação</th><th>Apontamentos</th><th>Média h/Reg.</th><th>Tickets</th></tr></thead>
-          <tbody id="execAgentRows"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="report-card">
-      <h3>2. Detalhamento dos Serviços e Categorias por Status</h3>
-      <div class="tablewrap">
-        <table>
-          <thead><tr><th>Categoria / Status do Chamado</th><th>Horas Consumidas</th><th>% do Total</th><th>Natureza Predominante</th></tr></thead>
-          <tbody id="execServiceRows"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="report-card">
-      <h3>3. Auditoria de Chamados Críticos do Setor</h3>
-      <div class="tablewrap">
-        <table>
-          <thead><tr><th>Ticket</th><th>Cliente / Demandante</th><th>Descrição do Projeto / Demanda</th><th>Horas</th><th>Status</th></tr></thead>
-          <tbody id="execCriticalRows"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="report-card">
-      <h3>4. Plano de Ação & Recomendações à Diretoria</h3>
-      <ol id="execActionPlan" style="line-height:1.8;padding-left:20px;color:var(--ink)"></ol>
-    </div>
-  </div>
-</section>
-
-<!-- AUDITORIA CRUZADA -->
-<section id="crossAuditPage" class="hidden">
-  <div class="panel">
-    <div class="panelhead">
-      <div><h2>Matriz de Auditoria Cruzada & Fila de Riscos</h2><small>Cruzamento de apontamentos, idade, horas e nível de risco por chamado.</small></div>
-    </div>
-    <div class="tablewrap">
-      <table id="tableCrossAudit">
-        <thead><tr><th>Número</th><th>Cliente</th><th>Assunto</th><th>Dias Aberto</th><th>Status</th><th>Responsável</th><th>Horas Apontadas</th><th>Horas Trabalhadas</th><th>Risco</th><th>Ação Recomendada</th></tr></thead>
-        <tbody id="crossAuditRows"></tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<!-- GERENCIAR DADOS -->
-<section id="settingsPage" class="hidden">
-  <div class="panel" style="padding:24px">
-    <h2>Gerenciador de Dados e Links</h2>
-    <p class="muted">Configure a URL do seu Movidesk e gerencie a base de dados do sistema.</p>
-    
-    <div id="settingsNotice" class="notice"></div>
-
-    <div class="form-group">
-      <label for="movideskDomain">Domínio / URL do seu Movidesk</label>
-      <input type="text" id="movideskDomain" placeholder="https://suaempresa.movidesk.com">
-      <small>Exemplo: https://minhaempresa.movidesk.com</small>
-    </div>
-
-    <div style="display:flex;gap:10px;margin-bottom:24px">
-      <button id="btnSaveDomain" class="btn primary">Salvar Domínio</button>
-    </div>
-
-    <hr style="border:0;border-top:1px solid var(--line);margin:20px 0">
-
-    <div class="form-group">
-      <label for="fileInput">Importar Arquivo Excel (.xlsx / .xls) ou CSV</label>
-      <input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .json">
-      <small>Aceita arquivos gerados do Movidesk ou relatórios em Excel.</small>
-    </div>
-
-    <div style="display:flex;gap:10px;margin-top:20px">
-      <button id="btnResetData" class="btn secondary">Restaurar Dados Reais da Auditoria</button>
-    </div>
-  </div>
-</section>
-
-<section id="guidePage" class="hidden"><div class="panel" style="padding:20px;line-height:1.8"><h2>Como interpretar os indicadores</h2><p><b>Pendentes:</b> exclui chamados com status reconhecidos como encerrados.</p></div></section>
-
-<div class="foot">Central de Auditoria • Guardiões do Bravo • Atualizado em <span id="lastRefresh">—</span></div></main></div>
+</main>
 
 <script>
-(() => {
-const PRIORITY_CLIENTS = [
-  "dr óculos", "dr oculos", "ferri", "instituto", "paulo e condah", "paulo & condah",
-  "atacadão do óculos", "atacadao do oculos", "imv", "paschoal lab", "cardeal", "sr dos óculos", "lux"
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const FIELDS=[['owner_name','Colaborador'],['sector','Equipe'],['activity','Atividade'],['service_name','Serviço'],['category','Categoria'],['status','Status'],['client_name','Cliente']];
+let raw=[],rows=[],chart=null,firstTicket=null;
+
+/* ---------- utilidades ---------- */
+// Pessoas no Movidesk usam "businessName" (não "name"). Esse era o motivo dos agentes virem vazios.
+function nm(p){
+  if(!p) return '';
+  if(typeof p==='string') return p.trim();
+  return String(p.businessName||p.name||p.fullName||p.userName||p.email||'').trim();
+}
+function lbl(x){return x&&typeof x==='object'?String(x.name||x.description||x.businessName||'').trim():String(x||'').trim()}
+function hrs(v){
+  if(v==null||v==='') return 0;
+  if(typeof v==='number') return v;
+  const p=String(v).split(':').map(Number);
+  if(p.length>1&&p.every(n=>!isNaN(n))) return p[0]+(p[1]||0)/60+(p[2]||0)/3600;
+  return parseFloat(v)||0;
+}
+const fmtDate=d=>d?d.split('-').reverse().join('/'):'—';
+const csvDate=d=>{const p=String(d||'').split('/');return p.length===3?`${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`:d||''};
+const log=(m,c)=>{$('log').className=c||'';$('log').textContent=m};
+const ticketUrl=id=>{const d=(localStorage.getItem('md_domain')||'').replace(/\/+$/,'');return d?`${d}/Ticket/Edit/${id}`:''};
+
+/* ---------- API Movidesk ---------- */
+const EXPANDS=[
+  'owner,clients($expand=organization),actions($select=id,createdDate,createdBy,timeAppointments;$expand=createdBy($select=id,businessName),timeAppointments)',
+  'owner,clients($expand=organization),actions($expand=createdBy,timeAppointments)',
+  'owner,clients,actions($expand=createdBy,timeAppointments)',
+  'owner,clients,actions'
 ];
+const SELECT='id,createdDate,lastUpdate,subject,category,status,serviceFirstLevel,ownerTeam,owner,clients,actions';
+let stats={},CF='';
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function build(all){stats={tk:all.length,ac:0,ap:0,tw:0};raw=all.flatMap(flatten)}
 
-const REAL_AUDIT_TICKETS = [
-  { 
-    ticket_id: "77901", client_name: "40 ARQUEM SISTEMAS E EQUIPAMENTOS DE INFORMÁTICA LTDA", subject: "RB - MELHORIA AUDITORIA DE TURNO", owner_name: "Produção - CPO", status: "Fila", sector: "operacao", 
-    total_hours: 0.0, promised_hours: 10.0, hours_worked: 0.0, age_days: 413, days_since_update: 15, synced_at: "2026-10-28", risk: "Alto", action: "Verificar histórico; solicitar responsável.",
-    appointments: [{ date: "2026-10-28", hours: 0.0 }]
-  },
-  { 
-    ticket_id: "96081", client_name: "40 ARQUEM SISTEMAS E EQUIPAMENTOS DE INFORMÁTICA LTDA", subject: "RB - NOVOS RECURSOS REFORMA TRIBUTÁRIA", owner_name: "Inteligência", status: "Fila", sector: "projetos", 
-    total_hours: 0.0, promised_hours: 15.0, hours_worked: 0.0, age_days: 94, days_since_update: 12, synced_at: "2026-10-25", risk: "Alto", action: "Verificar histórico; solicitar responsável.",
-    appointments: [{ date: "2026-10-25", hours: 0.0 }]
-  },
-  { 
-    ticket_id: "97012", client_name: "1684 DR. OCULOS", subject: "RB - ACORDO EM RECEBIMENTO DE VENDAS", owner_name: "Produção - CPO", status: "Fila", sector: "financeiro", 
-    total_hours: 0.68, promised_hours: 2.0, hours_worked: 0.68, age_days: 80, days_since_update: 8, synced_at: "2026-10-22", risk: "Alto", action: "CLIENTE PRIORITÁRIO — Cobrar justificativa.",
-    appointments: [{ date: "2026-10-22", hours: 0.68 }]
-  },
-  { 
-    ticket_id: "97233", client_name: "001 EPS - EMBRAPOL,246 DIGITOP", subject: "ACOLAB - Fase 2 Reforma Tributária - Antecipação", owner_name: "Guilherme Gustavo Bonato", status: "Fila", sector: "projetos", 
-    total_hours: 16.78, promised_hours: 12.0, hours_worked: 16.78, age_days: 77, days_since_update: 10, synced_at: "2026-10-20", risk: "Alto", action: "ESTOURO DE CRONOGRAMA — Reavaliar escopo.",
-    appointments: [
-      { date: "2026-10-18", hours: 5.5 }, 
-      { date: "2026-10-19", hours: 6.28 }, 
-      { date: "2026-10-20", hours: 5.0 }   
-    ]
-  },
-  { 
-    ticket_id: "97610", client_name: "40 ARQUEM SISTEMAS E EQUIPAMENTOS DE INFORMÁTICA LTDA", subject: "ACO - RECURSOS REFORMA TRIBUTÁRIA", owner_name: "Guilherme Gustavo Bonato", status: "Fila", sector: "projetos", 
-    total_hours: 4.52, promised_hours: 6.0, hours_worked: 4.52, age_days: 71, days_since_update: 9, synced_at: "2026-10-21", risk: "Alto", action: "Dentro da estimativa total.",
-    appointments: [{ date: "2026-10-21", hours: 4.52 }]
-  },
-  { 
-    ticket_id: "97702", client_name: "1272 INSTITUTO + VISAO - Matriz LJ 01", subject: "IMPLANTAÇÃO PAGAMENTOS MAIS VISÃO: 716", owner_name: "Guilherme Gustavo Bonato", status: "Fila", sector: "projetos", 
-    total_hours: 7.88, promised_hours: 8.0, hours_worked: 7.88, age_days: 70, days_since_update: 7, synced_at: "2026-10-23", risk: "Alto", action: "Próximo do limite do projeto.",
-    appointments: [
-      { date: "2026-10-22", hours: 3.8 },
-      { date: "2026-10-23", hours: 4.08 }
-    ]
-  },
-  { 
-    ticket_id: "98533", client_name: "40 ARQUEM SISTEMAS E EQUIPAMENTOS DE INFORMÁTICA LTDA", subject: "Projeto RBIA", owner_name: "Cassiano Zanona", status: "Em Execução", sector: "projetos", 
-    total_hours: 0.50, promised_hours: 5.0, hours_worked: 0.50, age_days: 57, days_since_update: 3, synced_at: "2026-10-27", risk: "Atenção", action: "Dentro do cronograma.",
-    appointments: [{ date: "2026-10-27", hours: 0.5 }]
-  },
-  { 
-    ticket_id: "99332", client_name: "40 ARQUEM SISTEMAS E EQUIPAMENTOS DE INFORMÁTICA LTDA", subject: "IA BENTO COBRANCAS - Boleto API", owner_name: "Lucas Matheus", status: "Em Execução", sector: "financeiro", 
-    total_hours: 1.43, promised_hours: 4.0, hours_worked: 1.43, age_days: 42, days_since_update: 2, synced_at: "2026-10-28", risk: "Atenção", action: "Acompanhar.",
-    appointments: [{ date: "2026-10-28", hours: 1.43 }]
-  },
-  { 
-    ticket_id: "99940", client_name: "3028 OTICA LUX LTDA loja 01", subject: "Trava para que desvinculo seja feito uma única vez", owner_name: "Guilherme Gustavo Bonato", status: "Em Execução", sector: "operacao", 
-    total_hours: 6.98, promised_hours: 8.0, hours_worked: 6.98, age_days: 31, days_since_update: 1, synced_at: "2026-10-29", risk: "Alto", action: "CLIENTE PRIORITÁRIO.",
-    appointments: [{ date: "2026-10-29", hours: 6.98 }]
-  },
-  { 
-    ticket_id: "100951", client_name: "3028 OTICA LUX LTDA loja 01", subject: "RB - MELHORIA - CLASSIFICAR TITULOS", owner_name: "Davi Vinicius", status: "Liberar Atualização", sector: "comercial", 
-    total_hours: 2.87, promised_hours: 3.0, hours_worked: 2.87, age_days: 14, days_since_update: 2, synced_at: "2026-10-28", risk: "Acompanhar", action: "Liberar atualização.",
-    appointments: [{ date: "2026-10-28", hours: 2.87 }]
-  },
-  { 
-    ticket_id: "101191", client_name: "40 ARQUEM SISTEMAS E EQUIPAMENTOS DE INFORMÁTICA LTDA", subject: "Projeto RBIA - Integração API", owner_name: "Felipe Cavassin", status: "Em Execução", sector: "projetos", 
-    total_hours: 26.78, promised_hours: 20.0, hours_worked: 26.78, age_days: 8, days_since_update: 0, synced_at: "2026-10-29", risk: "Atenção", action: "ESTOURO DE CRONOGRAMA (+6.78h)",
-    appointments: [
-      { date: "2026-10-26", hours: 4.0 },
-      { date: "2026-10-27", hours: 4.0 },
-      { date: "2026-10-28", hours: 6.78 },
-      { date: "2026-10-29", hours: 12.0 }
-    ]
-  }
-];
-
-function isPriorityClient(clientName) {
-  if(!clientName) return false;
-  const name = String(clientName).toLowerCase();
-  return PRIORITY_CLIENTS.some(p => name.includes(p));
-}
-
-const $=id=>document.getElementById(id); 
-let rawTickets = [], filteredTickets = [], people = [], page = "overview";
-let chartAgentInstance = null, chartStatusInstance = null;
-
-const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const num=v=>Number(v||0).toLocaleString("pt-BR");
-const hours=v=>Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
-const date=v=>v?(!Number.isNaN(new Date(v).getTime())?new Date(v).toLocaleDateString("pt-BR"):"—"):"—";
-
-window.openMovidesk = function(rawTicketId) {
-  let domain = localStorage.getItem("movidesk_domain") || "";
-  if (!domain) {
-    alert("Por favor, configure o Domínio do seu Movidesk na aba '⚙ Gerenciar Dados'.");
-    switchPage("settings");
-    return;
-  }
-  if (!/^https?:\/\//i.test(domain)) domain = "https://" + domain;
-  domain = domain.replace(/\/+$/, '');
-  
-  const cleanId = String(rawTicketId || "").replace(/[^0-9]/g, '');
-  if (!cleanId) return alert("Número de ticket inválido.");
-  window.open(`${domain}/Ticket/Edit?id=${cleanId}`, "_blank");
-};
-
-function populateColabDropdown() {
-  const colabs = [...new Set(rawTickets.map(t => t.owner_name || "Não identificado"))].sort();
-  const select = $("globalColabFilter");
-  select.innerHTML = '<option value="todos">Todos os Colaboradores</option>';
-  colabs.forEach(c => {
-    const opt = document.createElement("option");
-    opt.value = c;
-    opt.textContent = c;
-    select.appendChild(opt);
-  });
-}
-
-function applyGlobalFilters() {
-  const sDate = $("globalStartDate").value;
-  const eDate = $("globalEndDate").value;
-  const sector = $("globalSectorFilter").value;
-  const colab = $("globalColabFilter").value;
-
-  filteredTickets = rawTickets.filter(t => {
-    // Filtro de Setor
-    if (sector !== "todos" && t.sector && t.sector.toLowerCase() !== sector.toLowerCase()) {
-      return false;
+async function sync(){
+  let dom=$('domain').value.trim().replace(/\/+$/,''),tok=$('token').value.trim(),ini=$('startDate').value;
+  if(dom&&!/^https?:\/\//i.test(dom)) dom='https://'+dom;
+  if(!dom||!tok) return log('Preencha domínio e token.','err');
+  if(!ini) return log('Informe a data inicial.','err');
+  localStorage.setItem('md_domain',dom);localStorage.setItem('md_token',tok);
+  CF=$('cfId').value.trim();localStorage.setItem('md_cf',CF);const SEL=SELECT+(CF?',customFieldValues':'');
+  const filter=`lastUpdate ge ${ini}T00:00:00.00z`,t0=performance.now();
+  const url=(exp,skip)=>`${dom}/public/v1/tickets?token=${encodeURIComponent(tok)}&$select=${SEL}&$expand=${encodeURIComponent(exp)}&$filter=${encodeURIComponent(filter)}&$orderby=${encodeURIComponent('lastUpdate desc')}&$top=100&$skip=${skip}`;
+  const get=async(exp,skip)=>{
+    for(let i=0;i<6;i++){
+      const r=await fetch(url(exp,skip));
+      if(r.status===429){log('Limite da API atingido, aguardando 20s e continuando...');await sleep(20000);continue}
+      if(!r.ok){const e=new Error('Erro '+r.status);e.status=r.status;throw e}
+      return r.json();
     }
-    // Filtro de Colaborador
-    if (colab !== "todos" && t.owner_name !== colab) {
-      return false;
-    }
-    // Filtro de Datas
-    if (t.synced_at) {
-      const ticketDate = new Date(t.synced_at);
-      if (sDate && ticketDate < new Date(sDate)) return false;
-      if (eDate) {
-        const endDate = new Date(eDate);
-        endDate.setHours(23, 59, 59);
-        if (ticketDate > endDate) return false;
+    throw new Error('API com limite de requisições excedido. Tente de novo em 1 minuto.');
+  };
+  try{
+    log('Conectando...');
+    let exp=null,first;
+    for(const e of EXPANDS){
+      try{first=await get(e,0);exp=e;break}
+      catch(err){
+        if(err.status===401||err.status===403) throw new Error('Token inválido ou sem permissão ('+err.status+')');
+        if(!(err.status>=400)) throw err;
       }
     }
-    return true;
-  });
-
-  processPeopleData();
-  renderAllViews();
-}
-
-function resetGlobalFilters() {
-  $("globalStartDate").value = "";
-  $("globalEndDate").value = "";
-  $("globalSectorFilter").value = "todos";
-  $("globalColabFilter").value = "todos";
-  applyGlobalFilters();
-}
-
-function loadData() {
-  const savedDomain = localStorage.getItem("movidesk_domain") || "";
-  $("movideskDomain").value = savedDomain;
-
-  const stored = localStorage.getItem("local_audit_tickets");
-  let loadedData = null;
-
-  if (stored) {
-    try { 
-      loadedData = JSON.parse(stored); 
-      if (!Array.isArray(loadedData) || loadedData.length === 0) {
-        loadedData = REAL_AUDIT_TICKETS;
-        localStorage.setItem("local_audit_tickets", JSON.stringify(loadedData));
-      }
-    } catch(e) { loadedData = REAL_AUDIT_TICKETS; }
-  } else {
-    loadedData = REAL_AUDIT_TICKETS;
-    localStorage.setItem("local_audit_tickets", JSON.stringify(loadedData));
+    if(exp===null) throw new Error('A API recusou a consulta.');
+    let all=[...first],skip=100,done=first.length<100;
+    build(all);start(`API Movidesk (${all.length} tickets...)`);
+    const W=5;
+    while(!done&&all.length<5000){
+      log(`Buscando em paralelo... ${all.length} tickets`);
+      const pages=await Promise.all(Array.from({length:W},(_,i)=>get(exp,skip+i*100)));
+      pages.forEach(p=>{all=all.concat(p);if(p.length<100)done=true});
+      skip+=W*100;
+      build(all);applyFilters();
+    }
+    firstTicket=all.find(t=>(t.actions||[]).length)||all[0]||null;
+    build(all);start(`API Movidesk (${all.length} tickets)`);
+    log(`Concluído em ${((performance.now()-t0)/1000).toFixed(1)}s: ${all.length} tickets, ${raw.length} lançamentos de tempo.`,'okc');
+    if(!raw.length) showTab('diag');
+  }catch(e){
+    log('Erro: '+e.message+(e instanceof TypeError?' (falha de rede ou CORS: verifique o domínio ou rode por um servidor local)':''),'err');
   }
-
-  rawTickets = loadedData.map(ticket => ({
-    ...ticket,
-    priority_client: isPriorityClient(ticket.client_name)
-  }));
-
-  populateColabDropdown();
-  applyGlobalFilters();
-  $("lastRefresh").textContent = new Date().toLocaleString("pt-BR");
 }
 
-function processPeopleData() {
-  const map = {};
-  filteredTickets.forEach(t => {
-    const name = t.owner_name || "Não identificado";
-    const isProj = String(t.sector || "").toLowerCase() === "projetos" || String(t.subject || "").toLowerCase().includes("projeto");
-    const h = Number(t.total_hours || 0);
-
-    if (!map[name]) {
-      map[name] = { collaborator_name: name, ticket_count: 0, project_tickets: 0, project_hours: 0, support_hours: 0, total_hours: 0 };
-    }
-    
-    map[name].ticket_count++;
-    if (isProj) {
-      map[name].project_tickets++;
-      map[name].project_hours += h;
-    } else {
-      map[name].support_hours += h;
-    }
-    map[name].total_hours += h;
-  });
-
-  people = Object.values(map).sort((a,b) => b.total_hours - a.total_hours);
-}
-
-function renderCapacityAuditSection() {
-  const dailyMap = {};
-  let missingHoursTotal = 0;
-  let underDaysCount = 0;
-  let totalAdherenceSum = 0;
-  let recordCount = 0;
-
-  filteredTickets.forEach(t => {
-    const owner = t.owner_name || "Não identificado";
-    const appts = t.appointments || [{ date: t.synced_at || "—", hours: Number(t.total_hours || 0) }];
-
-    appts.forEach(ap => {
-      const dKey = `${owner}_${ap.date || 'sem_data'}`;
-      if (!dailyMap[dKey]) {
-        dailyMap[dKey] = { owner: owner, date: ap.date || "—", hours: 0 };
-      }
-      dailyMap[dKey].hours += Number(ap.hours || 0);
-    });
-  });
-
-  const dailyRecords = Object.values(dailyMap).sort((a,b) => b.date.localeCompare(a.date));
-  const rows = [];
-
-  dailyRecords.forEach(r => {
-    recordCount++;
-    const worked = r.hours;
-    const diff = 8.0 - worked;
-    const adhPct = Math.min(100, ((worked / 8.0) * 100)).toFixed(1);
-    totalAdherenceSum += parseFloat(adhPct);
-
-    let statusPill = `<span class="pill good">100% Cumpriu 8h</span>`;
-    let suggestion = "Jornada totalmente registrada em chamados.";
-
-    if (diff > 0) {
-      underDaysCount++;
-      missingHoursTotal += diff;
-      statusPill = `<span class="pill bad">🚨 Faltam ${hours(diff)}h para 8h</span>`;
-      suggestion = `<b>Sugestão de Escopo:</b> Provável tempo em <i>reuniões de alinhamento, atendimento telefónico/chat direto, triagem de caixa de entrada ou testes</i> não vinculados a chamados.`;
-    } else if (diff < 0) {
-      statusPill = `<span class="pill warn">⚠️ Excedeu 8h (+${hours(Math.abs(diff))}h)</span>`;
-      suggestion = "Risco de hora extra / sobrecarga diária.";
-    }
-
-    rows.push(`<tr>
-      <td><b>${esc(r.owner)}</b></td>
-      <td>${date(r.date)}</td>
-      <td>8,00 h/dia (09h-18h)</td>
-      <td><b>${hours(worked)} h</b></td>
-      <td><b style="${diff > 0 ? 'color:#dc2626' : 'color:#16a34a'}">${diff > 0 ? '-' : '+'}${hours(Math.abs(diff))} h</b></td>
-      <td><b>${adhPct}%</b></td>
-      <td>${statusPill}</td>
-      <td style="white-space:normal; min-width:280px">${suggestion}</td>
-    </tr>`);
-  });
-
-  const uniqueColabs = new Set(dailyRecords.map(r => r.owner)).size;
-  const avgAdherence = recordCount > 0 ? (totalAdherenceSum / recordCount).toFixed(1) : 0;
-
-  $("capColabCount").textContent = num(uniqueColabs);
-  $("capUnderDays").textContent = num(underDaysCount);
-  $("capMissingHours").textContent = hours(missingHoursTotal) + " h";
-  $("capAvgAdherence").textContent = avgAdherence + "%";
-
-  $("capacityAuditRows").innerHTML = rows.length > 0 ? rows.join("") : `<tr><td colspan="8" class="empty">Nenhum registro de jornada encontrado para os filtros selecionados.</td></tr>`;
-}
-
-function renderProjectAuditSection() {
-  let projTicketsCount = 0;
-  let overBudgetCount = 0;
-  let dailyExceededCount = 0;
-  let totalProjHoursSum = 0;
-
-  const rows = [];
-
-  filteredTickets.forEach(t => {
-    const isProj = String(t.sector || "").toLowerCase() === "projetos" || String(t.subject || "").toLowerCase().includes("projeto");
-    if (!isProj) return;
-
-    projTicketsCount++;
-    const workedTotal = Number(t.total_hours || 0);
-    const promised = Number(t.promised_hours || 0);
-    totalProjHoursSum += workedTotal;
-
-    const isOverBudget = promised > 0 && workedTotal > promised;
-    if (isOverBudget) overBudgetCount++;
-
-    const appts = t.appointments || [{ date: t.synced_at || "—", hours: workedTotal }];
-
-    appts.forEach(ap => {
-      const hDay = Number(ap.hours || 0);
-      const isDailyExceeded = hDay > 4.0;
-      if (isDailyExceeded) dailyExceededCount++;
-
-      const cleanId = String(t.ticket_id || "").replace(/[^0-9]/g, '');
-      const ticketBtn = `<button onclick="openMovidesk('${esc(cleanId)}')" class="ticket-btn">#${esc(cleanId)} ↗</button>`;
-
-      let dailyStatusPill = `<span class="pill good">✅ Normal (${hours(hDay)}h)</span>`;
-      if (isDailyExceeded) {
-        dailyStatusPill = `<span class="pill bad">🚨 Excedeu 4h no dia (+${hours(hDay - 4.0)}h)</span>`;
-      } else if (hDay === 4.0) {
-        dailyStatusPill = `<span class="pill warn">⚠️ Limite Diário Exato (4.0h)</span>`;
-      }
-
-      let budgetStatusPill = `<span class="pill good">✅ Dentro da Estimativa</span>`;
-      if (isOverBudget) {
-        budgetStatusPill = `<span class="pill bad">💥 Estourou Projeto (+${hours(workedTotal - promised)}h)</span>`;
-      }
-
-      rows.push(`<tr>
-        <td>${ticketBtn}</td>
-        <td><b>${esc(t.client_name)}</b><br><small class="muted">${esc(t.subject)}</small></td>
-        <td><span class="pill priority">🚀 Projeto</span></td>
-        <td>${esc(t.owner_name)}</td>
-        <td>${date(ap.date)}</td>
-        <td><b>${hours(hDay)} h</b></td>
-        <td>${dailyStatusPill}</td>
-        <td>${hours(promised)} h</td>
-        <td><b>${hours(workedTotal)} h</b></td>
-        <td>${budgetStatusPill}</td>
-      </tr>`);
-    });
-  });
-
-  $("projCount").textContent = num(projTicketsCount);
-  $("projOverBudget").textContent = num(overBudgetCount);
-  $("projDailyExceeded").textContent = num(dailyExceededCount);
-  $("projTotalHours").textContent = hours(totalProjHoursSum) + " h";
-
-  $("projectAuditRows").innerHTML = rows.length > 0 ? rows.join("") : `<tr><td colspan="10" class="empty">Nenhum chamado de projeto registrado na base para os filtros selecionados.</td></tr>`;
-}
-
-function renderPeopleSection() {
-  if (!people || people.length === 0) {
-    $("peopleRows").innerHTML = "";
-    $("peopleEmpty").classList.remove("hidden");
-    return;
-  }
-
-  $("peopleEmpty").classList.add("hidden");
-
-  $("peopleRows").innerHTML = people.map(p => {
-    const pVal = p.project_hours;
-    const tVal = p.total_hours;
-
-    let statusPill = `<span class="pill good">✅ Jornada OK (Dentro das 8h)</span>`;
-    if (pVal > 4.0) {
-      statusPill = `<span class="pill warn">⚠️ Atenção: >4h em Projetos</span>`;
-    }
-    if (tVal > 8.0) {
-      statusPill = `<span class="pill bad">🚨 Sobrecarga: >8h Total</span>`;
-    }
-
-    return `<tr>
-      <td><b>${esc(p.collaborator_name)}</b></td>
-      <td>${num(p.ticket_count)}</td>
-      <td>${num(p.project_tickets)}</td>
-      <td><b style="${pVal > 4.0 ? 'color:#b45309' : ''}">${hours(pVal)} h</b></td>
-      <td>${hours(p.support_hours)} h</td>
-      <td><b>${hours(tVal)} h</b></td>
-      <td>09:00 - 18:00 (8,00h/dia)</td>
-      <td>${statusPill}</td>
-    </tr>`;
-  }).join("");
-}
-
-function status(s){
-  let v=String(s||"Sem status"),c=/atras|urgente|cr[ií]tic|vencid/i.test(v)?"pill bad":/aberto|andamento|pendente|novo|fila/i.test(v)?"pill warn":"pill";
-  return `<span class="${c}">${esc(v)}</span>`;
-}
-
-function ticketRow(t,compact=false){
-  const cleanId = String(t.ticket_id || "").replace(/[^0-9]/g, '');
-  const ticketBtn = `<button onclick="openMovidesk('${esc(cleanId)}')" class="ticket-btn">#${esc(cleanId)} ↗</button>`;
-  const cli = t.priority_client ? `<span class="pill priority">★ ${esc(t.client_name||"Prioritário")}</span>` : esc(t.client_name||"—");
-  
-  if(compact) return `<tr><td title="${esc(t.subject)}">${ticketBtn} · ${esc(t.subject||"Sem assunto")}</td><td>${cli}</td><td>${status(t.status)}</td><td>${esc(t.owner_name||"—")}</td><td>${hours(t.total_hours)} h</td><td>${t.age_days==null?"—":num(t.age_days)}</td><td>${date(t.synced_at)}</td></tr>`;
-  return `<tr><td>${ticketBtn}</td><td>${esc(t.subject||"—")}</td><td>${cli}</td><td>${status(t.status)}</td><td>${esc(t.priority||"—")}</td><td>${esc(t.owner_name||"—")}</td><td>${hours(t.total_hours)}</td><td>${t.age_days==null?"—":num(t.age_days)}</td><td>${t.days_since_update==null?"—":num(t.days_since_update)}</td><td>${date(t.synced_at)}</td></tr>`;
-}
-
-function renderAllViews() {
- renderOverview();
- renderCharts();
- renderPivotTable();
- renderPeopleSection();
- renderCapacityAuditSection();
- renderProjectAuditSection();
- renderExecutiveReport();
- renderCrossAudit();
-}
-
-function renderOverview(){
- const priorityTickets = filteredTickets.filter(t => t.priority_client);
- const totalHours = filteredTickets.reduce((acc, t) => acc + Number(t.total_hours || 0), 0);
- const oldTickets = filteredTickets.filter(t => (t.age_days || 0) >= 7).length;
- const noHoursTickets = filteredTickets.filter(t => Number(t.total_hours || 0) === 0).length;
-
- $("pendingN").textContent=num(filteredTickets.length);
- $("oldN").textContent=num(oldTickets);
- $("noHoursN").textContent=num(noHoursTickets);
- $("hoursN").textContent=hours(totalHours)+" h";
-
- const top=[...filteredTickets].sort((a,b)=>Number(b.priority_client)-Number(a.priority_client)||Number(b.age_days||0)-Number(a.age_days||0)).slice(0,8);
- $("topRows").innerHTML=top.map(t=>ticketRow(t,true)).join("");
- $("topEmpty").classList.toggle("hidden",top.length>0);
-
- renderTickets();
- renderPrioritySection(priorityTickets);
-}
-
-function runAIInteractiveSearch() {
-  const query = $("aiQueryInput").value.trim().toLowerCase();
-  if (!query) return alert("Por favor, digite o nome de uma empresa ou colaborador.");
-
-  const filtered = filteredTickets.filter(t => 
-    String(t.client_name || "").toLowerCase().includes(query) ||
-    String(t.owner_name || "").toLowerCase().includes(query)
-  );
-
-  if (filtered.length === 0) return alert(`Nenhum chamado encontrado para "${query}".`);
-
-  const totalWorked = filtered.reduce((acc, t) => acc + Number(t.total_hours || 0), 0);
-  const totalPromised = filtered.reduce((acc, t) => acc + Number(t.promised_hours || (Number(t.total_hours || 0) * 1.25)), 0);
-  const execRatio = totalPromised > 0 ? ((totalWorked / totalPromised) * 100).toFixed(1) : 0;
-
-  $("aiQueryTitle").textContent = `Diagnóstico para: "${$("aiQueryInput").value.trim()}"`;
-  $("aiQuerySubtitle").textContent = `Encontrados ${filtered.length} chamados de projetos e atendimento na base auditada.`;
-
-  $("aiMetricTickets").textContent = num(filtered.length);
-  $("aiMetricWorked").textContent = hours(totalWorked) + " h";
-  $("aiMetricPromised").textContent = hours(totalPromised) + " h";
-  $("aiMetricRatio").textContent = execRatio + "%";
-
-  let alertHtml = "";
-  if (totalWorked > totalPromised) {
-    alertHtml += `<div class="ai-alert-item danger"><b>🚨 Alerta de Desvio de Projeto:</b> O tempo trabalhado (${hours(totalWorked)}h) ultrapassou o tempo prometido/estimado (${hours(totalPromised)}h).</div>`;
-  } else {
-    alertHtml += `<div class="ai-alert-item info"><b>✅ Execução Dentro do Cronograma:</b> A execução está consumindo ${execRatio}% da estimativa total do projeto.</div>`;
-  }
-
-  $("aiQueryAlerts").innerHTML = alertHtml;
-
-  $("aiQueryRows").innerHTML = filtered.map(t => {
-    const cleanId = String(t.ticket_id || "").replace(/[^0-9]/g, '');
-    const ticketBtn = `<button onclick="openMovidesk('${esc(cleanId)}')" class="ticket-btn">#${esc(cleanId)} ↗</button>`;
-    const worked = Number(t.total_hours || 0);
-    const promised = Number(t.promised_hours || (worked * 1.25));
-    const diff = worked - promised;
-    const diffClass = diff > 0 ? "pill bad" : "pill good";
-
-    return `<tr>
-      <td>${ticketBtn}</td>
-      <td><b>${esc(t.client_name)}</b></td>
-      <td>${esc(t.subject)}</td>
-      <td>${esc(t.owner_name)}</td>
-      <td>${status(t.status)}</td>
-      <td><b>${hours(worked)} h</b></td>
-      <td>${hours(promised)} h</td>
-      <td><span class="${diffClass}">${diff > 0 ? '+' : ''}${hours(diff)} h</span></td>
-    </tr>`;
-  }).join("");
-
-  $("aiQueryResult").classList.remove("hidden");
-}
-
-function renderCharts() {
-  if (chartAgentInstance) chartAgentInstance.destroy();
-  if (chartStatusInstance) chartStatusInstance.destroy();
-
-  const agentLabels = people.map(p => p.collaborator_name);
-  const agentHours = people.map(p => p.total_hours);
-
-  const ctxAgent = document.getElementById('chartHoursAgent').getContext('2d');
-  chartAgentInstance = new Chart(ctxAgent, {
-    type: 'bar',
-    data: {
-      labels: agentLabels,
-      datasets: [{ label: 'Horas Apontadas', data: agentHours, backgroundColor: '#2563eb', borderRadius: 6 }]
-    },
-    options: { responsive: true, plugins: { legend: { display: false } } }
-  });
-
-  const statusMap = {};
-  filteredTickets.forEach(t => {
-    const s = t.status || "Outros";
-    statusMap[s] = (statusMap[s] || 0) + 1;
-  });
-
-  const ctxStatus = document.getElementById('chartStatus').getContext('2d');
-  chartStatusInstance = new Chart(ctxStatus, {
-    type: 'doughnut',
-    data: {
-      labels: Object.keys(statusMap),
-      datasets: [{ data: Object.values(statusMap), backgroundColor: ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6'] }]
-    },
-    options: { responsive: true }
-  });
-}
-
-function renderPivotTable() {
-  const rowField = $("pivotRowField").value;
-  const valField = $("pivotValueField").value;
-
-  const groupMap = {};
-  let globalTotal = 0;
-
-  filteredTickets.forEach(t => {
-    const key = t[rowField] || "Não Especificado";
-    if (!groupMap[key]) groupMap[key] = { count: 0, hoursSum: 0 };
-    
-    groupMap[key].count++;
-    groupMap[key].hoursSum += Number(t.total_hours || 0);
-    globalTotal += Number(t.total_hours || 0);
-  });
-
-  const rows = Object.keys(groupMap).map(k => {
-    const item = groupMap[k];
-    let calcVal = 0;
-    if (valField === "total_hours_sum") calcVal = item.hoursSum;
-    else if (valField === "total_hours_avg") calcVal = item.count > 0 ? (item.hoursSum / item.count) : 0;
-    else calcVal = item.count;
-
-    const pct = globalTotal > 0 ? ((item.hoursSum / globalTotal) * 100).toFixed(1) : 0;
-    return { name: k, value: calcVal, pct: pct };
-  }).sort((a,b) => b.value - a.value);
-
-  $("pivotBodyRows").innerHTML = rows.map(r => `
-    <tr>
-      <td><b>${esc(r.name)}</b></td>
-      <td><b>${valField.includes("hours") ? hours(r.value) + " h" : num(r.value)}</b></td>
-      <td>${r.pct}%</td>
-    </tr>
-  `).join("");
-}
-
-function renderTickets(){
-  const q=$("search").value.toLowerCase().trim(), cf=$("clientFilter").value, hf=$("hoursFilter").value;
-
-  const rows = filteredTickets.filter(t => {
-    const matchesSearch = [t.ticket_id, t.subject, t.client_name, t.owner_name, t.status].join(" ").toLowerCase().includes(q);
-    const matchesClient = (cf==="all" || (cf==="priority" ? t.priority_client : !t.priority_client));
-    const matchesHours = (hf==="all" || (hf==="none" ? Number(t.total_hours)===0 : Number(t.total_hours)>0));
-    return matchesSearch && matchesClient && matchesHours;
-  });
-
-  $("ticketRows").innerHTML=rows.map(t=>ticketRow(t)).join("");
-  $("ticketCount").textContent=`${num(rows.length)} de ${num(filteredTickets.length)} chamados`;
-  $("ticketEmpty").classList.toggle("hidden",rows.length>0);
-}
-
-function renderPrioritySection(priorityTickets) {
-  const pOld = priorityTickets.filter(t => (t.age_days || 0) >= 7).length;
-  const pStale = priorityTickets.filter(t => (t.days_since_update || 0) >= 7).length;
-  const pHours = priorityTickets.reduce((acc, t) => acc + Number(t.total_hours || 0), 0);
-
-  $("pPendingN").textContent = num(priorityTickets.length);
-  $("pOldN").textContent = num(pOld);
-  $("pStaleN").textContent = num(pStale);
-  $("pHoursN").textContent = hours(pHours) + " h";
-
-  const displayList = ["Dr Óculos", "Ferri", "Instituto", "Paulo e Condah", "Atacadão do Óculos", "IMV", "Paschoal LAB", "Cardeal", "Sr dos Óculos", "Lux"];
-
-  $("priorityClientRows").innerHTML = displayList.map(client => {
-    const tickets = filteredTickets.filter(t => isPriorityClient(t.client_name) && String(t.client_name).toLowerCase().includes(client.toLowerCase()));
-    const pCount = tickets.length;
-    const pOldCount = tickets.filter(t => (t.age_days || 0) >= 7).length;
-    const pStaleCount = tickets.filter(t => (t.days_since_update || 0) >= 7).length;
-    const pTotalHours = tickets.reduce((acc, t) => acc + Number(t.total_hours || 0), 0);
-
-    return `<tr>
-      <td><b>${client}</b></td>
-      <td>${num(pCount)}</td>
-      <td>${pOldCount > 0 ? `<span class="pill bad">${pOldCount}</span>` : '0'}</td>
-      <td>${pStaleCount > 0 ? `<span class="pill warn">${pStaleCount}</span>` : '0'}</td>
-      <td><b>${hours(pTotalHours)} h</b></td>
-    </tr>`;
-  }).join("");
-}
-
-function renderExecutiveReport() {
-  const totH = filteredTickets.reduce((acc, t) => acc + Number(t.total_hours || 0), 0);
-  
-  const clientMap = {};
-  filteredTickets.forEach(t => {
-    const c = t.client_name || "Outros";
-    clientMap[c] = (clientMap[c] || 0) + Number(t.total_hours || 0);
-  });
-  
-  let maxClientH = 0;
-  Object.keys(clientMap).forEach(c => {
-    if (clientMap[c] > maxClientH) maxClientH = clientMap[c];
-  });
-  const maxConc = totH > 0 ? ((maxClientH / totH) * 100).toFixed(1) : "0.0";
-
-  $("execTotalHours").textContent = hours(totH) + " h";
-  $("execTotalTickets").textContent = num(filteredTickets.length);
-  $("execMaxClientConc").textContent = maxConc + "%";
-
-  $("execSummaryText").textContent = `No acompanhamento da auditoria, a operação registrou o volume total de ${hours(totH)}h aplicadas distribuídas em ${filteredTickets.length} chamados no período selecionado.`;
-
-  const agentMap = {};
-  filteredTickets.forEach(t => {
-    const ag = t.owner_name || "Não atribuído";
-    if (!agentMap[ag]) agentMap[ag] = { name: ag, hours: 0, count: 0, appointments: 0 };
-    agentMap[ag].hours += Number(t.total_hours || 0);
-    agentMap[ag].count++;
-    agentMap[ag].appointments += Number(t.total_hours || 0) > 0 ? 1 : 0;
-  });
-
-  const dynamicAgents = Object.values(agentMap).sort((a,b) => b.hours - a.hours);
-
-  $("execAgentRows").innerHTML = dynamicAgents.length > 0 ? dynamicAgents.map(a => {
-    const pct = totH > 0 ? ((a.hours / totH) * 100).toFixed(1) : "0.0";
-    const avg = a.appointments > 0 ? (a.hours / a.appointments).toFixed(2) : "0.00";
-
-    return `<tr>
-      <td><b>${esc(a.name)}</b></td>
-      <td>Multisetor</td>
-      <td><b>${hours(a.hours)} h</b></td>
-      <td>${pct}%</td>
-      <td>${num(a.appointments)}</td>
-      <td>${avg} h</td>
-      <td>${num(a.count)}</td>
-    </tr>`;
-  }).join("") : `<tr><td colspan="7" class="empty">Nenhum agente encontrado.</td></tr>`;
-
-  const serviceMap = {};
-  filteredTickets.forEach(t => {
-    const s = t.status || "Atendimento";
-    if (!serviceMap[s]) serviceMap[s] = { name: s, hours: 0, count: 0 };
-    serviceMap[s].hours += Number(t.total_hours || 0);
-    serviceMap[s].count++;
-  });
-
-  const dynamicServices = Object.values(serviceMap).sort((a,b) => b.hours - a.hours);
-
-  $("execServiceRows").innerHTML = dynamicServices.length > 0 ? dynamicServices.map(s => {
-    const pct = totH > 0 ? ((s.hours / totH) * 100).toFixed(1) : "0.0";
-    return `<tr>
-      <td><b>Status: ${esc(s.name)}</b></td>
-      <td><b>${hours(s.hours)} h</b></td>
-      <td>${pct}%</td>
-      <td>Volume de ${s.count} chamado(s) neste status</td>
-    </tr>`;
-  }).join("") : `<tr><td colspan="4" class="empty">Nenhuma categoria encontrada.</td></tr>`;
-
-  const critical = [...filteredTickets].sort((a,b) => Number(b.total_hours||0) - Number(a.total_hours||0)).slice(0, 6);
-  $("execCriticalRows").innerHTML = critical.length > 0 ? critical.map(t => {
-    const cleanId = String(t.ticket_id || "").replace(/[^0-9]/g, '');
-    return `<tr><td><button onclick="openMovidesk('${esc(cleanId)}')" class="ticket-btn">#${esc(cleanId)} ↗</button></td><td><b>${esc(t.client_name)}</b></td><td>${esc(t.subject)}</td><td><b>${hours(t.total_hours)} h</b></td><td>${status(t.status)}</td></tr>`;
-  }).join("") : `<tr><td colspan="5" class="empty">Nenhum chamado crítico.</td></tr>`;
-}
-
-function runAIAuditAnalysis() {
-  const filaTickets = filteredTickets.filter(t => String(t.status).toLowerCase().includes("fila"));
-  const filaH = filaTickets.reduce((acc, t) => acc + Number(t.total_hours || 0), 0);
-
-  let html = `
-    <div style="line-height:1.7; color: #1e3a8a;">
-      <p><b>Resumo do Diagnóstico Algorítmico do Ticket Manager:</b></p>
-      <div class="ai-alert-item danger">
-        <b>🚨 Gargalo 1: Horas Retidas em Status "Fila":</b> Existem <b>${hours(filaH)}h</b> estagnadas no status "Fila" (${filaTickets.length} chamados).
-        <br><i>Sugestão do Ticket Manager:</i> Executar mutirão de alinhamento para homologação rápida.
-      </div>
-    </div>
-  `;
-
-  $("aiContent").innerHTML = html;
-  $("aiAnalysisResult").classList.remove("hidden");
-}
-
-function renderCrossAudit() {
-  const tableRows = filteredTickets.map(t => {
-    const cleanId = String(t.ticket_id || "").replace(/[^0-9]/g, '');
-    const ticketBtn = `<button onclick="openMovidesk('${esc(cleanId)}')" class="ticket-btn">#${esc(cleanId)} ↗</button>`;
-    const rClass = String(t.risk||"").toLowerCase().includes("alto") ? "pill bad" : "pill warn";
-
-    return `<tr>
-      <td>${ticketBtn}</td>
-      <td>${esc(t.client_name)}</td>
-      <td>${esc(t.subject)}</td>
-      <td>${num(t.age_days)}</td>
-      <td>${status(t.status)}</td>
-      <td>${esc(t.owner_name)}</td>
-      <td>${hours(t.total_hours)} h</td>
-      <td>${hours(t.hours_worked || t.total_hours)} h</td>
-      <td><span class="${rClass}">${esc(t.risk || 'Atenção')}</span></td>
-      <td title="${esc(t.action)}">${esc(t.action || 'Acompanhar.')}</td>
-    </tr>`;
-  }).join("");
-
-  $("crossAuditRows").innerHTML = tableRows;
-}
-
-// CORREÇÃO DO BOTÃO DE EXPORTAR CSV (GERA DOWLOAD REAL)
-function exportCurrentViewToCSV() {
-  let table = null;
-  let filename = `auditoria_${page}_${new Date().toISOString().split('T')[0]}.csv`;
-
-  if (page === "capacityAudit") table = $("tableCapacityAudit");
-  else if (page === "projectAudit") table = $("tableProjectAudit");
-  else if (page === "tickets") table = $("tableTickets");
-  else if (page === "people") table = $("tablePeople");
-  else if (page === "crossAudit") table = $("tableCrossAudit");
-  else if (page === "pivotTable") table = $("pivotResultTable");
-
-  if (!table) {
-    alert("Selecione uma aba com tabela para exportar os dados.");
-    return;
-  }
-
-  const rows = Array.from(table.querySelectorAll("tr"));
-  const csvContent = rows.map(row => {
-    const cols = Array.from(row.querySelectorAll("th, td"));
-    return cols.map(c => `"${c.innerText.replace(/"/g, '""').replace(/\n/g, ' ')}"`).join(";");
-  }).join("\n");
-
-  const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.setAttribute("download", filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
-function switchPage(p){
- page=p;
- const pageNames = ["overview","aiAssistant","capacityAudit","projectAudit","pivotTable","tickets","people","priority","executiveReport","crossAudit","settings","guide"];
- pageNames.forEach(x => {
-   const el = $(x + "Page");
-   if (el) el.classList.toggle("hidden", x !== p);
- });
-
- document.querySelectorAll(".nav").forEach(b => b.classList.toggle("active", b.dataset.page === p));
-
- const titleMap = {
-   overview: ["Visão geral", "Acompanhe a fila e identifique onde concentrar a auditoria."],
-   aiAssistant: ["Consulta com IA", "Pesquise por empresa ou colaborador para analisar prazos e desvios."],
-   capacityAudit: ["Auditoria de Jornada & Ocupação", "Comparação entre a jornada de 8h/dia (09h-18h) e os apontamentos reais."],
-   projectAudit: ["Auditoria Detalhada de Projetos", "Análise de limite diário (4h/dia), estimativa cadastrada e cronograma."],
-   pivotTable: ["Tabela Dinâmica", "Cruze dimensões, filtre métricas e agregue dados dinamicamente."],
-   tickets: ["Fila de chamados", "Pesquise, filtre e priorize os chamados que precisam de atenção."],
-   people: ["Horas por colaborador", "Validação da jornada de 09:00 às 18:00 (8h) e limite de 4h em projetos."],
-   priority: ["Clientes Prioritários", "Painel exclusivo para o acompanhamento dos 10 clientes prioritários."],
-   executiveReport: ["Relatório Executivo para Diretoria", "Diagnóstico global, produtividade, ofensores e plano de ação."],
-   crossAudit: ["Matriz de Auditoria Cruzada", "Cruzamento de apontamentos, idade, horas e nível de risco por chamado."],
-   settings: ["Gerenciador de Dados", "Atualize os dados por Excel (.xlsx) / CSV ou restaure a demonstração."],
-   guide: ["Indicadores", "Entenda os critérios e limitações desta versão."]
- };
-
- if (titleMap[p]) {
-   $("title").textContent = titleMap[p][0];
-   $("subtitle").textContent = titleMap[p][1];
- }
-
- // RENDERIZAÇÃO GARANTIDA AO MUDAR DE ABA
- if (p === "people") renderPeopleSection();
- else if (p === "capacityAudit") renderCapacityAuditSection();
- else if (p === "projectAudit") renderProjectAuditSection();
- else if (p === "crossAudit") renderCrossAudit();
- else if (p === "overview") renderCharts();
- else if (p === "pivotTable") renderPivotTable();
- else if (p === "executiveReport") renderExecutiveReport();
-
- $("export").classList.toggle("hidden", p === "guide" || p === "settings" || p === "executiveReport");
-}
-
-$("btnSaveDomain").addEventListener("click", () => {
-  let domain = $("movideskDomain").value.trim();
-  if (domain && !/^https?:\/\//i.test(domain)) domain = "https://" + domain;
-  localStorage.setItem("movidesk_domain", domain);
-  $("movideskDomain").value = domain;
-  loadData();
-});
-
-$("btnApplyGlobalFilters").addEventListener("click", applyGlobalFilters);
-$("btnResetGlobalFilters").addEventListener("click", resetGlobalFilters);
-$("export").addEventListener("click", exportCurrentViewToCSV);
-
-$("btnSearchAI").addEventListener("click", runAIInteractiveSearch);
-$("aiQueryInput").addEventListener("keypress", (e) => { if (e.key === "Enter") runAIInteractiveSearch(); });
-
-$("btnGeneratePivot").addEventListener("click", renderPivotTable);
-$("btnRunAI").addEventListener("click", runAIAuditAnalysis);
-
-$("fileInput").addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
-    reader.onload = (evt) => {
-      try {
-        const data = new Uint8Array(evt.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const json = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-
-        if (json.length > 0) {
-          const parsedTickets = json.map(r => ({
-            ticket_id: String(r["Número"] || r["Ticket"] || r["ID"] || ""),
-            client_name: r["Cliente"] || "—",
-            subject: r["Assunto"] || "Sem Assunto",
-            status: r["Status"] || "Aberto",
-            sector: String(r["Setor"] || r["Nicho"] || "operacao").toLowerCase(),
-            owner_name: r["Responsável atual"] || r["Responsável"] || "—",
-            total_hours: parseFloat(String(r["Horas apontadas"]||0).replace(/[^0-9.]/g, '')) || 0,
-            promised_hours: parseFloat(String(r["Horas estimadas"] || r["Horas prometidas"] || 0).replace(/[^0-9.]/g, '')) || 0,
-            hours_worked: parseFloat(String(r["Horas trabalhadas"]||0).replace(/[^0-9.]/g, '')) || 0,
-            age_days: parseInt(r["Dias em aberto"] || r["Idade"] || 0) || 0,
-            days_since_update: 0,
-            synced_at: new Date().toISOString().split('T')[0],
-            risk: r["Risco de acompanhamento"] || "Rotina",
-            action: r["Ação recomendada"] || "Acompanhar",
-            appointments: [{ date: new Date().toISOString().split('T')[0], hours: parseFloat(String(r["Horas apontadas"]||0).replace(/[^0-9.]/g, '')) || 0 }]
-          })).filter(t => t.ticket_id);
-
-          localStorage.setItem("local_audit_tickets", JSON.stringify(parsedTickets));
-          loadData();
-        }
-      } catch(err) { alert("Erro ao ler Excel: " + err.message); }
+function flatten(t){
+  const owner=nm(t.owner),team=lbl(t.ownerTeam)||'Sem equipe';
+  const c=(t.clients||[])[0]||{};
+  const base={ticket_id:String(t.id),subject:t.subject||'Sem assunto',
+    client_name:nm(c.organization)||nm(c)||'Não informado',
+    planned:(()=>{const f=CF&&(t.customFieldValues||[]).find(x=>String(x.customFieldId)===CF);return f?parseFloat(String(f.value).replace(',','.'))||0:0})(),
+    service_name:t.serviceFirstLevel||'Geral',category:t.category||'Geral',status:t.status||'—'};
+  const out=[];
+  (t.actions||[]).forEach(a=>{
+    stats.ac++;
+    const add=(h,agent,date,act,tm,src)=>{
+      if(!(h>0)) return;
+      out.push({...base,hours:h,
+        owner_name:agent||owner||'Não atribuído',
+        agent_src:agent?src:(owner?'responsável do ticket':'nenhum'),
+        sector:tm||team,activity:act||'Geral',
+        date:String(date||a.createdDate||t.createdDate||'').substring(0,10)});
     };
-    reader.readAsArrayBuffer(file);
+    const aps=Array.isArray(a.timeAppointments)?a.timeAppointments:[];
+    if(aps.length) stats.ap+=aps.length;
+    else if(a.timeWorked) stats.tw++;
+    if(aps.length) aps.forEach(p=>add(hrs(p.workTime??p.accountedTime),nm(p.createdBy)||nm(p.agent)||nm(a.createdBy),p.date,lbl(p.activity),lbl(p.createdByTeam),'apontamento'));
+    else add(hrs(a.timeWorked),nm(a.createdBy),a.createdDate,lbl(a.activity),'','ação');
+  });
+  return out;
+}
+
+/* ---------- CSV ---------- */
+function loadCSV(e){
+  const f=e.target.files[0];if(!f) return;
+  Papa.parse(f,{header:true,skipEmptyLines:true,encoding:'ISO-8859-1',complete:res=>{
+    raw=res.data.map((r,i)=>({
+      ticket_id:String(r['Ticket']||i),subject:r['Assunto']||'Sem assunto',
+      client_name:r['Cliente']||'Não informado',owner_name:(r['Agente']||'Não atribuído').trim(),
+      agent_src:'csv',sector:(r['Equipe']||'Sem equipe').trim(),activity:(r['Atividade']||'Geral').trim(),
+      service_name:(r['Serviço']||'Geral').trim(),category:(r['Categoria']||'Geral').trim(),
+      status:(r['Status']||'—').trim(),date:csvDate(r['Data']),hours:hrs(r['Horas Trabalhadas']||r['Horas Apontadas'])
+    }));
+    firstTicket=res.data[0]||null;
+    start(`CSV (${raw.length} linhas)`);
+    log(`CSV carregado: ${raw.length} linhas.`,'okc');
+  }});
+}
+
+/* ---------- painel ---------- */
+function start(src){
+  $('status').textContent='Fonte: '+src;
+  $('app').classList.remove('hide');
+  buildFilters();applyFilters();showTab(raw.length?'overview':'diag');
+}
+
+function buildFilters(){
+  const box=$('filters');
+  box.querySelectorAll('.dyn').forEach(n=>n.remove());
+  FIELDS.forEach(([k,label])=>{
+    const vals=[...new Set(raw.map(r=>r[k]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const d=document.createElement('div');d.className='fg dyn';
+    d.innerHTML=`<label>${label}</label><select id="f_${k}" onchange="applyFilters()"><option value="">Todos</option>${vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>`;
+    box.appendChild(d);
+  });
+  $('fStart').value=$('startDate').value;$('fEnd').value=$('endDate').value;
+  initPivot();
+}
+
+function applyFilters(){
+  const s=$('fStart').value,e=$('fEnd').value;
+  const sel=FIELDS.map(([k])=>[k,$('f_'+k).value]).filter(x=>x[1]);
+  rows=raw.filter(r=>(!s||!r.date||r.date>=s)&&(!e||!r.date||r.date<=e)&&sel.every(([k,v])=>r[k]===v));
+  try{render()}catch(e){console.error(e);$('status').textContent='Erro ao desenhar: '+e.message}
+}
+function resetFilters(){FIELDS.forEach(([k])=>$('f_'+k).value='');$('fStart').value='';$('fEnd').value='';applyFilters()}
+
+function groupAgents(){
+  const m={};
+  rows.forEach(r=>{
+    const a=m[r.owner_name]??={name:r.owner_name,teams:{},n:0,h:0,tk:new Set(),cl:new Set(),days:new Set()};
+    a.teams[r.sector]=(a.teams[r.sector]||0)+r.hours;a.n++;a.h+=r.hours;a.tk.add(r.ticket_id);a.cl.add(r.client_name);if(r.date)a.days.add(r.date);
+  });
+  return Object.values(m).map(a=>({...a,team:Object.entries(a.teams).sort((x,y)=>y[1]-x[1])[0][0]})).sort((x,y)=>y.h-x.h);
+}
+
+function render(){
+  const c=R(),kd=mk(c);
+  const tot=rows.reduce((s,r)=>s+r.hours,0);
+  $('kT').textContent=new Set(rows.map(r=>r.ticket_id)).size;
+  $('kH').textContent=tot.toFixed(2)+' h';
+  $('kA').textContent=new Set(rows.map(r=>r.owner_name)).size;
+  $('kC').textContent=new Set(rows.map(r=>r.client_name)).size;
+
+  const LIM=1000;
+  $('tEntries').innerHTML=rows.slice(0,LIM).map(r=>{
+    const u=ticketUrl(r.ticket_id);
+    return `<tr><td>${u?`<a href="${esc(u)}" target="_blank" rel="noopener">#${esc(r.ticket_id)}</a>`:'#'+esc(r.ticket_id)}</td><td>${fmtDate(r.date)} ${tag(kd(r.date))}</td><td><b>${esc(r.client_name)}</b></td><td>${esc(r.subject)}</td><td><b>${esc(r.owner_name)}</b></td><td><span class="pill">${esc(r.sector)}</span></td><td>${esc(r.activity)}</td><td><span class="pill">${esc(r.status)}</span></td><td><b>${r.hours.toFixed(2)} h</b></td></tr>`;
+  }).join('');
+  $('cap').textContent=rows.length>LIM?`Mostrando ${LIM} de ${rows.length} lançamentos. O Excel exporta todos.`:'';
+
+  const ag=groupAgents();
+  $('tPeople').innerHTML=ag.map(a=>{
+    const avg=a.days.size?a.h/a.days.size:0,ok=avg>=8;
+    return `<tr><td><b>${esc(a.name)}</b></td><td><span class="pill">${esc(a.team)}</span></td><td>${a.n}</td><td>${a.tk.size}</td><td>${a.cl.size}</td><td>${a.days.size}</td><td><b>${a.h.toFixed(2)} h</b></td><td>${avg.toFixed(2)} h</td><td><span class="pill ${ok?'ok':'bad'}">${ok?'Meta cumprida':'Faltam '+(8-avg).toFixed(2)+' h/dia'}</span></td></tr>`;
+  }).join('');
+
+  const max=Math.max(1,...ag.map(a=>a.h));
+  $('bars').innerHTML=ag.slice(0,8).map(a=>`<div class="bar"><span style="width:170px"><b>${esc(a.name)}</b></span><i><u style="width:${a.h/max*100}%"></u></i><b style="width:70px;text-align:right">${a.h.toFixed(2)} h</b></div>`).join('')||'<span style="color:var(--muted)">Nenhum lançamento no filtro.</span>';
+  if(chart) chart.destroy();
+  if(window.Chart) chart=new Chart($('chart'),{type:'bar',data:{labels:ag.map(a=>a.name),datasets:[{label:'Horas',data:ag.map(a=>+a.h.toFixed(2)),backgroundColor:'#2563eb'}]},options:{responsive:true}});
+
+  renderPivot();renderDiag();
+  renderProj(c);renderBudget(c);renderOcc(c);renderMgmt(c);renderVip(c);renderCharts(c);
+}
+
+
+function renderDiag(){
+  const c={};raw.forEach(r=>c[r.agent_src]=(c[r.agent_src]||0)+1);
+  $('diagSummary').innerHTML=`<p><b>Tickets:</b> ${stats.tk||0} · <b>Ações:</b> ${stats.ac||0} · <b>Apontamentos (timeAppointments):</b> ${stats.ap||0} · <b>Ações com timeWorked:</b> ${stats.tw||0}</p>`+'<p>Origem do nome do colaborador em cada lançamento:</p>'+Object.entries(c).map(([k,v])=>`<span class="pill" style="margin-right:6px">${esc(k)}: ${v}</span>`).join('')+
+    '<p style="color:var(--muted)">Se aparecer muito "responsável do ticket" ou "nenhum", o JSON abaixo mostra quais campos a API devolveu.</p>';
+  $('rawJson').textContent=firstTicket?JSON.stringify(firstTicket,null,2).slice(0,12000):'Sem dados.';
+}
+
+let ACT='load';
+function showTab(t){
+  ACT=t;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  $('t-load').classList.toggle('hide',t!=='load');
+  ['mgmt','vip','overview','charts','entries','people','pivot','proj','budget','occ','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  $('rules').classList.toggle('hide',!['proj','budget','occ','mgmt','vip','charts','pivot'].includes(t));
+  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='diag');
+}
+$('tabs').addEventListener('click',e=>{const t=e.target.dataset.t;if(t)showTab(t)});
+
+
+/* ---------- regras e relatórios ---------- */
+const RF=['rMeta','rJor','rMin','rFld','rKw','rIds','rFac','rHol'];
+function R(){return{meta:+$('rMeta').value||4,jor:+$('rJor').value||8,min:(+$('rMin').value||80)/100,fld:$('rFld').value,kw:$('rKw').value.trim().toLowerCase(),ids:$('rIds').value.split(/[\s,;#]+/).filter(Boolean),fac:$('rFac').value,hol:$('rHol').value.split(/[,;\s]+/).map(csvDate).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x))}}
+function rulesChanged(){localStorage.setItem('md_rules',JSON.stringify(Object.fromEntries(RF.map(i=>[i,$(i).value]))));if(raw.length)render()}
+/* calendário: fins de semana e feriados nacionais */
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+function easter(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),n=h+l-7*m+114;return new Date(y,Math.floor(n/31)-1,n%31+1,12)}
+const HC={};
+function hols(y,c){
+  const key=y+c.fac;if(HC[key]) return HC[key];
+  const m=new Map(),E=easter(y),sh=n=>{const d=new Date(E);d.setDate(d.getDate()+n);return iso(d)};
+  [['01-01','Confraternização Universal'],['04-21','Tiradentes'],['05-01','Dia do Trabalho'],['09-07','Independência'],['09-08','N. Sra. da Luz dos Pinhais (Curitiba)'],['10-12','N. Sra. Aparecida'],['11-02','Finados'],['11-15','Proclamação da República'],['11-20','Consciência Negra'],['12-25','Natal']].forEach(([d,n])=>m.set(`${y}-${d}`,n));
+  m.set(sh(-2),'Sexta-feira Santa');
+  if(c.fac==='1'){m.set(sh(-48),'Carnaval');m.set(sh(-47),'Carnaval');m.set(sh(60),'Corpus Christi')}
+  return HC[key]=m;
+}
+function dayKind(d,c){
+  const n=hols(+d.slice(0,4),c).get(d)||(c.hol.includes(d)?'Feriado extra':'');
+  if(n) return {k:'Feriado',n};
+  const w=new Date(d+'T12:00:00').getDay();
+  return w===0?{k:'Domingo'}:w===6?{k:'Sábado'}:null;
+}
+function mk(c){const K={};return d=>d?(d in K?K[d]:(K[d]=dayKind(d,c))):null}
+const tag=k=>k?`<span class="pill warn">${esc(k.k+(k.n?': '+k.n:''))}</span>`:'';
+function period(c){
+  const dts=rows.map(r=>r.date).filter(Boolean).sort();
+  const o={s:$('fStart').value||dts[0],e:$('fEnd').value||dts[dts.length-1],work:0,wk:0,hol:[],cap:0};
+  if(!o.s||!o.e) return o;
+  for(let d=new Date(o.s+'T12:00:00'),x=new Date(o.e+'T12:00:00');d<=x;d.setDate(d.getDate()+1)){
+    const k=dayKind(iso(d),c);
+    if(!k) o.work++;else if(k.k==='Feriado') o.hol.push(iso(d)+'|'+k.n);else o.wk++;
   }
-});
+  o.cap=o.work*c.jor;return o;
+}
+const isProj=(r,c)=>c.ids.includes(r.ticket_id)||(c.kw&&String(r[c.fld]||'').toLowerCase().includes(c.kw));
+const bizDays=(a,b)=>{let n=0;for(let d=new Date(a+'T12:00:00'),e=new Date(b+'T12:00:00');d<=e;d.setDate(d.getDate()+1)){const w=d.getDay();if(w&&w<6)n++}return n};
+const H=v=>v.toFixed(2)+' h';
+const empty=n=>`<tr><td colspan="${n}" style="color:var(--muted)">Nenhum projeto encontrado. Ajuste "Projeto identificado por" e o texto, ou informe os números dos tickets.</td></tr>`;
 
-$("btnResetData").addEventListener("click", () => {
-  localStorage.setItem("local_audit_tickets", JSON.stringify(REAL_AUDIT_TICKETS));
-  loadData();
-});
+function renderProj(c){
+  const kd=mk(c),P={},tol=0.25,det=[];
+  rows.filter(r=>isProj(r,c)&&r.date).forEach(r=>{
+    const p=P[r.ticket_id]??={id:r.ticket_id,subject:r.subject,client:r.client_name,d:{}};
+    const d=p.d[r.date]??={h:0,a:new Set()};d.h+=r.hours;d.a.add(r.owner_name);
+  });
+  const st=h=>h<c.meta-tol?'low':h>c.meta+tol?'high':'ok';
+  $('tProj').innerHTML=Object.values(P).map(p=>{
+    const ds=Object.entries(p.d);let lo=0,ok=0,hi=0,tot=0;
+    ds.forEach(([dt,v])=>{const s=st(v.h);if(s==='low')lo++;else if(s==='ok')ok++;else hi++;tot+=v.h;det.push({p,dt,v,s})});
+    const avg=tot/ds.length,s=st(avg);
+    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${esc(p.client)}</td><td>${ds.length}</td><td><b>${H(tot)}</b></td><td><span class="pill ${s==='ok'?'ok':s==='high'?'bad':'warn'}">${H(avg)}</span></td><td>${lo}</td><td>${ok}</td><td>${hi?`<span class="pill bad">${hi}</span>`:0}</td></tr>`;
+  }).join('')||empty(9);
+  det.sort((a,b)=>b.dt.localeCompare(a.dt));
+  $('tProjDay').innerHTML=det.slice(0,1000).map(({p,dt,v,s})=>{
+    const df=v.h-c.meta;
+    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${fmtDate(dt)} ${tag(kd(dt))}</td><td>${[...v.a].map(esc).join(', ')}</td><td><b>${H(v.h)}</b></td><td>${df>0?'+':''}${df.toFixed(2)} h</td><td><span class="pill ${s==='ok'?'ok':s==='high'?'bad':'warn'}">${s==='ok'?'Meta cumprida':s==='high'?'Estourou':'Abaixo da meta'}</span></td></tr>`;
+  }).join('');
+}
 
-$("refresh").addEventListener("click", loadData);
-["search","clientFilter","hoursFilter"].forEach(id=>$(id).addEventListener(id==="search"?"input":"change",renderTickets));
-document.querySelectorAll(".nav").forEach(b=>b.addEventListener("click",()=>switchPage(b.dataset.page)));
+function renderBudget(c){
+  const bud=JSON.parse(localStorage.getItem('md_budget')||'{}'),M={};
+  raw.filter(r=>isProj(r,c)).forEach(r=>{
+    const p=M[r.ticket_id]??={id:r.ticket_id,subject:r.subject,client:r.client_name,h:0,days:new Set(),pl:r.planned||0};
+    p.h+=r.hours;if(r.date)p.days.add(r.date);
+  });
+  $('tBudget').innerHTML=Object.values(M).sort((a,b)=>b.h-a.h).map(p=>{
+    const pl=+bud[p.id]||p.pl,ds=[...p.days].sort(),f=ds[0],l=ds[ds.length-1],pct=pl?p.h/pl:0;
+    const span=f?Math.round((new Date(l)-new Date(f))/864e5)+1:0;
+    const s=!pl?['','Sem previsão']:pct>1?['bad','Estourou +'+(p.h-pl).toFixed(2)+' h']:pct>=.9?['warn','Quase no limite']:['ok','Dentro da carga'];
+    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${esc(p.client)}</td><td><input type="number" min="0" step="1" value="${pl||''}" style="width:80px" onchange="setBudget('${esc(p.id)}',this.value)"></td><td><b>${H(p.h)}</b></td><td>${pl?(pct*100).toFixed(0)+'%':'—'}</td><td>${pl?(pl-p.h).toFixed(2)+' h':'—'}</td><td><span class="pill ${s[0]}">${s[1]}</span></td><td>${fmtDate(f)}</td><td>${fmtDate(l)}</td><td>${span}</td><td>${ds.length}</td></tr>`;
+  }).join('')||empty(12);
+}
+function setBudget(id,v){const b=JSON.parse(localStorage.getItem('md_budget')||'{}');b[id]=+v||0;localStorage.setItem('md_budget',JSON.stringify(b));render()}
 
-loadData();
-})();
-</script></body></html>
+function offByAgent(kd){const o={};rows.forEach(r=>{if(kd(r.date))o[r.owner_name]=(o[r.owner_name]||0)+r.hours});return o}
+const offPill=o=>o?`<span class="pill warn">${H(o)}</span>`:'—';
+const calTxt=(P,c)=>`${P.work} dias úteis (descontados ${P.wk} dias de fim de semana e ${P.hol.length} feriados) × ${c.jor} h = ${P.cap} h por colaborador`;
+
+function renderOcc(c){
+  const kd=mk(c),P=period(c),off=offByAgent(kd);
+  $('occInfo').textContent=P.s?`Período de ${fmtDate(P.s)} a ${fmtDate(P.e)}: ${calTxt(P,c)}. Bom a partir de ${(c.min*100).toFixed(0)}% das horas apontadas; abaixo disso é crítico. Horas apontadas em fim de semana e feriado contam no total e aparecem destacadas.`:'';
+  $('tOcc').innerHTML=groupAgents().sort((a,b)=>a.h-b.h).map(a=>{
+    const pct=P.cap?a.h/P.cap:0,ok=pct>=c.min;
+    return `<tr><td><b>${esc(a.name)}</b></td><td><span class="pill">${esc(a.team)}</span></td><td>${a.days.size}</td><td>${H(a.h)}</td><td>${offPill(off[a.name])}</td><td>${P.cap} h</td><td><b>${(pct*100).toFixed(0)}%</b></td><td><span class="pill ${ok?'ok':'bad'}">${ok?'Bom':'Crítico'}</span></td></tr>`;
+  }).join('');
+  const D={};
+  rows.forEach(r=>{if(r.date){const k=r.owner_name+'|'+r.date;D[k]=(D[k]||0)+r.hours}});
+  $('tOccDay').innerHTML=Object.entries(D).map(([k,h])=>{const i=k.lastIndexOf('|');return{n:k.slice(0,i),d:k.slice(i+1),h}})
+    .sort((x,y)=>y.d.localeCompare(x.d)||x.n.localeCompare(y.n)).slice(0,1000).map(({n,d,h})=>{
+      const p=h/c.jor,k=kd(d),ok=p>=c.min;
+      return `<tr><td>${fmtDate(d)} ${tag(k)}</td><td><b>${esc(n)}</b></td><td>${H(h)}</td><td>${(p*100).toFixed(0)}%</td><td><span class="pill ${k?'warn':ok?'ok':'bad'}">${k?'Dia não útil':ok?'Bom':'Crítico'}</span></td></tr>`;
+    }).join('');
+}
+
+function renderMgmt(c){
+  const kd=mk(c),P=period(c),tot=rows.reduce((s,r)=>s+r.hours,0),offH=rows.reduce((s,r)=>s+(kd(r.date)?r.hours:0),0);
+  const pc=v=>tot?(v/tot*100).toFixed(1)+'%':'0%';
+  $('mgInfo').innerHTML=P.s?`<b>Período:</b> ${fmtDate(P.s)} a ${fmtDate(P.e)} · ${calTxt(P,c)}.${P.hol.length?'<br><span style="color:var(--muted)">Feriados: '+P.hol.map(x=>{const [d,n]=x.split('|');return fmtDate(d).slice(0,5)+' '+esc(n)}).join(', ')+'</span>':''}`:'Carregue os dados para gerar o relatório.';
+  const kp=[['Horas apontadas',H(tot)],['Chamados',new Set(rows.map(r=>r.ticket_id)).size],['Empresas',new Set(rows.map(r=>r.client_name)).size],['Colaboradores',new Set(rows.map(r=>r.owner_name)).size],['Horas em dias não úteis',H(offH)+(tot?` (${(offH/tot*100).toFixed(0)}%)`:'')]];
+  $('mgKpi').innerHTML=kp.map(([l,v])=>`<div class="card"><small>${l}</small><div><b style="font-size:22px">${v}</b></div></div>`).join('');
+  const grp=key=>{const m={};rows.forEach(r=>{const g=m[r[key]]??={r,h:0,off:0,k:0,tk:new Set(),ag:new Set(),days:new Set()};g.h+=r.hours;g.k++;if(kd(r.date))g.off+=r.hours;g.tk.add(r.ticket_id);g.ag.add(r.owner_name);if(r.date)g.days.add(r.date)});return Object.values(m).sort((a,b)=>b.h-a.h).slice(0,10)};
+  const cli=grp('client_name'),mx=Math.max(1,...cli.map(g=>g.h));
+  $('mgBars').innerHTML=cli.map(g=>`<div class="bar"><span style="width:220px"><b>${esc(g.r.client_name)}</b></span><i><u style="width:${g.h/mx*100}%"></u></i><b style="width:80px;text-align:right">${H(g.h)}</b></div>`).join('');
+  const VL=vipList();
+  $('tMgCli').innerHTML=cli.map(g=>`<tr><td><b>${esc(g.r.client_name)}</b>${vipOf(g.r.client_name,VL)?' <span class="pill ok">VIP</span>':''}</td><td><b>${H(g.h)}</b></td><td>${pc(g.h)}</td><td>${g.tk.size}</td><td>${g.ag.size}</td><td>${offPill(g.off)}</td></tr>`).join('');
+  $('tMgTk').innerHTML=grp('ticket_id').map(g=>`<tr><td>#${esc(g.r.ticket_id)}</td><td>${esc(g.r.subject)}</td><td>${esc(g.r.client_name)}</td><td><b>${H(g.h)}</b></td><td>${pc(g.h)}</td><td>${g.k}</td><td>${g.ag.size}</td><td>${g.days.size}</td><td>${offPill(g.off)}</td><td><span class="pill">${esc(g.r.status)}</span></td></tr>`).join('');
+  const off=offByAgent(kd);
+  $('tMgAg').innerHTML=groupAgents().map(a=>({a,pct:P.cap?a.h/P.cap:0})).sort((x,y)=>y.pct-x.pct).slice(0,10).map(({a,pct})=>{
+    const o=off[a.name]||0,s=pct>1?['bad','Sobrecarregado']:pct>=.9?['warn','No limite']:['ok','Dentro da jornada'];
+    return `<tr><td><b>${esc(a.name)}</b></td><td><span class="pill">${esc(a.team)}</span></td><td><b>${H(a.h)}</b></td><td>${P.cap} h</td><td><b>${(pct*100).toFixed(0)}%</b></td><td>${P.work?H((a.h-o)/P.work):'—'}</td><td>${offPill(o)}</td><td><span class="pill ${s[0]}">${s[1]}</span></td></tr>`;
+  }).join('');
+}
+
+/* ---------- clientes VIP ---------- */
+const norm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+const vipList=()=>$('vipList').value.split('\n').map(x=>x.trim()).filter(x=>x.length>=2);
+const vipOf=(name,V)=>{const n=` ${norm(name)} `;let b=null;V.forEach(v=>{const k=norm(v);if(k&&n.includes(` ${k} `)&&(!b||k.length>norm(b).length))b=v});return b};
+function vipChanged(){localStorage.setItem('md_vip',$('vipList').value);if(raw.length)render()}
+
+function renderVip(c){
+  const kd=mk(c),P=period(c),V=vipList(),tot=rows.reduce((s,r)=>s+r.hours,0);
+  const teamCap=P.cap*new Set(rows.map(r=>r.owner_name)).size,G={},O={},hit=new Set();
+  rows.forEach(r=>{
+    const v=vipOf(r.client_name,V),k=v||r.client_name;
+    if(v) hit.add(v);
+    const g=(v?G:O)[k]??={n:k,h:0,off:0,tk:new Set(),ag:{},cl:new Set()};
+    g.h+=r.hours;if(kd(r.date))g.off+=r.hours;g.tk.add(r.ticket_id);g.cl.add(r.client_name);
+    g.ag[r.owner_name]=(g.ag[r.owner_name]||0)+r.hours;
+  });
+  const vg=Object.values(G).sort((a,b)=>b.h-a.h),vh=vg.reduce((s,g)=>s+g.h,0);
+  const pc=v=>tot?(v/tot*100).toFixed(1)+'%':'0%';
+  const miss=V.filter(v=>!hit.has(v));
+  $('vipInfo').innerHTML=!V.length?'<span style="color:var(--muted)">Cole a lista acima para gerar o relatório.</span>':
+    `${V.length} clientes na lista, ${hit.size} com apontamento no período.`+(miss.length?`<br><span style="color:var(--muted)">Sem apontamento ou sem correspondência no nome: ${miss.map(esc).join(', ')}</span>`:'');
+  const kp=[['Horas dos VIPs',H(vh)],['% do total de horas',pc(vh)],['% da capacidade da equipe',teamCap?(vh/teamCap*100).toFixed(1)+'%':'—'],['Chamados VIP',vg.reduce((s,g)=>s+g.tk.size,0)]];
+  $('vipKpi').innerHTML=V.length?kp.map(([l,v])=>`<div class="card"><small>${l}</small><div><b style="font-size:22px">${v}</b></div></div>`).join(''):'';
+  $('tVip').innerHTML=vg.map(g=>{
+    const top=Object.entries(g.ag).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([n,h])=>`${esc(n)} (${H(h)})`).join(', ');
+    return `<tr><td><b>${esc(g.n)}</b><br><small style="color:var(--muted)">${esc([...g.cl].slice(0,3).join(', '))}</small></td><td><b>${H(g.h)}</b></td><td>${pc(g.h)}</td><td>${teamCap?(g.h/teamCap*100).toFixed(1)+'%':'—'}</td><td>${g.tk.size}</td><td>${Object.keys(g.ag).length}</td><td>${top}</td><td>${offPill(g.off)}</td></tr>`;
+  }).join('');
+  $('tVipOut').innerHTML=Object.values(O).sort((a,b)=>b.h-a.h).slice(0,15).map(g=>`<tr><td>${esc(g.n)}</td><td>${H(g.h)}</td><td>${pc(g.h)}</td><td>${g.tk.size}</td></tr>`).join('');
+}
+
+/* ---------- tabela dinâmica ---------- */
+const PF=[['client_name','Cliente'],['owner_name','Colaborador'],['sector','Equipe'],['activity','Atividade'],['service_name','Serviço'],['category','Categoria'],['status','Status'],['ticket_id','Chamado'],['mes','Mês'],['semana','Semana (segunda-feira)'],['date','Dia'],['dow','Dia da semana'],['tipo','Tipo de dia']];
+const TIMEF=['mes','semana','date'],DOW=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const DCOLS=[['ticket_id','Chamado'],['date','Data'],['mes','Mês'],['semana','Semana'],['dow','Dia da semana'],['tipo','Tipo de dia'],['client_name','Cliente'],['subject','Assunto'],['owner_name','Colaborador'],['sector','Equipe'],['activity','Atividade'],['service_name','Serviço'],['category','Categoria'],['status','Status']];
+const wk=d=>{const x=new Date(d+'T12:00:00');x.setDate(x.getDate()-((x.getDay()+6)%7));return iso(x)};
+function fv(r,f,kd){
+  const d=r.date;
+  if(f==='mes') return d?d.slice(0,7):'Sem data';
+  if(f==='semana') return d?wk(d):'Sem data';
+  if(f==='date') return d||'Sem data';
+  if(f==='dow') return d?DOW[new Date(d+'T12:00:00').getDay()]:'Sem data';
+  if(f==='tipo'){const k=kd(d);return k?(k.k==='Feriado'?'Feriado':'Fim de semana'):'Dia útil'}
+  return String(r[f]||'—');
+}
+let PV=null;
+function initPivot(){
+  if($('pvRow').options.length) return;
+  const o=PF.map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
+  $('pvRow').innerHTML=o;$('pvCol').innerHTML='<option value="">(nenhuma)</option>'+o;
+  $('pvRow').value='client_name';$('pvCol').value='mes';
+}
+function renderPivot(){
+  initPivot();
+  const c=R(),kd=mk(c),rf=$('pvRow').value,cf=$('pvCol').value,vm=$('pvVal').value;
+  const add=(o,k,r)=>{if(vm==='h')o[k]=(o[k]||0)+r.hours;else if(vm==='n')o[k]=(o[k]||0)+1;else(o[k]??=new Set()).add(vm==='t'?r.ticket_id:r.owner_name)};
+  const val=x=>x instanceof Set?x.size:(x||0);
+  const M={},RT={},CT={},G={};
+  rows.forEach(r=>{const a=fv(r,rf,kd),b=cf?fv(r,cf,kd):'Total';add(M,a+'\u0001'+b,r);add(RT,a,r);add(CT,b,r);add(G,'g',r)});
+  const srt=(o,f)=>Object.keys(o).sort((x,y)=>TIMEF.includes(f)?x.localeCompare(y):val(o[y])-val(o[x])||x.localeCompare(y));
+  const RL=srt(RT,rf),CL=srt(CT,cf),R2=RL.slice(0,60),C2=CL.slice(0,24);
+  const cells=R2.map(a=>C2.map(b=>val(M[a+'\u0001'+b])));
+  const mx=Math.max(1,...cells.flat()),fmt=v=>vm==='h'?v.toFixed(2):String(v);
+  const lab=Object.fromEntries(PF);
+  $('pvTable').innerHTML=`<thead><tr><th>${lab[rf]}${cf?' \\ '+lab[cf]:''}</th>${cf?C2.map(b=>`<th>${esc(b)}</th>`).join(''):''}<th>Total</th></tr></thead><tbody>`+
+    R2.map((a,i)=>`<tr><td><b>${esc(a)}</b></td>${cf?cells[i].map(v=>`<td style="background:rgba(37,99,235,${v?(.08+.4*v/mx).toFixed(2):0})">${v?fmt(v):''}</td>`).join(''):''}<td><b>${fmt(val(RT[a]))}</b></td></tr>`).join('')+
+    `<tr><td><b>Total</b></td>${cf?C2.map(b=>`<td><b>${fmt(val(CT[b]))}</b></td>`).join(''):''}<td><b>${fmt(val(G.g))}</b></td></tr></tbody>`;
+  $('pvNote').textContent=(RL.length>60||CL.length>24)?`Mostrando ${R2.length} de ${RL.length} linhas e ${cf?C2.length+' de '+CL.length:'0'} colunas, ordenadas por total. Os totais consideram tudo.`:'';
+  PV={rf,cf,vm,R:R2,C:cf?C2:[],cells,RT:R2.map(a=>val(RT[a])),CT:C2.map(b=>val(CT[b])),G:val(G.g)};
+}
+
+/* ---------- gráficos ---------- */
+const CH={},PAL=['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#475569','#ea580c'];
+const mkc=(id,cfg)=>{if(CH[id])CH[id].destroy();if(window.Chart)CH[id]=new Chart($(id),cfg)};
+const rangeDays=(a,b)=>{const o=[];for(let d=new Date(a+'T12:00:00'),x=new Date(b+'T12:00:00');d<=x;d.setDate(d.getDate()+1))o.push(iso(d));return o};
+function renderCharts(c){
+  const kd=mk(c),P=period(c),V=vipList(),agN=new Set(rows.map(r=>r.owner_name)).size;
+  const D={},W={},CL={},AC={},TM={};
+  rows.forEach(r=>{
+    if(r.date){D[r.date]=(D[r.date]||0)+r.hours;const o=W[wk(r.date)]??={};o[r.sector]=(o[r.sector]||0)+r.hours}
+    CL[r.client_name]=(CL[r.client_name]||0)+r.hours;AC[r.activity]=(AC[r.activity]||0)+r.hours;TM[r.sector]=(TM[r.sector]||0)+r.hours;
+  });
+  const ds=Object.keys(D).sort(),days=ds.length?rangeDays(ds[0],ds[ds.length-1]):[];
+  mkc('chDay',{type:'line',data:{labels:days.map(fmtDate),datasets:[
+    {label:'Horas apontadas',data:days.map(d=>+(D[d]||0).toFixed(2)),borderColor:'#2563eb',backgroundColor:'#2563eb33',fill:true,tension:.25,pointRadius:2},
+    {label:'Capacidade (jornada × colaboradores, dias úteis)',data:days.map(d=>kd(d)?0:c.jor*agN),borderColor:'#dc2626',borderDash:[6,4],pointRadius:0}]},options:{responsive:true,interaction:{mode:'index',intersect:false}}});
+  const weeks=Object.keys(W).sort(),tops=Object.entries(TM).sort((a,b)=>b[1]-a[1]).slice(0,7).map(x=>x[0]);
+  const sets=tops.map((t,i)=>({label:t,backgroundColor:PAL[i],data:weeks.map(w=>+(W[w][t]||0).toFixed(2))}));
+  if(Object.keys(TM).length>tops.length) sets.push({label:'Demais equipes',backgroundColor:'#94a3b8',data:weeks.map(w=>+(Object.entries(W[w]).filter(([k])=>!tops.includes(k)).reduce((s,x)=>s+x[1],0)).toFixed(2))});
+  mkc('chWeek',{type:'bar',data:{labels:weeks.map(w=>'Sem. '+fmtDate(w).slice(0,5)),datasets:sets},options:{scales:{x:{stacked:true},y:{stacked:true}}}});
+  const cl=Object.entries(CL).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  mkc('chCli',{type:'bar',data:{labels:cl.map(x=>x[0]),datasets:[{label:'Horas',data:cl.map(x=>+x[1].toFixed(2)),backgroundColor:cl.map(x=>vipOf(x[0],V)?'#d97706':'#2563eb')}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+  const ag=groupAgents().slice(0,15);
+  mkc('chAg',{type:'bar',data:{labels:ag.map(a=>a.name),datasets:[{label:'Horas apontadas',data:ag.map(a=>+a.h.toFixed(2)),backgroundColor:'#2563eb'},{type:'line',label:'Capacidade do período',data:ag.map(()=>P.cap),borderColor:'#dc2626',borderDash:[6,4],pointRadius:0}]}});
+  const ac=Object.entries(AC).sort((a,b)=>b[1]-a[1]),t8=ac.slice(0,8),rest=ac.slice(8).reduce((s,x)=>s+x[1],0);
+  if(rest) t8.push(['Outras',rest]);
+  mkc('chAct',{type:'doughnut',data:{labels:t8.map(x=>x[0]),datasets:[{data:t8.map(x=>+x[1].toFixed(2)),backgroundColor:PAL}]},options:{plugins:{legend:{position:'right'}}}});
+}
+
+/* ---------- exportação (Excel e PDF da aba atual) ---------- */
+const plain=tb=>{const c=tb.cloneNode(true);c.querySelectorAll('input').forEach(i=>i.replaceWith(document.createTextNode(i.value)));return c};
+const tabTitle=t=>(document.querySelector(`#tabs button[data-t="${t}"]`)||{}).textContent||t;
+
+function exportXLSX(){
+  if(!rows.length) return alert('Nenhum dado para exportar.');
+  const c=R(),kd=mk(c),wb=XLSX.utils.book_new(),used=new Set();
+  wb.Workbook={CalcPr:{fullCalcOnLoad:true}};
+  const nm=t=>{const n=String(t||'Aba').replace(/[\\/?*\[\]:]/g,' ').trim().slice(0,28)||'Aba';let k=n,i=2;while(used.has(k))k=n.slice(0,25)+' '+i++;used.add(k);return k};
+  const tidy=ws=>{
+    Object.keys(ws).forEach(a=>{
+      if(a[0]==='!') return;const x=ws[a];
+      if(x.t==='s'){let m=/^(-?\d+(?:\.\d+)?) h$/.exec(x.v);
+        if(m){x.t='n';x.v=+m[1];x.z='0.00" h"';delete x.w}
+        else if(m=/^(\d+(?:\.\d+)?)%$/.exec(x.v)){x.t='n';x.v=m[1]/100;x.z='0.0%';delete x.w}}
+    });
+    if(ws['!ref']) ws['!autofilter']={ref:ws['!ref']};return ws;
+  };
+  const N=rows.length+1,dl=DCOLS.length;
+  if(ACT==='pivot'&&PV){
+    const {rf,cf,vm,R:RR,C:CC,cells}=PV,cl=f=>String.fromCharCode(65+DCOLS.findIndex(x=>x[0]===f)),rg=l=>`Dados!$${l}$2:$${l}$${N}`;
+    const hdr=[PF.find(x=>x[0]===rf)[1],...CC,'Total'],aoa=[hdr,...RR.map((a,i)=>[a,...CC.map((b,j)=>cells[i][j]),PV.RT[i]]),['Total',...PV.CT,PV.G]];
+    const ws=XLSX.utils.aoa_to_sheet(aoa),fx=vm==='h'||vm==='n',last=String.fromCharCode(65+dl);
+    if(fx){
+      const body=vm==='h'?`*${rg(last)}`:'';
+      RR.forEach((a,i)=>{
+        CC.forEach((b,j)=>{const ad=XLSX.utils.encode_cell({r:i+1,c:j+1});ws[ad].f=`SUMPRODUCT((${rg(cl(rf))}=$A${i+2})*(${rg(cl(cf))}=${XLSX.utils.encode_col(j+1)}$1)${body}${vm==='n'?'*1':''})`});
+        const tc=XLSX.utils.encode_cell({r:i+1,c:CC.length+1});
+        ws[tc].f=cf?`SUM(B${i+2}:${XLSX.utils.encode_col(CC.length)}${i+2})`:`SUMPRODUCT((${rg(cl(rf))}=$A${i+2})${body}${vm==='n'?'*1':''})`;
+      });
+    }
+    ws['!autofilter']={ref:ws['!ref']};
+    XLSX.utils.book_append_sheet(wb,ws,nm('Dinâmica'));
+  }else{
+    document.querySelectorAll(`#t-${ACT} .card`).forEach(card=>{
+      const h=card.querySelector('h3'),tb=card.querySelector('table');
+      if(tb) XLSX.utils.book_append_sheet(wb,tidy(XLSX.utils.table_to_sheet(plain(tb))),nm(h&&h.textContent));
+    });
+  }
+  const dados=[DCOLS.map(x=>x[1]).concat('Horas'),...rows.map(r=>DCOLS.map(([k])=>fv(r,k,kd)).concat(+r.hours.toFixed(4)))];
+  const wd=XLSX.utils.aoa_to_sheet(dados);wd['!autofilter']={ref:wd['!ref']};wd['!cols']=DCOLS.map((x,i)=>({wch:i===7?40:16}));
+  XLSX.utils.book_append_sheet(wb,wd,'Dados');
+  XLSX.writeFile(wb,`Auditoria_${tabTitle(ACT).replace(/[^\w]+/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+function exportPDF(){
+  if(!rows.length) return alert('Nenhum dado para exportar.');
+  const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'pt',format:'a4'}),W=doc.internal.pageSize.getWidth()-80,P=period(R());
+  let y=42;
+  const room=h=>{if(y+h>550){doc.addPage();y=42}};
+  doc.setFontSize(16);doc.text('Auditoria de Chamados · '+tabTitle(ACT),40,y);y+=16;
+  doc.setFontSize(9);doc.setTextColor(100);
+  doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')}${P.s?' · Período '+fmtDate(P.s)+' a '+fmtDate(P.e):''} · ${$('kT').textContent} chamados · ${$('kH').textContent} · ${$('kA').textContent} colaboradores`,40,y);y+=20;
+  doc.setTextColor(0);
+  document.querySelectorAll(`#t-${ACT} .card`).forEach(card=>{
+    const h=card.querySelector('h3');
+    if(h){room(30);doc.setFontSize(12);doc.text(h.textContent,40,y);y+=14}
+    card.querySelectorAll('p').forEach(p=>{if(p.textContent.trim()){doc.setFontSize(8);const t=doc.splitTextToSize(p.innerText,W);room(t.length*10);doc.text(t,40,y);y+=t.length*10+4}});
+    const k=card.querySelector('.kpis');
+    if(k&&k.children.length){doc.setFontSize(9);const t=doc.splitTextToSize([...k.children].map(x=>x.innerText.replace(/\s*\n+\s*/g,': ')).join('   ·   '),W);room(t.length*11);doc.text(t,40,y);y+=t.length*11+6}
+    card.querySelectorAll('canvas').forEach(cv=>{const tw=Math.min(W,cv.width>cv.height*3?W:480),th=tw*cv.height/cv.width;room(th);doc.addImage(cv.toDataURL('image/png'),'PNG',40,y,tw,th);y+=th+12});
+    card.querySelectorAll('table').forEach(tb=>{doc.autoTable({html:plain(tb),startY:y,styles:{fontSize:7,cellPadding:3},headStyles:{fillColor:[15,23,42]},margin:{left:40,right:40,bottom:40}});y=doc.lastAutoTable.finalY+16;if(y>550){doc.addPage();y=42}});
+  });
+  doc.save(`Auditoria_${tabTitle(ACT).replace(/[^\w]+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`);
+}
+
+/* ---------- inicialização ---------- */
+$('domain').value=localStorage.getItem('md_domain')||'';
+$('token').value=localStorage.getItem('md_token')||'';
+const hoje=new Date(),pad=n=>String(n).padStart(2,'0');
+$('startDate').value=`${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-01`;
+$('endDate').value=`${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-${pad(hoje.getDate())}`;
+$('cfId').value=localStorage.getItem('md_cf')||'';
+$('vipList').value=localStorage.getItem('md_vip')??['Dr Oculos','Ferri','Instituto','Paulo e Condah','Atacadão do Oculos','IMV','Paschoal LAB','Cardeal','Sr dos Oculos','Lux'].join('\n');
+try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{if(sv[i]!=null)$(i).value=sv[i]})}catch(e){}
+showTab('load');
+</script>
+</body>
+</html>
