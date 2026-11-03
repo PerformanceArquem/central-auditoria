@@ -10,48 +10,60 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 <style>
-:root{--navy:#0f172a;--blue:#2563eb;--bg:#f8fafc;--line:#e2e8f0;--muted:#64748b;--ink:#1e293b;--ok:#16a34a;--bad:#dc2626}
+:root{--navy:#14213d;--blue:#2457d6;--bg:#f3f4f6;--line:#e3e6ea;--muted:#667085;--ink:#1d2433;--ok:#16803c;--bad:#c62828;--warn:#b45309;--r:10px}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif}
-header{background:var(--navy);color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-header b{font-size:17px}#status{font-size:12px;color:#94a3b8}
-nav{display:flex;gap:4px;padding:0 24px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto}
-nav button{border:0;background:none;padding:12px 14px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
-nav button.on{color:var(--blue);border-color:var(--blue)}
-main{padding:20px 24px;max-width:1400px;margin:auto}
-.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
-h3{margin:0 0 12px}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif;display:grid;grid-template-columns:232px minmax(0,1fr);grid-template-rows:auto 1fr;min-height:100vh}
+header{grid-column:1/-1;background:var(--navy);color:#fff;padding:12px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.brand b{font-size:17px;display:block;line-height:1.25}.brand small{color:#aab4cc;font-size:12px}
+.chip{display:flex;gap:8px;align-items:center;border:1px solid #ffffff30;border-radius:99px;padding:5px 14px;font-size:12px;color:#dbe2f0}
+.chip .dot{width:9px;height:9px;border-radius:50%;background:#8791a8;flex:none}.chip.ok .dot{background:#4ade80}.chip.busy .dot{background:#facc15;animation:pu 1s infinite}.chip.err .dot{background:#f87171}
+@keyframes pu{50%{opacity:.3}}@media(prefers-reduced-motion:reduce){.chip .dot{animation:none!important}}
+#status,#auto{font-size:12px;color:inherit}
+nav{display:flex;flex-direction:column;gap:2px;padding:14px 10px;background:#fff;border-right:1px solid var(--line);position:sticky;top:0;align-self:start;max-height:100vh;overflow-y:auto}
+nav button{border:0;background:none;padding:10px 12px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer;text-align:left;border-radius:8px;border-left:3px solid transparent}
+nav button:hover{background:#f5f6f8;color:var(--ink)}nav button.on{background:#eaf0fd;color:var(--blue);border-left-color:var(--blue)}
+main{padding:24px 28px;width:100%;max-width:1480px;margin:0 auto}
+.mh{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.mh h2{margin:0;font-size:22px;letter-spacing:-.01em}.mh p{margin:2px 0 0;color:var(--muted)}
+.sb{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sb input{min-width:270px;padding-left:34px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23667085' stroke-width='2'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 4 4'/%3E%3C/svg%3E") no-repeat 11px center}
+.qc{font-size:12px;color:var(--muted);font-weight:600}
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:20px;margin-bottom:16px}
+h3{margin:0 0 12px;font-size:15px}
 .row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
 .fg{display:flex;flex-direction:column;gap:3px;min-width:150px}
-.fg label{font-size:11px;font-weight:700;color:var(--muted)}
-input,select{padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fff}
-button.b{background:var(--blue);color:#fff;border:0;padding:9px 14px;border-radius:8px;font-weight:600;cursor:pointer}
-button.g{background:var(--ok)}button.s{background:#e2e8f0;color:var(--ink)}
-button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.fg label{font-size:12px;font-weight:600;color:var(--muted)}
+input,select,textarea{padding:8px 11px;border:1px solid #cfd5dd;border-radius:8px;font-size:13px;background:#fff;color:var(--ink)}
+button{font:inherit;transition:filter .15s}
+button.b{background:var(--blue);color:#fff;border:0;padding:9px 15px;border-radius:8px;font-weight:600;cursor:pointer}
+button.b:hover,button.s:hover{filter:brightness(.94)}
+button.g{background:var(--ok)}button.s{background:#e8ebf0;color:var(--ink);border:0;padding:9px 14px;border-radius:8px;font-weight:600;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
-.kpis .card{margin:0}.kpis small{color:var(--muted);font-weight:600}.kpis div b{display:block;font-size:26px;color:var(--navy)}
-.tw{overflow-x:auto;max-height:560px}
+.kpis .card{margin:0;padding:15px 18px;border-left:4px solid var(--blue)}.kpis small{color:var(--muted);font-weight:600}.kpis div b{display:block;font-size:26px;color:var(--ink)}
+.tw{overflow-x:auto;max-height:560px;border:1px solid var(--line);border-radius:8px}
 table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
-th{position:sticky;top:0;background:#f1f5f9;color:var(--muted);text-align:left;padding:10px 12px;font-size:12px}
-td{padding:9px 12px;border-bottom:1px solid var(--line)}
-.pill{padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#f1f5f9}
-.pill.ok{background:#dcfce7;color:#166534}.pill.bad{background:#fee2e2;color:#991b1b}.pill.warn{background:#fef3c7;color:#92400e}
+th{position:sticky;top:0;background:#f6f7f9;color:var(--muted);text-align:left;padding:10px 12px;font-size:12px;font-weight:600;border-bottom:1px solid var(--line)}
+td{padding:9px 12px;border-bottom:1px solid #eef0f3}tbody tr:hover td{background:#f8faff}
+.pill{padding:2px 9px;border-radius:12px;font-size:11px;font-weight:600;background:#eef0f3}
+.pill.ok{background:#dcf5e5;color:#14532d}.pill.bad{background:#fde2e2;color:#991b1b}.pill.warn{background:#fdf0d0;color:#8a4b08}
 .bar{display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:12px}
-.bar i{flex:1;height:10px;background:#e2e8f0;border-radius:5px;overflow:hidden}.bar u{display:block;height:100%;background:var(--blue)}
-.zone{border:2px dashed var(--blue);border-radius:10px;padding:18px;text-align:center;background:#eff6ff;cursor:pointer;font-weight:600;color:var(--blue)}
+.bar i{flex:1;height:10px;background:#e8ebf0;border-radius:5px;overflow:hidden}.bar u{display:block;height:100%;background:var(--blue)}
+.zone{border:2px dashed #9db5ef;border-radius:10px;padding:18px;text-align:center;background:#f3f6fe;cursor:pointer;font-weight:600;color:var(--blue)}
 #log{margin-top:10px;font-weight:600}.err{color:var(--bad)}.okc{color:var(--ok)}
-pre{background:#1e293b;color:#7dd3fc;padding:14px;border-radius:8px;max-height:380px;overflow:auto;font-size:12px}
+pre{background:#1d2433;color:#9fd3ff;padding:14px;border-radius:8px;max-height:380px;overflow:auto;font-size:12px}
 .hide{display:none!important}
-@media print{header,nav,.filters,.noprint,#rules{display:none!important}main{padding:0}}
 th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--blue)}.ar{margin-left:4px;font-size:10px}
 .colbtn{margin:0 0 8px;font-size:12px}.colbtn summary{cursor:pointer;color:var(--blue);font-weight:600;width:max-content}
 .colbox{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 0}.colbox label{display:flex;gap:4px;align-items:center;font-weight:400;font-size:12px;color:var(--ink)}
 details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 0 0;padding-left:20px}details.card li{margin-bottom:4px}
 .sum p{margin:6px 0}.sum p.al{color:#991b1b}.sum p.wn{color:#92400e}
+@media(max-width:900px){body{display:block}nav{flex-direction:row;position:static;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px 12px}nav button{white-space:nowrap;border-left:0;border-bottom:3px solid transparent}nav button.on{border-bottom-color:var(--blue)}main{padding:16px}.sb input{min-width:0;width:100%}}
+@media print{header,nav,.filters,.noprint,#rules,.mh{display:none!important}body{display:block;background:#fff}main{padding:0}}
 </style>
 </head>
 <body>
-<header><b>Auditoria de Chamados · Ticket Manager</b><div><span id="status">Aguardando dados</span> <span id="auto" style="font-size:12px;color:#94a3b8"></span></div></header>
+<header><div class="brand"><b>Auditoria de Chamados</b><small>Ticket Manager · Movidesk</small></div><div class="chip" id="chip"><span class="dot"></span><span id="status">Aguardando dados</span><span id="auto"></span></div></header>
 <nav id="tabs">
   <button data-t="load" class="on">Carregar dados</button>
   <button data-t="mgmt">Gestão</button>
@@ -61,6 +73,7 @@ details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 
   <button data-t="pivot">Tabela dinâmica</button>
   <button data-t="proj">Projetos</button>
   <button data-t="occ">Colaboradores</button>
+  <button data-t="bot">Robô de leitura</button>
   <button data-t="diag">Diagnóstico</button>
 </nav>
 <main>
@@ -73,11 +86,11 @@ details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 
         <div class="fg"><label>Início</label><input type="date" id="startDate"></div>
         <div class="fg"><label>Fim</label><input type="date" id="endDate"></div>
         <div class="fg"><label>ID do campo "horas previstas" (opcional)</label><input id="cfId" placeholder="ex.: 12345"></div>
-        <div class="fg"><label>Atualização automática</label><select id="autoMin" onchange="autoChanged()"><option value="0">Desligada</option><option value="1">A cada 1 min</option><option value="5">A cada 5 min</option><option value="10">A cada 10 min</option><option value="15">A cada 15 min</option></select></div>
-        <button class="b g" onclick="sync()">Sincronizar agora</button>
+        <div class="fg"><label>Atualização automática</label><select id="autoMin" onchange="autoChanged()"><option value="0">Desligada</option><option value="1">A cada 1 min</option><option value="5">A cada 5 min</option><option value="10">A cada 10 min</option><option value="15">A cada 15 min</option><option value="30">A cada 30 min</option><option value="60">A cada 60 min</option></select></div>
+        <button class="b g" onclick="sync()">Sincronizar agora</button><button class="s" onclick="clearCache()">Limpar dados salvos</button>
       </div>
       <div id="log"></div>
-      <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. O token fica salvo apenas neste navegador. Ao abrir a página com o token salvo, a sincronização começa sozinha; depois só os tickets alterados são buscados, e uma sincronização completa roda a cada hora.</p>
+      <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. Os dados do Movidesk ficam salvos neste navegador: ao abrir a página eles aparecem na hora e só os tickets alterados são buscados. Uma sincronização completa roda a cada 6 horas. Se a conexão cair, o sistema tenta de novo sozinho, com intervalos cada vez maiores.</p><p id="cacheInfo" style="margin:8px 0 0;font-weight:600"></p>
     </div>
     <div class="card">
       <h3>Leitura por IA (opcional)</h3>
@@ -167,6 +180,7 @@ details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 
       <div class="card"><h3>Previsto × apontado por chamado</h3><p style="color:var(--muted);margin:0 0 10px"><b>Previsto</b> = horas que a pessoa informou: digitadas aqui, do campo personalizado do Movidesk ou lidas no texto do chamado pelo robô de regras ou pela IA (“previsão 20h”; “3 dias” vale 3 × a jornada). <b>Apontado</b> = todo o histórico de tempo lançado, sem filtro de período. <b>Restam</b> = previsto − apontado; <b>Excedeu</b> = apontado − previsto. Previsão digitada aqui tem prioridade e fica salva neste navegador.</p><div class="row noprint" style="margin-bottom:10px"><div class="fg"><label>Mostrar</label><select id="bScope" onchange="render()"><option value="p">Somente projetos (regra acima)</option><option value="a">Todos os chamados</option></select></div></div><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Previsto (h)</th><th>De onde veio a previsão</th><th>Apontado (h)</th><th>Restam ou excedeu</th><th>% da previsão</th><th>Situação</th><th>Início</th><th>Último apontamento</th><th>Duração (dias corridos)</th><th>Dias com apontamento</th></tr></thead><tbody id="tBudget"></tbody></table></div></div></div>
     <div id="t-occ" class="hide"><div class="card"><h3>Colaboradores: horas apontadas e jornada</h3><p id="occInfo" style="color:var(--muted);margin:0 0 10px"></p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Lançamentos</th><th>Tickets</th><th>Clientes</th><th>Dias com apontamento</th><th>Horas apontadas (h)</th><th>Média por dia apontado (h)</th><th>Em dias não úteis (h)</th><th>Capacidade (h)</th><th>Mínimo exigido (h)</th><th>% da capacidade</th><th>Falta para o mínimo</th><th>Falta para a jornada completa</th><th>Situação</th></tr></thead><tbody id="tOcc"></tbody></table></div></div>
       <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Horas no dia (h)</th><th>% da jornada</th><th>Falta ou sobra no dia</th><th>Situação</th></tr></thead><tbody id="tOccDay"></tbody></table></div></div></div>
+    <div id="t-bot" class="hide"><div class="card"><h3>Previsões lidas pelo robô nos chamados</h3><p id="botInfo" style="margin:0 0 12px"></p><div class="tw"><table><thead><tr><th>Chamado</th><th>Cliente</th><th>Assunto</th><th>Onde leu</th><th>Trecho</th><th>Previsto (h)</th><th>Apontado (h)</th><th>Uso</th><th>Confiança</th><th>Ação</th></tr></thead><tbody id="tBot"></tbody></table></div></div></div>
     <div id="t-diag" class="hide"><div class="card"><h3>Diagnóstico da extração</h3><div id="diagSummary"></div><pre id="rawJson">Sem dados.</pre></div></div>
   </div>
 </main>
@@ -209,8 +223,8 @@ let stats={},CF='';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function build(all){stats={tk:all.length,ac:0,ap:0,tw:0};raw=all.flatMap(flatten)}
 
-let TK=new Map(),syncing=false,apiOn=false,EXP=null,lastSync=0,lastTry=0,lastFull=0,lastSig='',lastToday='';
-const AUTO_FULL_MS=36e5;
+let TK=new Map(),syncing=false,apiOn=false,EXP=null,lastSync=0,lastTry=0,lastFull=0,lastSig='',lastToday='',fails=0,lastErr='';
+const AUTO_FULL_MS=216e5;
 
 async function sync(auto){
   if(syncing) return;
@@ -218,7 +232,7 @@ async function sync(auto){
   if(dom&&!/^https?:\/\//i.test(dom)) dom='https://'+dom;
   if(!dom||!tok) return auto?0:log('Preencha domínio e token.','err');
   if(!ini) return auto?0:log('Informe a data inicial.','err');
-  localStorage.setItem('md_domain',dom);localStorage.setItem('md_token',tok);
+  localStorage.setItem('md_domain',dom);localStorage.setItem('md_token',tok);localStorage.setItem('md_ini',ini);
   CF=$('cfId').value.trim();localStorage.setItem('md_cf',CF);const SEL=SELECT+(CF?',customFieldValues':'');
   const began=Date.now(),t0=performance.now(),sig=[dom,ini,CF].join('|');
   const full=!auto||!TK.size||sig!==lastSig||began-lastFull>AUTO_FULL_MS;
@@ -258,7 +272,7 @@ async function sync(auto){
     const live=!auto&&full;
     if(live){build(all);start(`API Movidesk (${all.length} tickets...)`)}
     const W=5;
-    while(!done&&all.length<5000){
+    while(!done&&all.length<20000){
       log(`Buscando em paralelo... ${all.length} tickets`);
       const pages=await Promise.all(Array.from({length:W},(_,i)=>get(EXP,skip+i*100)));
       pages.forEach(p=>{all=all.concat(p);if(p.length<100)done=true});
@@ -266,9 +280,9 @@ async function sync(auto){
       if(live){build(all);applyFilters()}
     }
     if(full) TK=new Map();
-    all.forEach(t=>TK.set(String(t.id),t));
+    all.forEach(t=>TK.set(String(t.id),slim(t)));
     const list=[...TK.values()];
-    lastSync=began;if(full)lastFull=began;lastSig=sig;
+    lastSync=began;if(full)lastFull=began;lastSig=sig;fails=0;lastErr='';persist();
     if(full||all.length){
       firstTicket=list.find(t=>(t.actions||[]).length)||list[0]||null;
       build(list);start(`API Movidesk (${list.length} tickets)`,auto);
@@ -278,52 +292,69 @@ async function sync(auto){
     if(!raw.length&&!auto) showTab('diag');
     iaRun(true);
   }catch(e){
+    fails++;lastErr=e.message;
     log('Erro: '+e.message+(e instanceof TypeError?' (falha de rede ou CORS: verifique o domínio ou rode por um servidor local)':''),'err');
     if(auto&&(e.status===401||e.status===403)){$('autoMin').value='0';autoChanged()}
   }finally{syncing=false;autoLabel()}
 }
 
 /* ---------- atualização automática ---------- */
+const nextDelay=()=>{const m=+$('autoMin').value*6e4;return !m?0:fails?Math.min(Math.max(m,6e4)*2**fails,18e5):m};
 function autoLabel(){
-  const el=$('auto'),m=+$('autoMin').value;
-  if(!apiOn){el.textContent='';return}
-  if(syncing){el.textContent='· atualizando…';return}
-  if(!lastSync){el.textContent='';return}
-  const t=new Date(lastSync).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-  el.textContent=`· atualizado às ${t}`+(m?` · próxima em ${Math.max(0,Math.ceil((lastTry+m*6e4-Date.now())/6e4))} min`:' · automático desligado');
+  const el=$('auto'),ch=$('chip'),m=+$('autoMin').value;
+  if(!apiOn){el.textContent='';ch.className='chip';return}
+  ch.className='chip '+(syncing?'busy':fails?'err':lastSync?'ok':'');
+  if(syncing){el.textContent=' · atualizando…';return}
+  if(!lastSync&&!fails){el.textContent='';return}
+  const t=lastSync?new Date(lastSync).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'—',nx=Math.max(0,Math.ceil((lastTry+nextDelay()-Date.now())/6e4));
+  el.textContent=fails?` · falha (${lastErr}); nova tentativa em ${nx} min; dados salvos de ${t}`:` · atualizado às ${t}`+(m?` · próxima em ${nx} min`:' · automático desligado');
 }
 function autoChanged(){localStorage.setItem('md_auto',$('autoMin').value);autoLabel();tick()}
 function tick(){
   autoLabel();
   const m=+$('autoMin').value;
-  if(!m||!apiOn||syncing||document.hidden) return;
-  if(Date.now()-lastTry<m*6e4) return;
+  if(!m||!apiOn||syncing||document.hidden||navigator.onLine===false) return;
+  if(Date.now()-lastTry<nextDelay()) return;
   const a=document.activeElement; // não atualiza enquanto a pessoa digita numa tabela/lista
   if(a&&a.closest&&a.closest('table,textarea')) return;
   sync(true);
 }
 setInterval(tick,10000);
 document.addEventListener('visibilitychange',tick);
+addEventListener('online',()=>{fails=0;lastTry=0;tick()});
 
-/* robô de leitura: procura no assunto e na descrição do chamado quantas horas a pessoa disse que ia levar */
+/* robô de leitura: procura no assunto e nas ações quantas horas a pessoa disse que ia levar */
 const stripH=x=>String(x||'').replace(/<[^>]*>/g,' ').replace(/&nbsp;/gi,' ').replace(/\s+/g,' ').trim().slice(0,4000);
-const EST_KW='previs[aã]o|previst[oa]s?|estimativa|estimad[oa]s?|esfor[cç]o|vai\\s+levar|levar[aá]|levaremos|tempo\\s+(?:de\\s+)?(?:execu[cç][aã]o|desenvolvimento)';
-const EST_A=new RegExp('(?:'+EST_KW+')([^0-9\\n]{0,30}?)(\\d{1,4}(?:[.,]\\d{1,2})?)\\s*(horas?|hrs?|hs|h|dias?)(?![a-zà-ú])','i');
-const EST_B=/(\d{1,4}(?:[.,]\d{1,2})?)\s*(horas?|hrs?|hs|h|dias?)\s*(?:de\s+)?(?:previst[ao]s?|estimad[ao]s?|esfor[cç]o)/i;
-const EST_BAD=/entreg|prazo|venc|respost|retorn|sla|atendiment|reuni/i; // evita confundir prazo de entrega com esforço
+const WN={um:1,uma:1,dois:2,duas:2,'tres':3,'três':3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10};
+const EST_KW='previs[aã]o|previst[oa]s?|estimativa|estimad[oa]s?|estimo|esfor[cç]o|or[cç]ad[oa]s?|or[cç]amento|vai\\s+levar|levar[aá]|levaremos|leva\\s+(?:cerca\\s+de|uns?|aprox\\w*)|tempo\\s+(?:total\\s+)?(?:de\\s+)?(?:execu[cç][aã]o|desenvolvimento)';
+const NUM='(\\d{1,4}(?:[.,]\\d{1,2})?)(?:\\s*(?:a|à|-|até|ate)\\s*(\\d{1,4}(?:[.,]\\d{1,2})?))?';
+const UN='\\s*(horas?|hrs?|hs|h|min(?:utos?)?|dias?)(?![a-zà-ú])';
+const EST_A=new RegExp('(?:'+EST_KW+')([^0-9\\n]{0,30}?)'+NUM+UN,'i');
+const EST_B=new RegExp(NUM+UN+'\\s*(?:de\\s+|em\\s+)?(?:previst[ao]s?|estimad[ao]s?|esfor[cç]o|or[cç]ad[ao]s?)','i');
+const EST_BAD=/entreg|prazo|venc|respost|retorn|sla|atendiment|reuni|hor[aá]rio|janela|plant[aã]o|dispon/i; // prazo de entrega não é esforço
+const EST_NEG=/(?:\bsem|\bn[aã]o|nenhum[ao]?)\s+(?:\w+\s+){0,2}$/i; // "sem previsão de 2h"
+// normaliza "1h30", "2 horas e 15 min", "meia hora", "duas horas" para número + unidade
+const prep=x=>stripH(x)
+  .replace(/(\d{1,3})h(\d{2})(?!\d)/gi,(_,h,m)=>(+h+m/60).toFixed(2)+'h')
+  .replace(/(\d{1,3})\s*h(?:oras?)?\s*e\s*(\d{1,2})\s*min\w*/gi,(_,h,m)=>(+h+m/60).toFixed(2)+'h')
+  .replace(/(\d+)\s*horas?\s*e\s*meia/gi,(_,h)=>(+h+.5)+'h')
+  .replace(/\bmeia\s+hora\b/gi,'0.5h').replace(/\bmeio\s+dia\b/gi,'0.5 dia')
+  .replace(/\b(um|uma|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez)\s+(horas?|dias?)\b/gi,(_,w,u)=>WN[w.toLowerCase()]+' '+u);
 function readEstimate(t){
-  const T=[['assunto',t.subject]];
-  (t.actions||[]).slice(0,3).forEach((a,i)=>T.push([i?'ação '+(i+1):'descrição',a.description||a.htmlDescription]));
+  const acts=(t.actions||[]).slice().sort((a,b)=>String(a.createdDate).localeCompare(String(b.createdDate))).slice(0,12);
+  const T=[['assunto',t.subject],...acts.map((a,i)=>[i?'ação '+(i+1):'descrição',a.description||a.htmlDescription])],hits=[];
   for(const [src,txt] of T){
-    const tx=stripH(txt);if(!tx) continue;
-    let m=EST_A.exec(tx),v,u;
-    if(m&&!EST_BAD.test(m[1])){v=m[2];u=m[3]}
-    else if((m=EST_B.exec(tx))){v=m[1];u=m[2]}
+    const tx=prep(txt);if(!tx) continue;
+    let m=EST_A.exec(tx),a,b,u,sure=1;
+    if(m&&!EST_BAD.test(m[1])&&!EST_NEG.test(tx.slice(Math.max(0,m.index-25),m.index))){a=m[2];b=m[3];u=m[4]}
+    else if((m=EST_B.exec(tx))&&!EST_NEG.test(tx.slice(Math.max(0,m.index-25),m.index))){a=m[1];b=m[2];u=m[3];sure=0}
     else continue;
-    const n=parseFloat(v.replace(',','.'));if(!(n>0)) continue;
-    return {v:n,u:/^d/i.test(u)?'d':'h',src,snip:m[0].slice(0,70)};
+    let n=parseFloat((b||a).replace(',','.'));if(!(n>0)) continue; // faixa "10 a 20 h": usa o maior valor
+    const d=/^d/i.test(u);if(/^min/i.test(u)) n/=60;
+    hits.push({v:n,u:d?'d':'h',src,snip:m[0].slice(0,70),conf:sure?'alta':'média',range:!!b});
   }
-  return null;
+  if(!hits.length) return null;
+  const e=hits[hits.length-1];e.rev=hits.length;return e; // vale a estimativa mais recente
 }
 
 const ticketText=t=>[t.subject,...(t.actions||[]).slice(0,3).map(a=>stripH(a.description||a.htmlDescription))].filter(Boolean).join(' | ').slice(0,3000);
@@ -334,7 +365,7 @@ function flatten(t){
   const base={ticket_id:String(t.id),subject:t.subject||'Sem assunto',
     client_name:nm(c.organization)||nm(c)||'Não informado',
     planned:(()=>{const f=CF&&(t.customFieldValues||[]).find(x=>String(x.customFieldId)===CF);return f?parseFloat(String(f.value).replace(',','.'))||0:0})(),
-    service_name:t.serviceFirstLevel||'Geral',category:t.category||'Geral',status:t.status||'—',est:readEstimate(t),txt:ticketText(t)};
+    service_name:t.serviceFirstLevel||'Geral',category:t.category||'Geral',status:t.status||'—',est:IG[String(t.id)]?null:readEstimate(t),txt:ticketText(t)};
   const out=[];
   (t.actions||[]).forEach(a=>{
     stats.ac++;
@@ -400,7 +431,9 @@ function buildFilters(keep){
 function applyFilters(){
   const s=$('fStart').value,e=$('fEnd').value;
   const sel=FIELDS.map(([k])=>[k,$('f_'+k).value]).filter(x=>x[1]);
-  rows=raw.filter(r=>(!s||!r.date||r.date>=s)&&(!e||!r.date||r.date<=e)&&sel.every(([k,v])=>r[k]===v));
+  const q=(ACT==='load'||ACT==='diag')?[]:qn(ACT).split(' ').filter(Boolean);lastQ=q.join(' ');
+  rows=raw.filter(r=>(!s||!r.date||r.date>=s)&&(!e||!r.date||r.date<=e)&&sel.every(([k,v])=>r[k]===v)&&(!q.length||q.every(w=>hay(r).includes(w))));
+  const qe=$('qc_'+ACT);if(qe) qe.textContent=q.length?`${rows.length} lançamento(s) encontrados`:'';
   try{render()}catch(e){console.error(e);$('status').textContent='Erro ao desenhar: '+e.message}
 }
 function resetFilters(){FIELDS.forEach(([k])=>$('f_'+k).value='');$('fStart').value='';$('fEnd').value='';applyFilters()}
@@ -431,7 +464,7 @@ function render(){
 
 
   renderPivot();renderDiag();
-  renderProj(c);renderBudget(c);renderOcc(c);renderMgmt(c);renderVip(c);renderCharts(c);
+  renderProj(c);renderBudget(c);renderOcc(c);renderMgmt(c);renderVip(c);renderCharts(c);renderBot(c);
   enhanceTables();
 }
 
@@ -440,7 +473,8 @@ function renderDiag(){
   const c={};raw.forEach(r=>c[r.agent_src]=(c[r.agent_src]||0)+1);
   $('diagSummary').innerHTML=`<p><b>Tickets:</b> ${stats.tk||0} · <b>Ações:</b> ${stats.ac||0} · <b>Apontamentos (timeAppointments):</b> ${stats.ap||0} · <b>Ações com timeWorked:</b> ${stats.tw||0}</p>`+'<p>Origem do nome do colaborador em cada lançamento:</p>'+Object.entries(c).map(([k,v])=>`<span class="pill" style="margin-right:6px">${esc(k)}: ${v}</span>`).join('')+
     '<p style="color:var(--muted)">Se aparecer muito "responsável do ticket" ou "nenhum", o JSON abaixo mostra quais campos a API devolveu.</p>';
-  $('rawJson').textContent=firstTicket?JSON.stringify(firstTicket,null,2).slice(0,12000):'Sem dados.';
+  const jt=firstTicket?JSON.stringify(firstTicket,null,2).slice(0,12000):'Sem dados.',dq=norm(Q.diag||'');
+  $('rawJson').textContent=dq?(jt.split('\n').filter(l=>norm(l).includes(dq)).join('\n')||'Nenhuma linha corresponde à busca.'):jt;
 }
 
 let ACT='load';
@@ -448,9 +482,10 @@ function showTab(t){
   ACT=t;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-load').classList.toggle('hide',t!=='load');
-  ['mgmt','vip','charts','entries','pivot','proj','occ','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  $('rules').classList.toggle('hide',!['proj','occ','mgmt','vip','charts','pivot'].includes(t));
+  ['mgmt','vip','charts','entries','pivot','proj','occ','bot','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  $('rules').classList.toggle('hide',!['proj','occ','mgmt','vip','charts','pivot','bot'].includes(t));
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='diag');
+  if(raw.length&&t!=='load'&&t!=='diag'&&qn(t)!==lastQ) applyFilters();
 }
 $('tabs').addEventListener('click',e=>{const t=e.target.dataset.t;if(t)showTab(t)});
 
@@ -712,7 +747,7 @@ function renderCharts(c){
 }
 
 /* ---------- exportação (Excel e PDF da aba atual) ---------- */
-const plain=tb=>{const c=tb.cloneNode(true);c.querySelectorAll('input').forEach(i=>i.replaceWith(document.createTextNode(i.value)));c.querySelectorAll('.ar').forEach(x=>x.remove());c.querySelectorAll('th,td').forEach(x=>{if(x.style.display==='none')x.remove()});return c};
+const plain=tb=>{const c=tb.cloneNode(true);c.querySelectorAll('input').forEach(i=>i.replaceWith(document.createTextNode(i.value)));c.querySelectorAll('.ar').forEach(x=>x.remove());c.querySelectorAll('button').forEach(x=>x.remove());c.querySelectorAll('th,td').forEach(x=>{if(x.style.display==='none')x.remove()});return c};
 const tabTitle=t=>(document.querySelector(`#tabs button[data-t="${t}"]`)||{}).textContent||t;
 
 function exportXLSX(){
@@ -878,11 +913,59 @@ async function iaRun(auto){
   }finally{iaBusy=false}
 }
 
+/* ---------- busca por módulo ---------- */
+const Q={};let lastQ='';
+const qn=t=>norm(Q[t]||'');
+const hay=r=>r._s??=norm([r.ticket_id,r.client_name,r.subject,r.owner_name,r.sector,r.activity,r.service_name,r.category,r.status,fmtDate(r.date)].join(' '));
+function doSearch(t){
+  Q[t]=$('q_'+t).value.trim();
+  if(t==='load'){const n=norm(Q[t]);$('t-load').querySelectorAll('.card').forEach(c=>c.classList.toggle('hide',!!n&&!norm(c.textContent).includes(n)));return}
+  if(t==='diag') return renderDiag();
+  if(raw.length) applyFilters();
+}
+function clearSearch(t){$('q_'+t).value='';doSearch(t)}
+const MODS={load:['Carregar dados','Conecte ao Movidesk, configure a sincronização automática e a leitura por IA.'],mgmt:['Gestão','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos','Evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],bot:['Robô de leitura','Previsões de horas que o robô e a IA encontraram no texto dos chamados.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
+
+/* ---------- robô: painel de leituras ---------- */
+let IG=(()=>{try{return JSON.parse(localStorage.getItem('md_ig')||'{}')}catch(e){return {}}})();
+const reflat=()=>{if(TK.size){build([...TK.values()]);applyFilters()}};
+function ignoreEst(id){IG[id]=1;localStorage.setItem('md_ig',JSON.stringify(IG));reflat()}
+function restoreIg(){IG={};localStorage.setItem('md_ig','{}');reflat()}
+function renderBot(c){
+  const ids=new Set(rows.map(r=>r.ticket_id));
+  const L=budgetData(c,'a').filter(p=>ids.has(p.id)).map(p=>{
+    const e=p.r.est,ia=IA[p.id];
+    if(e) return {p,id:p.id,by:'Regras',src:e.src,snip:e.snip,v:e.u==='d'?e.v*c.jor:e.v,conf:e.conf+(e.rev>1?` · ${e.rev} leituras, vale a mais recente`:'')+(e.range?' · faixa: usei o maior valor':'')};
+    if(ia&&ia.horas>0&&p.r.txt&&ia.h===hash(p.r.txt)) return {p,id:p.id,by:'IA',src:'texto do chamado',snip:ia.trecho||'',v:ia.horas,conf:ia.conf||''};
+    return null;
+  }).filter(Boolean).sort((a,b)=>b.p.h/b.v-a.p.h/a.v);
+  const nIg=Object.keys(IG).length;
+  $('botInfo').innerHTML=`<b>${L.length}</b> chamado(s) com previsão lida do texto (${L.filter(x=>x.by==='Regras').length} pelo robô de regras, ${L.filter(x=>x.by==='IA').length} pela IA); <b>${L.filter(x=>x.p.h>x.v).length}</b> já passaram do previsto.`+(nIg?` ${nIg} leitura(s) ignorada(s) · <a href="#" onclick="restoreIg();return false">restaurar</a>.`:'')+'<br><span style="color:var(--muted)">Entende “previsão 20h”, “estimativa de 3 dias”, “1h30”, “45 min”, “meia hora” e “10 a 20 horas”. Quando há várias leituras no chamado, vale a mais recente. Se o robô errou, clique em Ignorar ou digite o valor certo na aba Projetos.</span>';
+  $('tBot').innerHTML=L.map(x=>{const u=x.p.h/x.v,s=u>1?'bad':u>=.9?'warn':'ok';
+    return `<tr><td>#${esc(x.id)}</td><td>${esc(x.p.client)}</td><td>${esc(x.p.subject)}</td><td><span class="pill">${x.by}</span> ${esc(x.src)}</td><td>${x.snip?'“'+esc(x.snip)+'”':'—'}</td><td data-v="${x.v}"><b>${H(x.v)}</b></td><td data-v="${x.p.h}">${H(x.p.h)}</td><td data-v="${u}"><span class="pill ${s}">${nf(u*100,0)}%</span></td><td>${esc(x.conf)}</td><td>${x.by==='Regras'?`<button class="s" onclick="ignoreEst('${esc(x.id)}')">Ignorar</button>`:''}</td></tr>`;
+  }).join('')||'<tr><td colspan="10" style="color:var(--muted)">Nenhuma previsão lida nos chamados deste filtro.</td></tr>';
+}
+
+/* ---------- dados salvos no navegador (IndexedDB) ---------- */
+const IDB={db:null,
+  open(){return this.db||(this.db=new Promise((ok,no)=>{const q=indexedDB.open('central-auditoria',1);q.onupgradeneeded=()=>q.result.createObjectStore('kv');q.onsuccess=()=>ok(q.result);q.onerror=()=>no(q.error)}))},
+  async get(k){try{const d=await this.open();return await new Promise(ok=>{const r=d.transaction('kv').objectStore('kv').get(k);r.onsuccess=()=>ok(r.result);r.onerror=()=>ok(null)})}catch(e){return null}},
+  async set(k,v){try{const d=await this.open();return await new Promise(ok=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>ok(true);t.onerror=()=>ok(false)})}catch(e){return false}},
+  async del(k){try{const d=await this.open();return await new Promise(ok=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=()=>ok(true);t.onerror=()=>ok(false)})}catch(e){return false}}};
+// guarda só o necessário (textos limpos, sem HTML) para o cache ficar leve; os textos lidos pelo robô e pela IA não mudam
+const slim=t=>({...t,actions:(t.actions||[]).map((a,i)=>{const {htmlDescription,...x}=a;if(i<12){const d=a.description||htmlDescription;if(d)x.description=i<3?stripH(d):stripH(d).slice(0,1200)}else delete x.description;return x})});
+function cacheLabel(t){const e=$('cacheInfo');if(e) e.textContent=TK.size?`${TK.size} tickets salvos neste navegador`+(t?` (último salvamento às ${new Date(t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})})`:'')+'.':''}
+async function persist(){const ok=await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});cacheLabel(ok?Date.now():0)}
+async function clearCache(){
+  if(!confirm('Apagar os dados salvos neste navegador? A próxima sincronização será completa.')) return;
+  await IDB.del('cache');TK=new Map();lastSync=lastFull=0;lastSig='';cacheLabel();log('Dados salvos apagados.','okc');
+}
+
 /* ---------- inicialização ---------- */
 $('domain').value=localStorage.getItem('md_domain')||'';
 $('token').value=localStorage.getItem('md_token')||'';
 const hoje=new Date(),pad=n=>String(n).padStart(2,'0');
-$('startDate').value=`${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-01`;
+$('startDate').value=localStorage.getItem('md_ini')||`${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-01`;
 $('endDate').value=`${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-${pad(hoje.getDate())}`;
 $('cfId').value=localStorage.getItem('md_cf')||'';
 $('vipList').value=localStorage.getItem('md_vip')??['Dr Oculos','Ferri','Instituto','Paulo e Condah','Atacadão do Oculos','IMV','Paschoal LAB','Cardeal','Sr dos Oculos','Lux'].join('\n');
@@ -891,7 +974,22 @@ $('autoMin').value=localStorage.getItem('md_auto')??'5';
 $('iaMode').value=localStorage.getItem('md_iamode')||'off';$('iaKey').value=localStorage.getItem('md_iakey')||'';
 lastToday=$('endDate').value;
 showTab('load');
-if(+$('autoMin').value&&$('domain').value&&$('token').value) sync(true); // já abre sincronizando
+Object.entries(MODS).forEach(([k,[t,d]])=>{
+  const el=$('t-'+k);if(!el) return;
+  el.insertAdjacentHTML('afterbegin',`<div class="mh noprint"><div><h2>${t}</h2><p>${d}</p></div><form class="sb" onsubmit="doSearch('${k}');return false"><input id="q_${k}" type="search" placeholder="Buscar em ${t.toLowerCase()}" aria-label="Buscar em ${t}" oninput="clearTimeout(window._qt);window._qt=setTimeout(()=>doSearch('${k}'),350)"><button class="b" type="submit">Buscar</button><button class="s" type="button" onclick="clearSearch('${k}')">Limpar</button><span class="qc" id="qc_${k}"></span></form></div>`);
+});
+if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Chart.defaults.color='#667085'}
+(async()=>{ // mostra na hora o que ficou salvo e só depois busca as alterações
+  const c=await IDB.get('cache');
+  if(c&&c.tickets&&c.tickets.length){
+    TK=new Map(c.tickets.map(t=>[String(t.id),t]));CF=c.cf||'';lastSync=c.lastSync||0;lastFull=c.lastFull||0;lastSig=c.sig||'';apiOn=true;
+    const ini=(c.sig||'').split('|')[1];if(ini) $('startDate').value=ini;
+    firstTicket=c.tickets.find(t=>(t.actions||[]).length)||null;
+    build(c.tickets);start(`Dados salvos (${TK.size} tickets)`);cacheLabel(c.saved);autoLabel();
+    log('Dados carregados do navegador. Buscando alterações em segundo plano...','okc');
+  }
+  if(+$('autoMin').value&&$('domain').value&&$('token').value) sync(true);
+})();
 </script>
 </body>
 </html>
