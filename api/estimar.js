@@ -1,93 +1,138 @@
+
 export default async function handler(req, res) {
-  // Configuração dos cabeçalhos CORS
-  res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, x-access-key'
-  );
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-access-key');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
+  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') {
     return res.status(405).json({ erro: 'Método não permitido.' });
   }
 
-  // Validação da ACCESS_KEY
-  const accessKey = req.headers['x-access-key'];
-  if (!accessKey || accessKey !== process.env.ACCESS_KEY) {
-    return res.status(401).json({ erro: 'Chave de acesso (ACCESS_KEY) inválida ou não informada.' });
+  const accessKey = process.env.ACCESS_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!accessKey || req.headers['x-access-key'] !== accessKey) {
+    return res.status(403).json({ erro: 'Chave de acesso inválida.' });
   }
 
-  // Validação da chave GEMINI_API_KEY
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ erro: 'A variável GEMINI_API_KEY não foi configurada na Vercel.' });
+  if (!apiKey) {
+    return res.status(500).json({ erro: 'GEMINI_API_KEY não configurada.' });
   }
 
-  const { jornada = 8, tickets = [] } = req.body || {};
+  const configuredModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
-  if (!tickets || tickets.length === 0) {
-    return res.status(200).json({ resultados: [] });
+  const models = [
+    ...new Set([
+      configuredModel,
+      'gemini-3.8-flash',
+      'gemini-3.7-flash',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite'
+    ])
+  ];
+
+  const tickets = Array.isArray(req.body?.tickets) ? req.body.tickets : [];
+
+  if (!tickets.length) {
+    return res.status(400).json({ erro: 'Nenhum chamado recebido.' });
   }
 
-  // Lista de modelos ordenados por prioridade (Modelo customizado > Recomendações atuais)
-  const primaryModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-  const candidateModels = Array.from(new Set([
-    primaryModel,
-    'gemini-3.8-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-2.5-flash'
-  ]));
+  const prompt = `
+Analise os chamados abaixo e estime o esforço necessário para resolução.
+Retorne SOMENTE um JSON em formato de array, sem Markdown.
 
-  const prompt = `Você é um auditor técnico. Analise os chamados abaixo e extraia a estimativa de horas necessária.
-Jornada diária: ${jornada}h.
-Responda APENAS um array JSON no seguinte formato:
-[{"id": "ID", "horas": 10, "confianca": "alta", "trecho": "trecho do texto"}]
+Cada objeto deve conter:
+- id: identificador original do chamado
+- hours: estimativa de horas, número positivo
+- confidence: confiança entre 0 e 1
+- excerpt: justificativa curta
 
-Chamados:
-${JSON.stringify(tickets)}`;
+Não invente informações. Considere a complexidade descrita.
 
-  let lastError = null;
+CHAMADOS:
+${JSON.stringify(tickets)}
+`;
 
-  // Tentativa dinâmica entre os modelos disponíveis
-  for (const modelName of candidateModels) {
+  const errors = [];
+
+  for (const modelName of models) {
     try {
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-      
-      const response = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json" }
-        })
-      });
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.1,
+              responseMimeType: 'application/json'
+            }
+          })
+        }
+      );
 
-      if (response.ok) {
-        const data = await response.json();
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-        
-        let resultados = [];
-        try {
-          resultados = JSON.parse(rawText);
-        } catch (e) {
-          resultados = [];
+      const data = await response.json();
+
+      if (!response.ok) {
+        const message = data?.error?.message || `HTTP ${response.status}`;
+
+        if ([401, 403].includes(response.status)) {
+          return res.status(response.status).json({
+            erro: `Falha de autenticação Gemini: ${message}`
+          });
         }
 
-        return res.status(200).json({ resultados, modeloUtilizado: modelName });
+        errors.push(`${modelName}: ${message}`);
+        continue;
       }
 
-      const errText = await response.text();
-      lastError = `[${modelName} - Status ${response.status}]: ${errText}`;
-    } catch (err) {
-      lastError = `[${modelName} - Exceção]: ${err.message}`;
+      const output = data?.candidates?.[0]?.content?.parts
+        ?.map(part => part.text || '')
+        .join('');
+
+      if (!output) {
+        errors.push(`${modelName}: resposta vazia.`);
+        continue;
+      }
+
+      let resultados;
+
+      try {
+        resultados = JSON.parse(output);
+      } catch {
+        errors.push(`${modelName}: resposta não veio em JSON válido.`);
+        continue;
+      }
+
+      if (!Array.isArray(resultados)) {
+        errors.push(`${modelName}: formato de resposta inválido.`);
+        continue;
+      }
+
+      const validIds = new Set(tickets.map(ticket => String(ticket.id)));
+
+      resultados = resultados.filter(item =>
+        item &&
+        validIds.has(String(item.id)) &&
+        Number.isFinite(Number(item.hours)) &&
+        Number(item.hours) > 0
+      );
+
+      return res.status(200).json({
+        resultados,
+        modeloUtilizado: modelName
+      });
+
+    } catch (error) {
+      errors.push(`${modelName}: ${error.message}`);
     }
   }
 
-  return res.status(500).json({ 
-    erro: `Falha na chamada à API Gemini em todos os modelos testados. Detalhe da última resposta: ${lastError}` 
+  return res.status(502).json({
+    erro: 'Falha em todos os modelos Gemini testados.',
+    detalhes: errors
   });
 }
