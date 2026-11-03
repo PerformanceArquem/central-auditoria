@@ -98,6 +98,16 @@ body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #a
 
   <div id="t-cfg" class="hide">
     <div class="card" style="border-left:4px solid var(--blue)"><h2 style="margin:0 0 5px">Conexão e carregamento de dados</h2><p style="margin:0;color:var(--muted)">Configure a API Movidesk, importe arquivos e acompanhe a sincronização automática.</p></div>
+    <div class="card" id="cloudCard" style="border:1px solid #b8c9e8;background:#f7faff">
+      <h3>Sincronização entre computadores · Supabase</h3>
+      <p style="margin:0 0 10px;color:var(--muted)">Compartilha chamados, histórico de alterações, previsões manuais, leituras da IA e configurações entre os computadores conectados à mesma base.</p>
+      <div class="row">
+        <div class="fg" style="flex:1;min-width:260px"><label>Chave de sincronização (definida na Vercel)</label><input id="cloudKey" type="password" autocomplete="off" placeholder="Cole a chave configurada em TICKET_SYNC_KEY"></div>
+        <button class="b" type="button" onclick="cloudConnect()">Ativar / carregar dados</button>
+      </div>
+      <p id="cloudMsg" style="margin:10px 0 0;font-weight:600">Nuvem ainda não conectada neste computador.</p>
+      <p style="font-size:12px;color:var(--muted);margin:7px 0 0">A chave acima não é a chave service_role do Supabase. Ela apenas autoriza este painel a chamar o backend da Vercel. A service_role permanece protegida no servidor.</p>
+    </div>
   <div id="t-load">
     <div class="card">
       <h3>API Movidesk</h3>
@@ -112,7 +122,7 @@ body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #a
       </div>
       <div id="log"></div>
       <div class="card" style="margin-top:12px;border:1px solid #b8c9e8;background:#f7faff"><h3 style="margin:0 0 8px">Monitor de alterações em tempo real</h3><p style="margin:0 0 8px;color:var(--muted)">Mostra atualizações detectadas na sincronização: mudança de previsão/prazo, status ou atualização do chamado.</p><div id="liveChanges" style="font-size:13px">Aguardando a primeira sincronização...</div></div>
-      <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. Os dados do Movidesk ficam salvos neste navegador: ao abrir a página eles aparecem na hora e só os tickets alterados são buscados. A verificação automática pode ocorrer a cada 1 minuto (quase em tempo real; depende da resposta da API e do limite de requisições do Movidesk). Alterações são registradas no Monitor de alterações. Uma sincronização completa roda a cada 6 horas. Se a conexão cair, o sistema tenta de novo sozinho, com intervalos cada vez maiores. Para alertas instantâneos sem espera, será necessário configurar um webhook no backend.</p><p id="cacheInfo" style="margin:8px 0 0;font-weight:600"></p>
+      <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. Com o Supabase ativado, os dados ficam disponíveis em outros computadores; o cache local continua como apoio para abrir o painel mais rápido. Sem ativar a nuvem, os dados permanecem apenas neste navegador. A verificação automática pode ocorrer a cada 1 minuto (quase em tempo real; depende da resposta da API e do limite de requisições do Movidesk). Alterações são registradas no Monitor de alterações. Uma sincronização completa roda a cada 6 horas. Se a conexão cair, o sistema tenta de novo sozinho, com intervalos cada vez maiores. Para alertas instantâneos sem espera, será necessário configurar um webhook no backend.</p><p id="cacheInfo" style="margin:8px 0 0;font-weight:600"></p>
     </div>
     <div class="card">
       <h3>Ou importe o CSV "Tempo trabalhado nos tickets"</h3>
@@ -1171,7 +1181,7 @@ const IDB={db:null,
 // guarda só o necessário (textos limpos, sem HTML) para o cache ficar leve; os textos lidos pelo robô e pela IA não mudam
 const slim=t=>({...t,actions:(t.actions||[]).map((a,i)=>{const {htmlDescription,...x}=a;if(i<12){const d=a.description||htmlDescription;if(d)x.description=i<3?stripH(d):stripH(d).slice(0,1200)}else delete x.description;return x})});
 function cacheLabel(t){const e=$('cacheInfo');if(e) e.textContent=TK.size?`${TK.size} tickets salvos neste navegador`+(t?` (último salvamento às ${new Date(t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})})`:'')+'.':''}
-async function persist(){const ok=await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});cacheLabel(ok?Date.now():0);return ok}
+async function persist(){const ok=await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});cacheLabel(ok?Date.now():0);if(ok&&cloudReady){try{await cloudSaveTickets([...TK.values()])}catch(e){cloudMessage('Cache local atualizado; falha ao enviar à nuvem: '+e.message,'err')}}return ok}
 async function saveNow(){
   if(!TK.size) return log('Não há dados da API para salvar. Clique em "Sincronizar agora" primeiro.','err');
   localStorage.setItem('md_domain',$('domain').value.trim());localStorage.setItem('md_token',$('token').value.trim());
@@ -1185,13 +1195,97 @@ async function clearCache(){
   await IDB.del('cache');TK=new Map();lastSync=lastFull=0;lastSig='';cacheLabel();log('Dados salvos apagados.','okc');
 }
 
+/* ---------- sincronização central com Supabase via backend Vercel ---------- */
+const CLOUD_EXCLUDE=new Set(['md_token','md_iakey','md_cloudkey']);
+let cloudReady=false,cloudHydrating=true,cloudStateTimer=null,cloudLastPull=new Date(0).toISOString(),cloudStateUpdated='',cloudTicketSig=new Map(),cloudPullBusy=false;
+function cloudMessage(msg,cls){const e=$('cloudMsg');if(e){e.textContent=msg;e.className=cls||''}}
+function cloudAccessKey(){return (localStorage.getItem('md_cloudkey')||$('cloudKey')?.value||'').trim()}
+async function cloudApi(action,method='GET',body=null,params={}){
+  const key=cloudAccessKey();if(!key)throw new Error('Informe a chave de sincronização definida na Vercel.');
+  const u=new URL('/api/ticket-manager',location.origin);u.searchParams.set('action',action);Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,String(v)));
+  const opt={method,headers:{'x-access-key':key,'Accept':'application/json'}};
+  if(body!==null){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body)}
+  const r=await fetch(u.toString(),opt);const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||('Erro HTTP '+r.status+' ao acessar o Supabase'));
+  return j;
+}
+function cloudStateSnapshot(){const out={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('md_')&&!CLOUD_EXCLUDE.has(k))out[k]=localStorage.getItem(k)}return out}
+function cloudScheduleState(){if(!cloudReady||cloudHydrating)return;clearTimeout(cloudStateTimer);cloudStateTimer=setTimeout(()=>cloudSaveState().catch(e=>cloudMessage('Falha ao salvar configurações na nuvem: '+e.message,'err')),1200)}
+async function cloudSaveState(){if(!cloudReady||cloudHydrating)return;await cloudApi('saveState','POST',{state:cloudStateSnapshot()});cloudMessage('Supabase conectado · configurações sincronizadas · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),'okc')}
+function installCloudStorageHooks(){
+  const originalSet=Storage.prototype.setItem,originalRemove=Storage.prototype.removeItem;
+  Storage.prototype.setItem=function(k,v){originalSet.call(this,k,v);if(this===localStorage&&String(k).startsWith('md_')&&!CLOUD_EXCLUDE.has(String(k)))cloudScheduleState()};
+  Storage.prototype.removeItem=function(k){originalRemove.call(this,k);if(this===localStorage&&String(k).startsWith('md_')&&!CLOUD_EXCLUDE.has(String(k)))cloudScheduleState()};
+}
+installCloudStorageHooks();
+function applyCloudSettings(){
+  $('domain').value=localStorage.getItem('md_domain')||$('domain').value||'';
+  $('startDate').value=localStorage.getItem('md_ini')||$('startDate').value;
+  $('cfId').value=localStorage.getItem('md_cf')||$('cfId').value||'';
+  $('vipList').value=localStorage.getItem('md_vip')??$('vipList').value;
+  try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{if(sv[i]!=null)$(i).value=sv[i]})}catch(e){}
+  $('autoMin').value=localStorage.getItem('md_auto')??$('autoMin').value;
+  $('iaMode').value=localStorage.getItem('md_iamode')||$('iaMode').value||'off';
+  try{IA=JSON.parse(localStorage.getItem('md_ia')||'{}')}catch(e){IA={}}
+  try{IG=JSON.parse(localStorage.getItem('md_ig')||'{}')}catch(e){IG={}}
+  try{liveEvents=JSON.parse(localStorage.getItem('md_live_events')||'[]');showLiveEvents()}catch(e){}
+}
+function cloudSig(t){return hash(JSON.stringify(t))}
+async function cloudSaveTickets(list){
+  if(!cloudReady||!list.length)return;
+  const pending=[];
+  for(const t of list){const id=String(t.id??'');if(!id)continue;const sig=cloudSig(t);if(cloudTicketSig.get(id)!==sig)pending.push({t,sig})}
+  for(let i=0;i<pending.length;i+=25){const part=pending.slice(i,i+25);await cloudApi('upsertTickets','POST',{tickets:part.map(x=>x.t)});part.forEach(x=>cloudTicketSig.set(String(x.t.id),x.sig))}
+  if(pending.length)cloudMessage(`Supabase conectado · ${pending.length} chamado(s) sincronizado(s) · ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`,'okc');
+}
+async function cloudLoadState(){const j=await cloudApi('loadState');const state=j.state||{};cloudHydrating=true;try{Object.entries(state).forEach(([k,v])=>{if(k.startsWith('md_')&&!CLOUD_EXCLUDE.has(k)&&typeof v==='string')localStorage.setItem(k,v)});}finally{cloudHydrating=false}cloudStateUpdated=j.updated_at||'';applyCloudSettings()}
+async function cloudLoadAllTickets(){
+  const found=[];let offset=0,limit=150;
+  while(true){const j=await cloudApi('loadTickets','GET',null,{offset,limit});const batch=Array.isArray(j.tickets)?j.tickets:[];found.push(...batch);batch.forEach(t=>cloudTicketSig.set(String(t.id),cloudSig(t)));if(batch.length<limit)break;offset+=limit}
+  return found;
+}
+function newerTicket(a,b){const da=Date.parse(a?.lastUpdate||a?.createdDate||'')||0,db=Date.parse(b?.lastUpdate||b?.createdDate||'')||0;return da>=db}
+async function cloudBootstrap(){
+  const key=$('cloudKey')?.value.trim()||localStorage.getItem('md_cloudkey')||'';
+  if(!key){cloudReady=false;cloudHydrating=false;cloudMessage('Informe a chave de sincronização para conectar este computador ao Supabase.');return false}
+  localStorage.setItem('md_cloudkey',key);cloudMessage('Conectando ao Supabase e buscando dados...');
+  try{
+    await cloudLoadState();
+    const remote=await cloudLoadAllTickets();
+    const cache=await IDB.get('cache');const merged=new Map(remote.map(t=>[String(t.id),t]));
+    if(cache?.tickets?.length){for(const t of cache.tickets){const id=String(t.id),old=merged.get(id);if(!old||newerTicket(t,old))merged.set(id,t)}lastSync=Math.max(lastSync,cache.lastSync||0);lastFull=Math.max(lastFull,cache.lastFull||0);lastSig=cache.sig||lastSig;CF=cache.cf||CF}
+    TK=merged;cloudReady=true;cloudHydrating=false;cloudLastPull=new Date(Date.now()-3000).toISOString();
+    if(TK.size){await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});}
+    cloudMessage(`Supabase conectado · ${remote.length} chamado(s) recuperado(s)${cache?.tickets?.length?` · ${cache.tickets.length} do cache local conferidos`:''}.`,'okc');
+    if(TK.size)await cloudSaveTickets([...TK.values()]);
+    await cloudSaveState();
+    return true;
+  }catch(e){cloudReady=false;cloudHydrating=false;cloudMessage('Não foi possível conectar ao Supabase: '+e.message,'err');return false}
+}
+async function cloudConnect(){
+  const key=$('cloudKey').value.trim();if(!key)return cloudMessage('Cole a chave de sincronização configurada na Vercel.','err');
+  localStorage.setItem('md_cloudkey',key);
+  const ok=await cloudBootstrap();
+  if(ok&&TK.size){firstTicket=[...TK.values()].find(t=>(t.actions||[]).length)||[...TK.values()][0]||null;build([...TK.values()]);start(`Supabase (${TK.size} tickets)`);log('Dados centrais carregados. Este computador já está sincronizado.','okc')}
+}
+async function cloudPoll(){
+  if(!cloudReady||cloudPullBusy||document.hidden||!navigator.onLine)return;cloudPullBusy=true;
+  try{
+    const j=await cloudApi('changes','GET',null,{since:cloudLastPull});const changed=Array.isArray(j.tickets)?j.tickets:[];
+    if(changed.length){changed.forEach(t=>{const id=String(t.id);TK.set(id,t);cloudTicketSig.set(id,cloudSig(t))});await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});const keep=!$('app').classList.contains('hide');build([...TK.values()]);start(`Supabase (${TK.size} tickets)`,keep);}
+    cloudLastPull=new Date().toISOString();
+    const st=await cloudApi('loadState');if(st.updated_at&&st.updated_at!==cloudStateUpdated){const active=document.activeElement;const editing=active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);if(!editing){cloudHydrating=true;try{Object.entries(st.state||{}).forEach(([k,v])=>{if(k.startsWith('md_')&&!CLOUD_EXCLUDE.has(k)&&typeof v==='string')localStorage.setItem(k,v)})}finally{cloudHydrating=false}cloudStateUpdated=st.updated_at;applyCloudSettings();}}
+  }catch(e){cloudMessage('Supabase temporariamente indisponível: '+e.message,'err')}finally{cloudPullBusy=false}
+}
+setInterval(cloudPoll,60000);
+
 /* ---------- inicialização ---------- */
 $('domain').value=localStorage.getItem('md_domain')||'';
 $('token').value=localStorage.getItem('md_token')||'';
 const hoje=new Date(),pad=n=>String(n).padStart(2,'0');
 $('startDate').value=localStorage.getItem('md_ini')||`${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-01`;
 $('endDate').value=`${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-${pad(hoje.getDate())}`;
-$('cfId').value=localStorage.getItem('md_cf')||'';
+$('cfId').value=localStorage.getItem('md_cf')||'';$('cloudKey').value=localStorage.getItem('md_cloudkey')||'';
 $('vipList').value=localStorage.getItem('md_vip')??['Dr Oculos','Ferri','Instituto','Paulo e Condah','Atacadão do Oculos','IMV','Paschoal LAB','Cardeal','Sr dos Oculos','Lux'].join('\n');
 try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{if(sv[i]!=null)$(i).value=sv[i]})}catch(e){}
 $('autoMin').value=localStorage.getItem('md_auto')??'1';
@@ -1204,16 +1298,20 @@ Object.entries(MODS).forEach(([k,[t,d]])=>{
   el.insertAdjacentHTML('afterbegin',`<div class="mh noprint"><div><h2>${t}</h2><p>${d}</p></div><form class="sb" onsubmit="doSearch('${k}');return false"><input id="q_${k}" type="search" placeholder="Buscar em ${t.toLowerCase()}" aria-label="Buscar em ${t}" oninput="clearTimeout(window._qt);window._qt=setTimeout(()=>doSearch('${k}'),350)"><button class="b" type="submit">Buscar</button><button class="s" type="button" onclick="clearSearch('${k}')">Limpar</button><span class="qc" id="qc_${k}"></span></form></div>`);
 });
 if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Chart.defaults.color='#667085'}
-(async()=>{ // mostra na hora o que ficou salvo e só depois busca as alterações
-  const c=await IDB.get('cache');
-  if(c&&c.tickets&&c.tickets.length){
-    TK=new Map(c.tickets.map(t=>[String(t.id),t]));CF=c.cf||'';lastSync=c.lastSync||0;lastFull=c.lastFull||0;lastSig=c.sig||'';apiOn=true;
-    const ini=(c.sig||'').split('|')[1];if(ini) $('startDate').value=ini;
-    firstTicket=c.tickets.find(t=>(t.actions||[]).length)||null;
-    build(c.tickets);start(`Dados salvos (${TK.size} tickets)`);cacheLabel(c.saved);autoLabel();
-    log('Dados carregados do navegador. Buscando alterações em segundo plano...','okc');
+(async()=>{ // recupera primeiro o banco central; o cache local entra como apoio e fonte de migração
+  const cloudOK=await cloudBootstrap();
+  if(!TK.size){
+    const c=await IDB.get('cache');
+    if(c&&c.tickets&&c.tickets.length){TK=new Map(c.tickets.map(t=>[String(t.id),t]));CF=c.cf||CF;lastSync=c.lastSync||0;lastFull=c.lastFull||0;lastSig=c.sig||'';}
   }
-  if($('domain').value&&$('token').value) sync(true); // sempre sincroniza ao abrir, mesmo com a atualização automática desligada
+  if(TK.size){
+    apiOn=true;const list=[...TK.values()];firstTicket=list.find(t=>(t.actions||[]).length)||list[0]||null;
+    build(list);start(`${cloudOK?'Supabase':'Dados locais'} (${TK.size} tickets)`);cacheLabel(Date.now());autoLabel();
+    await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:list});
+    if(cloudOK)await cloudSaveTickets(list);
+    log(cloudOK?'Dados carregados do Supabase. Buscando alterações do Movidesk...':'Dados carregados do navegador. Para compartilhar, ative a sincronização Supabase.','okc');
+  }
+  if($('domain').value&&$('token').value) sync(true); // sincroniza o Movidesk ao abrir
 })();
 </script>
 </body>
