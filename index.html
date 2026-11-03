@@ -74,7 +74,6 @@ body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #a
 <body>
 <header><div class="brand"><b>Auditoria de Chamados</b><small>Ticket Manager · Movidesk</small></div><div class="chip" id="chip"><span class="dot"></span><span id="status">Aguardando dados</span><span id="auto"></span></div></header>
 <nav id="tabs">
-  <button data-t="load" class="on">Carregar dados</button>
   <button data-t="live">Tickets atualizados</button>
   <button data-t="cfg">Configurações</button>
   <button data-t="mgmt">Gestão</button>
@@ -84,10 +83,21 @@ body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #a
   <button data-t="pivot">Tabela dinâmica</button>
   <button data-t="proj">Projetos</button>
   <button data-t="occ">Colaboradores</button>
-  <button data-t="bot">Robô de leitura</button>
   <button data-t="diag">Diagnóstico</button>
 </nav>
 <main>
+  <div id="t-live" class="hide">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0 0 5px">Painel de tickets atualizados</h3><p style="margin:0;color:var(--muted)">Acompanhe chamados que tiveram alteração detectada na última sincronização do Movidesk.</p></div><button class="b g" onclick="sync()">Atualizar agora</button></div>
+      <div class="kpis" style="margin:14px 0"><div class="card"><small>Alterações registradas</small><b id="liveCount">0</b></div><div class="card"><small>Previsões / prazos</small><b id="liveDue">0</b></div><div class="card"><small>Status alterados</small><b id="liveStatus">0</b></div><div class="card"><small>Chamados atualizados</small><b id="liveGeneral">0</b></div></div>
+      <div class="row noprint" style="margin-bottom:12px"><div class="fg"><label>Filtrar alterações</label><select id="liveFilter" onchange="showLiveEvents()"><option value="all">Todas</option><option value="PREVISÃO / PRAZO ALTERADO">Previsão / prazo</option><option value="STATUS ALTERADO">Status</option><option value="CHAMADO ATUALIZADO">Atualizações gerais</option></select></div><div class="fg"><label>Pesquisar ticket ou assunto</label><input id="liveSearch" placeholder="Número ou assunto" oninput="showLiveEvents()"></div><button class="s" onclick="clearLiveEvents()">Limpar histórico</button></div>
+      <div id="livePanelList"></div>
+      <p style="font-size:12px;color:var(--muted);margin-top:12px">O painel registra alterações identificadas entre sincronizações. Para receber eventos instantaneamente, sem aguardar a próxima consulta, é necessário configurar webhook no backend.</p>
+    </div>
+  </div>
+
+  <div id="t-cfg" class="hide">
+    <div class="card" style="border-left:4px solid var(--blue)"><h2 style="margin:0 0 5px">Conexão e carregamento de dados</h2><p style="margin:0;color:var(--muted)">Configure a API Movidesk, importe arquivos e acompanhe a sincronização automática.</p></div>
   <div id="t-load">
     <div class="card">
       <h3>API Movidesk</h3>
@@ -110,18 +120,8 @@ body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #a
       <input type="file" id="csvFile" accept=".csv,.txt" class="hide" onchange="loadCSV(event)">
     </div>
   </div>
-
-  <div id="t-live" class="hide">
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0 0 5px">Painel de tickets atualizados</h3><p style="margin:0;color:var(--muted)">Acompanhe chamados que tiveram alteração detectada na última sincronização do Movidesk.</p></div><button class="b g" onclick="sync()">Atualizar agora</button></div>
-      <div class="kpis" style="margin:14px 0"><div class="card"><small>Alterações registradas</small><b id="liveCount">0</b></div><div class="card"><small>Previsões / prazos</small><b id="liveDue">0</b></div><div class="card"><small>Status alterados</small><b id="liveStatus">0</b></div><div class="card"><small>Chamados atualizados</small><b id="liveGeneral">0</b></div></div>
-      <div class="row noprint" style="margin-bottom:12px"><div class="fg"><label>Filtrar alterações</label><select id="liveFilter" onchange="showLiveEvents()"><option value="all">Todas</option><option value="PREVISÃO / PRAZO ALTERADO">Previsão / prazo</option><option value="STATUS ALTERADO">Status</option><option value="CHAMADO ATUALIZADO">Atualizações gerais</option></select></div><div class="fg"><label>Pesquisar ticket ou assunto</label><input id="liveSearch" placeholder="Número ou assunto" oninput="showLiveEvents()"></div><button class="s" onclick="clearLiveEvents()">Limpar histórico</button></div>
-      <div id="livePanelList"></div>
-      <p style="font-size:12px;color:var(--muted);margin-top:12px">O painel registra alterações identificadas entre sincronizações. Para receber eventos instantaneamente, sem aguardar a próxima consulta, é necessário configurar webhook no backend.</p>
-    </div>
-  </div>
-
-  <div id="t-cfg" class="hide">
+    <div class="card" style="border-left:4px solid var(--blue)"><h2 style="margin:0 0 5px">Robô de leitura</h2><p style="margin:0;color:var(--muted)">Consulte as previsões de horas identificadas automaticamente nos chamados.</p></div>
+    <div id="t-bot"><div class="card"><h3>Previsões lidas pelo robô nos chamados</h3><p id="botInfo" style="margin:0 0 12px"></p><div class="tw"><table><thead><tr><th>Chamado</th><th>Cliente</th><th>Assunto</th><th>Onde leu</th><th>Trecho</th><th>Previsto (h)</th><th>Apontado (h)</th><th>Uso</th><th>Confiança</th><th>Ação</th></tr></thead><tbody id="tBot"></tbody></table></div></div></div>
     <div class="card" id="rules"><h3>Regras de cálculo</h3><div class="row">
       <div class="fg"><label>Meta diária por projeto (h)</label><input id="rMeta" type="number" step="0.5" value="4" onchange="rulesChanged()"></div>
       <div class="fg"><label>Jornada diária (h)</label><input id="rJor" type="number" step="0.5" value="8" onchange="rulesChanged()"></div>
@@ -206,7 +206,7 @@ body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #a
       <div class="card"><h3>Previsto × apontado por chamado</h3><p style="color:var(--muted);margin:0 0 10px"><b>Previsto</b> = horas que a pessoa informou: digitadas aqui, do campo personalizado do Movidesk ou lidas no texto do chamado pelo robô de regras ou pela IA (“previsão 20h”; “3 dias” vale 3 × a jornada). <b>Apontado</b> = todo o histórico de tempo lançado, sem filtro de período. <b>Restam</b> = previsto − apontado; <b>Excedeu</b> = apontado − previsto. Previsão digitada aqui tem prioridade e fica salva neste navegador.</p><div class="row noprint" style="margin-bottom:10px"><div class="fg"><label>Mostrar</label><select id="bScope" onchange="render()"><option value="p">Somente projetos (regra acima)</option><option value="a">Todos os chamados</option></select></div></div><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Previsto (h)</th><th>De onde veio a previsão</th><th>Apontado (h)</th><th>Restam ou excedeu</th><th>% da previsão</th><th>Situação</th><th>Início</th><th>Último apontamento</th><th>Duração (dias corridos)</th><th>Dias com apontamento</th></tr></thead><tbody id="tBudget"></tbody></table></div></div></div>
     <div id="t-occ" class="hide"><div class="card"><h3>Colaboradores: horas apontadas e jornada</h3><p id="occInfo" style="color:var(--muted);margin:0 0 10px"></p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Lançamentos</th><th>Tickets</th><th>Clientes</th><th>Dias com apontamento</th><th>Horas apontadas (h)</th><th>Média por dia apontado (h)</th><th>Horas em dias não úteis (h)</th><th>Capacidade (h)</th><th>Mínimo exigido (h)</th><th>% da capacidade</th><th>Falta para o mínimo</th><th>Falta para a jornada completa</th><th>Situação</th></tr></thead><tbody id="tOcc"></tbody></table></div></div>
       <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Horas no dia (h)</th><th>% da jornada</th><th>Falta ou sobra no dia</th><th>Situação</th></tr></thead><tbody id="tOccDay"></tbody></table></div></div></div>
-    <div id="t-bot" class="hide"><div class="card"><h3>Previsões lidas pelo robô nos chamados</h3><p id="botInfo" style="margin:0 0 12px"></p><div class="tw"><table><thead><tr><th>Chamado</th><th>Cliente</th><th>Assunto</th><th>Onde leu</th><th>Trecho</th><th>Previsto (h)</th><th>Apontado (h)</th><th>Uso</th><th>Confiança</th><th>Ação</th></tr></thead><tbody id="tBot"></tbody></table></div></div></div>
+
     <div id="t-diag" class="hide"><div class="card"><h3>Diagnóstico da extração</h3><div id="diagSummary"></div><pre id="rawJson">Sem dados.</pre></div></div>
   </div>
 </main>
@@ -523,12 +523,12 @@ function renderDiag(){
 
 const Q={};let lastQ='';
 const qn=t=>norm(Q[t]||'');
-let ACT='load';
+let ACT='cfg';
 function showTab(t){
   ACT=t;document.body.dataset.t=t;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
-  $('t-load').classList.toggle('hide',t!=='load');$('t-cfg').classList.toggle('hide',t!=='cfg');
-  ['live','mgmt','vip','charts','entries','pivot','proj','occ','bot','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  $('t-cfg').classList.toggle('hide',t!=='cfg');
+  ['live','mgmt','vip','charts','entries','pivot','proj','occ','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
   if(t==='live')showLiveEvents();
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag');
   if(raw.length&&t!=='load'&&t!=='cfg'&&t!=='diag'&&qn(t)!==lastQ) applyFilters();
@@ -1111,20 +1111,21 @@ async function iaRun(auto){
     todo.push({id:r.ticket_id,h,texto:r.txt});
   });
   if(!todo.length) return auto?0:iaLog('Nada novo para analisar.','okc');
-  const MAXRUN=auto?32:400,LOTE=8,fila=todo.slice(0,MAXRUN);let ok=0;
+  const MAXRUN=400,LOTE=8,fila=todo.slice(0,MAXRUN);let ok=0;
   iaBusy=true;
   try{
     for(let i=0;i<fila.length;i+=LOTE){
       const lote=fila.slice(i,i+LOTE);
-      iaLog(`IA analisando ${Math.min(i+LOTE,fila.length)} de ${fila.length}...`);
+      iaLog(`IA analisando ${Math.min(i+LOTE,fila.length)} de ${todo.length} chamados pendentes...`);
       const r=await fetch('/api/estimar',{method:'POST',headers:{'Content-Type':'application/json','x-access-key':key},body:JSON.stringify({jornada:c.jor,tickets:lote.map(t=>({id:t.id,texto:t.texto}))})});
       const j=await r.json().catch(()=>({}));
       if(!r.ok) throw new Error(j.erro||('erro '+r.status));
-      (j.resultados||[]).forEach(x=>{const t=lote.find(l=>l.id===String(x.id));if(t){IA[t.id]={h:t.h,horas:x.horas,conf:x.confianca,trecho:x.trecho};ok++}});
+      (j.resultados||[]).forEach(x=>{const t=lote.find(l=>l.id===String(x.id));if(t){const horas=Number(x.horas??x.hours),conf=x.confianca??x.confidence,trecho=x.trecho??x.excerpt;if(Number.isFinite(horas)&&horas>0){IA[t.id]={h:t.h,horas,conf:conf==null?'':String(conf),trecho:trecho==null?'':String(trecho)};ok++}}});
       try{localStorage.setItem('md_ia',JSON.stringify(IA))}catch(e){}
       render();
+      if(i+LOTE<fila.length) await sleep(900); // intervalo curto para reduzir risco de limite de requisições
     }
-    iaLog(`IA: ${ok} chamado(s) analisado(s)`+(todo.length>fila.length?`; faltam ${todo.length-fila.length} (entram na próxima atualização ou em "Analisar agora").`:'.'),'okc');
+    iaLog(`IA: ${ok} chamado(s) analisado(s)`+(todo.length>fila.length?`; faltam ${todo.length-fila.length} (serão retomados na próxima sincronização ou em "Analisar agora").`:'.'),'okc');
   }catch(e){
     iaLog('IA: '+e.message+(e instanceof TypeError?' (a função /api/estimar não respondeu; ela só existe depois de publicar na Vercel)':''),'err');
   }finally{iaBusy=false}
@@ -1139,7 +1140,7 @@ function doSearch(t){
   if(raw.length) applyFilters();
 }
 function clearSearch(t){$('q_'+t).value='';doSearch(t)}
-const MODS={load:['Carregar dados','Conecte ao Movidesk, configure a sincronização automática e a leitura por IA.'],live:['Tickets atualizados','Histórico de alterações detectadas nos tickets do Movidesk.'],cfg:['Configurações','Regras de cálculo, lista de clientes VIP e leitura por IA.'],mgmt:['Gestão','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos','Evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],bot:['Robô de leitura','Previsões de horas que o robô e a IA encontraram no texto dos chamados.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
+const MODS={live:['Tickets atualizados','Histórico de alterações detectadas nos tickets do Movidesk.'],cfg:['Configurações','Regras de cálculo, lista de clientes VIP e leitura por IA.'],mgmt:['Gestão','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos','Evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
 
 /* ---------- robô: painel de leituras ---------- */
 let IG=(()=>{try{return JSON.parse(localStorage.getItem('md_ig')||'{}')}catch(e){return {}}})();
@@ -1196,7 +1197,7 @@ try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{i
 $('autoMin').value=localStorage.getItem('md_auto')??'1';
 $('iaMode').value=localStorage.getItem('md_iamode')||'off';$('iaKey').value=localStorage.getItem('md_iakey')||'';
 lastToday=$('endDate').value;
-showTab('load');
+showTab('cfg');
 showLiveEvents();
 Object.entries(MODS).forEach(([k,[t,d]])=>{
   const el=$('t-'+k);if(!el) return;
