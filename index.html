@@ -92,7 +92,7 @@ body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #a
         <div class="fg"><label>Fim</label><input type="date" id="endDate"></div>
         <div class="fg"><label>ID do campo "horas previstas" (opcional)</label><input id="cfId" placeholder="ex.: 12345"></div>
         <div class="fg"><label>Atualização automática</label><select id="autoMin" onchange="autoChanged()"><option value="0">Desligada</option><option value="1">A cada 1 min</option><option value="5">A cada 5 min</option><option value="10">A cada 10 min</option><option value="15">A cada 15 min</option><option value="30">A cada 30 min</option><option value="60">A cada 60 min</option></select></div>
-        <button class="b g" onclick="sync()">Sincronizar agora</button><button class="s" onclick="clearCache()">Limpar dados salvos</button>
+        <button class="b g" onclick="sync()">Sincronizar agora</button><button class="b" onclick="saveNow()">Salvar dados</button><button class="s" onclick="clearCache()">Limpar dados salvos</button>
       </div>
       <div id="log"></div>
       <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. Os dados do Movidesk ficam salvos neste navegador: ao abrir a página eles aparecem na hora e só os tickets alterados são buscados. Uma sincronização completa roda a cada 6 horas. Se a conexão cair, o sistema tenta de novo sozinho, com intervalos cada vez maiores.</p><p id="cacheInfo" style="margin:8px 0 0;font-weight:600"></p>
@@ -966,7 +966,15 @@ const IDB={db:null,
 // guarda só o necessário (textos limpos, sem HTML) para o cache ficar leve; os textos lidos pelo robô e pela IA não mudam
 const slim=t=>({...t,actions:(t.actions||[]).map((a,i)=>{const {htmlDescription,...x}=a;if(i<12){const d=a.description||htmlDescription;if(d)x.description=i<3?stripH(d):stripH(d).slice(0,1200)}else delete x.description;return x})});
 function cacheLabel(t){const e=$('cacheInfo');if(e) e.textContent=TK.size?`${TK.size} tickets salvos neste navegador`+(t?` (último salvamento às ${new Date(t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})})`:'')+'.':''}
-async function persist(){const ok=await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});cacheLabel(ok?Date.now():0)}
+async function persist(){const ok=await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});cacheLabel(ok?Date.now():0);return ok}
+async function saveNow(){
+  if(!TK.size) return log('Não há dados da API para salvar. Clique em "Sincronizar agora" primeiro.','err');
+  localStorage.setItem('md_domain',$('domain').value.trim());localStorage.setItem('md_token',$('token').value.trim());
+  localStorage.setItem('md_ini',$('startDate').value);localStorage.setItem('md_cf',$('cfId').value.trim());
+  log('Salvando...');
+  const ok=await persist();
+  log(ok?`Dados salvos: ${TK.size} tickets, mais domínio, token e período. Eles aparecem sozinhos na próxima vez que abrir a página.`:'Não foi possível salvar: o navegador bloqueou o armazenamento local (modo anônimo ou sem espaço).',ok?'okc':'err');
+}
 async function clearCache(){
   if(!confirm('Apagar os dados salvos neste navegador? A próxima sincronização será completa.')) return;
   await IDB.del('cache');TK=new Map();lastSync=lastFull=0;lastSig='';cacheLabel();log('Dados salvos apagados.','okc');
