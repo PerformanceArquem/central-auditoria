@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  // Cabeçalhos CORS
+  // Configuração dos cabeçalhos CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -42,8 +42,8 @@ Responda APENAS um array JSON no seguinte formato:
 Chamados:
 ${JSON.stringify(tickets)}`;
 
-    // Utiliza o alias oficial gemini-2.5-flash mantido pela Google API
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    // URL atualizada para o modelo ativo recomendado pela Google: gemini-3.8-flash
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
     const response = await fetch(geminiUrl, {
       method: 'POST',
