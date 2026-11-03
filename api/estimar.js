@@ -42,7 +42,7 @@ Responda APENAS um array JSON no seguinte formato:
 Chamados:
 ${JSON.stringify(tickets)}`;
 
-    // URL atualizada com o modelo ativo: gemini-2.5-flash
+    // Utiliza o alias oficial gemini-2.5-flash mantido pela Google API
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
     const response = await fetch(geminiUrl, {
