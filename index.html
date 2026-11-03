@@ -43,22 +43,24 @@ td{padding:9px 12px;border-bottom:1px solid var(--line)}
 pre{background:#1e293b;color:#7dd3fc;padding:14px;border-radius:8px;max-height:380px;overflow:auto;font-size:12px}
 .hide{display:none!important}
 @media print{header,nav,.filters,.noprint,#rules{display:none!important}main{padding:0}}
+th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--blue)}.ar{margin-left:4px;font-size:10px}
+.colbtn{margin:0 0 8px;font-size:12px}.colbtn summary{cursor:pointer;color:var(--blue);font-weight:600;width:max-content}
+.colbox{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 0}.colbox label{display:flex;gap:4px;align-items:center;font-weight:400;font-size:12px;color:var(--ink)}
+details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 0 0;padding-left:20px}details.card li{margin-bottom:4px}
+.sum p{margin:6px 0}.sum p.al{color:#991b1b}.sum p.wn{color:#92400e}
 </style>
 </head>
 <body>
-<header><b>Auditoria de Chamados · Ticket Manager</b><span id="status">Aguardando dados</span></header>
+<header><b>Auditoria de Chamados · Ticket Manager</b><div><span id="status">Aguardando dados</span> <span id="auto" style="font-size:12px;color:#94a3b8"></span></div></header>
 <nav id="tabs">
   <button data-t="load" class="on">Carregar dados</button>
   <button data-t="mgmt">Gestão</button>
   <button data-t="vip">Clientes VIP</button>
-  <button data-t="overview">Visão geral</button>
   <button data-t="charts">Gráficos</button>
   <button data-t="entries">Lançamentos</button>
-  <button data-t="people">Colaboradores</button>
   <button data-t="pivot">Tabela dinâmica</button>
-  <button data-t="proj">Projetos (meta/dia)</button>
-  <button data-t="budget">Carga do projeto</button>
-  <button data-t="occ">Horas apontadas</button>
+  <button data-t="proj">Projetos</button>
+  <button data-t="occ">Colaboradores</button>
   <button data-t="diag">Diagnóstico</button>
 </nav>
 <main>
@@ -71,10 +73,21 @@ pre{background:#1e293b;color:#7dd3fc;padding:14px;border-radius:8px;max-height:3
         <div class="fg"><label>Início</label><input type="date" id="startDate"></div>
         <div class="fg"><label>Fim</label><input type="date" id="endDate"></div>
         <div class="fg"><label>ID do campo "horas previstas" (opcional)</label><input id="cfId" placeholder="ex.: 12345"></div>
-        <button class="b g" onclick="sync()">Sincronizar</button>
+        <div class="fg"><label>Atualização automática</label><select id="autoMin" onchange="autoChanged()"><option value="0">Desligada</option><option value="1">A cada 1 min</option><option value="5">A cada 5 min</option><option value="10">A cada 10 min</option><option value="15">A cada 15 min</option></select></div>
+        <button class="b g" onclick="sync()">Sincronizar agora</button>
       </div>
       <div id="log"></div>
-      <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. O token fica salvo apenas neste navegador.</p>
+      <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. O token fica salvo apenas neste navegador. Ao abrir a página com o token salvo, a sincronização começa sozinha; depois só os tickets alterados são buscados, e uma sincronização completa roda a cada hora.</p>
+    </div>
+    <div class="card">
+      <h3>Leitura por IA (opcional)</h3>
+      <div class="row">
+        <div class="fg"><label>Analisar</label><select id="iaMode" onchange="iaChanged()"><option value="off">Desligada</option><option value="proj">Só chamados de projeto</option><option value="all">Todos com horas apontadas</option></select></div>
+        <div class="fg" style="flex:1;min-width:240px"><label>Senha da função (ACCESS_KEY)</label><input id="iaKey" type="password" onchange="iaChanged()"></div>
+        <button class="b" onclick="iaRun()">Analisar agora</button>
+      </div>
+      <div id="iaMsg"></div>
+      <p style="color:var(--muted);margin:10px 0 0">Só entram chamados sem previsão digitada, sem campo personalizado e sem previsão lida pelo robô de regras. Cada chamado é analisado uma vez (de novo só se o texto mudar) e o resultado fica salvo neste navegador. <b>O assunto e a descrição dos chamados são enviados ao provedor de IA configurado na função.</b></p>
     </div>
     <div class="card">
       <h3>Ou importe o CSV "Tempo trabalhado nos tickets"</h3>
@@ -90,12 +103,21 @@ pre{background:#1e293b;color:#7dd3fc;padding:14px;border-radius:8px;max-height:3
         <div class="fg"><label>Fim</label><input type="date" id="fEnd" onchange="applyFilters()"></div>
       </div>
       <div class="row" style="margin-top:12px">
+        <span style="align-self:center;font-size:12px;font-weight:700;color:var(--muted)">Período rápido:</span>
+        <button class="s" onclick="quick('today')">Hoje</button><button class="s" onclick="quick('7')">Últimos 7 dias</button><button class="s" onclick="quick('m')">Mês atual</button><button class="s" onclick="quick('all')">Tudo carregado</button>
         <button class="s" onclick="resetFilters()">Limpar filtros</button>
         <button class="g b" onclick="exportXLSX()">Excel da aba</button>
         <button class="b" style="background:var(--bad)" onclick="exportPDF()">PDF da aba</button>
         <button class="s" onclick="print()">Imprimir</button>
       </div>
     </div>
+    <details class="card noprint" id="legend"><summary>Como ler horas e dias (clique para abrir)</summary><ul>
+      <li><b>h = horas</b>, <b>dias = quantidade de dias</b>. Horas aparecem sempre com vírgula e a unidade: 8,50 h = 8 horas e 30 minutos.</li>
+      <li><b>Dia útil</b>: segunda a sexta, menos feriados. <b>Capacidade</b> = dias úteis do período × jornada diária (ex.: 20 dias × 8 h = 160 h).</li>
+      <li><b>Mínimo exigido</b> = capacidade × o % mínimo definido (padrão 80%).</li>
+      <li><b>Faltam / Restam / Folga de</b> = quanto ainda falta (ou sobra) até a referência. <b>Passou / Excedeu / Acima em</b> = quanto passou dela. O trecho <b>(≈ 2,5 dias de 8 h)</b> converte as mesmas horas em dias de trabalho.</li>
+      <li><b>Previsto</b> = horas que a pessoa informou para o chamado: digitadas aqui, vindas do campo personalizado do Movidesk, ou <b>lidas no texto do chamado</b> pelo robô de regras ou pela IA (ex.: “previsão 20h”, “estimativa de 3 dias”). <b>Apontado</b> = tudo que já foi lançado de tempo no chamado.</li>
+      <li>Em qualquer tabela: <b>clique no título da coluna para ordenar</b> e use <b>“Colunas ▾”</b> para mostrar ou esconder colunas. O Excel e o PDF saem como você deixou a tabela.</li></ul></details>
     <div class="card hide" id="rules"><div class="row">
       <div class="fg"><label>Meta diária por projeto (h)</label><input id="rMeta" type="number" step="0.5" value="4" onchange="rulesChanged()"></div>
       <div class="fg"><label>Jornada diária (h)</label><input id="rJor" type="number" step="0.5" value="8" onchange="rulesChanged()"></div>
@@ -113,20 +135,22 @@ pre{background:#1e293b;color:#7dd3fc;padding:14px;border-radius:8px;max-height:3
       <div class="card"><small>Clientes</small><div><b id="kC">0</b></div></div>
     </div>
 
-    <div id="t-mgmt" class="hide"><div class="card"><h3>Relatório de gestão</h3><p id="mgInfo" style="margin:0 0 12px"></p><div class="kpis" id="mgKpi" style="margin:0"></div></div>
-      <div class="card"><h3>Empresas que mais consomem tempo</h3><div id="mgBars" style="margin-bottom:12px"></div><div class="tw"><table><thead><tr><th>Empresa</th><th>Horas</th><th>% do total</th><th>Chamados</th><th>Colaboradores</th><th>Em dias não úteis</th></tr></thead><tbody id="tMgCli"></tbody></table></div></div>
-      <div class="card"><h3>Chamados mais impactantes</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Empresa</th><th>Horas</th><th>% do total</th><th>Apontamentos</th><th>Colaboradores</th><th>Dias</th><th>Em dias não úteis</th><th>Status</th></tr></thead><tbody id="tMgTk"></tbody></table></div></div>
-      <div class="card"><h3>Colaboradores mais sobrecarregados</h3><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Horas apontadas</th><th>Capacidade</th><th>% da capacidade</th><th>Média por dia útil</th><th>Em dias não úteis</th><th>Situação</th></tr></thead><tbody id="tMgAg"></tbody></table></div></div></div>
+    <div id="t-mgmt" class="hide">
+      <div class="card"><h3>Resumo para a direção</h3><div class="sum" id="mgSum"></div></div>
+      <div class="card"><h3>Relatório de gestão</h3><p id="mgInfo" style="margin:0 0 12px"></p>
+        <div class="row noprint" style="margin-bottom:12px"><div class="fg"><label>Itens em cada ranking</label><select id="mgTop" onchange="render()"><option>5</option><option selected>10</option><option>20</option><option>50</option></select></div></div>
+        <div class="kpis" id="mgKpi" style="margin:0"></div></div>
+      <div class="card"><h3>Colaboradores que mais geram impacto e sobrecarga</h3><p style="color:var(--muted);margin:0 0 10px">Ordenado pelo % da capacidade usado no período. “Passou” = horas acima da capacidade; “Folga de” = horas que ainda cabiam.</p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Horas apontadas (h)</th><th>Capacidade (h)</th><th>% da capacidade</th><th>Passou ou folga</th><th>Chamados</th><th>Cliente com mais horas</th><th>Média por dia útil (h)</th><th>Em dias não úteis (h)</th><th>Situação</th></tr></thead><tbody id="tMgAg"></tbody></table></div></div>
+      <div class="card"><h3>Projetos e chamados que mais estouram a previsão</h3><p style="color:var(--muted);margin:0 0 10px">Inclui projetos (pela regra da aba Projetos) e qualquer chamado com previsão de horas informada. “Apontado” soma todo o histórico; “Apontado no período” respeita o filtro de datas.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Previsto (h)</th><th>Apontado (h)</th><th>Restam ou excedeu</th><th>% da previsão</th><th>Apontado no período (h)</th><th>Colaboradores</th><th>Situação</th></tr></thead><tbody id="tMgPrj"></tbody></table></div></div>
+      <div class="card"><h3>Empresas que mais consomem tempo</h3><div id="mgBars" style="margin-bottom:12px"></div><div class="tw"><table><thead><tr><th>Empresa</th><th>Horas (h)</th><th>% do total</th><th>Chamados</th><th>Colaboradores</th><th>Em dias não úteis (h)</th></tr></thead><tbody id="tMgCli"></tbody></table></div></div>
+      <div class="card"><h3>Chamados mais impactantes</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Empresa</th><th>Horas (h)</th><th>% do total</th><th>Apontamentos</th><th>Colaboradores</th><th>Dias com apontamento</th><th>Em dias não úteis (h)</th><th>Status</th></tr></thead><tbody id="tMgTk"></tbody></table></div></div></div>
     <div id="t-vip" class="hide"><div class="card"><h3>Clientes VIP</h3>
       <div class="fg"><label>Lista de clientes VIP (um por linha; basta uma parte do nome)</label><textarea id="vipList" rows="6" placeholder="Cole aqui os nomes dos clientes VIP" style="padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit" onchange="vipChanged()"></textarea></div>
       <p id="vipInfo" style="margin:10px 0"></p><div class="kpis" id="vipKpi" style="margin:0"></div></div>
       <div class="card"><h3>VIPs que mais consomem a carga</h3><div class="tw"><table><thead><tr><th>Cliente VIP</th><th>Horas</th><th>% do total</th><th>% da capacidade da equipe</th><th>Chamados</th><th>Colaboradores</th><th>Quem mais atende</th><th>Em dias não úteis</th></tr></thead><tbody id="tVip"></tbody></table></div></div>
       <div class="card"><h3>Clientes não VIP que mais consomem (comparação)</h3><div class="tw"><table><thead><tr><th>Cliente</th><th>Horas</th><th>% do total</th><th>Chamados</th></tr></thead><tbody id="tVipOut"></tbody></table></div></div></div>
-    <div id="t-overview" class="hide"><div class="card"><h3>Horas por colaborador</h3><div id="bars"></div><canvas id="chart" height="90"></canvas></div></div>
     <div id="t-entries" class="hide"><div class="card"><h3>Lançamentos de tempo</h3><div class="tw"><table>
       <thead><tr><th>Ticket</th><th>Data</th><th>Cliente</th><th>Assunto</th><th>Colaborador</th><th>Equipe</th><th>Atividade</th><th>Status</th><th>Horas</th></tr></thead><tbody id="tEntries"></tbody></table></div><p id="cap" style="color:var(--muted)"></p></div></div>
-    <div id="t-people" class="hide"><div class="card"><h3>Desempenho e jornada de 8h por dia</h3><div class="tw"><table>
-      <thead><tr><th>Colaborador</th><th>Equipe</th><th>Lançamentos</th><th>Tickets</th><th>Clientes</th><th>Dias</th><th>Horas</th><th>Média/dia</th><th>Meta 8h</th></tr></thead><tbody id="tPeople"></tbody></table></div></div></div>
     <div id="t-pivot" class="hide"><div class="card"><h3>Tabela dinâmica</h3>
       <div class="row"><div class="fg"><label>Linhas</label><select id="pvRow" onchange="renderPivot()"></select></div>
       <div class="fg"><label>Colunas</label><select id="pvCol" onchange="renderPivot()"></select></div>
@@ -138,11 +162,11 @@ pre{background:#1e293b;color:#7dd3fc;padding:14px;border-radius:8px;max-height:3
       <div class="card"><h3>Empresas que mais consomem (laranja = VIP)</h3><canvas id="chCli"></canvas></div>
       <div class="card"><h3>Colaboradores: horas × capacidade</h3><canvas id="chAg"></canvas></div>
       <div class="card"><h3>Distribuição por atividade</h3><canvas id="chAct"></canvas></div></div></div>
-    <div id="t-proj" class="hide"><div class="card"><h3>Projetos: horas por dia × meta</h3><p style="color:var(--muted);margin:0 0 10px">Soma de todos os colaboradores no projeto, dia a dia, dentro do período filtrado. Tolerância de 15 min em torno da meta.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Dias</th><th>Total</th><th>Média/dia</th><th>Abaixo da meta</th><th>Na meta</th><th>Estourou</th></tr></thead><tbody id="tProj"></tbody></table></div></div>
-      <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Data</th><th>Quem trabalhou</th><th>Horas</th><th>Diferença</th><th>Situação</th></tr></thead><tbody id="tProjDay"></tbody></table></div></div></div>
-    <div id="t-budget" class="hide"><div class="card"><h3>Carga do projeto: previsto × trabalhado</h3><p style="color:var(--muted);margin:0 0 10px">Soma todo o histórico de apontamentos dos tickets carregados, sem filtro de período. Digite as horas previstas de cada projeto (ficam salvas neste navegador) ou informe o ID do campo personalizado ao sincronizar.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Previsto (h)</th><th>Trabalhado</th><th>% da carga</th><th>Saldo</th><th>Situação</th><th>Início</th><th>Último apontamento</th><th>Duração (dias)</th><th>Dias trabalhados</th></tr></thead><tbody id="tBudget"></tbody></table></div></div></div>
-    <div id="t-occ" class="hide"><div class="card"><h3>Horas apontadas por colaborador</h3><p id="occInfo" style="color:var(--muted);margin:0 0 10px"></p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Dias com apontamento</th><th>Horas apontadas</th><th>Em dias não úteis</th><th>Capacidade</th><th>% apontado</th><th>Situação</th></tr></thead><tbody id="tOcc"></tbody></table></div></div>
-      <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Horas</th><th>% da jornada</th><th>Situação</th></tr></thead><tbody id="tOccDay"></tbody></table></div></div></div>
+    <div id="t-proj" class="hide"><div class="card"><h3>Projetos: horas por dia × meta</h3><p style="color:var(--muted);margin:0 0 10px">Soma de todos os colaboradores no projeto, dia a dia, dentro do período filtrado. Tolerância de 15 min em torno da meta.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Dias com apontamento</th><th>Total (h)</th><th>Média por dia (h)</th><th>Dias abaixo da meta</th><th>Dias na meta</th><th>Dias que estourou</th></tr></thead><tbody id="tProj"></tbody></table></div></div>
+      <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Data</th><th>Quem trabalhou</th><th>Horas no dia (h)</th><th>Diferença para a meta</th><th>Situação</th></tr></thead><tbody id="tProjDay"></tbody></table></div></div>
+      <div class="card"><h3>Previsto × apontado por chamado</h3><p style="color:var(--muted);margin:0 0 10px"><b>Previsto</b> = horas que a pessoa informou: digitadas aqui, do campo personalizado do Movidesk ou lidas no texto do chamado pelo robô de regras ou pela IA (“previsão 20h”; “3 dias” vale 3 × a jornada). <b>Apontado</b> = todo o histórico de tempo lançado, sem filtro de período. <b>Restam</b> = previsto − apontado; <b>Excedeu</b> = apontado − previsto. Previsão digitada aqui tem prioridade e fica salva neste navegador.</p><div class="row noprint" style="margin-bottom:10px"><div class="fg"><label>Mostrar</label><select id="bScope" onchange="render()"><option value="p">Somente projetos (regra acima)</option><option value="a">Todos os chamados</option></select></div></div><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Previsto (h)</th><th>De onde veio a previsão</th><th>Apontado (h)</th><th>Restam ou excedeu</th><th>% da previsão</th><th>Situação</th><th>Início</th><th>Último apontamento</th><th>Duração (dias corridos)</th><th>Dias com apontamento</th></tr></thead><tbody id="tBudget"></tbody></table></div></div></div>
+    <div id="t-occ" class="hide"><div class="card"><h3>Colaboradores: horas apontadas e jornada</h3><p id="occInfo" style="color:var(--muted);margin:0 0 10px"></p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Lançamentos</th><th>Tickets</th><th>Clientes</th><th>Dias com apontamento</th><th>Horas apontadas (h)</th><th>Média por dia apontado (h)</th><th>Em dias não úteis (h)</th><th>Capacidade (h)</th><th>Mínimo exigido (h)</th><th>% da capacidade</th><th>Falta para o mínimo</th><th>Falta para a jornada completa</th><th>Situação</th></tr></thead><tbody id="tOcc"></tbody></table></div></div>
+      <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Horas no dia (h)</th><th>% da jornada</th><th>Falta ou sobra no dia</th><th>Situação</th></tr></thead><tbody id="tOccDay"></tbody></table></div></div></div>
     <div id="t-diag" class="hide"><div class="card"><h3>Diagnóstico da extração</h3><div id="diagSummary"></div><pre id="rawJson">Sem dados.</pre></div></div>
   </div>
 </main>
@@ -151,7 +175,7 @@ pre{background:#1e293b;color:#7dd3fc;padding:14px;border-radius:8px;max-height:3
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const FIELDS=[['owner_name','Colaborador'],['sector','Equipe'],['activity','Atividade'],['service_name','Serviço'],['category','Categoria'],['status','Status'],['client_name','Cliente']];
-let raw=[],rows=[],chart=null,firstTicket=null;
+let raw=[],rows=[],firstTicket=null;
 
 /* ---------- utilidades ---------- */
 // Pessoas no Movidesk usam "businessName" (não "name"). Esse era o motivo dos agentes virem vazios.
@@ -175,7 +199,7 @@ const ticketUrl=id=>{const d=(localStorage.getItem('md_domain')||'').replace(/\/
 
 /* ---------- API Movidesk ---------- */
 const EXPANDS=[
-  'owner,clients($expand=organization),actions($select=id,createdDate,createdBy,timeAppointments;$expand=createdBy($select=id,businessName),timeAppointments)',
+  'owner,clients($expand=organization),actions($select=id,createdDate,createdBy,description,timeAppointments;$expand=createdBy($select=id,businessName),timeAppointments)',
   'owner,clients($expand=organization),actions($expand=createdBy,timeAppointments)',
   'owner,clients,actions($expand=createdBy,timeAppointments)',
   'owner,clients,actions'
@@ -185,14 +209,26 @@ let stats={},CF='';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function build(all){stats={tk:all.length,ac:0,ap:0,tw:0};raw=all.flatMap(flatten)}
 
-async function sync(){
+let TK=new Map(),syncing=false,apiOn=false,EXP=null,lastSync=0,lastTry=0,lastFull=0,lastSig='',lastToday='';
+const AUTO_FULL_MS=36e5;
+
+async function sync(auto){
+  if(syncing) return;
   let dom=$('domain').value.trim().replace(/\/+$/,''),tok=$('token').value.trim(),ini=$('startDate').value;
   if(dom&&!/^https?:\/\//i.test(dom)) dom='https://'+dom;
-  if(!dom||!tok) return log('Preencha domínio e token.','err');
-  if(!ini) return log('Informe a data inicial.','err');
+  if(!dom||!tok) return auto?0:log('Preencha domínio e token.','err');
+  if(!ini) return auto?0:log('Informe a data inicial.','err');
   localStorage.setItem('md_domain',dom);localStorage.setItem('md_token',tok);
   CF=$('cfId').value.trim();localStorage.setItem('md_cf',CF);const SEL=SELECT+(CF?',customFieldValues':'');
-  const filter=`lastUpdate ge ${ini}T00:00:00.00z`,t0=performance.now();
+  const began=Date.now(),t0=performance.now(),sig=[dom,ini,CF].join('|');
+  const full=!auto||!TK.size||sig!==lastSig||began-lastFull>AUTO_FULL_MS;
+  if(auto){ // virou o dia com a página aberta: empurra a data final junto
+    const today=iso(new Date());
+    if(today!==lastToday){if($('endDate').value===lastToday)$('endDate').value=today;if($('fEnd').value===lastToday)$('fEnd').value=today;lastToday=today}
+  }
+  syncing=true;apiOn=true;lastTry=began;autoLabel();
+  // sincronização completa: tudo desde a data inicial. Incremental: só o que mudou desde a última (com 5 min de folga).
+  const filter=full?`lastUpdate ge ${ini}T00:00:00.00z`:`lastUpdate ge ${new Date(lastSync-3e5).toISOString().slice(0,19)}.00z`;
   const url=(exp,skip)=>`${dom}/public/v1/tickets?token=${encodeURIComponent(tok)}&$select=${SEL}&$expand=${encodeURIComponent(exp)}&$filter=${encodeURIComponent(filter)}&$orderby=${encodeURIComponent('lastUpdate desc')}&$top=100&$skip=${skip}`;
   const get=async(exp,skip)=>{
     for(let i=0;i<6;i++){
@@ -204,34 +240,93 @@ async function sync(){
     throw new Error('API com limite de requisições excedido. Tente de novo em 1 minuto.');
   };
   try{
-    log('Conectando...');
-    let exp=null,first;
-    for(const e of EXPANDS){
-      try{first=await get(e,0);exp=e;break}
-      catch(err){
-        if(err.status===401||err.status===403) throw new Error('Token inválido ou sem permissão ('+err.status+')');
-        if(!(err.status>=400)) throw err;
+    log(full?'Conectando...':'Buscando alterações...');
+    if(full) EXP=null;
+    let first;
+    if(EXP) first=await get(EXP,0);
+    else{
+      for(const e of EXPANDS){
+        try{first=await get(e,0);EXP=e;break}
+        catch(err){
+          if(err.status===401||err.status===403){const x=new Error('Token inválido ou sem permissão ('+err.status+')');x.status=err.status;throw x}
+          if(!(err.status>=400)) throw err;
+        }
       }
+      if(!EXP) throw new Error('A API recusou a consulta.');
     }
-    if(exp===null) throw new Error('A API recusou a consulta.');
     let all=[...first],skip=100,done=first.length<100;
-    build(all);start(`API Movidesk (${all.length} tickets...)`);
+    const live=!auto&&full;
+    if(live){build(all);start(`API Movidesk (${all.length} tickets...)`)}
     const W=5;
     while(!done&&all.length<5000){
       log(`Buscando em paralelo... ${all.length} tickets`);
-      const pages=await Promise.all(Array.from({length:W},(_,i)=>get(exp,skip+i*100)));
+      const pages=await Promise.all(Array.from({length:W},(_,i)=>get(EXP,skip+i*100)));
       pages.forEach(p=>{all=all.concat(p);if(p.length<100)done=true});
       skip+=W*100;
-      build(all);applyFilters();
+      if(live){build(all);applyFilters()}
     }
-    firstTicket=all.find(t=>(t.actions||[]).length)||all[0]||null;
-    build(all);start(`API Movidesk (${all.length} tickets)`);
-    log(`Concluído em ${((performance.now()-t0)/1000).toFixed(1)}s: ${all.length} tickets, ${raw.length} lançamentos de tempo.`,'okc');
-    if(!raw.length) showTab('diag');
+    if(full) TK=new Map();
+    all.forEach(t=>TK.set(String(t.id),t));
+    const list=[...TK.values()];
+    lastSync=began;if(full)lastFull=began;lastSig=sig;
+    if(full||all.length){
+      firstTicket=list.find(t=>(t.actions||[]).length)||list[0]||null;
+      build(list);start(`API Movidesk (${list.length} tickets)`,auto);
+    }
+    log(full?`Concluído em ${((performance.now()-t0)/1000).toFixed(1)}s: ${list.length} tickets, ${raw.length} lançamentos de tempo.`
+            :`Atualizado: ${all.length} ticket(s) alterado(s), ${list.length} no total.`,'okc');
+    if(!raw.length&&!auto) showTab('diag');
+    iaRun(true);
   }catch(e){
     log('Erro: '+e.message+(e instanceof TypeError?' (falha de rede ou CORS: verifique o domínio ou rode por um servidor local)':''),'err');
-  }
+    if(auto&&(e.status===401||e.status===403)){$('autoMin').value='0';autoChanged()}
+  }finally{syncing=false;autoLabel()}
 }
+
+/* ---------- atualização automática ---------- */
+function autoLabel(){
+  const el=$('auto'),m=+$('autoMin').value;
+  if(!apiOn){el.textContent='';return}
+  if(syncing){el.textContent='· atualizando…';return}
+  if(!lastSync){el.textContent='';return}
+  const t=new Date(lastSync).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  el.textContent=`· atualizado às ${t}`+(m?` · próxima em ${Math.max(0,Math.ceil((lastTry+m*6e4-Date.now())/6e4))} min`:' · automático desligado');
+}
+function autoChanged(){localStorage.setItem('md_auto',$('autoMin').value);autoLabel();tick()}
+function tick(){
+  autoLabel();
+  const m=+$('autoMin').value;
+  if(!m||!apiOn||syncing||document.hidden) return;
+  if(Date.now()-lastTry<m*6e4) return;
+  const a=document.activeElement; // não atualiza enquanto a pessoa digita numa tabela/lista
+  if(a&&a.closest&&a.closest('table,textarea')) return;
+  sync(true);
+}
+setInterval(tick,10000);
+document.addEventListener('visibilitychange',tick);
+
+/* robô de leitura: procura no assunto e na descrição do chamado quantas horas a pessoa disse que ia levar */
+const stripH=x=>String(x||'').replace(/<[^>]*>/g,' ').replace(/&nbsp;/gi,' ').replace(/\s+/g,' ').trim().slice(0,4000);
+const EST_KW='previs[aã]o|previst[oa]s?|estimativa|estimad[oa]s?|esfor[cç]o|vai\\s+levar|levar[aá]|levaremos|tempo\\s+(?:de\\s+)?(?:execu[cç][aã]o|desenvolvimento)';
+const EST_A=new RegExp('(?:'+EST_KW+')([^0-9\\n]{0,30}?)(\\d{1,4}(?:[.,]\\d{1,2})?)\\s*(horas?|hrs?|hs|h|dias?)(?![a-zà-ú])','i');
+const EST_B=/(\d{1,4}(?:[.,]\d{1,2})?)\s*(horas?|hrs?|hs|h|dias?)\s*(?:de\s+)?(?:previst[ao]s?|estimad[ao]s?|esfor[cç]o)/i;
+const EST_BAD=/entreg|prazo|venc|respost|retorn|sla|atendiment|reuni/i; // evita confundir prazo de entrega com esforço
+function readEstimate(t){
+  const T=[['assunto',t.subject]];
+  (t.actions||[]).slice(0,3).forEach((a,i)=>T.push([i?'ação '+(i+1):'descrição',a.description||a.htmlDescription]));
+  for(const [src,txt] of T){
+    const tx=stripH(txt);if(!tx) continue;
+    let m=EST_A.exec(tx),v,u;
+    if(m&&!EST_BAD.test(m[1])){v=m[2];u=m[3]}
+    else if((m=EST_B.exec(tx))){v=m[1];u=m[2]}
+    else continue;
+    const n=parseFloat(v.replace(',','.'));if(!(n>0)) continue;
+    return {v:n,u:/^d/i.test(u)?'d':'h',src,snip:m[0].slice(0,70)};
+  }
+  return null;
+}
+
+const ticketText=t=>[t.subject,...(t.actions||[]).slice(0,3).map(a=>stripH(a.description||a.htmlDescription))].filter(Boolean).join(' | ').slice(0,3000);
 
 function flatten(t){
   const owner=nm(t.owner),team=lbl(t.ownerTeam)||'Sem equipe';
@@ -239,7 +334,7 @@ function flatten(t){
   const base={ticket_id:String(t.id),subject:t.subject||'Sem assunto',
     client_name:nm(c.organization)||nm(c)||'Não informado',
     planned:(()=>{const f=CF&&(t.customFieldValues||[]).find(x=>String(x.customFieldId)===CF);return f?parseFloat(String(f.value).replace(',','.'))||0:0})(),
-    service_name:t.serviceFirstLevel||'Geral',category:t.category||'Geral',status:t.status||'—'};
+    service_name:t.serviceFirstLevel||'Geral',category:t.category||'Geral',status:t.status||'—',est:readEstimate(t),txt:ticketText(t)};
   const out=[];
   (t.actions||[]).forEach(a=>{
     stats.ac++;
@@ -264,6 +359,7 @@ function flatten(t){
 function loadCSV(e){
   const f=e.target.files[0];if(!f) return;
   Papa.parse(f,{header:true,skipEmptyLines:true,encoding:'ISO-8859-1',complete:res=>{
+    TK=new Map();apiOn=false;autoLabel();
     raw=res.data.map((r,i)=>({
       ticket_id:String(r['Ticket']||i),subject:r['Assunto']||'Sem assunto',
       client_name:r['Cliente']||'Não informado',owner_name:(r['Agente']||'Não atribuído').trim(),
@@ -278,22 +374,26 @@ function loadCSV(e){
 }
 
 /* ---------- painel ---------- */
-function start(src){
+function start(src,keep){
+  keep=keep&&!$('app').classList.contains('hide');
   $('status').textContent='Fonte: '+src;
   $('app').classList.remove('hide');
-  buildFilters();applyFilters();showTab(raw.length?'overview':'diag');
+  buildFilters(keep);applyFilters();
+  if(!keep) showTab(raw.length?'mgmt':'diag');
 }
 
-function buildFilters(){
-  const box=$('filters');
+function buildFilters(keep){
+  const box=$('filters'),old={};
+  FIELDS.forEach(([k])=>{const e=$('f_'+k);if(e)old[k]=e.value});
   box.querySelectorAll('.dyn').forEach(n=>n.remove());
   FIELDS.forEach(([k,label])=>{
     const vals=[...new Set(raw.map(r=>r[k]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     const d=document.createElement('div');d.className='fg dyn';
     d.innerHTML=`<label>${label}</label><select id="f_${k}" onchange="applyFilters()"><option value="">Todos</option>${vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>`;
+    if(old[k]&&vals.includes(old[k])) d.querySelector('select').value=old[k];
     box.appendChild(d);
   });
-  $('fStart').value=$('startDate').value;$('fEnd').value=$('endDate').value;
+  if(!keep){$('fStart').value=$('startDate').value;$('fEnd').value=$('endDate').value}
   initPivot();
 }
 
@@ -318,30 +418,21 @@ function render(){
   const c=R(),kd=mk(c);
   const tot=rows.reduce((s,r)=>s+r.hours,0);
   $('kT').textContent=new Set(rows.map(r=>r.ticket_id)).size;
-  $('kH').textContent=tot.toFixed(2)+' h';
+  $('kH').textContent=H(tot);
   $('kA').textContent=new Set(rows.map(r=>r.owner_name)).size;
   $('kC').textContent=new Set(rows.map(r=>r.client_name)).size;
 
   const LIM=1000;
   $('tEntries').innerHTML=rows.slice(0,LIM).map(r=>{
     const u=ticketUrl(r.ticket_id);
-    return `<tr><td>${u?`<a href="${esc(u)}" target="_blank" rel="noopener">#${esc(r.ticket_id)}</a>`:'#'+esc(r.ticket_id)}</td><td>${fmtDate(r.date)} ${tag(kd(r.date))}</td><td><b>${esc(r.client_name)}</b></td><td>${esc(r.subject)}</td><td><b>${esc(r.owner_name)}</b></td><td><span class="pill">${esc(r.sector)}</span></td><td>${esc(r.activity)}</td><td><span class="pill">${esc(r.status)}</span></td><td><b>${r.hours.toFixed(2)} h</b></td></tr>`;
+    return `<tr><td>${u?`<a href="${esc(u)}" target="_blank" rel="noopener">#${esc(r.ticket_id)}</a>`:'#'+esc(r.ticket_id)}</td><td>${fmtDate(r.date)} ${tag(kd(r.date))}</td><td><b>${esc(r.client_name)}</b></td><td>${esc(r.subject)}</td><td><b>${esc(r.owner_name)}</b></td><td><span class="pill">${esc(r.sector)}</span></td><td>${esc(r.activity)}</td><td><span class="pill">${esc(r.status)}</span></td><td><b>${H(r.hours)}</b></td></tr>`;
   }).join('');
   $('cap').textContent=rows.length>LIM?`Mostrando ${LIM} de ${rows.length} lançamentos. O Excel exporta todos.`:'';
 
-  const ag=groupAgents();
-  $('tPeople').innerHTML=ag.map(a=>{
-    const avg=a.days.size?a.h/a.days.size:0,ok=avg>=8;
-    return `<tr><td><b>${esc(a.name)}</b></td><td><span class="pill">${esc(a.team)}</span></td><td>${a.n}</td><td>${a.tk.size}</td><td>${a.cl.size}</td><td>${a.days.size}</td><td><b>${a.h.toFixed(2)} h</b></td><td>${avg.toFixed(2)} h</td><td><span class="pill ${ok?'ok':'bad'}">${ok?'Meta cumprida':'Faltam '+(8-avg).toFixed(2)+' h/dia'}</span></td></tr>`;
-  }).join('');
-
-  const max=Math.max(1,...ag.map(a=>a.h));
-  $('bars').innerHTML=ag.slice(0,8).map(a=>`<div class="bar"><span style="width:170px"><b>${esc(a.name)}</b></span><i><u style="width:${a.h/max*100}%"></u></i><b style="width:70px;text-align:right">${a.h.toFixed(2)} h</b></div>`).join('')||'<span style="color:var(--muted)">Nenhum lançamento no filtro.</span>';
-  if(chart) chart.destroy();
-  if(window.Chart) chart=new Chart($('chart'),{type:'bar',data:{labels:ag.map(a=>a.name),datasets:[{label:'Horas',data:ag.map(a=>+a.h.toFixed(2)),backgroundColor:'#2563eb'}]},options:{responsive:true}});
 
   renderPivot();renderDiag();
   renderProj(c);renderBudget(c);renderOcc(c);renderMgmt(c);renderVip(c);renderCharts(c);
+  enhanceTables();
 }
 
 
@@ -357,8 +448,8 @@ function showTab(t){
   ACT=t;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-load').classList.toggle('hide',t!=='load');
-  ['mgmt','vip','overview','charts','entries','people','pivot','proj','budget','occ','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  $('rules').classList.toggle('hide',!['proj','budget','occ','mgmt','vip','charts','pivot'].includes(t));
+  ['mgmt','vip','charts','entries','pivot','proj','occ','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  $('rules').classList.toggle('hide',!['proj','occ','mgmt','vip','charts','pivot'].includes(t));
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='diag');
 }
 $('tabs').addEventListener('click',e=>{const t=e.target.dataset.t;if(t)showTab(t)});
@@ -400,7 +491,11 @@ function period(c){
 }
 const isProj=(r,c)=>c.ids.includes(r.ticket_id)||(c.kw&&String(r[c.fld]||'').toLowerCase().includes(c.kw));
 const bizDays=(a,b)=>{let n=0;for(let d=new Date(a+'T12:00:00'),e=new Date(b+'T12:00:00');d<=e;d.setDate(d.getDate()+1)){const w=d.getDay();if(w&&w<6)n++}return n};
-const H=v=>v.toFixed(2)+' h';
+const nf=(v,d=2)=>v.toFixed(d).replace('.',',');
+const H=v=>nf(v)+' h';
+const dEq=(h,c)=>{const n=Math.abs(h)/c.jor;return n>=0.5?` (≈ ${nf(n,1)} ${n===1?'dia':'dias'} de ${c.jor} h)`:''};
+// diferença escrita por extenso: "Faltam 2,00 h (≈ 0,3 dia de 8 h)" ou "Passou 3,00 h"
+const gapTxt=(h,ref,c,low,high)=>{const d=h-ref;return Math.abs(d)<0.005?'Exato':d<0?`${low} ${H(-d)}${dEq(-d,c)}`:`${high} ${H(d)}${dEq(d,c)}`};
 const empty=n=>`<tr><td colspan="${n}" style="color:var(--muted)">Nenhum projeto encontrado. Ajuste "Projeto identificado por" e o texto, ou informe os números dos tickets.</td></tr>`;
 
 function renderProj(c){
@@ -418,23 +513,35 @@ function renderProj(c){
   }).join('')||empty(9);
   det.sort((a,b)=>b.dt.localeCompare(a.dt));
   $('tProjDay').innerHTML=det.slice(0,1000).map(({p,dt,v,s})=>{
-    const df=v.h-c.meta;
-    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${fmtDate(dt)} ${tag(kd(dt))}</td><td>${[...v.a].map(esc).join(', ')}</td><td><b>${H(v.h)}</b></td><td>${df>0?'+':''}${df.toFixed(2)} h</td><td><span class="pill ${s==='ok'?'ok':s==='high'?'bad':'warn'}">${s==='ok'?'Meta cumprida':s==='high'?'Estourou':'Abaixo da meta'}</span></td></tr>`;
+    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${fmtDate(dt)} ${tag(kd(dt))}</td><td>${[...v.a].map(esc).join(', ')}</td><td><b>${H(v.h)}</b></td><td data-v="${(v.h-c.meta).toFixed(2)}">${gapTxt(v.h,c.meta,c,'Faltaram','Passou')}</td><td><span class="pill ${s==='ok'?'ok':s==='high'?'bad':'warn'}">${s==='ok'?'Meta cumprida':s==='high'?'Estourou':'Abaixo da meta'}</span></td></tr>`;
   }).join('');
 }
 
-function renderBudget(c){
+/* previsto x apontado. mode: 'p' só projetos, 'a' todos os chamados, 'g' projetos + chamados com previsão (visão da direção) */
+function budgetData(c,mode){
   const bud=JSON.parse(localStorage.getItem('md_budget')||'{}'),M={};
-  raw.filter(r=>isProj(r,c)).forEach(r=>{
-    const p=M[r.ticket_id]??={id:r.ticket_id,subject:r.subject,client:r.client_name,h:0,days:new Set(),pl:r.planned||0};
-    p.h+=r.hours;if(r.date)p.days.add(r.date);
+  raw.filter(r=>mode==='a'||isProj(r,c)||(mode==='g'&&(r.est||r.planned||+bud[r.ticket_id]))).forEach(r=>{
+    const p=M[r.ticket_id]??={id:r.ticket_id,subject:r.subject,client:r.client_name,status:r.status,h:0,days:new Set(),ag:new Set(),r};
+    p.h+=r.hours;if(r.date)p.days.add(r.date);p.ag.add(r.owner_name);
   });
-  $('tBudget').innerHTML=Object.values(M).sort((a,b)=>b.h-a.h).map(p=>{
-    const pl=+bud[p.id]||p.pl,ds=[...p.days].sort(),f=ds[0],l=ds[ds.length-1],pct=pl?p.h/pl:0;
-    const span=f?Math.round((new Date(l)-new Date(f))/864e5)+1:0;
-    const s=!pl?['','Sem previsão']:pct>1?['bad','Estourou +'+(p.h-pl).toFixed(2)+' h']:pct>=.9?['warn','Quase no limite']:['ok','Dentro da carga'];
-    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${esc(p.client)}</td><td><input type="number" min="0" step="1" value="${pl||''}" style="width:80px" onchange="setBudget('${esc(p.id)}',this.value)"></td><td><b>${H(p.h)}</b></td><td>${pl?(pct*100).toFixed(0)+'%':'—'}</td><td>${pl?(pl-p.h).toFixed(2)+' h':'—'}</td><td><span class="pill ${s[0]}">${s[1]}</span></td><td>${fmtDate(f)}</td><td>${fmtDate(l)}</td><td>${span}</td><td>${ds.length}</td></tr>`;
-  }).join('')||empty(12);
+  const inP={};rows.forEach(r=>{inP[r.ticket_id]=(inP[r.ticket_id]||0)+r.hours});
+  return Object.values(M).map(p=>{
+    let pl=+bud[p.id]||0,src=pl?'Digitada aqui':'';
+    if(!pl&&p.r.planned){pl=p.r.planned;src='Campo personalizado do Movidesk'}
+    if(!pl&&p.r.est){const e=p.r.est;pl=e.u==='d'?e.v*c.jor:e.v;src=`Robô leu no chamado (${e.src}): “${e.snip}”`+(e.u==='d'?` → ${e.v} dia(s) × ${c.jor} h`:'')}
+    if(!pl){const ia=IA[p.id];if(ia&&ia.horas>0&&p.r.txt&&ia.h===hash(p.r.txt)){pl=ia.horas;src=`IA leu (confiança ${ia.conf}): “${ia.trecho||'sem trecho'}” → ${nf(ia.horas,1)} h`}}
+    return {...p,pl,src,ds:[...p.days].sort(),pct:pl?p.h/pl:0,per:inP[p.id]||0};
+  });
+}
+const bst=p=>!p.pl?['','Sem previsão']:p.pct>1?['bad','Estourou']:p.pct>=.9?['warn','Quase no limite (90% ou mais)']:['ok','Dentro da previsão'];
+const byRisk=(a,b)=>(b.pct-a.pct)||(b.h-a.h);
+
+function renderBudget(c){
+  const B=budgetData(c,$('bScope').value==='a'?'a':'p').sort(byRisk);
+  $('tBudget').innerHTML=B.map(p=>{
+    const f=p.ds[0],l=p.ds[p.ds.length-1],span=f?Math.round((new Date(l)-new Date(f))/864e5)+1:0,s=bst(p);
+    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${esc(p.client)}</td><td data-v="${p.pl}"><input type="number" min="0" step="1" value="${p.pl||''}" style="width:80px" onchange="setBudget('${esc(p.id)}',this.value)"></td><td style="white-space:normal;min-width:200px">${p.src?esc(p.src):'—'}</td><td><b>${H(p.h)}</b></td><td data-v="${p.pl?(p.pl-p.h).toFixed(2):1e12}">${p.pl?gapTxt(p.h,p.pl,c,'Restam','Excedeu'):'—'}</td><td data-v="${p.pct}">${p.pl?nf(p.pct*100,0)+'%':'—'}</td><td><span class="pill ${s[0]}">${s[1]}</span></td><td>${fmtDate(f)}</td><td>${fmtDate(l)}</td><td>${span}</td><td>${p.ds.length}</td></tr>`;
+  }).join('')||empty(13);
 }
 function setBudget(id,v){const b=JSON.parse(localStorage.getItem('md_budget')||'{}');b[id]=+v||0;localStorage.setItem('md_budget',JSON.stringify(b));render()}
 
@@ -443,38 +550,67 @@ const offPill=o=>o?`<span class="pill warn">${H(o)}</span>`:'—';
 const calTxt=(P,c)=>`${P.work} dias úteis (descontados ${P.wk} dias de fim de semana e ${P.hol.length} feriados) × ${c.jor} h = ${P.cap} h por colaborador`;
 
 function renderOcc(c){
-  const kd=mk(c),P=period(c),off=offByAgent(kd);
-  $('occInfo').textContent=P.s?`Período de ${fmtDate(P.s)} a ${fmtDate(P.e)}: ${calTxt(P,c)}. Bom a partir de ${(c.min*100).toFixed(0)}% das horas apontadas; abaixo disso é crítico. Horas apontadas em fim de semana e feriado contam no total e aparecem destacadas.`:'';
+  const kd=mk(c),P=period(c),off=offByAgent(kd),min=P.cap*c.min;
+  $('occInfo').textContent=P.s?`Período de ${fmtDate(P.s)} a ${fmtDate(P.e)}: ${calTxt(P,c)}. Mínimo exigido: ${H(min)} (${(c.min*100).toFixed(0)}% da capacidade); abaixo disso é crítico. Horas em fim de semana e feriado contam no total e aparecem destacadas.`:'';
   $('tOcc').innerHTML=groupAgents().sort((a,b)=>a.h-b.h).map(a=>{
     const pct=P.cap?a.h/P.cap:0,ok=pct>=c.min;
-    return `<tr><td><b>${esc(a.name)}</b></td><td><span class="pill">${esc(a.team)}</span></td><td>${a.days.size}</td><td>${H(a.h)}</td><td>${offPill(off[a.name])}</td><td>${P.cap} h</td><td><b>${(pct*100).toFixed(0)}%</b></td><td><span class="pill ${ok?'ok':'bad'}">${ok?'Bom':'Crítico'}</span></td></tr>`;
+    return `<tr><td><b>${esc(a.name)}</b></td><td><span class="pill">${esc(a.team)}</span></td><td>${a.n}</td><td>${a.tk.size}</td><td>${a.cl.size}</td><td>${a.days.size}</td><td><b>${H(a.h)}</b></td><td>${a.days.size?H(a.h/a.days.size):'—'}</td><td>${offPill(off[a.name])}</td><td>${H(P.cap)}</td><td>${H(min)}</td><td><b>${nf(pct*100,0)}%</b></td><td data-v="${(a.h-min).toFixed(2)}">${gapTxt(a.h,min,c,'Faltam','Acima em')}</td><td data-v="${(a.h-P.cap).toFixed(2)}">${gapTxt(a.h,P.cap,c,'Faltam','Acima em')}</td><td><span class="pill ${ok?'ok':'bad'}">${ok?'Bom':'Crítico'}</span></td></tr>`;
   }).join('');
   const D={};
   rows.forEach(r=>{if(r.date){const k=r.owner_name+'|'+r.date;D[k]=(D[k]||0)+r.hours}});
   $('tOccDay').innerHTML=Object.entries(D).map(([k,h])=>{const i=k.lastIndexOf('|');return{n:k.slice(0,i),d:k.slice(i+1),h}})
     .sort((x,y)=>y.d.localeCompare(x.d)||x.n.localeCompare(y.n)).slice(0,1000).map(({n,d,h})=>{
       const p=h/c.jor,k=kd(d),ok=p>=c.min;
-      return `<tr><td>${fmtDate(d)} ${tag(k)}</td><td><b>${esc(n)}</b></td><td>${H(h)}</td><td>${(p*100).toFixed(0)}%</td><td><span class="pill ${k?'warn':ok?'ok':'bad'}">${k?'Dia não útil':ok?'Bom':'Crítico'}</span></td></tr>`;
+      return `<tr><td>${fmtDate(d)} ${tag(k)}</td><td><b>${esc(n)}</b></td><td>${H(h)}</td><td>${nf(p*100,0)}%</td><td data-v="${(h-c.jor).toFixed(2)}">${k?'Dia não útil':gapTxt(h,c.jor,c,'Faltaram','Acima em')}</td><td><span class="pill ${k?'warn':ok?'ok':'bad'}">${k?'Dia não útil':ok?'Bom':'Crítico'}</span></td></tr>`;
     }).join('');
 }
 
 function renderMgmt(c){
   const kd=mk(c),P=period(c),tot=rows.reduce((s,r)=>s+r.hours,0),offH=rows.reduce((s,r)=>s+(kd(r.date)?r.hours:0),0);
-  const pc=v=>tot?(v/tot*100).toFixed(1)+'%':'0%';
+  const N=+$('mgTop').value||10,nAg=new Set(rows.map(r=>r.owner_name)).size,min=P.cap*c.min;
+  const pc=v=>tot?nf(v/tot*100,1)+'%':'0%';
   $('mgInfo').innerHTML=P.s?`<b>Período:</b> ${fmtDate(P.s)} a ${fmtDate(P.e)} · ${calTxt(P,c)}.${P.hol.length?'<br><span style="color:var(--muted)">Feriados: '+P.hol.map(x=>{const [d,n]=x.split('|');return fmtDate(d).slice(0,5)+' '+esc(n)}).join(', ')+'</span>':''}`:'Carregue os dados para gerar o relatório.';
-  const kp=[['Horas apontadas',H(tot)],['Chamados',new Set(rows.map(r=>r.ticket_id)).size],['Empresas',new Set(rows.map(r=>r.client_name)).size],['Colaboradores',new Set(rows.map(r=>r.owner_name)).size],['Horas em dias não úteis',H(offH)+(tot?` (${(offH/tot*100).toFixed(0)}%)`:'')]];
+  const kp=[['Horas apontadas',H(tot)],['Chamados',new Set(rows.map(r=>r.ticket_id)).size],['Empresas',new Set(rows.map(r=>r.client_name)).size],['Colaboradores',nAg],['Horas em dias não úteis',H(offH)+(tot?` (${(offH/tot*100).toFixed(0)}%)`:'')]];
   $('mgKpi').innerHTML=kp.map(([l,v])=>`<div class="card"><small>${l}</small><div><b style="font-size:22px">${v}</b></div></div>`).join('');
-  const grp=key=>{const m={};rows.forEach(r=>{const g=m[r[key]]??={r,h:0,off:0,k:0,tk:new Set(),ag:new Set(),days:new Set()};g.h+=r.hours;g.k++;if(kd(r.date))g.off+=r.hours;g.tk.add(r.ticket_id);g.ag.add(r.owner_name);if(r.date)g.days.add(r.date)});return Object.values(m).sort((a,b)=>b.h-a.h).slice(0,10)};
-  const cli=grp('client_name'),mx=Math.max(1,...cli.map(g=>g.h));
-  $('mgBars').innerHTML=cli.map(g=>`<div class="bar"><span style="width:220px"><b>${esc(g.r.client_name)}</b></span><i><u style="width:${g.h/mx*100}%"></u></i><b style="width:80px;text-align:right">${H(g.h)}</b></div>`).join('');
+  const grp=key=>{const m={};rows.forEach(r=>{const g=m[r[key]]??={r,h:0,off:0,k:0,tk:new Set(),ag:new Set(),days:new Set()};g.h+=r.hours;g.k++;if(kd(r.date))g.off+=r.hours;g.tk.add(r.ticket_id);g.ag.add(r.owner_name);if(r.date)g.days.add(r.date)});return Object.values(m).sort((a,b)=>b.h-a.h)};
+  const cliAll=grp('client_name'),cli=cliAll.slice(0,N),mx=Math.max(1,...cli.map(g=>g.h));
+  $('mgBars').innerHTML=cli.map(g=>`<div class="bar"><span style="width:220px"><b>${esc(g.r.client_name)}</b></span><i><u style="width:${g.h/mx*100}%"></u></i><b style="width:90px;text-align:right">${H(g.h)}</b></div>`).join('');
   const VL=vipList();
   $('tMgCli').innerHTML=cli.map(g=>`<tr><td><b>${esc(g.r.client_name)}</b>${vipOf(g.r.client_name,VL)?' <span class="pill ok">VIP</span>':''}</td><td><b>${H(g.h)}</b></td><td>${pc(g.h)}</td><td>${g.tk.size}</td><td>${g.ag.size}</td><td>${offPill(g.off)}</td></tr>`).join('');
-  $('tMgTk').innerHTML=grp('ticket_id').map(g=>`<tr><td>#${esc(g.r.ticket_id)}</td><td>${esc(g.r.subject)}</td><td>${esc(g.r.client_name)}</td><td><b>${H(g.h)}</b></td><td>${pc(g.h)}</td><td>${g.k}</td><td>${g.ag.size}</td><td>${g.days.size}</td><td>${offPill(g.off)}</td><td><span class="pill">${esc(g.r.status)}</span></td></tr>`).join('');
-  const off=offByAgent(kd);
-  $('tMgAg').innerHTML=groupAgents().map(a=>({a,pct:P.cap?a.h/P.cap:0})).sort((x,y)=>y.pct-x.pct).slice(0,10).map(({a,pct})=>{
-    const o=off[a.name]||0,s=pct>1?['bad','Sobrecarregado']:pct>=.9?['warn','No limite']:['ok','Dentro da jornada'];
-    return `<tr><td><b>${esc(a.name)}</b></td><td><span class="pill">${esc(a.team)}</span></td><td><b>${H(a.h)}</b></td><td>${P.cap} h</td><td><b>${(pct*100).toFixed(0)}%</b></td><td>${P.work?H((a.h-o)/P.work):'—'}</td><td>${offPill(o)}</td><td><span class="pill ${s[0]}">${s[1]}</span></td></tr>`;
+  $('tMgTk').innerHTML=grp('ticket_id').slice(0,N).map(g=>`<tr><td>#${esc(g.r.ticket_id)}</td><td>${esc(g.r.subject)}</td><td>${esc(g.r.client_name)}</td><td><b>${H(g.h)}</b></td><td>${pc(g.h)}</td><td>${g.k}</td><td>${g.ag.size}</td><td>${g.days.size}</td><td>${offPill(g.off)}</td><td><span class="pill">${esc(g.r.status)}</span></td></tr>`).join('');
+
+  // colaboradores
+  const off=offByAgent(kd),AC={};
+  rows.forEach(r=>{const m=AC[r.owner_name]??={};m[r.client_name]=(m[r.client_name]||0)+r.hours});
+  const topCli=n=>{const e=Object.entries(AC[n]||{}).sort((a,b)=>b[1]-a[1])[0];return e?`${esc(e[0])} (${H(e[1])})`:'—'};
+  const agp=groupAgents().map(a=>({a,pct:P.cap?a.h/P.cap:0,o:off[a.name]||0})).sort((x,y)=>y.pct-x.pct);
+  $('tMgAg').innerHTML=agp.slice(0,N).map(({a,pct,o})=>{
+    const s=pct>1?['bad','Sobrecarregado']:pct>=.9?['warn','No limite']:['ok','Dentro da jornada'];
+    return `<tr><td><b>${esc(a.name)}</b></td><td><span class="pill">${esc(a.team)}</span></td><td><b>${H(a.h)}</b></td><td>${H(P.cap)}</td><td><b>${nf(pct*100,0)}%</b></td><td data-v="${(a.h-P.cap).toFixed(2)}">${gapTxt(a.h,P.cap,c,'Folga de','Passou')}</td><td>${a.tk.size}</td><td>${topCli(a.name)}</td><td>${P.work?H((a.h-o)/P.work):'—'}</td><td>${offPill(o)}</td><td><span class="pill ${s[0]}">${s[1]}</span></td></tr>`;
   }).join('');
+
+  // projetos / chamados que estouram
+  const B=budgetData(c,'g').sort(byRisk);
+  $('tMgPrj').innerHTML=B.slice(0,N).map(p=>{
+    const s=bst(p);
+    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${esc(p.client)}</td><td>${p.pl?H(p.pl):'—'}</td><td><b>${H(p.h)}</b></td><td data-v="${p.pl?(p.pl-p.h).toFixed(2):1e12}">${p.pl?gapTxt(p.h,p.pl,c,'Restam','Excedeu'):'—'}</td><td data-v="${p.pct}">${p.pl?nf(p.pct*100,0)+'%':'—'}</td><td>${H(p.per)}</td><td>${p.ag.size}</td><td><span class="pill ${s[0]}">${s[1]}</span></td></tr>`;
+  }).join('')||empty(10);
+
+  // resumo em linguagem simples (também sai no PDF)
+  const S=[],list=(a,f,k=3)=>a.slice(0,k).map(f).join('; ');
+  if(!rows.length||!P.s){$('mgSum').innerHTML='<p style="color:var(--muted)">Carregue os dados para gerar o resumo.</p>';return}
+  const capT=P.cap*nAg;
+  S.push(['',`<b>Visão geral:</b> de ${fmtDate(P.s)} a ${fmtDate(P.e)} a equipe apontou <b>${H(tot)}</b> de uma capacidade de ${H(capT)} (${capT?nf(tot/capT*100,0):0}%), em ${P.work} dia(s) útil(eis) e ${nAg} colaborador(es).`]);
+  const over=agp.filter(x=>P.cap&&x.pct>1),low=agp.filter(x=>P.cap&&x.a.h<min).sort((x,y)=>x.a.h-y.a.h);
+  S.push(over.length?['al',`<b>Sobrecarga:</b> ${over.length} colaborador(es) passaram da capacidade. Os maiores: ${list(over,x=>`${esc(x.a.name)} (${nf(x.pct*100,0)}%, passou ${H(x.a.h-P.cap)})`)}.`]:['',`<b>Sobrecarga:</b> ninguém passou da capacidade no período.`]);
+  if(low.length) S.push(['wn',`<b>Abaixo do mínimo de ${(c.min*100).toFixed(0)}%:</b> ${low.length} colaborador(es). Os mais distantes: ${list(low,x=>`${esc(x.a.name)} (faltam ${H(min-x.a.h)}${dEq(min-x.a.h,c)})`)}.`]);
+  const bad=B.filter(p=>p.pl&&p.h>p.pl),near=B.filter(p=>p.pl&&p.pct>=.9&&p.pct<=1),nopl=B.filter(p=>!p.pl);
+  S.push(bad.length?['al',`<b>Projetos estourados:</b> ${bad.length} passaram da previsão. Os piores: ${list(bad,p=>`#${esc(p.id)} ${esc(p.subject.slice(0,50))} (excedeu ${H(p.h-p.pl)}; ${nf(p.pct*100,0)}% de ${H(p.pl)})`)}.`]:['',`<b>Projetos estourados:</b> nenhum chamado com previsão passou do limite.`]);
+  if(near.length) S.push(['wn',`<b>Quase no limite (90% ou mais):</b> ${near.length} — ${list(near,p=>`#${esc(p.id)} (restam ${H(p.pl-p.h)})`)}.`]);
+  if(nopl.length) S.push(['',`<b>Sem previsão de horas:</b> ${nopl.length} projeto(s)/chamado(s) sem previsão informada, então não dá para saber se estouraram. Informe na aba Projetos ou no texto do chamado (ex.: “previsão 20h”).`]);
+  if(cliAll[0]) S.push(['',`<b>Empresa que mais consome:</b> ${esc(cliAll[0].r.client_name)} com ${H(cliAll[0].h)} (${pc(cliAll[0].h)} do total).`]);
+  if(offH>0) S.push(['wn',`<b>Dias não úteis:</b> ${H(offH)} (${nf(offH/tot*100,0)}% do total) foram apontadas em fim de semana ou feriado.`]);
+  $('mgSum').innerHTML=S.map(([k,t])=>`<p class="${k}">• ${t}</p>`).join('');
 }
 
 /* ---------- clientes VIP ---------- */
@@ -576,7 +712,7 @@ function renderCharts(c){
 }
 
 /* ---------- exportação (Excel e PDF da aba atual) ---------- */
-const plain=tb=>{const c=tb.cloneNode(true);c.querySelectorAll('input').forEach(i=>i.replaceWith(document.createTextNode(i.value)));return c};
+const plain=tb=>{const c=tb.cloneNode(true);c.querySelectorAll('input').forEach(i=>i.replaceWith(document.createTextNode(i.value)));c.querySelectorAll('.ar').forEach(x=>x.remove());c.querySelectorAll('th,td').forEach(x=>{if(x.style.display==='none')x.remove()});return c};
 const tabTitle=t=>(document.querySelector(`#tabs button[data-t="${t}"]`)||{}).textContent||t;
 
 function exportXLSX(){
@@ -587,9 +723,9 @@ function exportXLSX(){
   const tidy=ws=>{
     Object.keys(ws).forEach(a=>{
       if(a[0]==='!') return;const x=ws[a];
-      if(x.t==='s'){let m=/^(-?\d+(?:\.\d+)?) h$/.exec(x.v);
-        if(m){x.t='n';x.v=+m[1];x.z='0.00" h"';delete x.w}
-        else if(m=/^(\d+(?:\.\d+)?)%$/.exec(x.v)){x.t='n';x.v=m[1]/100;x.z='0.0%';delete x.w}}
+      if(x.t==='s'){let m=/^(-?\d+(?:[.,]\d+)?) h$/.exec(x.v);
+        if(m){x.t='n';x.v=+m[1].replace(',','.');x.z='0.00" h"';delete x.w}
+        else if(m=/^(\d+(?:[.,]\d+)?)%$/.exec(x.v)){x.t='n';x.v=+m[1].replace(',','.')/100;x.z='0.0%';delete x.w}}
     });
     if(ws['!ref']) ws['!autofilter']={ref:ws['!ref']};return ws;
   };
@@ -641,6 +777,107 @@ function exportPDF(){
   doc.save(`Auditoria_${tabTitle(ACT).replace(/[^\w]+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`);
 }
 
+
+/* ---------- período rápido ---------- */
+function quick(k){
+  const t=new Date(),e=iso(t);let s=e;
+  if(k==='7'){const d=new Date(t);d.setDate(d.getDate()-6);s=iso(d)}
+  if(k==='m') s=e.slice(0,8)+'01';
+  if(k==='all'){$('fStart').value='';$('fEnd').value=''}else{$('fStart').value=s;$('fEnd').value=e}
+  applyFilters();
+}
+
+/* ---------- tabelas: ordenar clicando no título e escolher colunas ---------- */
+const SORT={},DEFHID={tOcc:['Lançamentos','Clientes']};
+const colState=()=>{try{return JSON.parse(localStorage.getItem('md_cols')||'{}')}catch(e){return {}}};
+const tkey=t=>t.id||(t.tBodies[0]&&t.tBodies[0].id)||'';
+const tableOf=key=>{const e=document.getElementById(key);return e&&(e.tagName==='TABLE'?e:e.closest('table'))};
+function applyHid(t,flags){
+  [...t.rows].forEach(r=>{if(r.cells.length!==flags.length) return;[...r.cells].forEach((x,i)=>{x.style.display=flags[i]?'none':''})});
+}
+function sortTable(t,c,d){
+  const tb=t.tBodies[0],n=t.tHead.rows[0].cells.length,rs=[...tb.rows].filter(r=>r.cells.length===n);
+  if(rs.length<2) return;
+  const val=r=>{
+    const cell=r.cells[c];if(cell.dataset.v!=null&&cell.dataset.v!=='') return +cell.dataset.v;
+    const i=cell.querySelector('input'),x=(i?i.value:cell.textContent).trim(),m=/^(\d{2})\/(\d{2})\/(\d{4})/.exec(x);
+    if(m) return +(m[3]+m[2]+m[1]);
+    const q=/^#?(-?\d+(?:[.,]\d+)?)/.exec(x);return q?parseFloat(q[1].replace(',','.')):x.toLowerCase();
+  };
+  rs.sort((a,b)=>{const x=val(a),y=val(b);return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'pt-BR'))*d});
+  rs.forEach(r=>tb.appendChild(r));
+}
+function enhanceTables(){
+  const saved=colState();
+  document.querySelectorAll('#app .tw table').forEach(t=>{
+    const key=tkey(t);if(!key||key==='pvTable'||!t.tHead) return;
+    const ths=[...t.tHead.rows[0].cells];
+    ths.forEach(h=>{if(h.dataset.n==null){h.dataset.n=h.textContent;h.classList.add('sortable');h.title='Clique para ordenar';const a=document.createElement('span');a.className='ar';h.appendChild(a)}});
+    const names=ths.map(h=>h.dataset.n),st=SORT[key];
+    if(st) sortTable(t,st.c,st.d);
+    ths.forEach((h,i)=>{h.querySelector('.ar').textContent=st&&st.c===i?(st.d>0?'▲':'▼'):''});
+    const hid=saved[key]||DEFHID[key]||[];
+    applyHid(t,names.map(n=>hid.includes(n)));
+    if(!document.getElementById('cc_'+key)){
+      const box=document.createElement('details');box.id='cc_'+key;box.className='colbtn noprint';
+      box.innerHTML='<summary>Colunas ▾</summary><div class="colbox">'+names.map((n,i)=>`<label><input type="checkbox" ${hid.includes(n)?'':'checked'} onchange="toggleCol('${key}',${i},this.checked)"> ${esc(n)}</label>`).join('')+'</div>';
+      t.closest('.tw').before(box);
+    }
+  });
+}
+function toggleCol(key,i,on){
+  const t=tableOf(key);if(!t) return;
+  const names=[...t.tHead.rows[0].cells].map(h=>h.dataset.n),cur=colState(),hid=new Set(cur[key]||DEFHID[key]||[]);
+  on?hid.delete(names[i]):hid.add(names[i]);
+  cur[key]=[...hid];localStorage.setItem('md_cols',JSON.stringify(cur));
+  applyHid(t,names.map(n=>hid.has(n)));
+}
+$('app').addEventListener('click',e=>{
+  const h=e.target.closest('th.sortable');if(!h) return;
+  const t=h.closest('table'),key=tkey(t),c=h.cellIndex,s=SORT[key];
+  SORT[key]={c,d:s&&s.c===c?-s.d:1};
+  enhanceTables();
+});
+
+/* ---------- leitura por IA (chama /api/estimar na Vercel; a chave fica no servidor) ---------- */
+let IA=(()=>{try{return JSON.parse(localStorage.getItem('md_ia')||'{}')}catch(e){return {}}})(),iaBusy=false;
+const hash=x=>{let h=5381;for(let i=0;i<x.length;i++)h=((h<<5)+h+x.charCodeAt(i))|0;return String(h)};
+const iaLog=(m,c)=>{$('iaMsg').className=c||'';$('iaMsg').textContent=m};
+function iaChanged(){localStorage.setItem('md_iamode',$('iaMode').value);localStorage.setItem('md_iakey',$('iaKey').value.trim());if($('iaMode').value!=='off'&&raw.length)iaRun()}
+async function iaRun(auto){
+  if(iaBusy) return;
+  const mode=$('iaMode').value,key=$('iaKey').value.trim();
+  if(mode==='off') return auto?0:iaLog('IA desligada. Escolha quais chamados analisar.');
+  if(!key) return auto?0:iaLog('Informe a senha da função (ACCESS_KEY).','err');
+  const c=R(),bud=JSON.parse(localStorage.getItem('md_budget')||'{}'),seen=new Set(),todo=[];
+  raw.forEach(r=>{
+    if(seen.has(r.ticket_id)) return;seen.add(r.ticket_id);
+    if(r.est||r.planned||+bud[r.ticket_id]||!r.txt) return;
+    if(mode==='proj'&&!isProj(r,c)) return;
+    const h=hash(r.txt),x=IA[r.ticket_id];
+    if(x&&x.h===h) return;
+    todo.push({id:r.ticket_id,h,texto:r.txt});
+  });
+  if(!todo.length) return auto?0:iaLog('Nada novo para analisar.','okc');
+  const MAXRUN=auto?32:400,LOTE=8,fila=todo.slice(0,MAXRUN);let ok=0;
+  iaBusy=true;
+  try{
+    for(let i=0;i<fila.length;i+=LOTE){
+      const lote=fila.slice(i,i+LOTE);
+      iaLog(`IA analisando ${Math.min(i+LOTE,fila.length)} de ${fila.length}...`);
+      const r=await fetch('/api/estimar',{method:'POST',headers:{'Content-Type':'application/json','x-access-key':key},body:JSON.stringify({jornada:c.jor,tickets:lote.map(t=>({id:t.id,texto:t.texto}))})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.erro||('erro '+r.status));
+      (j.resultados||[]).forEach(x=>{const t=lote.find(l=>l.id===String(x.id));if(t){IA[t.id]={h:t.h,horas:x.horas,conf:x.confianca,trecho:x.trecho};ok++}});
+      try{localStorage.setItem('md_ia',JSON.stringify(IA))}catch(e){}
+      render();
+    }
+    iaLog(`IA: ${ok} chamado(s) analisado(s)`+(todo.length>fila.length?`; faltam ${todo.length-fila.length} (entram na próxima atualização ou em "Analisar agora").`:'.'),'okc');
+  }catch(e){
+    iaLog('IA: '+e.message+(e instanceof TypeError?' (a função /api/estimar não respondeu; ela só existe depois de publicar na Vercel)':''),'err');
+  }finally{iaBusy=false}
+}
+
 /* ---------- inicialização ---------- */
 $('domain').value=localStorage.getItem('md_domain')||'';
 $('token').value=localStorage.getItem('md_token')||'';
@@ -650,7 +887,11 @@ $('endDate').value=`${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-${pad(hoje.g
 $('cfId').value=localStorage.getItem('md_cf')||'';
 $('vipList').value=localStorage.getItem('md_vip')??['Dr Oculos','Ferri','Instituto','Paulo e Condah','Atacadão do Oculos','IMV','Paschoal LAB','Cardeal','Sr dos Oculos','Lux'].join('\n');
 try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{if(sv[i]!=null)$(i).value=sv[i]})}catch(e){}
+$('autoMin').value=localStorage.getItem('md_auto')??'5';
+$('iaMode').value=localStorage.getItem('md_iamode')||'off';$('iaKey').value=localStorage.getItem('md_iakey')||'';
+lastToday=$('endDate').value;
 showTab('load');
+if(+$('autoMin').value&&$('domain').value&&$('token').value) sync(true); // já abre sincronizando
 </script>
 </body>
 </html>
