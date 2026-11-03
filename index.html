@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 <style>
@@ -59,8 +60,8 @@ th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--blue)}
 details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 0 0;padding-left:20px}details.card li{margin-bottom:4px}
 .sum p{margin:6px 0}.sum p.al{color:#991b1b}.sum p.wn{color:#92400e}
 .prog{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:12px}.prog .pn{width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.prog i{flex:1;height:14px;background:#e8ebf0;border-radius:7px;position:relative;overflow:hidden}.prog u{display:block;height:100%;border-radius:7px}.prog s{position:absolute;top:0;bottom:0;width:2px;background:#1d2433;opacity:.55}
-.prog .pv{width:230px;text-align:right}.prog.tot i{height:20px}.prog.tot{font-size:13px;margin-bottom:14px}
+.prog i{flex:1;height:14px;background:#e8ebf0;border-radius:7px;position:relative;overflow:hidden}.prog u{display:block;height:100%;border-radius:7px;transform-origin:left center;animation:progReveal 1.15s cubic-bezier(.2,.8,.2,1) both}.prog s{position:absolute;top:0;bottom:0;width:2px;background:#1d2433;opacity:.55}
+.prog .pv{width:230px;text-align:right}.prog.tot i{height:20px}.prog.tot{font-size:13px;margin-bottom:14px}@keyframes progReveal{from{transform:scaleX(0);opacity:.45}to{transform:scaleX(1);opacity:1}}.prog-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin:8px 0 12px}.prog-legend span{display:inline-flex;align-items:center;gap:5px}.prog-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
 body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #app>.kpis{display:none}
 .fb{border:0;background:none;color:var(--muted);cursor:pointer;padding:1px 4px;margin-left:4px;font-size:11px;border-radius:4px}.fb:hover{background:#e8ebf0}.fb.on{color:#fff;background:var(--blue)}
 .fp{position:fixed;z-index:50;width:270px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px rgba(20,33,61,.18);padding:10px}
@@ -74,6 +75,7 @@ body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #a
 <header><div class="brand"><b>Auditoria de Chamados</b><small>Ticket Manager · Movidesk</small></div><div class="chip" id="chip"><span class="dot"></span><span id="status">Aguardando dados</span><span id="auto"></span></div></header>
 <nav id="tabs">
   <button data-t="load" class="on">Carregar dados</button>
+  <button data-t="live">Tickets atualizados</button>
   <button data-t="cfg">Configurações</button>
   <button data-t="mgmt">Gestão</button>
   <button data-t="vip">Clientes VIP</button>
@@ -95,16 +97,27 @@ body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #a
         <div class="fg"><label>Início</label><input type="date" id="startDate"></div>
         <div class="fg"><label>Fim</label><input type="date" id="endDate"></div>
         <div class="fg"><label>ID do campo "horas previstas" (opcional)</label><input id="cfId" placeholder="ex.: 12345"></div>
-        <div class="fg"><label>Atualização automática</label><select id="autoMin" onchange="autoChanged()"><option value="0">Desligada</option><option value="1">A cada 1 min</option><option value="5">A cada 5 min</option><option value="10">A cada 10 min</option><option value="15">A cada 15 min</option><option value="30">A cada 30 min</option><option value="60">A cada 60 min</option></select></div>
+        <div class="fg"><label>Atualização automática</label><select id="autoMin" onchange="autoChanged()"><option value="0">Desligada</option><option value="1">A cada 1 min (quase em tempo real)</option><option value="5">A cada 5 min</option><option value="10">A cada 10 min</option><option value="15">A cada 15 min</option><option value="30">A cada 30 min</option><option value="60">A cada 60 min</option></select></div>
         <button class="b g" onclick="sync()">Sincronizar agora</button><button class="b" onclick="saveNow()">Salvar dados</button><button class="s" onclick="clearCache()">Limpar dados salvos</button>
       </div>
       <div id="log"></div>
-      <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. Os dados do Movidesk ficam salvos neste navegador: ao abrir a página eles aparecem na hora e só os tickets alterados são buscados. Uma sincronização completa roda a cada 6 horas. Se a conexão cair, o sistema tenta de novo sozinho, com intervalos cada vez maiores.</p><p id="cacheInfo" style="margin:8px 0 0;font-weight:600"></p>
+      <div class="card" style="margin-top:12px;border:1px solid #b8c9e8;background:#f7faff"><h3 style="margin:0 0 8px">Monitor de alterações em tempo real</h3><p style="margin:0 0 8px;color:var(--muted)">Mostra atualizações detectadas na sincronização: mudança de previsão/prazo, status ou atualização do chamado.</p><div id="liveChanges" style="font-size:13px">Aguardando a primeira sincronização...</div></div>
+      <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. Os dados do Movidesk ficam salvos neste navegador: ao abrir a página eles aparecem na hora e só os tickets alterados são buscados. A verificação automática pode ocorrer a cada 1 minuto (quase em tempo real; depende da resposta da API e do limite de requisições do Movidesk). Alterações são registradas no Monitor de alterações. Uma sincronização completa roda a cada 6 horas. Se a conexão cair, o sistema tenta de novo sozinho, com intervalos cada vez maiores. Para alertas instantâneos sem espera, será necessário configurar um webhook no backend.</p><p id="cacheInfo" style="margin:8px 0 0;font-weight:600"></p>
     </div>
     <div class="card">
       <h3>Ou importe o CSV "Tempo trabalhado nos tickets"</h3>
       <div class="zone" onclick="csvFile.click()">Clique para escolher o arquivo CSV</div>
       <input type="file" id="csvFile" accept=".csv,.txt" class="hide" onchange="loadCSV(event)">
+    </div>
+  </div>
+
+  <div id="t-live" class="hide">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0 0 5px">Painel de tickets atualizados</h3><p style="margin:0;color:var(--muted)">Acompanhe chamados que tiveram alteração detectada na última sincronização do Movidesk.</p></div><button class="b g" onclick="sync()">Atualizar agora</button></div>
+      <div class="kpis" style="margin:14px 0"><div class="card"><small>Alterações registradas</small><b id="liveCount">0</b></div><div class="card"><small>Previsões / prazos</small><b id="liveDue">0</b></div><div class="card"><small>Status alterados</small><b id="liveStatus">0</b></div><div class="card"><small>Chamados atualizados</small><b id="liveGeneral">0</b></div></div>
+      <div class="row noprint" style="margin-bottom:12px"><div class="fg"><label>Filtrar alterações</label><select id="liveFilter" onchange="showLiveEvents()"><option value="all">Todas</option><option value="PREVISÃO / PRAZO ALTERADO">Previsão / prazo</option><option value="STATUS ALTERADO">Status</option><option value="CHAMADO ATUALIZADO">Atualizações gerais</option></select></div><div class="fg"><label>Pesquisar ticket ou assunto</label><input id="liveSearch" placeholder="Número ou assunto" oninput="showLiveEvents()"></div><button class="s" onclick="clearLiveEvents()">Limpar histórico</button></div>
+      <div id="livePanelList"></div>
+      <p style="font-size:12px;color:var(--muted);margin-top:12px">O painel registra alterações identificadas entre sincronizações. Para receber eventos instantaneamente, sem aguardar a próxima consulta, é necessário configurar webhook no backend.</p>
     </div>
   </div>
 
@@ -166,14 +179,14 @@ body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #a
       <div class="card"><h3>Relatório de gestão</h3><p id="mgInfo" style="margin:0 0 12px"></p>
         <div class="row noprint" style="margin-bottom:12px"><div class="fg"><label>Itens em cada ranking</label><select id="mgTop" onchange="render()"><option>5</option><option selected>10</option><option>20</option><option>50</option></select></div></div>
         <div class="kpis" id="mgKpi" style="margin:0"></div></div>
-      <div class="card"><h3>Colaboradores que mais geram impacto e sobrecarga</h3><p style="color:var(--muted);margin:0 0 10px">Ordenado pelo % da capacidade usado no período. “Passou” = horas acima da capacidade; “Folga de” = horas que ainda cabiam.</p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Horas apontadas (h)</th><th>Capacidade (h)</th><th>% da capacidade</th><th>Passou ou folga</th><th>Chamados</th><th>Cliente com mais horas</th><th>Média por dia útil (h)</th><th>Em dias não úteis (h)</th><th>Situação</th></tr></thead><tbody id="tMgAg"></tbody></table></div></div>
+      <div class="card"><h3>Colaboradores que mais geram impacto e sobrecarga</h3><p style="color:var(--muted);margin:0 0 10px">Ordenado pelo % da capacidade usado no período. “Passou” = horas acima da capacidade; “Folga de” = horas que ainda cabiam.</p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Horas apontadas (h)</th><th>Capacidade (h)</th><th>% da capacidade</th><th>Passou ou folga</th><th>Chamados</th><th>Cliente com mais horas</th><th>Média por dia útil (h)</th><th>Horas em dias não úteis (h)</th><th>Situação</th></tr></thead><tbody id="tMgAg"></tbody></table></div></div>
       <div class="card"><h3>Projetos e chamados que mais estouram a previsão</h3><p style="color:var(--muted);margin:0 0 10px">Inclui projetos (pela regra da aba Projetos) e qualquer chamado com previsão de horas informada. “Apontado” soma todo o histórico; “Apontado no período” respeita o filtro de datas.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Previsto (h)</th><th>Apontado (h)</th><th>Restam ou excedeu</th><th>% da previsão</th><th>Apontado no período (h)</th><th>Colaboradores</th><th>Situação</th></tr></thead><tbody id="tMgPrj"></tbody></table></div></div>
-      <div class="card"><h3>Empresas que mais consomem tempo</h3><div id="mgBars" style="margin-bottom:12px"></div><div class="tw"><table><thead><tr><th>Empresa</th><th>Horas (h)</th><th>% do total</th><th>Chamados</th><th>Colaboradores</th><th>Em dias não úteis (h)</th></tr></thead><tbody id="tMgCli"></tbody></table></div></div>
-      <div class="card"><h3>Chamados mais impactantes</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Empresa</th><th>Horas (h)</th><th>% do total</th><th>Apontamentos</th><th>Colaboradores</th><th>Dias com apontamento</th><th>Em dias não úteis (h)</th><th>Status</th></tr></thead><tbody id="tMgTk"></tbody></table></div></div></div>
+      <div class="card"><h3>Empresas que mais consomem tempo</h3><div id="mgBars" style="margin-bottom:12px"></div><div class="tw"><table><thead><tr><th>Empresa</th><th>Horas (h)</th><th>% do total</th><th>Chamados</th><th>Colaboradores</th><th>Horas em dias não úteis (h)</th></tr></thead><tbody id="tMgCli"></tbody></table></div></div>
+      <div class="card"><h3>Chamados mais impactantes</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Empresa</th><th>Horas (h)</th><th>% do total</th><th>Apontamentos</th><th>Colaboradores</th><th>Dias com apontamento</th><th>Horas em dias não úteis (h)</th><th>Status</th></tr></thead><tbody id="tMgTk"></tbody></table></div></div></div>
     <div id="t-vip" class="hide"><div class="card"><h3>Clientes VIP</h3>
       
       <p id="vipInfo" style="margin:10px 0"></p><div class="kpis" id="vipKpi" style="margin:0"></div></div>
-      <div class="card"><h3>VIPs que mais consomem a carga</h3><div class="tw"><table><thead><tr><th>Cliente VIP</th><th>Horas</th><th>% do total</th><th>% da capacidade da equipe</th><th>Chamados</th><th>Colaboradores</th><th>Quem mais atende</th><th>Em dias não úteis</th></tr></thead><tbody id="tVip"></tbody></table></div></div>
+      <div class="card"><h3>VIPs que mais consomem a carga</h3><div class="tw"><table><thead><tr><th>Cliente VIP</th><th>Horas</th><th>% do total</th><th>% da capacidade da equipe</th><th>Chamados</th><th>Colaboradores</th><th>Quem mais atende</th><th>Horas em dias não úteis (h)</th></tr></thead><tbody id="tVip"></tbody></table></div></div>
       <div class="card"><h3>Clientes não VIP que mais consomem (comparação)</h3><div class="tw"><table><thead><tr><th>Cliente</th><th>Horas</th><th>% do total</th><th>Chamados</th></tr></thead><tbody id="tVipOut"></tbody></table></div></div></div>
     <div id="t-entries" class="hide"><div class="card"><h3>Lançamentos de tempo</h3><div class="tw"><table>
       <thead><tr><th>Ticket</th><th>Data</th><th>Cliente</th><th>Assunto</th><th>Colaborador</th><th>Equipe</th><th>Atividade</th><th>Status</th><th>Horas</th></tr></thead><tbody id="tEntries"></tbody></table></div><p id="cap" style="color:var(--muted)"></p></div></div>
@@ -186,12 +199,12 @@ body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #a
       <div class="card" style="grid-column:1/-1"><h3>Progresso acumulado: horas apontadas × capacidade</h3><canvas id="chDay" height="80"></canvas></div>
       <div class="card"><h3>Horas por semana e equipe</h3><canvas id="chWeek"></canvas></div>
       <div class="card"><h3>Empresas que mais consomem (laranja = VIP)</h3><canvas id="chCli"></canvas></div>
-      <div class="card"><h3>Progresso da capacidade por colaborador</h3><p style="color:var(--muted);margin:0 0 10px">A barra mostra as horas apontadas sobre a capacidade do período. O traço marca o mínimo exigido; verde = dentro do esperado, amarelo = abaixo do mínimo, vermelho = acima da capacidade.</p><div id="agProg"></div></div>
+      <div class="card"><h3>Horas apontadas × capacidade prevista</h3><p style="color:var(--muted);margin:0 0 10px">Compare o total de horas efetivamente apontadas com a capacidade prevista para o período, por colaborador e para a equipe.</p><div class="prog-legend"><span><i class="prog-dot" style="background:#16a34a"></i>Dentro da capacidade</span><span><i class="prog-dot" style="background:#d97706"></i>Abaixo do mínimo</span><span><i class="prog-dot" style="background:#dc2626"></i>Acima da capacidade</span><span>│ mínimo esperado</span></div><div id="agProg"></div></div>
       <div class="card"><h3>Distribuição por atividade</h3><canvas id="chAct"></canvas></div></div></div>
     <div id="t-proj" class="hide"><div class="card"><h3>Projetos: horas por dia × meta</h3><p style="color:var(--muted);margin:0 0 10px">Soma de todos os colaboradores no projeto, dia a dia, dentro do período filtrado. Tolerância de 15 min em torno da meta.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Dias com apontamento</th><th>Total (h)</th><th>Média por dia (h)</th><th>Dias abaixo da meta</th><th>Dias na meta</th><th>Dias que estourou</th></tr></thead><tbody id="tProj"></tbody></table></div></div>
       <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Data</th><th>Quem trabalhou</th><th>Horas no dia (h)</th><th>Diferença para a meta</th><th>Situação</th></tr></thead><tbody id="tProjDay"></tbody></table></div></div>
       <div class="card"><h3>Previsto × apontado por chamado</h3><p style="color:var(--muted);margin:0 0 10px"><b>Previsto</b> = horas que a pessoa informou: digitadas aqui, do campo personalizado do Movidesk ou lidas no texto do chamado pelo robô de regras ou pela IA (“previsão 20h”; “3 dias” vale 3 × a jornada). <b>Apontado</b> = todo o histórico de tempo lançado, sem filtro de período. <b>Restam</b> = previsto − apontado; <b>Excedeu</b> = apontado − previsto. Previsão digitada aqui tem prioridade e fica salva neste navegador.</p><div class="row noprint" style="margin-bottom:10px"><div class="fg"><label>Mostrar</label><select id="bScope" onchange="render()"><option value="p">Somente projetos (regra acima)</option><option value="a">Todos os chamados</option></select></div></div><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Previsto (h)</th><th>De onde veio a previsão</th><th>Apontado (h)</th><th>Restam ou excedeu</th><th>% da previsão</th><th>Situação</th><th>Início</th><th>Último apontamento</th><th>Duração (dias corridos)</th><th>Dias com apontamento</th></tr></thead><tbody id="tBudget"></tbody></table></div></div></div>
-    <div id="t-occ" class="hide"><div class="card"><h3>Colaboradores: horas apontadas e jornada</h3><p id="occInfo" style="color:var(--muted);margin:0 0 10px"></p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Lançamentos</th><th>Tickets</th><th>Clientes</th><th>Dias com apontamento</th><th>Horas apontadas (h)</th><th>Média por dia apontado (h)</th><th>Em dias não úteis (h)</th><th>Capacidade (h)</th><th>Mínimo exigido (h)</th><th>% da capacidade</th><th>Falta para o mínimo</th><th>Falta para a jornada completa</th><th>Situação</th></tr></thead><tbody id="tOcc"></tbody></table></div></div>
+    <div id="t-occ" class="hide"><div class="card"><h3>Colaboradores: horas apontadas e jornada</h3><p id="occInfo" style="color:var(--muted);margin:0 0 10px"></p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Lançamentos</th><th>Tickets</th><th>Clientes</th><th>Dias com apontamento</th><th>Horas apontadas (h)</th><th>Média por dia apontado (h)</th><th>Horas em dias não úteis (h)</th><th>Capacidade (h)</th><th>Mínimo exigido (h)</th><th>% da capacidade</th><th>Falta para o mínimo</th><th>Falta para a jornada completa</th><th>Situação</th></tr></thead><tbody id="tOcc"></tbody></table></div></div>
       <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Horas no dia (h)</th><th>% da jornada</th><th>Falta ou sobra no dia</th><th>Situação</th></tr></thead><tbody id="tOccDay"></tbody></table></div></div></div>
     <div id="t-bot" class="hide"><div class="card"><h3>Previsões lidas pelo robô nos chamados</h3><p id="botInfo" style="margin:0 0 12px"></p><div class="tw"><table><thead><tr><th>Chamado</th><th>Cliente</th><th>Assunto</th><th>Onde leu</th><th>Trecho</th><th>Previsto (h)</th><th>Apontado (h)</th><th>Uso</th><th>Confiança</th><th>Ação</th></tr></thead><tbody id="tBot"></tbody></table></div></div></div>
     <div id="t-diag" class="hide"><div class="card"><h3>Diagnóstico da extração</h3><div id="diagSummary"></div><pre id="rawJson">Sem dados.</pre></div></div>
@@ -231,12 +244,29 @@ const EXPANDS=[
   'owner,clients,actions($expand=createdBy,timeAppointments)',
   'owner,clients,actions'
 ];
-const SELECT='id,createdDate,lastUpdate,subject,category,status,serviceFirstLevel,ownerTeam,owner,clients,actions';
+const SELECT='id,createdDate,lastUpdate,subject,category,status,serviceFirstLevel,ownerTeam,owner,clients,actions,slaSolutionDate';
 let stats={},CF='';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function build(all){stats={tk:all.length,ac:0,ap:0,tw:0};raw=all.flatMap(flatten)}
 
 let TK=new Map(),syncing=false,apiOn=false,EXP=null,lastSync=0,lastTry=0,lastFull=0,lastSig='',lastToday='',fails=0,lastErr='';
+let liveEvents=JSON.parse(localStorage.getItem('md_live_events')||'[]');
+function dueValue(t){const direct=t.slaSolutionDate||t.dueDate||t.expectedDate||t.forecastDate||'';if(direct)return String(direct);const vals=t.customFieldValues||[];const found=vals.filter(x=>(CF&&String(x.customFieldId)===String(CF))||/prazo|previs|venc|solu[cç][aã]o|entrega|data limite/i.test(String(x.customFieldName||x.name||x.label||''))).map(x=>String(x.value??''));return found.join(' | ')}
+function showLiveEvents(){
+ const el=$('liveChanges'),panel=$('livePanelList'),f=$('liveFilter')?.value||'all',q=norm($('liveSearch')?.value||'');
+ const due=liveEvents.filter(e=>e.kind==='PREVISÃO / PRAZO ALTERADO').length,st=liveEvents.filter(e=>e.kind==='STATUS ALTERADO').length,gen=liveEvents.filter(e=>e.kind==='CHAMADO ATUALIZADO').length;
+ if($('liveCount'))$('liveCount').textContent=liveEvents.length;if($('liveDue'))$('liveDue').textContent=due;if($('liveStatus'))$('liveStatus').textContent=st;if($('liveGeneral'))$('liveGeneral').textContent=gen;
+ const list=liveEvents.filter(e=>(f==='all'||e.kind===f)&&(!q||norm([e.id,e.subject,e.detail].join(' ')).includes(q)));
+ const html=list.length?list.slice(0,100).map(e=>`<div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:13px;border:1px solid #e5eaf2;border-radius:10px;margin:8px 0;background:#fff"><div style="min-width:0"><b style="color:#14213d">#${esc(e.id)}</b> · <b>${esc(e.subject)}</b><div style="margin-top:5px"><span class="pill">${esc(e.kind)}</span> ${esc(e.detail)}</div></div><small style="color:#778;white-space:nowrap">${new Date(e.at).toLocaleString('pt-BR')}</small></div>`).join(''):'<div style="padding:22px;text-align:center;color:var(--muted)">Nenhum ticket corresponde ao filtro. As novas alterações aparecerão aqui após a sincronização.</div>';
+ if(el)el.innerHTML=liveEvents.length?liveEvents.slice(0,20).map(e=>`<div style="padding:7px 0;border-bottom:1px solid #e1e8f3"><b>#${esc(e.id)}</b> · ${esc(e.subject)}<br><span style="color:#2457a7">${esc(e.kind)}</span> ${esc(e.detail)}<small style="display:block;color:#778">${new Date(e.at).toLocaleString('pt-BR')}</small></div>`).join(''):'Nenhuma alteração detectada ainda.';
+ if(panel)panel.innerHTML=html;
+}
+function clearLiveEvents(){if(!confirm('Limpar o histórico de alterações deste navegador?'))return;liveEvents=[];localStorage.removeItem('md_live_events');showLiveEvents()}
+function detectTicketChanges(incoming){const now=Date.now();for(const t of incoming){const old=TK.get(String(t.id));if(!old)continue;const oldDue=dueValue(old),newDue=dueValue(t);if(oldDue!==newDue){liveEvents.unshift({id:t.id,subject:t.subject||old.subject||'Sem assunto',kind:'PREVISÃO / PRAZO ALTERADO',detail:`${oldDue||'Não informado'} → ${newDue||'Não informado'}`,at:now});}
+if(String(old.status||'')!==String(t.status||'')){liveEvents.unshift({id:t.id,subject:t.subject||old.subject||'Sem assunto',kind:'STATUS ALTERADO',detail:`${old.status||'—'} → ${t.status||'—'}`,at:now});}
+if(old.lastUpdate&&t.lastUpdate&&String(old.lastUpdate)!==String(t.lastUpdate)&&oldDue===newDue&&String(old.status||'')===String(t.status||'')){liveEvents.unshift({id:t.id,subject:t.subject||old.subject||'Sem assunto',kind:'CHAMADO ATUALIZADO',detail:`Última atualização: ${new Date(t.lastUpdate).toLocaleString('pt-BR')}`,at:now});}}
+liveEvents=liveEvents.slice(0,100);localStorage.setItem('md_live_events',JSON.stringify(liveEvents));showLiveEvents()}
+
 const AUTO_FULL_MS=216e5;
 
 async function sync(auto){
@@ -292,6 +322,7 @@ async function sync(auto){
       skip+=W*100;
       if(live){build(all);applyFilters()}
     }
+    detectTicketChanges(all);
     if(full) TK=new Map();
     all.forEach(t=>TK.set(String(t.id),slim(t)));
     const list=[...TK.values()];
@@ -497,7 +528,8 @@ function showTab(t){
   ACT=t;document.body.dataset.t=t;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-load').classList.toggle('hide',t!=='load');$('t-cfg').classList.toggle('hide',t!=='cfg');
-  ['mgmt','vip','charts','entries','pivot','proj','occ','bot','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  ['live','mgmt','vip','charts','entries','pivot','proj','occ','bot','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  if(t==='live')showLiveEvents();
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag');
   if(raw.length&&t!=='load'&&t!=='cfg'&&t!=='diag'&&qn(t)!==lastQ) applyFilters();
 }
@@ -734,7 +766,7 @@ function renderPivot(){
 
 /* ---------- gráficos ---------- */
 const CH={},PAL=['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#475569','#ea580c'];
-const mkc=(id,cfg)=>{if(CH[id])CH[id].destroy();if(window.Chart)CH[id]=new Chart($(id),cfg)};
+const mkc=(id,cfg)=>{if(CH[id])CH[id].destroy();if(window.Chart){cfg.options=cfg.options||{};if(cfg.options.animation===undefined)cfg.options.animation={duration:1200,easing:'easeOutQuart'};CH[id]=new Chart($(id),cfg)}};
 const rangeDays=(a,b)=>{const o=[];for(let d=new Date(a+'T12:00:00'),x=new Date(b+'T12:00:00');d<=x;d.setDate(d.getDate()+1))o.push(iso(d));return o};
 function renderCharts(c){
   const kd=mk(c),P=period(c),V=vipList(),agN=new Set(rows.map(r=>r.owner_name)).size;
@@ -755,60 +787,100 @@ function renderCharts(c){
   const cl=Object.entries(CL).sort((a,b)=>b[1]-a[1]).slice(0,10);
   mkc('chCli',{type:'bar',data:{labels:cl.map(x=>x[0]),datasets:[{label:'Horas',data:cl.map(x=>+x[1].toFixed(2)),backgroundColor:cl.map(x=>vipOf(x[0],V)?'#d97706':'#2563eb')}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
   const ag=groupAgents().slice(0,15);
-  const bar=(n,h,cp,cls)=>{const p=cp?h/cp:0,col=p>1?'var(--bad)':p>=c.min?'var(--ok)':'var(--warn)';return `<div class="prog ${cls||''}"><span class="pn"><b>${esc(n)}</b></span><i><u style="width:${Math.min(p,1)*100}%;background:${col}"></u>${cp?`<s style="left:${c.min*100}%"></s>`:''}</i><b class="pv">${H(h)} de ${H(cp)} · ${nf(p*100,0)}%</b></div>`};
+  const bar=(n,h,cp,cls)=>{const p=cp?h/cp:0,col=p>1?'var(--bad)':p>=c.min?'var(--ok)':'var(--warn)',dif=h-cp,delta=dif>0?`+${H(dif)} acima`:dif<0?`${H(Math.abs(dif))} abaixo`:'no limite';return `<div class="prog ${cls||''}"><span class="pn"><b>${esc(n)}</b></span><i title="Apontado: ${H(h)} | Capacidade prevista: ${H(cp)}"><u style="width:${Math.min(p,1)*100}%;background:${col}"></u>${cp?`<s style="left:${c.min*100}%" title="Mínimo esperado"></s>`:''}</i><b class="pv">Apontado: ${H(h)} · Previsto: ${H(cp)} · ${nf(p*100,0)}% (${delta})</b></div>`};
   const totH=rows.reduce((x,r)=>x+r.hours,0);
   $('agProg').innerHTML=(rows.length?bar('Equipe toda',totH,P.cap*agN,'tot'):'')+ag.map(a=>bar(a.name,a.h,P.cap)).join('')||'<p>Sem dados.</p>';
   const ac=Object.entries(AC).sort((a,b)=>b[1]-a[1]),t8=ac.slice(0,8),rest=ac.slice(8).reduce((s,x)=>s+x[1],0);
   if(rest) t8.push(['Outras',rest]);
-  mkc('chAct',{type:'doughnut',data:{labels:t8.map(x=>x[0]),datasets:[{data:t8.map(x=>+x[1].toFixed(2)),backgroundColor:PAL}]},options:{plugins:{legend:{position:'right'}}}});
+  mkc('chAct',{type:'doughnut',data:{labels:t8.map(x=>x[0]),datasets:[{data:t8.map(x=>+x[1].toFixed(2)),backgroundColor:PAL}]},options:{animation:{duration:1500,easing:'easeOutBounce',animateRotate:true,animateScale:true},plugins:{legend:{position:'right'}}}});
 }
 
 /* ---------- exportação (Excel e PDF da aba atual) ---------- */
 const plain=tb=>{const c=tb.cloneNode(true);c.querySelectorAll('input').forEach(i=>i.replaceWith(document.createTextNode(i.value)));c.querySelectorAll('.ar').forEach(x=>x.remove());c.querySelectorAll('button').forEach(x=>x.remove());c.querySelectorAll('tr').forEach(r=>{if(r.style.display==='none')r.remove()});c.querySelectorAll('th,td').forEach(x=>{if(x.style.display==='none')x.remove()});return c};
 const tabTitle=t=>(document.querySelector(`#tabs button[data-t="${t}"]`)||{}).textContent||t;
 
-function exportXLSX(){
+function safeSheetName(value, used){
+  let base=String(value||'Dados').replace(/[\\/?*\[\]:]/g,' ').replace(/\s+/g,' ').trim().slice(0,31)||'Dados';
+  let name=base, n=2;
+  while(used.has(name.toLowerCase())){const suffix=' '+n++;name=base.slice(0,31-suffix.length)+suffix;}
+  used.add(name.toLowerCase());return name;
+}
+
+function makeChartImage(id){
+  const source=CH[id];
+  if(!source||!window.Chart) return null;
+  try{
+    const canvas=document.createElement('canvas');canvas.width=1000;canvas.height=480;
+    const cfg=JSON.parse(JSON.stringify({type:source.config.type,data:source.config.data,options:source.config.options||{}}));
+    cfg.options=cfg.options||{};cfg.options.responsive=false;cfg.options.animation=false;
+    cfg.options.devicePixelRatio=1;cfg.options.maintainAspectRatio=false;
+    const temp=new Chart(canvas.getContext('2d'),cfg);
+    temp.update('none');const url=canvas.toDataURL('image/png');temp.destroy();
+    return url;
+  }catch(e){console.warn('Não foi possível gerar imagem do gráfico '+id,e);return null;}
+}
+
+async function attachChartImages(arrayBuffer, sheetIndex, images){
+  if(!images.length||!window.JSZip) return arrayBuffer;
+  const zip=await JSZip.loadAsync(arrayBuffer);
+  const sheetPath=`xl/worksheets/sheet${sheetIndex}.xml`;
+  let sheet=await zip.file(sheetPath).async('string');
+  if(!sheet.includes('xmlns:r=')) sheet=sheet.replace('<worksheet ', '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ');
+  sheet=sheet.replace('</worksheet>','<drawing r:id="rId1"/></worksheet>');
+  zip.file(sheetPath,sheet);
+  zip.file(`xl/worksheets/_rels/sheet${sheetIndex}.xml.rels`,
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>'+
+    '</Relationships>');
+  let drawing='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
+  let rels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+  images.forEach((img,i)=>{
+    const file=`chart_${i+1}.png`,rid=`rId${i+1}`;
+    const col=(i%2)*9,row=2+Math.floor(i/2)*25;
+    zip.file(`xl/media/${file}`,img.data,{base64:true});
+    rels+=`<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${file}"/>`;
+    drawing+=`<xdr:oneCellAnchor><xdr:from><xdr:col>${col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="5943600" cy="2857500"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i+1}" name="${img.title}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`;
+  });
+  drawing+='</xdr:wsDr>';rels+='</Relationships>';
+  zip.file('xl/drawings/drawing1.xml',drawing);
+  zip.file('xl/drawings/_rels/drawing1.xml.rels',rels);
+  let types=await zip.file('[Content_Types].xml').async('string');
+  if(!types.includes('Extension="png"')) types=types.replace('</Types>','<Default Extension="png" ContentType="image/png"/></Types>');
+  if(!types.includes('/xl/drawings/drawing1.xml')) types=types.replace('</Types>','<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
+  zip.file('[Content_Types].xml',types);
+  return await zip.generateAsync({type:'arraybuffer',compression:'DEFLATE',compressionOptions:{level:6}});
+}
+
+async function exportXLSX(){
   if(!rows.length) return alert('Nenhum dado para exportar.');
+  if(!window.XLSX) return alert('A biblioteca de Excel não carregou. Verifique sua conexão e tente novamente.');
   const c=R(),kd=mk(c),wb=XLSX.utils.book_new(),used=new Set();
   wb.Workbook={CalcPr:{fullCalcOnLoad:true}};
-  const MAP_NAMES = {
-    'mgSum': 'Resumo Executivo',
-    'mgInfo': 'Relatório Gestão',
-    'tMgAg': 'Sobrecarga e Impacto',
-    'tMgPrj': 'Estouros de Previsão',
-    'tMgCli': 'Consumo por Empresa',
-    'tMgTk': 'Chamados Impactantes',
-    'tVip': 'Clientes VIP',
-    'tVipOut': 'Clientes Não VIP',
-    'tEntries': 'Lançamentos de Tempo',
-    'tProj': 'Projetos e Metas',
-    'tProjDay': 'Projetos Detalhe Dia',
-    'tBudget': 'Previsto vs Apontado',
-    'tOcc': 'Horas Colaboradores',
-    'tOccDay': 'Jornada Detalhe Dia',
-    'tBot': 'Previsões Robô e IA'
-  };
-  const nm=t=>{
-    let base = MAP_NAMES[t] || String(t||'Aba').replace(/[\\/?*\[\]:]/g,' ').trim().slice(0,28) || 'Aba';
-    let k = base, i = 2;
-    while(used.has(k)) { k = base.slice(0,25) + ' ' + i++; }
-    used.add(k);
-    return k;
+  const TABLE_NAMES={
+    tMgAg:'Sobrecarga por Colaborador',tMgPrj:'Chamados e Previsões',tMgCli:'Consumo por Empresa',tMgTk:'Chamados Mais Impactantes',
+    tVip:'Consumo dos Clientes VIP',tVipOut:'Consumo Não VIP',tEntries:'Lançamentos de Tempo',
+    tProj:'Projetos e Metas',tProjDay:'Detalhamento Diário dos Projetos',tBudget:'Previsto e Apontado',
+    tOcc:'Jornada por Colaborador',tOccDay:'Jornada por Dia',tBot:'Previsões do Robô e IA'
   };
   const tidy=ws=>{
     Object.keys(ws).forEach(a=>{
       if(a[0]==='!') return;const x=ws[a];
-      if(x.t==='s'){let m=/^(-?\d+(?:[.,]\d+)?) h$/.exec(x.v);
-        if(m){x.t='n';x.v=+m[1].replace(',','.');x.z='0.00" h"';delete x.w}
-        else if(m=/^(\d+(?:[.,]\d+)?)%$/.exec(x.v)){x.t='n';x.v=+m[1].replace(',','.')/100;x.z='0.0%';delete x.w}}
+      if(x.t==='s'&&typeof x.v==='string'){
+        let m=/^(-?\d+(?:[.,]\d+)?)\s*h$/i.exec(x.v.trim());
+        if(m){x.t='n';x.v=+m[1].replace(',','.');x.z='0.00" h"';delete x.w;return;}
+        m=/^(\d+(?:[.,]\d+)?)%$/.exec(x.v.trim());
+        if(m){x.t='n';x.v=+m[1].replace(',','.')/100;x.z='0.0%';delete x.w;return;}
+      }
     });
     if(ws['!ref']) ws['!autofilter']={ref:ws['!ref']};return ws;
   };
   const N=rows.length+1,dl=DCOLS.length;
   if(ACT==='pivot'&&PV){
-    const {rf,cf,vm,R:RR,C:CC,cells}=PV,cl=f=>String.fromCharCode(65+DCOLS.findIndex(x=>x[0]===f)),rg=l=>`Dados!$${l}$2:$${l}$${N}`;
+    const {rf,cf,vm,R:RR,C:CC,cells}=PV,cl=f=>XLSX.utils.encode_col(DCOLS.findIndex(x=>x[0]===f)),rg=l=>`Dados!$${l}$2:$${l}$${N}`;
     const hdr=[PF.find(x=>x[0]===rf)[1],...CC,'Total'],aoa=[hdr,...RR.map((a,i)=>[a,...CC.map((b,j)=>cells[i][j]),PV.RT[i]]),['Total',...PV.CT,PV.G]];
-    const ws=XLSX.utils.aoa_to_sheet(aoa),fx=vm==='h'||vm==='n',last=String.fromCharCode(65+dl);
+    const ws=XLSX.utils.aoa_to_sheet(aoa),fx=vm==='h'||vm==='n',last=XLSX.utils.encode_col(dl);
     if(fx){
       const body=vm==='h'?`*${rg(last)}`:'';
       RR.forEach((a,i)=>{
@@ -817,20 +889,50 @@ function exportXLSX(){
         ws[tc].f=cf?`SUM(B${i+2}:${XLSX.utils.encode_col(CC.length)}${i+2})`:`SUMPRODUCT((${rg(cl(rf))}=$A${i+2})${body}${vm==='n'?'*1':''})`;
       });
     }
-    ws['!autofilter']={ref:ws['!ref']};
-    XLSX.utils.book_append_sheet(wb,ws,nm('Dinâmica'));
+    XLSX.utils.book_append_sheet(wb,ws,safeSheetName('Tabela Dinâmica',used));
   }else{
     document.querySelectorAll(`#t-${ACT} .card`).forEach(card=>{
-      const h=card.querySelector('h3'),tb=card.querySelector('table');
-      if(tb) XLSX.utils.book_append_sheet(wb,tidy(XLSX.utils.table_to_sheet(plain(tb))),nm(h&&h.textContent));
+      const tb=card.querySelector('table');if(!tb)return;
+      const tableId=tb.id||tb.querySelector('tbody')?.id||'';
+      const heading=card.querySelector('h3')?.textContent||'Relatório';
+      const name=TABLE_NAMES[tableId]||heading;
+      const ws=tidy(XLSX.utils.table_to_sheet(plain(tb)));
+      // Make day-count columns numeric, and keep hour columns explicitly formatted as hours.
+      const headers=XLSX.utils.sheet_to_json(ws,{header:1,raw:true})[0]||[];
+      headers.forEach((header,col)=>{
+        const label=String(header||'').toLowerCase();
+        if(/dias com apontamento|dias corridos|dias abaixo|dias na meta|dias que estourou|lançamentos|chamados|colaboradores/.test(label)){
+          for(let rr=1;rr<=XLSX.utils.decode_range(ws['!ref']).e.r;rr++){
+            const cell=ws[XLSX.utils.encode_cell({r:rr,c:col})];
+            if(cell&&cell.t==='s'){const n=Number(String(cell.v).replace(',','.'));if(Number.isFinite(n)){cell.t='n';cell.v=n;delete cell.w;}}
+          }
+        }
+      });
+      ws['!cols']=headers.map(h=>({wch:Math.min(38,Math.max(16,String(h||'').length+5))}));
+      XLSX.utils.book_append_sheet(wb,ws,safeSheetName(name,used));
     });
   }
   const dados=[DCOLS.map(x=>x[1]).concat('Horas'),...rows.map(r=>DCOLS.map(([k])=>fv(r,k,kd)).concat(+r.hours.toFixed(4)))];
-  const wd=XLSX.utils.aoa_to_sheet(dados);wd['!autofilter']={ref:wd['!ref']};wd['!cols']=DCOLS.map((x,i)=>({wch:i===7?40:16}));
-  XLSX.utils.book_append_sheet(wb,wd,'Dados');
-  XLSX.writeFile(wb,`Auditoria_${tabTitle(ACT).replace(/[^\w]+/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`);
-}
+  const wd=XLSX.utils.aoa_to_sheet(dados);wd['!autofilter']={ref:wd['!ref']};wd['!cols']=DCOLS.map((x,i)=>({wch:i===7?40:18}));
+  XLSX.utils.book_append_sheet(wb,wd,safeSheetName('Base de Dados',used));
 
+  // Gráficos: exporta imagens em alta resolução para uma aba própria do Excel.
+  const chartDefs=[['chDay','Evolução diária de horas'],['chWeek','Horas por semana e equipe'],['chCli','Horas por empresa'],['chAct','Distribuição por atividade']];
+  const images=chartDefs.map(([id,title])=>{const url=makeChartImage(id);return url?{title,data:url.split(',')[1]}:null;}).filter(Boolean);
+  if(images.length){
+    const chartSheet=XLSX.utils.aoa_to_sheet([['GRÁFICOS DA AUDITORIA'],['Gráficos ilustrativos gerados com os dados e filtros aplicados no painel.'],...images.map(x=>[x.title])]);
+    chartSheet['!cols']=[{wch:34},{wch:34},{wch:34},{wch:34},{wch:34},{wch:34},{wch:34},{wch:34},{wch:34},{wch:34}];
+    XLSX.utils.book_append_sheet(wb,chartSheet,safeSheetName('Gráficos',used));
+  }
+  try{
+    let output=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+    if(images.length&&window.JSZip) output=await attachChartImages(output,wb.SheetNames.length,images);
+    const blob=new Blob([output],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=`Auditoria_${tabTitle(ACT).replace(/[^\w]+/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }catch(e){console.error(e);alert('Não foi possível montar o Excel: '+(e.message||e));}
+}
 function exportPDF(){
   if(!rows.length) return alert('Nenhum dado para exportar.');
   const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'pt',format:'a4'}),W=doc.internal.pageSize.getWidth()-80,P=period(R());
@@ -1037,7 +1139,7 @@ function doSearch(t){
   if(raw.length) applyFilters();
 }
 function clearSearch(t){$('q_'+t).value='';doSearch(t)}
-const MODS={load:['Carregar dados','Conecte ao Movidesk, configure a sincronização automática e a leitura por IA.'],cfg:['Configurações','Regras de cálculo, lista de clientes VIP e leitura por IA.'],mgmt:['Gestão','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos','Evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],bot:['Robô de leitura','Previsões de horas que o robô e a IA encontraram no texto dos chamados.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
+const MODS={load:['Carregar dados','Conecte ao Movidesk, configure a sincronização automática e a leitura por IA.'],live:['Tickets atualizados','Histórico de alterações detectadas nos tickets do Movidesk.'],cfg:['Configurações','Regras de cálculo, lista de clientes VIP e leitura por IA.'],mgmt:['Gestão','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos','Evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],bot:['Robô de leitura','Previsões de horas que o robô e a IA encontraram no texto dos chamados.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
 
 /* ---------- robô: painel de leituras ---------- */
 let IG=(()=>{try{return JSON.parse(localStorage.getItem('md_ig')||'{}')}catch(e){return {}}})();
@@ -1091,10 +1193,11 @@ $('endDate').value=`${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-${pad(hoje.g
 $('cfId').value=localStorage.getItem('md_cf')||'';
 $('vipList').value=localStorage.getItem('md_vip')??['Dr Oculos','Ferri','Instituto','Paulo e Condah','Atacadão do Oculos','IMV','Paschoal LAB','Cardeal','Sr dos Oculos','Lux'].join('\n');
 try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{if(sv[i]!=null)$(i).value=sv[i]})}catch(e){}
-$('autoMin').value=localStorage.getItem('md_auto')??'5';
+$('autoMin').value=localStorage.getItem('md_auto')??'1';
 $('iaMode').value=localStorage.getItem('md_iamode')||'off';$('iaKey').value=localStorage.getItem('md_iakey')||'';
 lastToday=$('endDate').value;
 showTab('load');
+showLiveEvents();
 Object.entries(MODS).forEach(([k,[t,d]])=>{
   const el=$('t-'+k);if(!el) return;
   el.insertAdjacentHTML('afterbegin',`<div class="mh noprint"><div><h2>${t}</h2><p>${d}</p></div><form class="sb" onsubmit="doSearch('${k}');return false"><input id="q_${k}" type="search" placeholder="Buscar em ${t.toLowerCase()}" aria-label="Buscar em ${t}" oninput="clearTimeout(window._qt);window._qt=setTimeout(()=>doSearch('${k}'),350)"><button class="b" type="submit">Buscar</button><button class="s" type="button" onclick="clearSearch('${k}')">Limpar</button><span class="qc" id="qc_${k}"></span></form></div>`);
