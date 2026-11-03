@@ -65,8 +65,9 @@ body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #a
 .fb{border:0;background:none;color:var(--muted);cursor:pointer;padding:1px 4px;margin-left:4px;font-size:11px;border-radius:4px}.fb:hover{background:#e8ebf0}.fb.on{color:#fff;background:var(--blue)}
 .fp{position:fixed;z-index:50;width:270px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px rgba(20,33,61,.18);padding:10px}
 .fp>input{width:100%}.fl{max-height:230px;overflow:auto;margin:8px 0}.fl label{display:flex;gap:7px;align-items:flex-start;padding:3px 2px;font-size:12px;cursor:pointer}.fl input{padding:0;margin-top:2px}.fl em{color:var(--muted);font-size:12px}.fa{display:flex;gap:6px}.fa button{padding:6px 10px;font-size:12px}.fn{color:var(--muted);font-size:11px;margin:4px 0 0}
+.rz{position:absolute;top:0;right:0;width:8px;height:100%;cursor:col-resize}.rz:hover{background:var(--blue);opacity:.35}th.dov{box-shadow:inset 3px 0 0 var(--blue)}th[draggable=true]{cursor:pointer}
 @media(max-width:900px){.prog{flex-wrap:wrap}.prog .pn,.prog .pv{width:auto}body{display:block}nav{flex-direction:row;position:static;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px 12px}nav button{white-space:nowrap;border-left:0;border-bottom:3px solid transparent}nav button.on{border-bottom-color:var(--blue)}main{padding:16px}.sb input{min-width:0;width:100%}}
-@media print{.fb,.fp{display:none!important}header,nav,.filters,.noprint,#rules,.mh{display:none!important}body{display:block;background:#fff}main{padding:0}}
+@media print{.fb,.fp,.rz{display:none!important}header,nav,.filters,.noprint,#rules,.mh{display:none!important}body{display:block;background:#fff}main{padding:0}}
 </style>
 </head>
 <body>
@@ -860,8 +861,8 @@ function enhanceTables(){
   const saved=colState();
   document.querySelectorAll('#app .tw table').forEach(t=>{
     const key=tkey(t);if(!key||key==='pvTable'||!t.tHead) return;
-    const ths=[...t.tHead.rows[0].cells];
-    ths.forEach(h=>{if(h.dataset.n==null){h.dataset.n=h.textContent;h.classList.add('sortable');h.title='Clique para ordenar';const a=document.createElement('span');a.className='ar';h.appendChild(a);h.insertAdjacentHTML('beforeend','<button class="fb" type="button" title="Filtrar por nome" aria-label="Filtrar esta coluna">▾</button>')}});
+    unperm(t,ORD[key]);const ths=[...t.tHead.rows[0].cells];
+    ths.forEach((h,ix)=>{if(h.dataset.n==null){h.dataset.i=ix;h.draggable=true;h.insertAdjacentHTML('beforeend','<span class="rz" title="Arraste para mudar a largura; duplo clique restaura"></span>');h.dataset.n=h.textContent;h.classList.add('sortable');h.title='Clique para ordenar; arraste o título para mover a coluna';const a=document.createElement('span');a.className='ar';h.appendChild(a);h.insertAdjacentHTML('beforeend','<button class="fb" type="button" title="Filtrar por nome" aria-label="Filtrar esta coluna">▾</button>')}});
     const names=ths.map(h=>h.dataset.n),st=SORT[key];
     if(st) sortTable(t,st.c,st.d);
     ths.forEach((h,i)=>{h.querySelector('.ar').textContent=st&&st.c===i?(st.d>0?'▲':'▼'):''});
@@ -869,11 +870,54 @@ function enhanceTables(){
     applyHid(t,names.map(n=>hid.includes(n)));applyRowFilter(t,key);
     if(!document.getElementById('cc_'+key)){
       const box=document.createElement('details');box.id='cc_'+key;box.className='colbtn noprint';
-      box.innerHTML='<summary>Colunas ▾</summary><div class="colbox">'+names.map((n,i)=>`<label><input type="checkbox" ${hid.includes(n)?'':'checked'} onchange="toggleCol('${key}',${i},this.checked)"> ${esc(n)}</label>`).join('')+'</div>';
+      box.innerHTML='<summary>Colunas ▾</summary><div class="colbox">'+names.map((n,i)=>`<label><input type="checkbox" ${hid.includes(n)?'':'checked'} onchange="toggleCol('${key}',${i},this.checked)"> ${esc(n)}</label>`).join('')+'<button class="s" type="button" onclick="resetCols(\''+key+'\')">Restaurar ordem e largura</button></div>';
       t.closest('.tw').before(box);
     }
+    ORD[key]=orderFor(names,key);applyW(t,names,key);perm(t,ORD[key]);
   });
 }
+/* ---------- colunas: arrastar para mudar a ordem e puxar a borda para mudar a largura ---------- */
+const ORD={};
+const lsj=k=>{try{return JSON.parse(localStorage.getItem(k)||'{}')}catch(e){return {}}};
+const lss=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+function orderFor(names,key){
+  if(new Set(names).size!==names.length) return names.map((_,i)=>i);
+  const sv=(lsj('md_ord')[key]||[]).filter(n=>names.includes(n));
+  return [...sv,...names.filter(n=>!sv.includes(n))].map(n=>names.indexOf(n));
+}
+// o corpo das tabelas é redesenhado na ordem original; a ordem do usuário é aplicada por último e desfeita antes de cada redesenho
+function perm(t,o){if(o.every((v,i)=>v===i)) return;[...t.rows].forEach(r=>{if(r.cells.length!==o.length) return;const cs=[...r.cells];o.forEach(i=>r.appendChild(cs[i]));r.dataset.p=1})}
+function unperm(t,o){if(!o) return;const inv=o.map((_,i)=>o.indexOf(i));[...t.rows].forEach(r=>{if(!r.dataset.p||r.cells.length!==o.length) return;const cs=[...r.cells];inv.forEach(p=>r.appendChild(cs[p]));delete r.dataset.p})}
+function applyW(t,names,key){
+  const W=lsj('md_w')[key]||{},n=names.length;
+  [...t.rows].forEach(r=>{if(r.cells.length!==n) return;[...r.cells].forEach((c,i)=>{const w=W[names[i]];
+    if(w){c.style.width=c.style.minWidth=c.style.maxWidth=w+'px';c.style.overflow='hidden';c.style.textOverflow='ellipsis';if(c.tagName==='TD') c.title=c.textContent.trim()}
+    else if(c.style.maxWidth){c.style.width=c.style.minWidth=c.style.maxWidth=c.style.overflow=c.style.textOverflow=''}})});
+}
+function resetCols(key){const O=lsj('md_ord'),W=lsj('md_w');delete O[key];delete W[key];lss('md_ord',O);lss('md_w',W);enhanceTables()}
+$('app').addEventListener('mousedown',e=>{
+  const z=e.target.closest('.rz');if(!z) return;
+  e.preventDefault();e.stopPropagation();
+  const th=z.closest('th'),t=th.closest('table'),key=tkey(t),name=th.dataset.n,x0=e.clientX,w0=th.offsetWidth;let w=w0,moved=false;th.draggable=false;
+  const mv=ev=>{moved=true;w=Math.max(60,Math.round(w0+ev.clientX-x0));const p=th.cellIndex,n=t.tHead.rows[0].cells.length;
+    [...t.rows].forEach(r=>{if(r.cells.length===n){const c=r.cells[p];c.style.width=c.style.minWidth=c.style.maxWidth=w+'px';c.style.overflow='hidden';c.style.textOverflow='ellipsis'}})};
+  const up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);th.draggable=true;
+    if(moved){const W=lsj('md_w');(W[key]??={})[name]=w;lss('md_w',W);enhanceTables()}};
+  document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
+});
+$('app').addEventListener('dblclick',e=>{const z=e.target.closest('.rz');if(!z) return;const th=z.closest('th'),key=tkey(th.closest('table')),W=lsj('md_w');if(W[key]){delete W[key][th.dataset.n];lss('md_w',W)}enhanceTables()});
+let DR=null;
+const clrDov=()=>document.querySelectorAll('th.dov').forEach(x=>x.classList.remove('dov'));
+$('app').addEventListener('dragstart',e=>{const th=e.target.closest&&e.target.closest('th[draggable=true]');if(!th) return;DR={t:th.closest('table'),n:th.dataset.n};e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',th.dataset.n)});
+$('app').addEventListener('dragover',e=>{const th=DR&&e.target.closest('th[draggable=true]');if(!th||th.closest('table')!==DR.t) return;e.preventDefault();clrDov();th.classList.add('dov')});
+$('app').addEventListener('drop',e=>{
+  const th=DR&&e.target.closest('th[draggable=true]');if(!th||th.closest('table')!==DR.t) return;e.preventDefault();
+  const t=DR.t,key=tkey(t),cur=[...t.tHead.rows[0].cells].map(h=>h.dataset.n),a=cur.indexOf(DR.n),b=cur.indexOf(th.dataset.n);
+  if(a>=0&&b>=0&&a!==b){cur.splice(a,1);cur.splice(b,0,DR.n);const O=lsj('md_ord');O[key]=cur;lss('md_ord',O)}
+  DR=null;clrDov();enhanceTables();
+});
+$('app').addEventListener('dragend',()=>{DR=null;clrDov()});
+
 /* ---------- filtro por coluna (escolher nomes) ---------- */
 const CFLT={};let FP=null;
 const cellTxt=c=>{const i=c.querySelector('input');return (i?i.value:c.textContent).trim()};
@@ -885,8 +929,8 @@ function applyRowFilter(t,key){
 function closeFP(){if(FP){FP.remove();FP=null}}
 function openFilter(btn){
   closeFP();
-  const th=btn.closest('th'),t=th.closest('table'),key=tkey(t),i=th.cellIndex,n=t.tHead.rows[0].cells.length;
-  const vals=[...new Set([...t.tBodies[0].rows].filter(r=>r.cells.length===n).map(r=>cellTxt(r.cells[i])))].sort((a,b)=>a.localeCompare(b,'pt-BR',{numeric:true}));
+  const th=btn.closest('th'),t=th.closest('table'),key=tkey(t),pos=th.cellIndex,i=+th.dataset.i,n=t.tHead.rows[0].cells.length;
+  const vals=[...new Set([...t.tBodies[0].rows].filter(r=>r.cells.length===n).map(r=>cellTxt(r.cells[pos])))].sort((a,b)=>a.localeCompare(b,'pt-BR',{numeric:true}));
   const cur=((CFLT[key]??={})[i]??=new Set());
   const p=document.createElement('div');p.className='fp';p._b=btn;
   p.innerHTML='<input type="search" placeholder="Buscar nome" aria-label="Buscar nos valores da coluna"><div class="fl"></div><div class="fa"><button class="s" type="button" data-a="all">Marcar os listados</button><button class="s" type="button" data-a="clr">Limpar</button></div><p class="fn"></p>';
@@ -894,9 +938,9 @@ function openFilter(btn){
   const draw=()=>{const w=norm(q.value);const all=vals.filter(v=>!w||norm(v).includes(w));shown=all.slice(0,300);
     list.innerHTML=shown.map(v=>`<label><input type="checkbox" value="${esc(v)}" ${cur.has(v)?'checked':''}> ${esc(v)||'(vazio)'}</label>`).join('')||'<em>Nenhum valor encontrado</em>';
     note.textContent=(all.length>300?`Mostrando 300 de ${all.length}; use a busca. `:'')+(cur.size?`${cur.size} selecionado(s).`:'Nada selecionado = mostra tudo.')};
-  list.onchange=e=>{const c=e.target;c.checked?cur.add(c.value):cur.delete(c.value);applyRowFilter(t,key);draw()};
+  list.onchange=e=>{const c=e.target;c.checked?cur.add(c.value):cur.delete(c.value);enhanceTables();draw()};
   q.oninput=draw;
-  p.querySelector('.fa').onclick=e=>{const a=e.target.dataset.a;if(!a) return;if(a==='all')shown.forEach(v=>cur.add(v));else cur.clear();applyRowFilter(t,key);draw()};
+  p.querySelector('.fa').onclick=e=>{const a=e.target.dataset.a;if(!a) return;if(a==='all')shown.forEach(v=>cur.add(v));else cur.clear();enhanceTables();draw()};
   draw();document.body.appendChild(p);FP=p;
   const r=btn.getBoundingClientRect();p.style.left=Math.max(8,Math.min(r.left,innerWidth-p.offsetWidth-8))+'px';p.style.top=Math.min(r.bottom+4,innerHeight-p.offsetHeight-8)+'px';
   q.focus();
@@ -906,15 +950,16 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape') closeFP()});
 addEventListener('resize',closeFP);
 function toggleCol(key,i,on){
   const t=tableOf(key);if(!t) return;
-  const names=[...t.tHead.rows[0].cells].map(h=>h.dataset.n),cur=colState(),hid=new Set(cur[key]||DEFHID[key]||[]);
+  const names=[...t.tHead.rows[0].cells].sort((a,b)=>a.dataset.i-b.dataset.i).map(h=>h.dataset.n),cur=colState(),hid=new Set(cur[key]||DEFHID[key]||[]);
   on?hid.delete(names[i]):hid.add(names[i]);
   cur[key]=[...hid];localStorage.setItem('md_cols',JSON.stringify(cur));
-  applyHid(t,names.map(n=>hid.has(n)));
+  enhanceTables();
 }
 $('app').addEventListener('click',e=>{
+  if(e.target.closest('.rz')) return;
   const fb=e.target.closest('.fb');if(fb){if(FP&&FP._b===fb)closeFP();else openFilter(fb);return}
   const h=e.target.closest('th.sortable');if(!h) return;
-  const t=h.closest('table'),key=tkey(t),c=h.cellIndex,s=SORT[key];
+  const t=h.closest('table'),key=tkey(t),c=+h.dataset.i,s=SORT[key];
   SORT[key]={c,d:s&&s.c===c?-s.d:1};
   enhanceTables();
 });
