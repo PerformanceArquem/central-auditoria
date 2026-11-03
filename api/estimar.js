@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  // Configuração dos cabeçalhos CORS
+  // Cabeçalhos CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -16,15 +16,15 @@ export default async function handler(req, res) {
     return res.status(405).json({ erro: 'Método não permitido.' });
   }
 
-  // Validação da Chave de Acesso (ACCESS_KEY)
+  // Validação da ACCESS_KEY
   const accessKey = req.headers['x-access-key'];
   if (!accessKey || accessKey !== process.env.ACCESS_KEY) {
     return res.status(401).json({ erro: 'Chave de acesso (ACCESS_KEY) inválida ou não informada.' });
   }
 
-  // Validação da Chave da API do Gemini
+  // Validação da chave GEMINI_API_KEY
   if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ erro: 'A variável GEMINI_API_KEY não foi configurada nas Environment Variables da Vercel.' });
+    return res.status(500).json({ erro: 'A variável GEMINI_API_KEY não foi configurada na Vercel.' });
   }
 
   const { jornada = 8, tickets = [] } = req.body || {};
@@ -42,7 +42,7 @@ Responda APENAS um array JSON no seguinte formato:
 Chamados:
 ${JSON.stringify(tickets)}`;
 
-    // URL atualizada utilizando o modelo gemini-2.5-flash
+    // URL atualizada com o modelo ativo: gemini-2.5-flash
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
     const response = await fetch(geminiUrl, {
