@@ -6,7 +6,7 @@
   <title>Movidesk Audit Central</title>
   <!-- Chart.js para gráficos animados -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- SheetJS para importação/exportação Excel/CSV -->
+  <!-- SheetJS para exportação e leitura de arquivos -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -86,7 +86,7 @@
       overflow-y: auto;
     }
     
-    .page-section { display: none !important; }
+    .page-section { display: none; }
     .page-section.active { display: block !important; }
 
     .card {
@@ -142,19 +142,6 @@
     }
     .btn:hover { background: var(--blue-hover); }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 15px;
-      font-size: 13px;
-    }
-    th, td {
-      border: 1px solid var(--border);
-      padding: 10px 12px;
-      text-align: left;
-    }
-    th { background: #f8fafc; font-weight: 600; color: var(--muted); }
-
     #realtime-toast {
       display: none;
       background: #2563eb;
@@ -164,6 +151,7 @@
       margin-bottom: 15px;
       font-size: 13px;
       font-weight: 500;
+      animation: fadeIn 0.3s ease;
     }
 
     .capacity-row {
@@ -212,6 +200,7 @@
     @media (max-width: 1024px) {
       .grid-2col { grid-template-columns: 1fr; }
     }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 <body>
@@ -231,7 +220,7 @@
   </nav>
 
   <main>
-    <div id="realtime-toast">⚡ Atualização em tempo real detectada nos chamados!</div>
+    <div id="realtime-toast">⚡ Atualização em tempo real detetada nos chamados!</div>
 
     <!-- MÓDULO 1: GESTÃO -->
     <section id="gestao" class="page-section active">
@@ -241,65 +230,13 @@
         <button class="btn" onclick="iaRunExecutiva()">✨ Gerar Análise Executiva (IA)</button>
         <div id="ia-executiva-result" style="margin-top: 15px; font-size: 14px; white-space: pre-wrap;"></div>
       </div>
-      
-      <div class="card">
-        <h3>Resumo das Métricas Operacionais</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Métrica</th>
-              <th>Valor Atual</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Total de Horas Apontadas</td>
-              <td>1.992,78 h</td>
-              <td><span style="color: var(--green);">● Normal</span></td>
-            </tr>
-            <tr>
-              <td>Capacidade Esperada</td>
-              <td>4.048,00 h</td>
-              <td><span style="color: var(--blue);">● Planejada</span></td>
-            </tr>
-            <tr>
-              <td>Chamados Auditados por IA</td>
-              <td>142 chamados</td>
-              <td><span style="color: var(--green);">● Atualizado</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
     </section>
 
     <!-- MÓDULO 2: CLIENTES VIP -->
     <section id="vip" class="page-section">
       <div class="card">
         <h2>Clientes VIP</h2>
-        <p style="color: var(--muted);">Acompanhamento exclusivo de contratos estratégicos e fracionamento de horas.</p>
-        <div id="vip-table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Cliente VIP</th>
-                <th>Horas Contratadas</th>
-                <th>Horas Apontadas</th>
-                <th>Saldo</th>
-                <th>Status Contratual</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td>Dr Oculos</td><td>100,00 h</td><td>42,50 h</td><td style="color: var(--green); font-weight: 600;">+57,50 h</td><td><span style="color: var(--green);">● Regular</span></td></tr>
-              <tr><td>Ferri</td><td>80,00 h</td><td>78,10 h</td><td style="color: var(--yellow); font-weight: 600;">+1,90 h</td><td><span style="color: var(--yellow);">● Atenção</span></td></tr>
-              <tr><td>Instituto mais visão</td><td>120,00 h</td><td>125,00 h</td><td style="color: var(--red); font-weight: 600;">-5,00 h</td><td><span style="color: var(--red);">● Excedido</span></td></tr>
-              <tr><td>Instituto dos óculos</td><td>90,00 h</td><td>30,00 h</td><td style="color: var(--green); font-weight: 600;">+60,00 h</td><td><span style="color: var(--green);">● Regular</span></td></tr>
-              <tr><td>Paulo e Condah</td><td>150,00 h</td><td>110,00 h</td><td style="color: var(--green); font-weight: 600;">+40,00 h</td><td><span style="color: var(--green);">● Regular</span></td></tr>
-              <tr><td>Atacadão do Oculos</td><td>60,00 h</td><td>12,00 h</td><td style="color: var(--green); font-weight: 600;">+48,00 h</td><td><span style="color: var(--green);">● Regular</span></td></tr>
-              <tr><td>Paschoal LAB</td><td>200,00 h</td><td>195,00 h</td><td style="color: var(--yellow); font-weight: 600;">+5,00 h</td><td><span style="color: var(--yellow);">● Atenção</span></td></tr>
-            </tbody>
-          </table>
-        </div>
+        <p style="color: var(--muted);">Acompanhamento exclusivo de contratos estratégicos.</p>
       </div>
     </section>
 
@@ -327,24 +264,7 @@
     <section id="projetos" class="page-section">
       <div class="card">
         <h2>Projetos & Estimativas</h2>
-        <p style="color: var(--muted);">Análise comparativa de Horas Previstas (IA/Manual) vs. Apontadas.</p>
-        <table>
-          <thead>
-            <tr>
-              <th>Projeto / Chamado</th>
-              <th>Responsável</th>
-              <th>Horas Previstas (IA)</th>
-              <th>Horas Apontadas</th>
-              <th>Desvio</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>#1042 - Migração de Banco</td><td>Kleber Silva</td><td>12,00 h</td><td>14,50 h</td><td style="color: var(--red);">+2,50 h</td></tr>
-            <tr><td>#1058 - Integração API Movidesk</td><td>Felipe Cavassin</td><td>8,00 h</td><td>6,00 h</td><td style="color: var(--green);">-2,00 h</td></tr>
-            <tr><td>#1090 - Ajustes de Relatório VIP</td><td>Davi Vinicius</td><td>4,00 h</td><td>4,00 h</td><td style="color: var(--muted);">0,00 h</td></tr>
-            <tr><td>#1112 - Automação de Workflows</td><td>Guilherme Bonato</td><td>16,00 h</td><td>22,00 h</td><td style="color: var(--red);">+6,00 h</td></tr>
-          </tbody>
-        </table>
+        <p style="color: var(--muted);">Análise comparativa de Horas Previstas vs. Apontadas.</p>
       </div>
     </section>
 
@@ -353,24 +273,6 @@
       <div class="card">
         <h2>Capacidade de Colaboradores</h2>
         <p style="color: var(--muted);">Carga de trabalho e distribuição individual de tarefas.</p>
-        <table>
-          <thead>
-            <tr>
-              <th>Colaborador</th>
-              <th>Capacidade Mensal</th>
-              <th>Apontado</th>
-              <th>Ocupação</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>Kleber Silva</td><td>176,00 h</td><td>261,52 h</td><td style="color: var(--red); font-weight: bold;">148% (Sobrecarga)</td></tr>
-            <tr><td>Felipe Cavassin</td><td>176,00 h</td><td>186,78 h</td><td style="color: var(--red);">106%</td></tr>
-            <tr><td>Guilherme Gustavo Bonato</td><td>176,00 h</td><td>158,27 h</td><td style="color: var(--green);">90%</td></tr>
-            <tr><td>Davi Vinicius</td><td>176,00 h</td><td>146,93 h</td><td style="color: var(--green);">83%</td></tr>
-            <tr><td>Leticia Barbosa</td><td>176,00 h</td><td>136,53 h</td><td style="color: var(--green);">77%</td></tr>
-            <tr><td>Lucas Vieira</td><td>176,00 h</td><td>130,52 h</td><td style="color: var(--green);">74%</td></tr>
-          </tbody>
-        </table>
       </div>
     </section>
 
@@ -423,20 +325,10 @@
 
       <div id="sub-params" class="sub-tab-content" style="display: none;">
         <div class="card">
-          <h3>Clientes VIP & Parâmetros Gerais</h3>
+          <h3>Clientes VIP</h3>
           <div class="fg">
             <label>Lista de Clientes VIP (um por linha)</label>
-            <textarea id="vipList" rows="5">Dr Oculos
-Ferri
-Instituto mais visão
-Instituto dos óculos
-Paulo e Condah
-Atacadão do Oculos
-IMV
-Paschoal LAB
-Cardeal
-Sr dos Oculos
-Lux</textarea>
+            <textarea id="vipList" rows="5"></textarea>
           </div>
           <button class="btn" onclick="salvarVIPs()">Salvar VIPs</button>
         </div>
@@ -446,10 +338,10 @@ Lux</textarea>
   </main>
 
   <script>
-    // Seletor $ com prioridade
+    // 1. Declaração obrigatória do seletor $ para prevenir ReferenceError
     const $ = (id) => document.getElementById(id);
 
-    // Configuração Firebase
+    // 2. Inicialização do Firebase Firestore
     const firebaseConfig = {
       apiKey: "AIzaSyDummyKeyForArchitectureDemo",
       authDomain: "movidesk-audit.firebaseapp.com",
@@ -466,7 +358,7 @@ Lux</textarea>
 
     let ticketsLocais = [];
 
-    // Sistema de Troca de Abas sem Limpeza
+    // 3. Gerenciador de Navegação do Menu Principal e Sub-abas
     function setupNavigation() {
       document.querySelectorAll('[data-tab]').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -486,6 +378,7 @@ Lux</textarea>
           } else {
             document.querySelectorAll('.page-section').forEach(el => {
               el.classList.remove('active');
+              el.style.display = 'none';
             });
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
 
@@ -503,6 +396,7 @@ Lux</textarea>
       });
     }
 
+    // 4. Escuta em Tempo Real do Firestore (Tickets e Atualizações)
     function escutarAlteracoesEmTempoReal() {
       db.collection('artifacts')
         .doc('public')
@@ -510,20 +404,43 @@ Lux</textarea>
         .doc('tickets_cache')
         .onSnapshot((doc) => {
           if (!doc.exists) return;
-          ticketsLocais = doc.data().tickets || [];
+          
+          const novosTickets = doc.data().tickets || [];
+          
+          if (ticketsLocais.length > 0) {
+            notificarAlteracao("Sincronização em tempo real realizada!");
+          }
+
+          ticketsLocais = novosTickets;
           renderGraficosMock();
         }, (error) => {
-          console.warn("Modo estático ativo.");
+          console.warn("Utilizando dados locais:", error);
         });
     }
 
+    function notificarAlteracao(msg) {
+      const toast = $('realtime-toast');
+      if (!toast) return;
+      toast.innerText = `⚡ ${msg}`;
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 4000);
+    }
+
+    // 5. Persistência de Chaves da IA
     function iaChanged() {
       const mode = $('iaMode') ? $('iaMode').value : 'off';
       const key = $('iaKey') ? $('iaKey').value.trim() : '';
       localStorage.setItem('md_iamode', mode);
       localStorage.setItem('md_iakey', key);
+
+      db.collection('settings').doc('ia_config').set({
+        mode: mode,
+        key: key,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true }).catch(() => {});
     }
 
+    // 6. Chamada à Serverless Function na Vercel
     async function iaRun() {
       const key = $('iaKey').value.trim();
       const mode = $('iaMode').value;
@@ -537,7 +454,7 @@ Lux</textarea>
         return;
       }
 
-      $('iaLog').innerText = 'A enviar requisição de IA...';
+      $('iaLog').innerText = 'Processando requisição de IA...';
 
       try {
         const response = await fetch('/api/estimar', {
@@ -556,15 +473,13 @@ Lux</textarea>
           return;
         }
 
-        $('iaLog').innerText = 'Processamento concluído com sucesso!';
+        $('iaLog').innerText = 'Processamento finalizado com sucesso!';
       } catch (err) {
         $('iaLog').innerText = 'IA: Failed to fetch (função /api/estimar offline).';
       }
     }
 
-    function salvarConfiguracoes() { alert('Configurações salvas!'); }
-    function salvarVIPs() { alert('VIPs salvos!'); }
-
+    // 7. Dados e Gráficos Animados de Capacidade e Atividades
     const colaboradoresData = [
       { nome: "Equipe toda", apontado: 1992.78, esperado: 4048.00 },
       { nome: "Kleber Silva", apontado: 261.52, esperado: 176.00 },
@@ -572,7 +487,8 @@ Lux</textarea>
       { nome: "Guilherme Gustavo Bonato", apontado: 158.27, esperado: 176.00 },
       { nome: "Davi Vinicius", apontado: 146.93, esperado: 176.00 },
       { nome: "Leticia Barbosa", apontado: 136.53, esperado: 176.00 },
-      { nome: "Lucas Vieira", apontado: 130.52, esperado: 176.00 }
+      { nome: "Lucas Vieira", apontado: 130.52, esperado: 176.00 },
+      { nome: "Alan Reis", apontado: 119.15, esperado: 176.00 }
     ];
 
     function renderCapacityBars() {
@@ -589,7 +505,7 @@ Lux</textarea>
         const row = document.createElement('div');
         row.className = 'capacity-row';
         row.innerHTML = `
-          <div class="capacity-name">${item.nome}</div>
+          <div class="capacity-name" title="${item.nome}">${item.nome}</div>
           <div class="progress-bar-container">
             <div class="progress-bar-fill ${colorClass}" style="width: 0%;"></div>
           </div>
@@ -617,10 +533,17 @@ Lux</textarea>
       window.chartAtividadesInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['PRO - Desenvolvimento', 'SUP - Chat resolvido', 'COO - Mediação', 'Outras'],
+          labels: [
+            'PRO - Desenvolvimento / correção',
+            'SUP - Chat resolvido',
+            'COO - Condução / mediação',
+            'PRO - Análise / diagnóstico',
+            'SUC - Plano de ação / sucesso',
+            'Outras'
+          ],
           datasets: [{
-            data: [40, 25, 15, 20],
-            backgroundColor: ['#2563eb', '#16a34a', '#d97706', '#475569'],
+            data: [35, 18, 14, 8, 5, 20],
+            backgroundColor: ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#9333ea', '#475569'],
             borderWidth: 2,
             borderColor: '#ffffff'
           }]
@@ -639,6 +562,7 @@ Lux</textarea>
       renderAtividadesChart();
     }
 
+    // Inicialização da Aplicação
     document.addEventListener('DOMContentLoaded', () => {
       setupNavigation();
       escutarAlteracoesEmTempoReal();
