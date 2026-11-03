@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Movidesk Audit Central</title>
+  <!-- Chart.js para gráficos animados -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS para exportação/importação Excel/CSV -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -14,12 +16,16 @@
   <style>
     :root {
       --navy: #14213d;
-      --blue: #245be6;
+      --blue: #2563eb;
+      --blue-hover: #1d4ed8;
       --bg: #f4f6f9;
-      --card-bg: rgba(255, 255, 255, 0.9);
+      --card-bg: #ffffff;
       --border: #e2e8f0;
       --text: #1e293b;
       --muted: #64748b;
+      --green: #16a34a;
+      --yellow: #d97706;
+      --red: #dc2626;
     }
     * { box-sizing: border-box; }
     body {
@@ -67,10 +73,12 @@
       width: 100%;
       text-align: left;
       font-size: 14px;
+      transition: all 0.2s ease;
     }
     .nav-item:hover, .nav-item.active {
       background: #eff6ff;
       color: var(--blue);
+      font-weight: 600;
     }
     
     main {
@@ -105,6 +113,7 @@
       cursor: pointer;
       font-weight: 500;
       font-size: 14px;
+      transition: all 0.2s ease;
     }
     .sub-tab.active {
       background: var(--blue);
@@ -119,6 +128,7 @@
       border: 1px solid var(--border);
       border-radius: 6px;
       font-size: 14px;
+      width: 100%;
     }
     .btn {
       background: var(--blue);
@@ -128,28 +138,65 @@
       border-radius: 6px;
       font-weight: 600;
       cursor: pointer;
+      transition: background 0.2s ease;
     }
-    .btn:hover { opacity: 0.9; }
+    .btn:hover { background: var(--blue-hover); }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
+    /* Estilos das Barras de Progresso de Capacidade */
+    .capacity-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      font-size: 13px;
     }
-    th, td {
-      text-align: left;
-      padding: 10px;
-      border-bottom: 1px solid var(--border);
-      font-size: 14px;
+    .capacity-name {
+      width: 180px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    th { background: #f8fafc; font-weight: 600; }
+    .progress-bar-container {
+      flex: 1;
+      height: 12px;
+      background: #e2e8f0;
+      border-radius: 6px;
+      margin: 0 15px;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: 6px;
+      transition: width 0.8s ease-in-out, background-color 0.3s ease;
+    }
+    .progress-bar-fill.green { background-color: var(--green); }
+    .progress-bar-fill.yellow { background-color: var(--yellow); }
+    .progress-bar-fill.red { background-color: var(--red); }
+    .capacity-values {
+      width: 220px;
+      text-align: right;
+      font-family: monospace;
+      font-weight: 500;
+    }
+
+    .grid-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 1024px) {
+      .grid-2col { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
 
   <header>
     <div class="brand">Auditoria de Chamados <span>Ticket Manager · Movidesk</span></div>
-    <div id="status-badge" style="font-size: 12px; opacity: 0.8;">● Conectado ao Firebase</div>
+    <div id="status-badge" style="font-size: 12px; opacity: 0.8;">● Conectado ao Firestore</div>
   </header>
 
   <nav class="sidebar">
@@ -176,15 +223,31 @@
     <section id="vip" class="page-section">
       <div class="card">
         <h2>Clientes VIP</h2>
-        <p style="color: var(--muted);">Acompanhamento exclusivo de contratos estratégicos.</p>
+        <p style="color: var(--muted);">Acompanhamento exclusivo de contratos estratégicos e fracionamento de horas.</p>
       </div>
     </section>
 
-    <!-- GRÁFICOS -->
+    <!-- GRÁFICOS E CAPACIDADE -->
     <section id="graficos" class="page-section">
-      <div class="card">
-        <h2>Gráficos Analíticos</h2>
-        <canvas id="chartGestao" height="100"></canvas>
+      <div class="grid-2col">
+        <!-- Card 1: Capacidade por Colaborador Animada -->
+        <div class="card">
+          <h3>Progresso da capacidade por colaborador</h3>
+          <p style="color: var(--muted); font-size: 12px; margin-bottom: 20px;">
+            Exibição exata: <b>Apontado</b> vs <b>Esperado (Capacidade)</b>. Verde = dentro do esperado, Amarelo = abaixo, Vermelho = sobrecarga.
+          </p>
+          <div id="colaboradores-progress-list">
+            <!-- As barras dinâmicas são injetadas pelo JavaScript -->
+          </div>
+        </div>
+
+        <!-- Card 2: Distribuição por Atividade (Gráfico de Rosca) -->
+        <div class="card">
+          <h3>Distribuição por atividade</h3>
+          <div style="position: relative; height: 320px; width: 100%;">
+            <canvas id="chartAtividades"></canvas>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -192,7 +255,7 @@
     <section id="projetos" class="page-section">
       <div class="card">
         <h2>Projetos & Estimativas</h2>
-        <p style="color: var(--muted);">Análise comparativa de Horas Previstas vs. Apontadas.</p>
+        <p style="color: var(--muted);">Análise comparativa de Horas Previstas (IA/Manual) vs. Apontadas.</p>
       </div>
     </section>
 
@@ -200,7 +263,7 @@
     <section id="colaboradores" class="page-section">
       <div class="card">
         <h2>Capacidade de Colaboradores</h2>
-        <p style="color: var(--muted);">Carga de trabalho e distribuição individual.</p>
+        <p style="color: var(--muted);">Carga de trabalho e distribuição individual de tarefas.</p>
       </div>
     </section>
 
@@ -269,10 +332,10 @@
   </main>
 
   <script>
-    // 1. Definição essencial da função de seleção por ID para evitar ReferenceError[cite: 2]
+    // 1. Definição obrigatória de $ para evitar Uncaught ReferenceError
     const $ = (id) => document.getElementById(id);
 
-    // 2. Configuração do Firebase
+    // 2. Inicialização segura do Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyDummyKeyForArchitectureDemo",
       authDomain: "movidesk-audit.firebaseapp.com",
@@ -287,7 +350,7 @@
     }
     const db = firebase.firestore();
 
-    // 3. Sistema de Navegação Dinâmico e Unificado[cite: 1]
+    // 3. Sistema de Navegação das Abas Principais e Sub-Abas
     function setupNavigation() {
       document.querySelectorAll('[data-tab]').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -298,7 +361,6 @@
           const isSubTab = btn.classList.contains('sub-tab');
 
           if (isSubTab) {
-            // Gerencia sub-abas (dentro de Configurações)
             document.querySelectorAll('.sub-tab-content').forEach(el => el.style.display = 'none');
             document.querySelectorAll('.sub-tab').forEach(el => el.classList.remove('active'));
             
@@ -306,35 +368,40 @@
             if (targetSub) targetSub.style.display = 'block';
             btn.classList.add('active');
           } else {
-            // Gerencia menu principal da sidebar
             document.querySelectorAll('.page-section').forEach(el => el.style.display = 'none');
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
 
             const targetPage = $(targetId);
-            if (targetPage) targetPage.style.display = 'block';
-            btn.classList.add('active');
+            if (targetPage) {
+              targetPage.style.display = 'block';
+              btn.classList.add('active');
+
+              // Se clicou na aba Gráficos, força o re-render dos gráficos animados
+              if (targetId === 'graficos') {
+                renderGraficosMock();
+              }
+            }
           }
         });
       });
     }
 
-    // 4. Salvar ACCESS_KEY e Modos da IA em tempo real[cite: 1]
+    // 4. Salvamento e Persistência Automática da ACCESS_KEY em tempo real
     function iaChanged() {
-      const mode = $('iaMode').value;
-      const key = $('iaKey').value.trim();
+      const mode = $('iaMode') ? $('iaMode').value : 'off';
+      const key = $('iaKey') ? $('iaKey').value.trim() : '';
 
       localStorage.setItem('md_iamode', mode);
       localStorage.setItem('md_iakey', key);
 
-      // Sincroniza também no Firestore
       db.collection('settings').doc('ia_config').set({
         mode: mode,
         key: key,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true }).catch(err => console.log('Erro ao persistir no Firebase:', err));
+      }, { merge: true }).catch(err => console.log('Sincronização Firebase offline:', err));
     }
 
-    // 5. Execução do Robô de IA
+    // 5. Execução de IA via Vercel Serverless
     async function iaRun() {
       const key = $('iaKey').value.trim();
       const mode = $('iaMode').value;
@@ -350,7 +417,7 @@
         return;
       }
 
-      $('iaLog').innerText = 'Enviando dados para análise...';
+      $('iaLog').innerText = 'Processando requisição de IA...';
 
       try {
         const response = await fetch('/api/estimar', {
@@ -363,39 +430,138 @@
         });
 
         if (response.status === 401) {
-          $('iaLog').innerText = 'Erro: ACCESS_KEY inválida.';
+          $('iaLog').innerText = 'Erro 401: ACCESS_KEY inválida.';
           return;
         }
 
         const data = await response.json();
-        $('iaLog').innerText = 'Análise concluída com sucesso!';
+        $('iaLog').innerText = 'Processamento finalizado com sucesso!';
       } catch (err) {
-        $('iaLog').innerText = 'IA: Failed to fetch (a função /api/estimar não respondeu; verifique a publicação na Vercel).';
+        $('iaLog').innerText = 'IA: Failed to fetch (função /api/estimar offline; publique na Vercel).';
       }
     }
 
-    // 6. Carregar Configurações Iniciais ao abrir a página
-    function carregarConfiguracoes() {
+    // 6. Dados e Animação das Barras de Progresso de Capacidade
+    const colaboradoresData = [
+      { nome: "Equipe toda", apontado: 1992.78, esperado: 4048.00 },
+      { nome: "Kleber Silva", apontado: 261.52, esperado: 176.00 },
+      { nome: "Felipe Cavassin", apontado: 186.78, esperado: 176.00 },
+      { nome: "Guilherme Gustavo Bonato", apontado: 158.27, esperado: 176.00 },
+      { nome: "Davi Vinicius", apontado: 146.93, esperado: 176.00 },
+      { nome: "Leticia Barbosa", apontado: 136.53, esperado: 176.00 },
+      { nome: "Lucas Vieira", apontado: 130.52, esperado: 176.00 },
+      { nome: "Alan Reis", apontado: 119.15, esperado: 176.00 },
+      { nome: "Artur Cavalcante", apontado: 106.83, esperado: 176.00 }
+    ];
+
+    function renderCapacityBars() {
+      const container = $('colaboradores-progress-list');
+      if (!container) return;
+      container.innerHTML = '';
+
+      colaboradoresData.forEach(item => {
+        const pct = Math.round((item.apontado / item.esperado) * 100);
+        let colorClass = 'yellow';
+        if (pct > 100) colorClass = 'red';
+        else if (pct >= 80) colorClass = 'green';
+
+        const fillWidth = Math.min(pct, 100);
+
+        const row = document.createElement('div');
+        row.className = 'capacity-row';
+        row.innerHTML = `
+          <div class="capacity-name" title="${item.nome}">${item.nome}</div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill ${colorClass}" style="width: 0%;"></div>
+          </div>
+          <div class="capacity-values">
+            ${item.apontado.toFixed(2).replace('.', ',')} h de ${item.esperado.toFixed(2).replace('.', ',')} h · <b>${pct}%</b>
+          </div>
+        `;
+        container.appendChild(row);
+
+        // Animação da barra ao renderizar
+        setTimeout(() => {
+          row.querySelector('.progress-bar-fill').style.width = fillWidth + '%';
+        }, 50);
+      });
+    }
+
+    // 7. Renderização do Gráfico de Rosca Animado (Chart.js)
+    function renderAtividadesChart() {
+      const canvas = $('chartAtividades');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      if (window.chartAtividadesInstance) {
+        window.chartAtividadesInstance.destroy();
+      }
+
+      window.chartAtividadesInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: [
+            'PRO - Desenvolvimento / correção',
+            'SUP - Chat resolvido',
+            'COO - Condução / mediação',
+            'PRO - Análise / diagnóstico',
+            'SUC - Plano de ação / sucesso',
+            'SUC - Acompanhamento / follow-up',
+            'TRE - Aplicação do treinamento',
+            'IMP - Homologação / validação',
+            'Outras'
+          ],
+          datasets: [{
+            data: [35, 18, 14, 8, 5, 5, 4, 3, 8],
+            backgroundColor: [
+              '#2563eb', '#16a34a', '#d97706', '#dc2626', 
+              '#9333ea', '#0891b2', '#db2777', '#65a30d', '#475569'
+            ],
+            borderWidth: 2,
+            borderColor: '#ffffff',
+            hoverOffset: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: {
+            animateScale: true,
+            animateRotate: true,
+            duration: 1200,
+            easing: 'easeOutQuart'
+          },
+          plugins: {
+            legend: { 
+              position: 'right',
+              labels: { font: { size: 11 } }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.label}: ${ctx.raw}%`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderGraficosMock() {
+      renderCapacityBars();
+      renderAtividadesChart();
+    }
+
+    // 8. Inicializador Geral
+    document.addEventListener('DOMContentLoaded', () => {
+      setupNavigation();
+      
+      // Carregar valores salvos de chave e modo
       const savedKey = localStorage.getItem('md_iakey') || '';
       const savedMode = localStorage.getItem('md_iamode') || 'off';
-
       if ($('iaKey')) $('iaKey').value = savedKey;
       if ($('iaMode')) $('iaMode').value = savedMode;
 
-      // Buscar do Firestore como fallback
-      db.collection('settings').doc('ia_config').get().then(doc => {
-        if (doc.exists) {
-          const data = doc.data();
-          if (data.key && !$('iaKey').value) $('iaKey').value = data.key;
-          if (data.mode) $('iaMode').value = data.mode;
-        }
-      }).catch(() => {});
-    }
-
-    // Inicializador
-    document.addEventListener('DOMContentLoaded', () => {
-      setupNavigation();
-      carregarConfiguracoes();
+      renderGraficosMock();
     });
   </script>
 </body>
