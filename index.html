@@ -62,8 +62,11 @@ details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 
 .prog i{flex:1;height:14px;background:#e8ebf0;border-radius:7px;position:relative;overflow:hidden}.prog u{display:block;height:100%;border-radius:7px}.prog s{position:absolute;top:0;bottom:0;width:2px;background:#1d2433;opacity:.55}
 .prog .pv{width:230px;text-align:right}.prog.tot i{height:20px}.prog.tot{font-size:13px;margin-bottom:14px}
 body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #app>.kpis{display:none}
+.fb{border:0;background:none;color:var(--muted);cursor:pointer;padding:1px 4px;margin-left:4px;font-size:11px;border-radius:4px}.fb:hover{background:#e8ebf0}.fb.on{color:#fff;background:var(--blue)}
+.fp{position:fixed;z-index:50;width:270px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px rgba(20,33,61,.18);padding:10px}
+.fp>input{width:100%}.fl{max-height:230px;overflow:auto;margin:8px 0}.fl label{display:flex;gap:7px;align-items:flex-start;padding:3px 2px;font-size:12px;cursor:pointer}.fl input{padding:0;margin-top:2px}.fl em{color:var(--muted);font-size:12px}.fa{display:flex;gap:6px}.fa button{padding:6px 10px;font-size:12px}.fn{color:var(--muted);font-size:11px;margin:4px 0 0}
 @media(max-width:900px){.prog{flex-wrap:wrap}.prog .pn,.prog .pv{width:auto}body{display:block}nav{flex-direction:row;position:static;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px 12px}nav button{white-space:nowrap;border-left:0;border-bottom:3px solid transparent}nav button.on{border-bottom-color:var(--blue)}main{padding:16px}.sb input{min-width:0;width:100%}}
-@media print{header,nav,.filters,.noprint,#rules,.mh{display:none!important}body{display:block;background:#fff}main{padding:0}}
+@media print{.fb,.fp{display:none!important}header,nav,.filters,.noprint,#rules,.mh{display:none!important}body{display:block;background:#fff}main{padding:0}}
 </style>
 </head>
 <body>
@@ -445,7 +448,7 @@ function applyFilters(){
   const qe=$('qc_'+ACT);if(qe) qe.textContent=q.length?`${rows.length} lançamento(s) encontrados`:'';
   try{render()}catch(e){console.error(e);$('status').textContent='Erro ao desenhar: '+e.message}
 }
-function resetFilters(){FIELDS.forEach(([k])=>$('f_'+k).value='');$('fStart').value='';$('fEnd').value='';applyFilters()}
+function resetFilters(){Object.keys(CFLT).forEach(k=>delete CFLT[k]);FIELDS.forEach(([k])=>$('f_'+k).value='');$('fStart').value='';$('fEnd').value='';applyFilters()}
 
 function groupAgents(){
   const m={};
@@ -758,7 +761,7 @@ function renderCharts(c){
 }
 
 /* ---------- exportação (Excel e PDF da aba atual) ---------- */
-const plain=tb=>{const c=tb.cloneNode(true);c.querySelectorAll('input').forEach(i=>i.replaceWith(document.createTextNode(i.value)));c.querySelectorAll('.ar').forEach(x=>x.remove());c.querySelectorAll('button').forEach(x=>x.remove());c.querySelectorAll('th,td').forEach(x=>{if(x.style.display==='none')x.remove()});return c};
+const plain=tb=>{const c=tb.cloneNode(true);c.querySelectorAll('input').forEach(i=>i.replaceWith(document.createTextNode(i.value)));c.querySelectorAll('.ar').forEach(x=>x.remove());c.querySelectorAll('button').forEach(x=>x.remove());c.querySelectorAll('tr').forEach(r=>{if(r.style.display==='none')r.remove()});c.querySelectorAll('th,td').forEach(x=>{if(x.style.display==='none')x.remove()});return c};
 const tabTitle=t=>(document.querySelector(`#tabs button[data-t="${t}"]`)||{}).textContent||t;
 
 function exportXLSX(){
@@ -858,12 +861,12 @@ function enhanceTables(){
   document.querySelectorAll('#app .tw table').forEach(t=>{
     const key=tkey(t);if(!key||key==='pvTable'||!t.tHead) return;
     const ths=[...t.tHead.rows[0].cells];
-    ths.forEach(h=>{if(h.dataset.n==null){h.dataset.n=h.textContent;h.classList.add('sortable');h.title='Clique para ordenar';const a=document.createElement('span');a.className='ar';h.appendChild(a)}});
+    ths.forEach(h=>{if(h.dataset.n==null){h.dataset.n=h.textContent;h.classList.add('sortable');h.title='Clique para ordenar';const a=document.createElement('span');a.className='ar';h.appendChild(a);h.insertAdjacentHTML('beforeend','<button class="fb" type="button" title="Filtrar por nome" aria-label="Filtrar esta coluna">▾</button>')}});
     const names=ths.map(h=>h.dataset.n),st=SORT[key];
     if(st) sortTable(t,st.c,st.d);
     ths.forEach((h,i)=>{h.querySelector('.ar').textContent=st&&st.c===i?(st.d>0?'▲':'▼'):''});
     const hid=saved[key]||DEFHID[key]||[];
-    applyHid(t,names.map(n=>hid.includes(n)));
+    applyHid(t,names.map(n=>hid.includes(n)));applyRowFilter(t,key);
     if(!document.getElementById('cc_'+key)){
       const box=document.createElement('details');box.id='cc_'+key;box.className='colbtn noprint';
       box.innerHTML='<summary>Colunas ▾</summary><div class="colbox">'+names.map((n,i)=>`<label><input type="checkbox" ${hid.includes(n)?'':'checked'} onchange="toggleCol('${key}',${i},this.checked)"> ${esc(n)}</label>`).join('')+'</div>';
@@ -871,6 +874,36 @@ function enhanceTables(){
     }
   });
 }
+/* ---------- filtro por coluna (escolher nomes) ---------- */
+const CFLT={};let FP=null;
+const cellTxt=c=>{const i=c.querySelector('input');return (i?i.value:c.textContent).trim()};
+function applyRowFilter(t,key){
+  const f=CFLT[key]||{},n=t.tHead.rows[0].cells.length,idx=Object.keys(f).filter(i=>f[i].size);
+  [...t.tBodies[0].rows].forEach(r=>{if(r.cells.length===n) r.style.display=idx.every(i=>f[i].has(cellTxt(r.cells[i])))?'':'none'});
+  [...t.tHead.rows[0].cells].forEach((h,i)=>{const b=h.querySelector('.fb');if(b) b.classList.toggle('on',!!(f[i]&&f[i].size))});
+}
+function closeFP(){if(FP){FP.remove();FP=null}}
+function openFilter(btn){
+  closeFP();
+  const th=btn.closest('th'),t=th.closest('table'),key=tkey(t),i=th.cellIndex,n=t.tHead.rows[0].cells.length;
+  const vals=[...new Set([...t.tBodies[0].rows].filter(r=>r.cells.length===n).map(r=>cellTxt(r.cells[i])))].sort((a,b)=>a.localeCompare(b,'pt-BR',{numeric:true}));
+  const cur=((CFLT[key]??={})[i]??=new Set());
+  const p=document.createElement('div');p.className='fp';p._b=btn;
+  p.innerHTML='<input type="search" placeholder="Buscar nome" aria-label="Buscar nos valores da coluna"><div class="fl"></div><div class="fa"><button class="s" type="button" data-a="all">Marcar os listados</button><button class="s" type="button" data-a="clr">Limpar</button></div><p class="fn"></p>';
+  const list=p.querySelector('.fl'),q=p.querySelector('input'),note=p.querySelector('.fn');let shown=[];
+  const draw=()=>{const w=norm(q.value);const all=vals.filter(v=>!w||norm(v).includes(w));shown=all.slice(0,300);
+    list.innerHTML=shown.map(v=>`<label><input type="checkbox" value="${esc(v)}" ${cur.has(v)?'checked':''}> ${esc(v)||'(vazio)'}</label>`).join('')||'<em>Nenhum valor encontrado</em>';
+    note.textContent=(all.length>300?`Mostrando 300 de ${all.length}; use a busca. `:'')+(cur.size?`${cur.size} selecionado(s).`:'Nada selecionado = mostra tudo.')};
+  list.onchange=e=>{const c=e.target;c.checked?cur.add(c.value):cur.delete(c.value);applyRowFilter(t,key);draw()};
+  q.oninput=draw;
+  p.querySelector('.fa').onclick=e=>{const a=e.target.dataset.a;if(!a) return;if(a==='all')shown.forEach(v=>cur.add(v));else cur.clear();applyRowFilter(t,key);draw()};
+  draw();document.body.appendChild(p);FP=p;
+  const r=btn.getBoundingClientRect();p.style.left=Math.max(8,Math.min(r.left,innerWidth-p.offsetWidth-8))+'px';p.style.top=Math.min(r.bottom+4,innerHeight-p.offsetHeight-8)+'px';
+  q.focus();
+}
+document.addEventListener('click',e=>{if(FP&&!e.target.closest('.fp,.fb')) closeFP()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape') closeFP()});
+addEventListener('resize',closeFP);
 function toggleCol(key,i,on){
   const t=tableOf(key);if(!t) return;
   const names=[...t.tHead.rows[0].cells].map(h=>h.dataset.n),cur=colState(),hid=new Set(cur[key]||DEFHID[key]||[]);
@@ -879,6 +912,7 @@ function toggleCol(key,i,on){
   applyHid(t,names.map(n=>hid.has(n)));
 }
 $('app').addEventListener('click',e=>{
+  const fb=e.target.closest('.fb');if(fb){if(FP&&FP._b===fb)closeFP();else openFilter(fb);return}
   const h=e.target.closest('th.sortable');if(!h) return;
   const t=h.closest('table'),key=tkey(t),c=h.cellIndex,s=SORT[key];
   SORT[key]={c,d:s&&s.c===c?-s.d:1};
@@ -1007,7 +1041,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     build(c.tickets);start(`Dados salvos (${TK.size} tickets)`);cacheLabel(c.saved);autoLabel();
     log('Dados carregados do navegador. Buscando alterações em segundo plano...','okc');
   }
-  if(+$('autoMin').value&&$('domain').value&&$('token').value) sync(true);
+  if($('domain').value&&$('token').value) sync(true); // sempre sincroniza ao abrir, mesmo com a atualização automática desligada
 })();
 </script>
 </body>
