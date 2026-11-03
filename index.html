@@ -58,7 +58,11 @@ th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--blue)}
 .colbox{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 0}.colbox label{display:flex;gap:4px;align-items:center;font-weight:400;font-size:12px;color:var(--ink)}
 details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 0 0;padding-left:20px}details.card li{margin-bottom:4px}
 .sum p{margin:6px 0}.sum p.al{color:#991b1b}.sum p.wn{color:#92400e}
-@media(max-width:900px){body{display:block}nav{flex-direction:row;position:static;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px 12px}nav button{white-space:nowrap;border-left:0;border-bottom:3px solid transparent}nav button.on{border-bottom-color:var(--blue)}main{padding:16px}.sb input{min-width:0;width:100%}}
+.prog{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:12px}.prog .pn{width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prog i{flex:1;height:14px;background:#e8ebf0;border-radius:7px;position:relative;overflow:hidden}.prog u{display:block;height:100%;border-radius:7px}.prog s{position:absolute;top:0;bottom:0;width:2px;background:#1d2433;opacity:.55}
+.prog .pv{width:230px;text-align:right}.prog.tot i{height:20px}.prog.tot{font-size:13px;margin-bottom:14px}
+body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #app>.kpis{display:none}
+@media(max-width:900px){.prog{flex-wrap:wrap}.prog .pn,.prog .pv{width:auto}body{display:block}nav{flex-direction:row;position:static;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px 12px}nav button{white-space:nowrap;border-left:0;border-bottom:3px solid transparent}nav button.on{border-bottom-color:var(--blue)}main{padding:16px}.sb input{min-width:0;width:100%}}
 @media print{header,nav,.filters,.noprint,#rules,.mh{display:none!important}body{display:block;background:#fff}main{padding:0}}
 </style>
 </head>
@@ -66,6 +70,7 @@ details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 
 <header><div class="brand"><b>Auditoria de Chamados</b><small>Ticket Manager · Movidesk</small></div><div class="chip" id="chip"><span class="dot"></span><span id="status">Aguardando dados</span><span id="auto"></span></div></header>
 <nav id="tabs">
   <button data-t="load" class="on">Carregar dados</button>
+  <button data-t="cfg">Configurações</button>
   <button data-t="mgmt">Gestão</button>
   <button data-t="vip">Clientes VIP</button>
   <button data-t="charts">Gráficos</button>
@@ -93,6 +98,25 @@ details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 
       <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. Os dados do Movidesk ficam salvos neste navegador: ao abrir a página eles aparecem na hora e só os tickets alterados são buscados. Uma sincronização completa roda a cada 6 horas. Se a conexão cair, o sistema tenta de novo sozinho, com intervalos cada vez maiores.</p><p id="cacheInfo" style="margin:8px 0 0;font-weight:600"></p>
     </div>
     <div class="card">
+      <h3>Ou importe o CSV "Tempo trabalhado nos tickets"</h3>
+      <div class="zone" onclick="csvFile.click()">Clique para escolher o arquivo CSV</div>
+      <input type="file" id="csvFile" accept=".csv,.txt" class="hide" onchange="loadCSV(event)">
+    </div>
+  </div>
+
+  <div id="t-cfg" class="hide">
+    <div class="card" id="rules"><h3>Regras de cálculo</h3><div class="row">
+      <div class="fg"><label>Meta diária por projeto (h)</label><input id="rMeta" type="number" step="0.5" value="4" onchange="rulesChanged()"></div>
+      <div class="fg"><label>Jornada diária (h)</label><input id="rJor" type="number" step="0.5" value="8" onchange="rulesChanged()"></div>
+      <div class="fg"><label>Mínimo de horas apontadas (%)</label><input id="rMin" type="number" value="80" onchange="rulesChanged()"></div>
+      <div class="fg"><label>Projeto identificado por</label><select id="rFld" onchange="rulesChanged()"><option value="service_name">Serviço</option><option value="category">Categoria</option><option value="sector">Equipe</option><option value="subject">Assunto</option><option value="activity">Atividade</option><option value="client_name">Cliente</option></select></div>
+      <div class="fg"><label>Contém o texto</label><input id="rKw" value="projeto" onchange="rulesChanged()"></div>
+      <div class="fg"><label>Carnaval e Corpus Christi como feriado</label><select id="rFac" onchange="rulesChanged()"><option value="0">Não</option><option value="1">Sim</option></select></div>
+      <div class="fg" style="flex:1;min-width:220px"><label>Feriados extras (dd/mm/aaaa, separados por vírgula)</label><input id="rHol" onchange="rulesChanged()"></div>
+      <div class="fg" style="flex:1;min-width:220px"><label>Ou números de tickets (separados por vírgula)</label><input id="rIds" onchange="rulesChanged()"></div>
+    </div></div>
+    <div class="card"><h3>Clientes VIP</h3><div class="fg"><label>Lista de clientes VIP (um por linha; basta uma parte do nome)</label><textarea id="vipList" rows="6" placeholder="Cole aqui os nomes dos clientes VIP" style="padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit" onchange="vipChanged()"></textarea></div><p style="color:var(--muted);margin:8px 0 0">O relatório fica na aba Clientes VIP.</p></div>
+    <div class="card">
       <h3>Leitura por IA (opcional)</h3>
       <div class="row">
         <div class="fg"><label>Analisar</label><select id="iaMode" onchange="iaChanged()"><option value="off">Desligada</option><option value="proj">Só chamados de projeto</option><option value="all">Todos com horas apontadas</option></select></div>
@@ -101,11 +125,6 @@ details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 
       </div>
       <div id="iaMsg"></div>
       <p style="color:var(--muted);margin:10px 0 0">Só entram chamados sem previsão digitada, sem campo personalizado e sem previsão lida pelo robô de regras. Cada chamado é analisado uma vez (de novo só se o texto mudar) e o resultado fica salvo neste navegador. <b>O assunto e a descrição dos chamados são enviados ao provedor de IA configurado na função.</b></p>
-    </div>
-    <div class="card">
-      <h3>Ou importe o CSV "Tempo trabalhado nos tickets"</h3>
-      <div class="zone" onclick="csvFile.click()">Clique para escolher o arquivo CSV</div>
-      <input type="file" id="csvFile" accept=".csv,.txt" class="hide" onchange="loadCSV(event)">
     </div>
   </div>
 
@@ -131,16 +150,6 @@ details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 
       <li><b>Faltam / Restam / Folga de</b> = quanto ainda falta (ou sobra) até a referência. <b>Passou / Excedeu / Acima em</b> = quanto passou dela. O trecho <b>(≈ 2,5 dias de 8 h)</b> converte as mesmas horas em dias de trabalho.</li>
       <li><b>Previsto</b> = horas que a pessoa informou para o chamado: digitadas aqui, vindas do campo personalizado do Movidesk, ou <b>lidas no texto do chamado</b> pelo robô de regras ou pela IA (ex.: “previsão 20h”, “estimativa de 3 dias”). <b>Apontado</b> = tudo que já foi lançado de tempo no chamado.</li>
       <li>Em qualquer tabela: <b>clique no título da coluna para ordenar</b> e use <b>“Colunas ▾”</b> para mostrar ou esconder colunas. O Excel e o PDF saem como você deixou a tabela.</li></ul></details>
-    <div class="card hide" id="rules"><div class="row">
-      <div class="fg"><label>Meta diária por projeto (h)</label><input id="rMeta" type="number" step="0.5" value="4" onchange="rulesChanged()"></div>
-      <div class="fg"><label>Jornada diária (h)</label><input id="rJor" type="number" step="0.5" value="8" onchange="rulesChanged()"></div>
-      <div class="fg"><label>Mínimo de horas apontadas (%)</label><input id="rMin" type="number" value="80" onchange="rulesChanged()"></div>
-      <div class="fg"><label>Projeto identificado por</label><select id="rFld" onchange="rulesChanged()"><option value="service_name">Serviço</option><option value="category">Categoria</option><option value="sector">Equipe</option><option value="subject">Assunto</option><option value="activity">Atividade</option><option value="client_name">Cliente</option></select></div>
-      <div class="fg"><label>Contém o texto</label><input id="rKw" value="projeto" onchange="rulesChanged()"></div>
-      <div class="fg"><label>Carnaval e Corpus Christi como feriado</label><select id="rFac" onchange="rulesChanged()"><option value="0">Não</option><option value="1">Sim</option></select></div>
-      <div class="fg" style="flex:1;min-width:220px"><label>Feriados extras (dd/mm/aaaa, separados por vírgula)</label><input id="rHol" onchange="rulesChanged()"></div>
-      <div class="fg" style="flex:1;min-width:220px"><label>Ou números de tickets (separados por vírgula)</label><input id="rIds" onchange="rulesChanged()"></div>
-    </div></div>
     <div class="kpis">
       <div class="card"><small>Tickets</small><div><b id="kT">0</b></div></div>
       <div class="card"><small>Horas apontadas</small><div><b id="kH">0</b></div></div>
@@ -158,7 +167,7 @@ details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 
       <div class="card"><h3>Empresas que mais consomem tempo</h3><div id="mgBars" style="margin-bottom:12px"></div><div class="tw"><table><thead><tr><th>Empresa</th><th>Horas (h)</th><th>% do total</th><th>Chamados</th><th>Colaboradores</th><th>Em dias não úteis (h)</th></tr></thead><tbody id="tMgCli"></tbody></table></div></div>
       <div class="card"><h3>Chamados mais impactantes</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Empresa</th><th>Horas (h)</th><th>% do total</th><th>Apontamentos</th><th>Colaboradores</th><th>Dias com apontamento</th><th>Em dias não úteis (h)</th><th>Status</th></tr></thead><tbody id="tMgTk"></tbody></table></div></div></div>
     <div id="t-vip" class="hide"><div class="card"><h3>Clientes VIP</h3>
-      <div class="fg"><label>Lista de clientes VIP (um por linha; basta uma parte do nome)</label><textarea id="vipList" rows="6" placeholder="Cole aqui os nomes dos clientes VIP" style="padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit" onchange="vipChanged()"></textarea></div>
+      
       <p id="vipInfo" style="margin:10px 0"></p><div class="kpis" id="vipKpi" style="margin:0"></div></div>
       <div class="card"><h3>VIPs que mais consomem a carga</h3><div class="tw"><table><thead><tr><th>Cliente VIP</th><th>Horas</th><th>% do total</th><th>% da capacidade da equipe</th><th>Chamados</th><th>Colaboradores</th><th>Quem mais atende</th><th>Em dias não úteis</th></tr></thead><tbody id="tVip"></tbody></table></div></div>
       <div class="card"><h3>Clientes não VIP que mais consomem (comparação)</h3><div class="tw"><table><thead><tr><th>Cliente</th><th>Horas</th><th>% do total</th><th>Chamados</th></tr></thead><tbody id="tVipOut"></tbody></table></div></div></div>
@@ -170,10 +179,10 @@ details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 
       <div class="fg"><label>Valor</label><select id="pvVal" onchange="renderPivot()"><option value="h">Horas</option><option value="n">Lançamentos</option><option value="t">Chamados distintos</option><option value="a">Colaboradores distintos</option></select></div></div>
       <div class="tw" style="margin-top:12px"><table id="pvTable"></table></div><p id="pvNote" style="color:var(--muted)"></p></div></div>
     <div id="t-charts" class="hide"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px">
-      <div class="card" style="grid-column:1/-1"><h3>Evolução diária de horas × capacidade</h3><canvas id="chDay" height="80"></canvas></div>
+      <div class="card" style="grid-column:1/-1"><h3>Progresso acumulado: horas apontadas × capacidade</h3><canvas id="chDay" height="80"></canvas></div>
       <div class="card"><h3>Horas por semana e equipe</h3><canvas id="chWeek"></canvas></div>
       <div class="card"><h3>Empresas que mais consomem (laranja = VIP)</h3><canvas id="chCli"></canvas></div>
-      <div class="card"><h3>Colaboradores: horas × capacidade</h3><canvas id="chAg"></canvas></div>
+      <div class="card"><h3>Progresso da capacidade por colaborador</h3><p style="color:var(--muted);margin:0 0 10px">A barra mostra as horas apontadas sobre a capacidade do período. O traço marca o mínimo exigido; verde = dentro do esperado, amarelo = abaixo do mínimo, vermelho = acima da capacidade.</p><div id="agProg"></div></div>
       <div class="card"><h3>Distribuição por atividade</h3><canvas id="chAct"></canvas></div></div></div>
     <div id="t-proj" class="hide"><div class="card"><h3>Projetos: horas por dia × meta</h3><p style="color:var(--muted);margin:0 0 10px">Soma de todos os colaboradores no projeto, dia a dia, dentro do período filtrado. Tolerância de 15 min em torno da meta.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Dias com apontamento</th><th>Total (h)</th><th>Média por dia (h)</th><th>Dias abaixo da meta</th><th>Dias na meta</th><th>Dias que estourou</th></tr></thead><tbody id="tProj"></tbody></table></div></div>
       <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Data</th><th>Quem trabalhou</th><th>Horas no dia (h)</th><th>Diferença para a meta</th><th>Situação</th></tr></thead><tbody id="tProjDay"></tbody></table></div></div>
@@ -431,7 +440,7 @@ function buildFilters(keep){
 function applyFilters(){
   const s=$('fStart').value,e=$('fEnd').value;
   const sel=FIELDS.map(([k])=>[k,$('f_'+k).value]).filter(x=>x[1]);
-  const q=(ACT==='load'||ACT==='diag')?[]:qn(ACT).split(' ').filter(Boolean);lastQ=q.join(' ');
+  const q=(ACT==='load'||ACT==='cfg'||ACT==='diag')?[]:qn(ACT).split(' ').filter(Boolean);lastQ=q.join(' ');
   rows=raw.filter(r=>(!s||!r.date||r.date>=s)&&(!e||!r.date||r.date<=e)&&sel.every(([k,v])=>r[k]===v)&&(!q.length||q.every(w=>hay(r).includes(w))));
   const qe=$('qc_'+ACT);if(qe) qe.textContent=q.length?`${rows.length} lançamento(s) encontrados`:'';
   try{render()}catch(e){console.error(e);$('status').textContent='Erro ao desenhar: '+e.message}
@@ -479,13 +488,12 @@ function renderDiag(){
 
 let ACT='load';
 function showTab(t){
-  ACT=t;
+  ACT=t;document.body.dataset.t=t;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
-  $('t-load').classList.toggle('hide',t!=='load');
+  $('t-load').classList.toggle('hide',t!=='load');$('t-cfg').classList.toggle('hide',t!=='cfg');
   ['mgmt','vip','charts','entries','pivot','proj','occ','bot','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  $('rules').classList.toggle('hide',!['proj','occ','mgmt','vip','charts','pivot','bot'].includes(t));
-  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='diag');
-  if(raw.length&&t!=='load'&&t!=='diag'&&qn(t)!==lastQ) applyFilters();
+  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag');
+  if(raw.length&&t!=='load'&&t!=='cfg'&&t!=='diag'&&qn(t)!==lastQ) applyFilters();
 }
 $('tabs').addEventListener('click',e=>{const t=e.target.dataset.t;if(t)showTab(t)});
 
@@ -730,9 +738,10 @@ function renderCharts(c){
     CL[r.client_name]=(CL[r.client_name]||0)+r.hours;AC[r.activity]=(AC[r.activity]||0)+r.hours;TM[r.sector]=(TM[r.sector]||0)+r.hours;
   });
   const ds=Object.keys(D).sort(),days=ds.length?rangeDays(ds[0],ds[ds.length-1]):[];
+  let ca=0,cb=0;const cum=[],cap=[];days.forEach(d=>{ca+=D[d]||0;cb+=kd(d)?0:c.jor*agN;cum.push(+ca.toFixed(2));cap.push(+cb.toFixed(2))});
   mkc('chDay',{type:'line',data:{labels:days.map(fmtDate),datasets:[
-    {label:'Horas apontadas',data:days.map(d=>+(D[d]||0).toFixed(2)),borderColor:'#2563eb',backgroundColor:'#2563eb33',fill:true,tension:.25,pointRadius:2},
-    {label:'Capacidade (jornada × colaboradores, dias úteis)',data:days.map(d=>kd(d)?0:c.jor*agN),borderColor:'#dc2626',borderDash:[6,4],pointRadius:0}]},options:{responsive:true,interaction:{mode:'index',intersect:false}}});
+    {label:'Horas apontadas (acumulado)',data:cum,borderColor:'#2457d6',backgroundColor:'#2457d633',fill:true,tension:.2,pointRadius:0},
+    {label:'Capacidade acumulada (jornada × colaboradores, dias úteis)',data:cap,borderColor:'#c62828',borderDash:[6,4],pointRadius:0}]},options:{responsive:true,interaction:{mode:'index',intersect:false},scales:{y:{title:{display:true,text:'horas'}}}}});
   const weeks=Object.keys(W).sort(),tops=Object.entries(TM).sort((a,b)=>b[1]-a[1]).slice(0,7).map(x=>x[0]);
   const sets=tops.map((t,i)=>({label:t,backgroundColor:PAL[i],data:weeks.map(w=>+(W[w][t]||0).toFixed(2))}));
   if(Object.keys(TM).length>tops.length) sets.push({label:'Demais equipes',backgroundColor:'#94a3b8',data:weeks.map(w=>+(Object.entries(W[w]).filter(([k])=>!tops.includes(k)).reduce((s,x)=>s+x[1],0)).toFixed(2))});
@@ -740,7 +749,9 @@ function renderCharts(c){
   const cl=Object.entries(CL).sort((a,b)=>b[1]-a[1]).slice(0,10);
   mkc('chCli',{type:'bar',data:{labels:cl.map(x=>x[0]),datasets:[{label:'Horas',data:cl.map(x=>+x[1].toFixed(2)),backgroundColor:cl.map(x=>vipOf(x[0],V)?'#d97706':'#2563eb')}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
   const ag=groupAgents().slice(0,15);
-  mkc('chAg',{type:'bar',data:{labels:ag.map(a=>a.name),datasets:[{label:'Horas apontadas',data:ag.map(a=>+a.h.toFixed(2)),backgroundColor:'#2563eb'},{type:'line',label:'Capacidade do período',data:ag.map(()=>P.cap),borderColor:'#dc2626',borderDash:[6,4],pointRadius:0}]}});
+  const bar=(n,h,cp,cls)=>{const p=cp?h/cp:0,col=p>1?'var(--bad)':p>=c.min?'var(--ok)':'var(--warn)';return `<div class="prog ${cls||''}"><span class="pn"><b>${esc(n)}</b></span><i><u style="width:${Math.min(p,1)*100}%;background:${col}"></u>${cp?`<s style="left:${c.min*100}%"></s>`:''}</i><b class="pv">${H(h)} de ${H(cp)} · ${nf(p*100,0)}%</b></div>`};
+  const totH=rows.reduce((x,r)=>x+r.hours,0);
+  $('agProg').innerHTML=(rows.length?bar('Equipe toda',totH,P.cap*agN,'tot'):'')+ag.map(a=>bar(a.name,a.h,P.cap)).join('')||'<p>Sem dados.</p>';
   const ac=Object.entries(AC).sort((a,b)=>b[1]-a[1]),t8=ac.slice(0,8),rest=ac.slice(8).reduce((s,x)=>s+x[1],0);
   if(rest) t8.push(['Outras',rest]);
   mkc('chAct',{type:'doughnut',data:{labels:t8.map(x=>x[0]),datasets:[{data:t8.map(x=>+x[1].toFixed(2)),backgroundColor:PAL}]},options:{plugins:{legend:{position:'right'}}}});
@@ -919,12 +930,12 @@ const qn=t=>norm(Q[t]||'');
 const hay=r=>r._s??=norm([r.ticket_id,r.client_name,r.subject,r.owner_name,r.sector,r.activity,r.service_name,r.category,r.status,fmtDate(r.date)].join(' '));
 function doSearch(t){
   Q[t]=$('q_'+t).value.trim();
-  if(t==='load'){const n=norm(Q[t]);$('t-load').querySelectorAll('.card').forEach(c=>c.classList.toggle('hide',!!n&&!norm(c.textContent).includes(n)));return}
+  if(t==='load'||t==='cfg'){const n=norm(Q[t]);$('t-'+t).querySelectorAll('.card').forEach(c=>c.classList.toggle('hide',!!n&&!norm(c.textContent).includes(n)));return}
   if(t==='diag') return renderDiag();
   if(raw.length) applyFilters();
 }
 function clearSearch(t){$('q_'+t).value='';doSearch(t)}
-const MODS={load:['Carregar dados','Conecte ao Movidesk, configure a sincronização automática e a leitura por IA.'],mgmt:['Gestão','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos','Evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],bot:['Robô de leitura','Previsões de horas que o robô e a IA encontraram no texto dos chamados.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
+const MODS={load:['Carregar dados','Conecte ao Movidesk, configure a sincronização automática e a leitura por IA.'],cfg:['Configurações','Regras de cálculo, lista de clientes VIP e leitura por IA.'],mgmt:['Gestão','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos','Evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],bot:['Robô de leitura','Previsões de horas que o robô e a IA encontraram no texto dos chamados.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
 
 /* ---------- robô: painel de leituras ---------- */
 let IG=(()=>{try{return JSON.parse(localStorage.getItem('md_ig')||'{}')}catch(e){return {}}})();
