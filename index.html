@@ -4,9 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Movidesk Audit Central</title>
-  <!-- Chart.js para gráficos animados -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- SheetJS para exportação/importação -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -86,8 +84,9 @@
       overflow-y: auto;
     }
     
+    /* Garantia de visibilidade controlada via classe active */
     .page-section { display: none; }
-    .page-section.active { display: block; }
+    .page-section.active { display: block !important; }
 
     .card {
       background: var(--card-bg);
@@ -142,21 +141,17 @@
     }
     .btn:hover { background: var(--blue-hover); }
 
-    /* Toast / Alerta de Tempo Real */
     #realtime-toast {
       display: none;
-      background: #3b82f6;
+      background: #2563eb;
       color: white;
       padding: 10px 16px;
       border-radius: 8px;
       margin-bottom: 15px;
       font-size: 13px;
       font-weight: 500;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      animation: fadeIn 0.3s ease;
     }
 
-    /* Barras de Progresso de Capacidade */
     .capacity-row {
       display: flex;
       align-items: center;
@@ -182,7 +177,7 @@
     .progress-bar-fill {
       height: 100%;
       border-radius: 6px;
-      transition: width 0.8s ease-in-out, background-color 0.3s ease;
+      transition: width 0.8s ease-in-out;
     }
     .progress-bar-fill.green { background-color: var(--green); }
     .progress-bar-fill.yellow { background-color: var(--yellow); }
@@ -203,14 +198,13 @@
     @media (max-width: 1024px) {
       .grid-2col { grid-template-columns: 1fr; }
     }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 <body>
 
   <header>
     <div class="brand">Auditoria de Chamados <span>Ticket Manager · Movidesk</span></div>
-    <div id="status-badge" style="font-size: 12px; opacity: 0.9;">🟢 Firestore Conectado (Tempo Real)</div>
+    <div id="status-badge" style="font-size: 12px; opacity: 0.9;">🟢 Firestore Conectado</div>
   </header>
 
   <nav class="sidebar">
@@ -225,7 +219,7 @@
   <main>
     <div id="realtime-toast">⚡ Atualização em tempo real detetada nos chamados!</div>
 
-    <!-- GESTÃO -->
+    <!-- MÓDULO 1: GESTÃO -->
     <section id="gestao" class="page-section active">
       <div class="card">
         <h2>Visão Geral de Gestão</h2>
@@ -235,7 +229,7 @@
       </div>
     </section>
 
-    <!-- CLIENTES VIP -->
+    <!-- MÓDULO 2: CLIENTES VIP -->
     <section id="vip" class="page-section">
       <div class="card">
         <h2>Clientes VIP</h2>
@@ -243,7 +237,7 @@
       </div>
     </section>
 
-    <!-- GRÁFICOS E CAPACIDADE -->
+    <!-- MÓDULO 3: GRÁFICOS -->
     <section id="graficos" class="page-section">
       <div class="grid-2col">
         <div class="card">
@@ -263,7 +257,7 @@
       </div>
     </section>
 
-    <!-- PROJETOS -->
+    <!-- MÓDULO 4: PROJETOS -->
     <section id="projetos" class="page-section">
       <div class="card">
         <h2>Projetos & Estimativas</h2>
@@ -271,7 +265,7 @@
       </div>
     </section>
 
-    <!-- COLABORADORES -->
+    <!-- MÓDULO 5: COLABORADORES -->
     <section id="colaboradores" class="page-section">
       <div class="card">
         <h2>Capacidade de Colaboradores</h2>
@@ -279,7 +273,7 @@
       </div>
     </section>
 
-    <!-- CONFIGURAÇÕES -->
+    <!-- MÓDULO 6: CONFIGURAÇÕES -->
     <section id="configuracoes" class="page-section">
       <div class="sub-nav">
         <button class="sub-tab active" data-tab="sub-carga">📌 API Movidesk & Dados</button>
@@ -341,10 +335,10 @@
   </main>
 
   <script>
-    // 1. Definição essencial da função $ no topo do script[cite: 2]
+    // 1. Função $ declarada obrigatoriamente no topo para eliminar o ReferenceError[cite: 2]
     const $ = (id) => document.getElementById(id);
 
-    // 2. Inicialização segura do Firebase Firestore
+    // 2. Inicialização do Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyDummyKeyForArchitectureDemo",
       authDomain: "movidesk-audit.firebaseapp.com",
@@ -359,9 +353,7 @@
     }
     const db = firebase.firestore();
 
-    let ticketsLocais = [];
-
-    // 3. Sistema de Navegação Unificado[cite: 1]
+    // 3. Sistema de Navegação Totalmente Protegido
     function setupNavigation() {
       document.querySelectorAll('[data-tab]').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -379,12 +371,15 @@
             if (targetSub) targetSub.style.display = 'block';
             btn.classList.add('active');
           } else {
-            document.querySelectorAll('.page-section').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.page-section').forEach(el => {
+              el.classList.remove('active');
+              el.style.display = 'none';
+            });
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
 
             const targetPage = $(targetId);
             if (targetPage) {
-              targetPage.style.display = 'block';
+              targetPage.classList.add('active');
               btn.classList.add('active');
 
               if (targetId === 'graficos') {
@@ -396,52 +391,7 @@
       });
     }
 
-    // 4. Escuta em Tempo Real do Firestore (Chama ao atualizar previsão ou ticket)
-    function escutarAlteracoesEmTempoReal() {
-      db.collection('artifacts')
-        .doc('public')
-        .collection('data')
-        .doc('tickets_cache')
-        .onSnapshot((doc) => {
-          if (!doc.exists) return;
-          
-          const novosTickets = doc.data().tickets || [];
-          
-          if (ticketsLocais.length > 0) {
-            notificarAlteracao("Sincronização em tempo real efetuada com sucesso!");
-          }
-
-          ticketsLocais = novosTickets;
-          renderGraficosMock();
-        }, (error) => {
-          console.warn("Utilizando modo local/cache:", error);
-        });
-    }
-
-    function notificarAlteracao(msg) {
-      const toast = $('realtime-toast');
-      if (!toast) return;
-      toast.innerText = `⚡ ${msg}`;
-      toast.style.display = 'block';
-      setTimeout(() => { toast.style.display = 'none'; }, 4000);
-    }
-
-    // 5. Persistência de Chaves em Tempo Real[cite: 1]
-    function iaChanged() {
-      const mode = $('iaMode') ? $('iaMode').value : 'off';
-      const key = $('iaKey') ? $('iaKey').value.trim() : '';
-
-      localStorage.setItem('md_iamode', mode);
-      localStorage.setItem('md_iakey', key);
-
-      db.collection('settings').doc('ia_config').set({
-        mode: mode,
-        key: key,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true }).catch(() => {});
-    }
-
-    // 6. Chamada à Serverless Function na Vercel
+    // 4. Execução da IA na Vercel
     async function iaRun() {
       const key = $('iaKey').value.trim();
       const mode = $('iaMode').value;
@@ -455,7 +405,7 @@
         return;
       }
 
-      $('iaLog').innerText = 'A enviar requisição...';
+      $('iaLog').innerText = 'Processando análise...';
 
       try {
         const response = await fetch('/api/estimar', {
@@ -480,16 +430,20 @@
       }
     }
 
-    // 7. Dados e Renderização de Capacidade e Gráficos Animados
+    function iaChanged() {
+      const mode = $('iaMode') ? $('iaMode').value : 'off';
+      const key = $('iaKey') ? $('iaKey').value.trim() : '';
+      localStorage.setItem('md_iamode', mode);
+      localStorage.setItem('md_iakey', key);
+    }
+
+    // 5. Renderização dos Gráficos Animados
     const colaboradoresData = [
       { nome: "Equipe toda", apontado: 1992.78, esperado: 4048.00 },
       { nome: "Kleber Silva", apontado: 261.52, esperado: 176.00 },
       { nome: "Felipe Cavassin", apontado: 186.78, esperado: 176.00 },
       { nome: "Guilherme Gustavo Bonato", apontado: 158.27, esperado: 176.00 },
-      { nome: "Davi Vinicius", apontado: 146.93, esperado: 176.00 },
-      { nome: "Leticia Barbosa", apontado: 136.53, esperado: 176.00 },
-      { nome: "Lucas Vieira", apontado: 130.52, esperado: 176.00 },
-      { nome: "Alan Reis", apontado: 119.15, esperado: 176.00 }
+      { nome: "Davi Vinicius", apontado: 146.93, esperado: 176.00 }
     ];
 
     function renderCapacityBars() {
@@ -503,12 +457,10 @@
         if (pct > 100) colorClass = 'red';
         else if (pct >= 80) colorClass = 'green';
 
-        const fillWidth = Math.min(pct, 100);
-
         const row = document.createElement('div');
         row.className = 'capacity-row';
         row.innerHTML = `
-          <div class="capacity-name" title="${item.nome}">${item.nome}</div>
+          <div class="capacity-name">${item.nome}</div>
           <div class="progress-bar-container">
             <div class="progress-bar-fill ${colorClass}" style="width: 0%;"></div>
           </div>
@@ -519,7 +471,7 @@
         container.appendChild(row);
 
         setTimeout(() => {
-          row.querySelector('.progress-bar-fill').style.width = fillWidth + '%';
+          row.querySelector('.progress-bar-fill').style.width = Math.min(pct, 100) + '%';
         }, 50);
       });
     }
@@ -536,17 +488,10 @@
       window.chartAtividadesInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: [
-            'PRO - Desenvolvimento / correção',
-            'SUP - Chat resolvido',
-            'COO - Condução / mediação',
-            'PRO - Análise / diagnóstico',
-            'SUC - Plano de ação / sucesso',
-            'Outras'
-          ],
+          labels: ['PRO - Desenvolvimento', 'SUP - Chat resolvido', 'COO - Mediação', 'Outras'],
           datasets: [{
-            data: [35, 18, 14, 8, 5, 20],
-            backgroundColor: ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#9333ea', '#475569'],
+            data: [40, 25, 15, 20],
+            backgroundColor: ['#2563eb', '#16a34a', '#d97706', '#475569'],
             borderWidth: 2,
             borderColor: '#ffffff'
           }]
@@ -565,10 +510,10 @@
       renderAtividadesChart();
     }
 
+    // Inicialização segura após carregamento do DOM
     document.addEventListener('DOMContentLoaded', () => {
       setupNavigation();
-      escutarAlteracoesEmTempoReal();
-
+      
       const savedKey = localStorage.getItem('md_iakey') || '';
       const savedMode = localStorage.getItem('md_iamode') || 'off';
       if ($('iaKey')) $('iaKey').value = savedKey;
