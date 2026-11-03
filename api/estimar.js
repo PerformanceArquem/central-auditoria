@@ -22,9 +22,9 @@ export default async function handler(req, res) {
     return res.status(401).json({ erro: 'Chave de acesso (ACCESS_KEY) inválida ou não informada.' });
   }
 
-  // Validação da Chave da API da IA (GEMINI_API_KEY)
+  // Validação da Chave da API do Gemini
   if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ erro: 'A variável GEMINI_API_KEY não foi configurada na Vercel.' });
+    return res.status(500).json({ erro: 'A variável GEMINI_API_KEY não foi configurada nas Environment Variables da Vercel.' });
   }
 
   const { jornada = 8, tickets = [] } = req.body || {};
@@ -42,7 +42,8 @@ Responda APENAS um array JSON no seguinte formato:
 Chamados:
 ${JSON.stringify(tickets)}`;
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    // URL atualizada utilizando o modelo gemini-2.5-flash
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
     const response = await fetch(geminiUrl, {
       method: 'POST',
