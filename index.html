@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Movidesk Audit Central</title>
+  <!-- Chart.js para gráficos animados -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS para exportação e leitura de arquivos -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -84,7 +86,6 @@
       overflow-y: auto;
     }
     
-    /* Garantia de visibilidade controlada via classe active */
     .page-section { display: none; }
     .page-section.active { display: block !important; }
 
@@ -150,6 +151,7 @@
       margin-bottom: 15px;
       font-size: 13px;
       font-weight: 500;
+      animation: fadeIn 0.3s ease;
     }
 
     .capacity-row {
@@ -198,6 +200,7 @@
     @media (max-width: 1024px) {
       .grid-2col { grid-template-columns: 1fr; }
     }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 <body>
@@ -335,10 +338,10 @@
   </main>
 
   <script>
-    // 1. Função $ declarada obrigatoriamente no topo para eliminar o ReferenceError[cite: 2]
+    // 1. Declaração obrigatória do seletor $ para prevenir ReferenceError
     const $ = (id) => document.getElementById(id);
 
-    // 2. Inicialização do Firebase
+    // 2. Inicialização do Firebase Firestore
     const firebaseConfig = {
       apiKey: "AIzaSyDummyKeyForArchitectureDemo",
       authDomain: "movidesk-audit.firebaseapp.com",
@@ -353,7 +356,9 @@
     }
     const db = firebase.firestore();
 
-    // 3. Sistema de Navegação Totalmente Protegido
+    let ticketsLocais = [];
+
+    // 3. Gerenciador de Navegação do Menu Principal e Sub-abas
     function setupNavigation() {
       document.querySelectorAll('[data-tab]').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -391,7 +396,51 @@
       });
     }
 
-    // 4. Execução da IA na Vercel
+    // 4. Escuta em Tempo Real do Firestore (Tickets e Atualizações)
+    function escutarAlteracoesEmTempoReal() {
+      db.collection('artifacts')
+        .doc('public')
+        .collection('data')
+        .doc('tickets_cache')
+        .onSnapshot((doc) => {
+          if (!doc.exists) return;
+          
+          const novosTickets = doc.data().tickets || [];
+          
+          if (ticketsLocais.length > 0) {
+            notificarAlteracao("Sincronização em tempo real realizada!");
+          }
+
+          ticketsLocais = novosTickets;
+          renderGraficosMock();
+        }, (error) => {
+          console.warn("Utilizando dados locais:", error);
+        });
+    }
+
+    function notificarAlteracao(msg) {
+      const toast = $('realtime-toast');
+      if (!toast) return;
+      toast.innerText = `⚡ ${msg}`;
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 4000);
+    }
+
+    // 5. Persistência de Chaves da IA
+    function iaChanged() {
+      const mode = $('iaMode') ? $('iaMode').value : 'off';
+      const key = $('iaKey') ? $('iaKey').value.trim() : '';
+      localStorage.setItem('md_iamode', mode);
+      localStorage.setItem('md_iakey', key);
+
+      db.collection('settings').doc('ia_config').set({
+        mode: mode,
+        key: key,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true }).catch(() => {});
+    }
+
+    // 6. Chamada à Serverless Function na Vercel
     async function iaRun() {
       const key = $('iaKey').value.trim();
       const mode = $('iaMode').value;
@@ -405,7 +454,7 @@
         return;
       }
 
-      $('iaLog').innerText = 'Processando análise...';
+      $('iaLog').innerText = 'Processando requisição de IA...';
 
       try {
         const response = await fetch('/api/estimar', {
@@ -424,26 +473,22 @@
           return;
         }
 
-        $('iaLog').innerText = 'Processamento concluído!';
+        $('iaLog').innerText = 'Processamento finalizado com sucesso!';
       } catch (err) {
         $('iaLog').innerText = 'IA: Failed to fetch (função /api/estimar offline).';
       }
     }
 
-    function iaChanged() {
-      const mode = $('iaMode') ? $('iaMode').value : 'off';
-      const key = $('iaKey') ? $('iaKey').value.trim() : '';
-      localStorage.setItem('md_iamode', mode);
-      localStorage.setItem('md_iakey', key);
-    }
-
-    // 5. Renderização dos Gráficos Animados
+    // 7. Dados e Gráficos Animados de Capacidade e Atividades
     const colaboradoresData = [
       { nome: "Equipe toda", apontado: 1992.78, esperado: 4048.00 },
       { nome: "Kleber Silva", apontado: 261.52, esperado: 176.00 },
       { nome: "Felipe Cavassin", apontado: 186.78, esperado: 176.00 },
       { nome: "Guilherme Gustavo Bonato", apontado: 158.27, esperado: 176.00 },
-      { nome: "Davi Vinicius", apontado: 146.93, esperado: 176.00 }
+      { nome: "Davi Vinicius", apontado: 146.93, esperado: 176.00 },
+      { nome: "Leticia Barbosa", apontado: 136.53, esperado: 176.00 },
+      { nome: "Lucas Vieira", apontado: 130.52, esperado: 176.00 },
+      { nome: "Alan Reis", apontado: 119.15, esperado: 176.00 }
     ];
 
     function renderCapacityBars() {
@@ -460,7 +505,7 @@
         const row = document.createElement('div');
         row.className = 'capacity-row';
         row.innerHTML = `
-          <div class="capacity-name">${item.nome}</div>
+          <div class="capacity-name" title="${item.nome}">${item.nome}</div>
           <div class="progress-bar-container">
             <div class="progress-bar-fill ${colorClass}" style="width: 0%;"></div>
           </div>
@@ -488,10 +533,17 @@
       window.chartAtividadesInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['PRO - Desenvolvimento', 'SUP - Chat resolvido', 'COO - Mediação', 'Outras'],
+          labels: [
+            'PRO - Desenvolvimento / correção',
+            'SUP - Chat resolvido',
+            'COO - Condução / mediação',
+            'PRO - Análise / diagnóstico',
+            'SUC - Plano de ação / sucesso',
+            'Outras'
+          ],
           datasets: [{
-            data: [40, 25, 15, 20],
-            backgroundColor: ['#2563eb', '#16a34a', '#d97706', '#475569'],
+            data: [35, 18, 14, 8, 5, 20],
+            backgroundColor: ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#9333ea', '#475569'],
             borderWidth: 2,
             borderColor: '#ffffff'
           }]
@@ -510,10 +562,11 @@
       renderAtividadesChart();
     }
 
-    // Inicialização segura após carregamento do DOM
+    // Inicialização da Aplicação
     document.addEventListener('DOMContentLoaded', () => {
       setupNavigation();
-      
+      escutarAlteracoesEmTempoReal();
+
       const savedKey = localStorage.getItem('md_iakey') || '';
       const savedMode = localStorage.getItem('md_iamode') || 'off';
       if ($('iaKey')) $('iaKey').value = savedKey;
