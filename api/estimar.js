@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  // Configuração de cabeçalhos CORS
+  // Cabeçalhos CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ erro: 'Chave de acesso (ACCESS_KEY) inválida ou não informada.' });
   }
 
-  // Validação da variável de ambiente GEMINI_API_KEY
+  // Validação da variável GEMINI_API_KEY
   if (!process.env.GEMINI_API_KEY) {
     return res.status(500).json({ erro: 'A variável GEMINI_API_KEY não foi configurada na Vercel.' });
   }
@@ -42,8 +42,8 @@ Responda APENAS um array JSON no seguinte formato:
 Chamados:
 ${JSON.stringify(tickets)}`;
 
-    // Chamada atualizada para o endpoint ativo da Google
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    // Endpoint atualizado com o modelo exato exigido na mensagem de erro: gemini-3.8-flash
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
     const response = await fetch(geminiUrl, {
       method: 'POST',
