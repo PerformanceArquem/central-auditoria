@@ -1180,6 +1180,8 @@ const IDB={db:null,
   async del(k){try{const d=await this.open();return await new Promise(ok=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=()=>ok(true);t.onerror=()=>ok(false)})}catch(e){return false}}};
 // guarda só o necessário (textos limpos, sem HTML) para o cache ficar leve; os textos lidos pelo robô e pela IA não mudam
 const slim=t=>({...t,actions:(t.actions||[]).map((a,i)=>{const {htmlDescription,...x}=a;if(i<12){const d=a.description||htmlDescription;if(d)x.description=i<3?stripH(d):stripH(d).slice(0,1200)}else delete x.description;return x})});
+// compactação mais agressiva só para o payload enviado ao Supabase (o cache local continua usando slim)
+const cloudSlim=t=>({...t,actions:(t.actions||[]).map((a,i)=>{const {htmlDescription,...x}=a;if(i<5){const d=a.description||htmlDescription;if(d)x.description=stripH(d).slice(0,500)}else delete x.description;return x})});
 function cacheLabel(t){const e=$('cacheInfo');if(e) e.textContent=TK.size?`${TK.size} tickets salvos neste navegador`+(t?` (último salvamento às ${new Date(t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})})`:'')+'.':''}
 async function persist(){const ok=await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});cacheLabel(ok?Date.now():0);if(ok&&cloudReady){try{await cloudSaveTickets([...TK.values()])}catch(e){cloudMessage('Cache local atualizado; falha ao enviar à nuvem: '+e.message,'err')}}return ok}
 async function saveNow(){
@@ -1234,9 +1236,16 @@ function cloudSig(t){return hash(JSON.stringify(t))}
 async function cloudSaveTickets(list){
   if(!cloudReady||!list.length)return;
   const pending=[];
-  for(const t of list){const id=String(t.id??'');if(!id)continue;const sig=cloudSig(t);if(cloudTicketSig.get(id)!==sig)pending.push({t,sig})}
-  for(let i=0;i<pending.length;i+=25){const part=pending.slice(i,i+25);await cloudApi('upsertTickets','POST',{tickets:part.map(x=>x.t)});part.forEach(x=>cloudTicketSig.set(String(x.t.id),x.sig))}
-  if(pending.length)cloudMessage(`Supabase conectado · ${pending.length} chamado(s) sincronizado(s) · ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`,'okc');
+  for(const t of list){const id=String(t.id??'');if(!id)continue;const p=cloudSlim(t);const sig=cloudSig(p);if(cloudTicketSig.get(id)!==sig)pending.push({t:p,sig})}
+  // lotes de 5 tickets por requisição para manter o payload pequeno
+  const CHUNK_SIZE=5;let ok=0,failed=0,lastErr=null;
+  for(let i=0;i<pending.length;i+=CHUNK_SIZE){
+    const part=pending.slice(i,i+CHUNK_SIZE);
+    try{await cloudApi('upsertTickets','POST',{tickets:part.map(x=>x.t)});part.forEach(x=>cloudTicketSig.set(String(x.t.id),x.sig));ok+=part.length}
+    catch(err){failed+=part.length;lastErr=err;console.error('Falha ao enviar lote ao Supabase:',err)}
+  }
+  if(ok)cloudMessage(`Supabase conectado · ${ok} chamado(s) sincronizado(s) · ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`,'okc');
+  if(failed)throw new Error(`${failed} chamado(s) não enviados (${lastErr&&lastErr.message||lastErr})`);
 }
 async function cloudLoadState(){const j=await cloudApi('loadState');const state=j.state||{};cloudHydrating=true;try{Object.entries(state).forEach(([k,v])=>{if(k.startsWith('md_')&&!CLOUD_EXCLUDE.has(k)&&typeof v==='string')localStorage.setItem(k,v)});}finally{cloudHydrating=false}cloudStateUpdated=j.updated_at||'';applyCloudSettings()}
 async function cloudLoadAllTickets(){
