@@ -1,125 +1,1350 @@
-import { timingSafeEqual } from 'node:crypto';
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auditoria de Chamados · Ticket Manager</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{--navy:#14213d;--blue:#2457d6;--bg:#f3f4f6;--line:#e3e6ea;--muted:#667085;--ink:#1d2433;--ok:#16803c;--bad:#c62828;--warn:#b45309;--r:10px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif;display:grid;grid-template-columns:232px minmax(0,1fr);grid-template-rows:auto 1fr;min-height:100vh}
+header{grid-column:1/-1;background:var(--navy);color:#fff;padding:12px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.brand b{font-size:17px;display:block;line-height:1.25}.brand small{color:#aab4cc;font-size:12px}
+.chip{display:flex;gap:8px;align-items:center;border:1px solid #ffffff30;border-radius:99px;padding:5px 14px;font-size:12px;color:#dbe2f0}
+.chip .dot{width:9px;height:9px;border-radius:50%;background:#8791a8;flex:none}.chip.ok .dot{background:#4ade80}.chip.busy .dot{background:#facc15;animation:pu 1s infinite}.chip.err .dot{background:#f87171}
+@keyframes pu{50%{opacity:.3}}@media(prefers-reduced-motion:reduce){.chip .dot{animation:none!important}}
+#status,#auto{font-size:12px;color:inherit}
+nav{display:flex;flex-direction:column;gap:2px;padding:14px 10px;background:#fff;border-right:1px solid var(--line);position:sticky;top:0;align-self:start;max-height:100vh;overflow-y:auto}
+nav button{border:0;background:none;padding:10px 12px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer;text-align:left;border-radius:8px;border-left:3px solid transparent}
+nav button:hover{background:#f5f6f8;color:var(--ink)}nav button.on{background:#eaf0fd;color:var(--blue);border-left-color:var(--blue)}
+main{padding:24px 28px;width:100%;max-width:1480px;margin:0 auto}
+.mh{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.mh h2{margin:0;font-size:22px;letter-spacing:-.01em}.mh p{margin:2px 0 0;color:var(--muted)}
+.sb{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sb input{min-width:270px;padding-left:34px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23667085' stroke-width='2'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 4 4'/%3E%3C/svg%3E") no-repeat 11px center}
+.qc{font-size:12px;color:var(--muted);font-weight:600}
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:20px;margin-bottom:16px}
+h3{margin:0 0 12px;font-size:15px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:150px}
+.fg label{font-size:12px;font-weight:600;color:var(--muted)}
+input,select,textarea{padding:8px 11px;border:1px solid #cfd5dd;border-radius:8px;font-size:13px;background:#fff;color:var(--ink)}
+button{font:inherit;transition:filter .15s}
+button.b{background:var(--blue);color:#fff;border:0;padding:9px 15px;border-radius:8px;font-weight:600;cursor:pointer}
+button.b:hover,button.s:hover{filter:brightness(.94)}
+button.g{background:var(--ok)}button.s{background:#e8ebf0;color:var(--ink);border:0;padding:9px 14px;border-radius:8px;font-weight:600;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.kpis .card{margin:0;padding:15px 18px;border-left:4px solid var(--blue)}.kpis small{color:var(--muted);font-weight:600}.kpis div b{display:block;font-size:26px;color:var(--ink)}
+.tw{overflow-x:auto;max-height:560px;border:1px solid var(--line);border-radius:8px}
+table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+th{position:sticky;top:0;background:#f6f7f9;color:var(--muted);text-align:left;padding:10px 12px;font-size:12px;font-weight:600;border-bottom:1px solid var(--line)}
+td{padding:9px 12px;border-bottom:1px solid #eef0f3}tbody tr:hover td{background:#f8faff}
+.pill{padding:2px 9px;border-radius:12px;font-size:11px;font-weight:600;background:#eef0f3}
+.pill.ok{background:#dcf5e5;color:#14532d}.pill.bad{background:#fde2e2;color:#991b1b}.pill.warn{background:#fdf0d0;color:#8a4b08}
+.bar{display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:12px}
+.bar i{flex:1;height:10px;background:#e8ebf0;border-radius:5px;overflow:hidden}.bar u{display:block;height:100%;background:var(--blue)}
+.zone{border:2px dashed #9db5ef;border-radius:10px;padding:18px;text-align:center;background:#f3f6fe;cursor:pointer;font-weight:600;color:var(--blue)}
+#log{margin-top:10px;font-weight:600}.err{color:var(--bad)}.okc{color:var(--ok)}
+pre{background:#1d2433;color:#9fd3ff;padding:14px;border-radius:8px;max-height:380px;overflow:auto;font-size:12px}
+.hide{display:none!important}
+th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--blue)}.ar{margin-left:4px;font-size:10px}
+.colbtn{margin:0 0 8px;font-size:12px}.colbtn summary{cursor:pointer;color:var(--blue);font-weight:600;width:max-content}
+.colbox{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 0}.colbox label{display:flex;gap:4px;align-items:center;font-weight:400;font-size:12px;color:var(--ink)}
+details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 0 0;padding-left:20px}details.card li{margin-bottom:4px}
+.sum p{margin:6px 0}.sum p.al{color:#991b1b}.sum p.wn{color:#92400e}
+.prog{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:12px}.prog .pn{width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prog i{flex:1;height:14px;background:#e8ebf0;border-radius:7px;position:relative;overflow:hidden}.prog u{display:block;height:100%;border-radius:7px;transform-origin:left center;animation:progReveal 1.15s cubic-bezier(.2,.8,.2,1) both}.prog s{position:absolute;top:0;bottom:0;width:2px;background:#1d2433;opacity:.55}
+.prog .pv{width:230px;text-align:right}.prog.tot i{height:20px}.prog.tot{font-size:13px;margin-bottom:14px}@keyframes progReveal{from{transform:scaleX(0);opacity:.45}to{transform:scaleX(1);opacity:1}}.prog-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin:8px 0 12px}.prog-legend span{display:inline-flex;align-items:center;gap:5px}.prog-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #app>.kpis{display:none}
+.fb{border:0;background:none;color:var(--muted);cursor:pointer;padding:1px 4px;margin-left:4px;font-size:11px;border-radius:4px}.fb:hover{background:#e8ebf0}.fb.on{color:#fff;background:var(--blue)}
+.fp{position:fixed;z-index:50;width:270px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px rgba(20,33,61,.18);padding:10px}
+.fp>input{width:100%}.fl{max-height:230px;overflow:auto;margin:8px 0}.fl label{display:flex;gap:7px;align-items:flex-start;padding:3px 2px;font-size:12px;cursor:pointer}.fl input{padding:0;margin-top:2px}.fl em{color:var(--muted);font-size:12px}.fa{display:flex;gap:6px}.fa button{padding:6px 10px;font-size:12px}.fn{color:var(--muted);font-size:11px;margin:4px 0 0}
+.rz{position:absolute;top:0;right:0;width:8px;height:100%;cursor:col-resize}.rz:hover{background:var(--blue);opacity:.35}th.dov{box-shadow:inset 3px 0 0 var(--blue)}th[draggable=true]{cursor:pointer}
+@media(max-width:900px){.prog{flex-wrap:wrap}.prog .pn,.prog .pv{width:auto}body{display:block}nav{flex-direction:row;position:static;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px 12px}nav button{white-space:nowrap;border-left:0;border-bottom:3px solid transparent}nav button.on{border-bottom-color:var(--blue)}main{padding:16px}.sb input{min-width:0;width:100%}}
+@media print{.fb,.fp,.rz{display:none!important}header,nav,.filters,.noprint,#rules,.mh{display:none!important}body{display:block;background:#fff}main{padding:0}}
+</style>
+</head>
+<body>
+<header><div class="brand"><b>Auditoria de Chamados</b><small>Ticket Manager · Movidesk</small></div><div class="chip" id="chip"><span class="dot"></span><span id="status">Aguardando dados</span><span id="auto"></span></div></header>
+<nav id="tabs">
+  <button data-t="live">Tickets atualizados</button>
+  <button data-t="cfg">Configurações</button>
+  <button data-t="mgmt">Gestão</button>
+  <button data-t="vip">Clientes VIP</button>
+  <button data-t="charts">Gráficos</button>
+  <button data-t="entries">Lançamentos</button>
+  <button data-t="pivot">Tabela dinâmica</button>
+  <button data-t="proj">Projetos</button>
+  <button data-t="occ">Colaboradores</button>
+  <button data-t="diag">Diagnóstico</button>
+</nav>
+<main>
+  <div id="t-live" class="hide">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0 0 5px">Painel de tickets atualizados</h3><p style="margin:0;color:var(--muted)">Acompanhe chamados que tiveram alteração detectada na última sincronização do Movidesk.</p></div><button class="b g" onclick="sync()">Atualizar agora</button></div>
+      <div class="kpis" style="margin:14px 0"><div class="card"><small>Alterações registradas</small><b id="liveCount">0</b></div><div class="card"><small>Previsões / prazos</small><b id="liveDue">0</b></div><div class="card"><small>Status alterados</small><b id="liveStatus">0</b></div><div class="card"><small>Chamados atualizados</small><b id="liveGeneral">0</b></div></div>
+      <div class="row noprint" style="margin-bottom:12px"><div class="fg"><label>Filtrar alterações</label><select id="liveFilter" onchange="showLiveEvents()"><option value="all">Todas</option><option value="PREVISÃO / PRAZO ALTERADO">Previsão / prazo</option><option value="STATUS ALTERADO">Status</option><option value="CHAMADO ATUALIZADO">Atualizações gerais</option></select></div><div class="fg"><label>Pesquisar ticket ou assunto</label><input id="liveSearch" placeholder="Número ou assunto" oninput="showLiveEvents()"></div><button class="s" onclick="clearLiveEvents()">Limpar histórico</button></div>
+      <div id="livePanelList"></div>
+      <p style="font-size:12px;color:var(--muted);margin-top:12px">O painel registra alterações identificadas entre sincronizações. Para receber eventos instantaneamente, sem aguardar a próxima consulta, é necessário configurar webhook no backend.</p>
+    </div>
+  </div>
 
-// Variáveis de ambiente na Vercel (Settings → Environment Variables):
-//   ACCESS_KEY          a "Senha da função" digitada no painel (Leitura por IA)
-//   GEMINI_API_KEY      chave da API do Gemini (Google AI Studio; fica só no servidor)
-//   GEMINI_MODEL        opcional; padrão: gemini-3.8-flash
-//   GEMINI_FALLBACK_MODEL  opcional; modelo reserva usado se o principal estiver sobrecarregado
-const ACCESS_KEY = process.env.ACCESS_KEY || '';
-const API_KEY = process.env.GEMINI_API_KEY || '';
-const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-const FALLBACK = process.env.GEMINI_FALLBACK_MODEL || '';
+  <div id="t-cfg" class="hide">
+    <div class="card" style="border-left:4px solid var(--blue)"><h2 style="margin:0 0 5px">Conexão e carregamento de dados</h2><p style="margin:0;color:var(--muted)">Configure a API Movidesk, importe arquivos e acompanhe a sincronização automática.</p></div>
+    <div class="card" id="cloudCard" style="border:1px solid #b8c9e8;background:#f7faff">
+      <h3>Sincronização entre computadores · Supabase</h3>
+      <p style="margin:0 0 10px;color:var(--muted)">Compartilha chamados, histórico de alterações, previsões manuais, leituras da IA e configurações entre os computadores conectados à mesma base.</p>
+      <div class="row">
+        <input id="cloudKey" type="hidden"><div style="flex:1;min-width:260px;color:var(--muted)">Conexão automática com o banco Supabase. Não precisa digitar nenhuma chave.</div>
+        <button class="b" type="button" onclick="cloudConnect()">Ativar / carregar dados</button>
+      </div>
+      <p id="cloudMsg" style="margin:10px 0 0;font-weight:600">Nuvem ainda não conectada neste computador.</p>
+      
+    </div>
+  <div id="t-load">
+    <div class="card">
+      <h3>API Movidesk</h3>
+      <div class="row">
+        <div class="fg" style="flex:1;min-width:240px"><label>Domínio</label><input id="domain" placeholder="https://suaempresa.movidesk.com"></div>
+        <div class="fg" style="flex:1;min-width:240px"><label>Token da API</label><input id="token" type="password"></div>
+        <div class="fg"><label>Início</label><input type="date" id="startDate"></div>
+        <div class="fg"><label>Fim</label><input type="date" id="endDate"></div>
+        <div class="fg"><label>ID do campo "horas previstas" (opcional)</label><input id="cfId" placeholder="ex.: 12345"></div>
+        <div class="fg"><label>Atualização automática</label><select id="autoMin" onchange="autoChanged()"><option value="0">Desligada</option><option value="1">A cada 1 min (quase em tempo real)</option><option value="5">A cada 5 min</option><option value="10">A cada 10 min</option><option value="15">A cada 15 min</option><option value="30">A cada 30 min</option><option value="60">A cada 60 min</option></select></div>
+        <button class="b g" onclick="sync()">Sincronizar agora</button><button class="b" onclick="saveNow()">Salvar dados</button><button class="s" onclick="clearCache()">Limpar dados salvos</button>
+      </div>
+      <div id="log"></div>
+      <div class="card" style="margin-top:12px;border:1px solid #b8c9e8;background:#f7faff"><h3 style="margin:0 0 8px">Monitor de alterações em tempo real</h3><p style="margin:0 0 8px;color:var(--muted)">Mostra atualizações detectadas na sincronização: mudança de previsão/prazo, status ou atualização do chamado.</p><div id="liveChanges" style="font-size:13px">Aguardando a primeira sincronização...</div></div>
+      <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. Com o Supabase ativado, os dados ficam disponíveis em outros computadores; o cache local continua como apoio para abrir o painel mais rápido. Sem ativar a nuvem, os dados permanecem apenas neste navegador. A verificação automática pode ocorrer a cada 1 minuto (quase em tempo real; depende da resposta da API e do limite de requisições do Movidesk). Alterações são registradas no Monitor de alterações. Uma sincronização completa roda a cada 6 horas. Se a conexão cair, o sistema tenta de novo sozinho, com intervalos cada vez maiores. Para alertas instantâneos sem espera, será necessário configurar um webhook no backend.</p><p id="cacheInfo" style="margin:8px 0 0;font-weight:600"></p>
+    </div>
+    <div class="card">
+      <h3>Ou importe o CSV "Tempo trabalhado nos tickets"</h3>
+      <div class="zone" onclick="csvFile.click()">Clique para escolher o arquivo CSV</div>
+      <input type="file" id="csvFile" accept=".csv,.txt" class="hide" onchange="loadCSV(event)">
+    </div>
+  </div>
+    <div class="card" style="border-left:4px solid var(--blue)"><h2 style="margin:0 0 5px">Robô de leitura</h2><p style="margin:0;color:var(--muted)">Consulte as previsões de horas identificadas automaticamente nos chamados.</p></div>
+    <div id="t-bot"><div class="card"><h3>Previsões lidas pelo robô nos chamados</h3><p id="botInfo" style="margin:0 0 12px"></p><div class="tw"><table><thead><tr><th>Chamado</th><th>Cliente</th><th>Assunto</th><th>Onde leu</th><th>Trecho</th><th>Previsto (h)</th><th>Apontado (h)</th><th>Uso</th><th>Confiança</th><th>Ação</th></tr></thead><tbody id="tBot"></tbody></table></div></div></div>
+    <div class="card" id="rules"><h3>Regras de cálculo</h3><div class="row">
+      <div class="fg"><label>Meta diária por projeto (h)</label><input id="rMeta" type="number" step="0.5" value="4" onchange="rulesChanged()"></div>
+      <div class="fg"><label>Jornada diária (h)</label><input id="rJor" type="number" step="0.5" value="8" onchange="rulesChanged()"></div>
+      <div class="fg"><label>Mínimo de horas apontadas (%)</label><input id="rMin" type="number" value="80" onchange="rulesChanged()"></div>
+      <div class="fg"><label>Projeto identificado por</label><select id="rFld" onchange="rulesChanged()"><option value="service_name">Serviço</option><option value="category">Categoria</option><option value="sector">Equipe</option><option value="subject">Assunto</option><option value="activity">Atividade</option><option value="client_name">Cliente</option></select></div>
+      <div class="fg"><label>Contém o texto</label><input id="rKw" value="projeto" onchange="rulesChanged()"></div>
+      <div class="fg"><label>Carnaval e Corpus Christi como feriado</label><select id="rFac" onchange="rulesChanged()"><option value="0">Não</option><option value="1">Sim</option></select></div>
+      <div class="fg" style="flex:1;min-width:220px"><label>Feriados extras (dd/mm/aaaa, separados por vírgula)</label><input id="rHol" onchange="rulesChanged()"></div>
+      <div class="fg" style="flex:1;min-width:220px"><label>Ou números de tickets (separados por vírgula)</label><input id="rIds" onchange="rulesChanged()"></div>
+    </div></div>
+    <div class="card"><h3>Clientes VIP</h3><div class="fg"><label>Lista de clientes VIP (um por linha; basta uma parte do nome)</label><textarea id="vipList" rows="6" placeholder="Cole aqui os nomes dos clientes VIP" style="padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit" onchange="vipChanged()"></textarea></div><p style="color:var(--muted);margin:8px 0 0">O relatório fica na aba Clientes VIP.</p></div>
+    <div class="card">
+      <h3>Leitura por IA (opcional)</h3>
+      <div class="row">
+        <div class="fg"><label>Analisar</label><select id="iaMode" onchange="iaChanged()"><option value="off">Desligada</option><option value="proj">Só chamados de projeto</option><option value="all">Todos com horas apontadas</option></select></div>
+        <div class="fg" style="flex:1;min-width:240px"><label>Senha da função (ACCESS_KEY)</label><input id="iaKey" type="password" onchange="iaChanged()"></div>
+        <button class="b" onclick="iaRun()">Analisar agora</button>
+      </div>
+      <div id="iaMsg"></div>
+      <p style="color:var(--muted);margin:10px 0 0">Só entram chamados sem previsão digitada, sem campo personalizado e sem previsão lida pelo robô de regras. Cada chamado é analisado uma vez (de novo só se o texto mudar) e o resultado fica salvo neste navegador. <b>O assunto e a descrição dos chamados são enviados ao provedor de IA configurado na função.</b></p>
+    </div>
+  </div>
 
-export const config = { maxDuration: 60 };
+  <div id="app" class="hide">
+    <div class="card filters">
+      <div class="row" id="filters">
+        <div class="fg"><label>Início</label><input type="date" id="fStart" onchange="applyFilters()"></div>
+        <div class="fg"><label>Fim</label><input type="date" id="fEnd" onchange="applyFilters()"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <span style="align-self:center;font-size:12px;font-weight:700;color:var(--muted)">Período rápido:</span>
+        <button class="s" onclick="quick('today')">Hoje</button><button class="s" onclick="quick('7')">Últimos 7 dias</button><button class="s" onclick="quick('m')">Mês atual</button><button class="s" onclick="quick('all')">Tudo carregado</button>
+        <button class="s" onclick="resetFilters()">Limpar filtros</button>
+        <button class="g b" onclick="exportXLSX()">Excel da aba</button>
+        <button class="b" style="background:var(--bad)" onclick="exportPDF()">PDF da aba</button>
+        <button class="s" onclick="print()">Imprimir</button>
+      </div>
+    </div>
+    <details class="card noprint" id="legend"><summary>Como ler horas e dias (clique para abrir)</summary><ul>
+      <li><b>h = horas</b>, <b>dias = quantidade de dias</b>. Horas aparecem sempre com vírgula e a unidade: 8,50 h = 8 horas e 30 minutos.</li>
+      <li><b>Dia útil</b>: segunda a sexta, menos feriados. <b>Capacidade</b> = dias úteis do período × jornada diária (ex.: 20 dias × 8 h = 160 h).</li>
+      <li><b>Mínimo exigido</b> = capacidade × o % mínimo definido (padrão 80%).</li>
+      <li><b>Faltam / Restam / Folga de</b> = quanto ainda falta (ou sobra) até a referência. <b>Passou / Excedeu / Acima em</b> = quanto passou dela. O trecho <b>(≈ 2,5 dias de 8 h)</b> converte as mesmas horas em dias de trabalho.</li>
+      <li><b>Previsto</b> = horas que a pessoa informou para o chamado: digitadas aqui, vindas do campo personalizado do Movidesk, ou <b>lidas no texto do chamado</b> pelo robô de regras ou pela IA (ex.: “previsão 20h”, “estimativa de 3 dias”). <b>Apontado</b> = tudo que já foi lançado de tempo no chamado.</li>
+      <li>Em qualquer tabela: <b>clique no título da coluna para ordenar</b> e use <b>“Colunas ▾”</b> para mostrar ou esconder colunas. O Excel e o PDF saem como você deixou a tabela.</li></ul></details>
+    <div class="kpis">
+      <div class="card"><small>Tickets</small><div><b id="kT">0</b></div></div>
+      <div class="card"><small>Horas apontadas</small><div><b id="kH">0</b></div></div>
+      <div class="card"><small>Colaboradores</small><div><b id="kA">0</b></div></div>
+      <div class="card"><small>Clientes</small><div><b id="kC">0</b></div></div>
+    </div>
 
-function sameKey(a, b) {
-  const x = Buffer.from(String(a || ''));
-  const y = Buffer.from(String(b || ''));
-  return x.length === y.length && x.length > 0 && timingSafeEqual(x, y);
+    <div id="t-mgmt" class="hide">
+      <div class="card"><h3>Resumo para a direção</h3><div class="sum" id="mgSum"></div></div>
+      <div class="card"><h3>Relatório de gestão</h3><p id="mgInfo" style="margin:0 0 12px"></p>
+        <div class="row noprint" style="margin-bottom:12px"><div class="fg"><label>Itens em cada ranking</label><select id="mgTop" onchange="render()"><option>5</option><option selected>10</option><option>20</option><option>50</option></select></div></div>
+        <div class="kpis" id="mgKpi" style="margin:0"></div></div>
+      <div class="card"><h3>Colaboradores que mais geram impacto e sobrecarga</h3><p style="color:var(--muted);margin:0 0 10px">Ordenado pelo % da capacidade usado no período. “Passou” = horas acima da capacidade; “Folga de” = horas que ainda cabiam.</p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Horas apontadas (h)</th><th>Capacidade (h)</th><th>% da capacidade</th><th>Passou ou folga</th><th>Chamados</th><th>Cliente com mais horas</th><th>Média por dia útil (h)</th><th>Horas em dias não úteis (h)</th><th>Situação</th></tr></thead><tbody id="tMgAg"></tbody></table></div></div>
+      <div class="card"><h3>Projetos e chamados que mais estouram a previsão</h3><p style="color:var(--muted);margin:0 0 10px">Inclui projetos (pela regra da aba Projetos) e qualquer chamado com previsão de horas informada. “Apontado” soma todo o histórico; “Apontado no período” respeita o filtro de datas.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Previsto (h)</th><th>Apontado (h)</th><th>Restam ou excedeu</th><th>% da previsão</th><th>Apontado no período (h)</th><th>Colaboradores</th><th>Situação</th></tr></thead><tbody id="tMgPrj"></tbody></table></div></div>
+      <div class="card"><h3>Empresas que mais consomem tempo</h3><div id="mgBars" style="margin-bottom:12px"></div><div class="tw"><table><thead><tr><th>Empresa</th><th>Horas (h)</th><th>% do total</th><th>Chamados</th><th>Colaboradores</th><th>Horas em dias não úteis (h)</th></tr></thead><tbody id="tMgCli"></tbody></table></div></div>
+      <div class="card"><h3>Chamados mais impactantes</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Empresa</th><th>Horas (h)</th><th>% do total</th><th>Apontamentos</th><th>Colaboradores</th><th>Dias com apontamento</th><th>Horas em dias não úteis (h)</th><th>Status</th></tr></thead><tbody id="tMgTk"></tbody></table></div></div></div>
+    <div id="t-vip" class="hide"><div class="card"><h3>Clientes VIP</h3>
+      
+      <p id="vipInfo" style="margin:10px 0"></p><div class="kpis" id="vipKpi" style="margin:0"></div></div>
+      <div class="card"><h3>VIPs que mais consomem a carga</h3><div class="tw"><table><thead><tr><th>Cliente VIP</th><th>Horas</th><th>% do total</th><th>% da capacidade da equipe</th><th>Chamados</th><th>Colaboradores</th><th>Quem mais atende</th><th>Horas em dias não úteis (h)</th></tr></thead><tbody id="tVip"></tbody></table></div></div>
+      <div class="card"><h3>Clientes não VIP que mais consomem (comparação)</h3><div class="tw"><table><thead><tr><th>Cliente</th><th>Horas</th><th>% do total</th><th>Chamados</th></tr></thead><tbody id="tVipOut"></tbody></table></div></div></div>
+    <div id="t-entries" class="hide"><div class="card"><h3>Lançamentos de tempo</h3><div class="tw"><table>
+      <thead><tr><th>Ticket</th><th>Data</th><th>Cliente</th><th>Assunto</th><th>Colaborador</th><th>Equipe</th><th>Atividade</th><th>Status</th><th>Horas</th></tr></thead><tbody id="tEntries"></tbody></table></div><p id="cap" style="color:var(--muted)"></p></div></div>
+    <div id="t-pivot" class="hide"><div class="card"><h3>Tabela dinâmica</h3>
+      <div class="row"><div class="fg"><label>Linhas</label><select id="pvRow" onchange="renderPivot()"></select></div>
+      <div class="fg"><label>Colunas</label><select id="pvCol" onchange="renderPivot()"></select></div>
+      <div class="fg"><label>Valor</label><select id="pvVal" onchange="renderPivot()"><option value="h">Horas</option><option value="n">Lançamentos</option><option value="t">Chamados distintos</option><option value="a">Colaboradores distintos</option></select></div></div>
+      <div class="tw" style="margin-top:12px"><table id="pvTable"></table></div><p id="pvNote" style="color:var(--muted)"></p></div></div>
+    <div id="t-charts" class="hide"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px">
+      <div class="card" style="grid-column:1/-1"><h3>Progresso acumulado: horas apontadas × capacidade</h3><canvas id="chDay" height="80"></canvas></div>
+      <div class="card"><h3>Horas por semana e equipe</h3><canvas id="chWeek"></canvas></div>
+      <div class="card"><h3>Empresas que mais consomem (laranja = VIP)</h3><canvas id="chCli"></canvas></div>
+      <div class="card"><h3>Horas apontadas × capacidade prevista</h3><p style="color:var(--muted);margin:0 0 10px">Compare o total de horas efetivamente apontadas com a capacidade prevista para o período, por colaborador e para a equipe.</p><div class="prog-legend"><span><i class="prog-dot" style="background:#16a34a"></i>Dentro da capacidade</span><span><i class="prog-dot" style="background:#d97706"></i>Abaixo do mínimo</span><span><i class="prog-dot" style="background:#dc2626"></i>Acima da capacidade</span><span>│ mínimo esperado</span></div><div id="agProg"></div></div>
+      <div class="card"><h3>Distribuição por atividade</h3><canvas id="chAct"></canvas></div></div></div>
+    <div id="t-proj" class="hide"><div class="card"><h3>Projetos: horas por dia × meta</h3><p style="color:var(--muted);margin:0 0 10px">Soma de todos os colaboradores no projeto, dia a dia, dentro do período filtrado. Tolerância de 15 min em torno da meta.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Dias com apontamento</th><th>Total (h)</th><th>Média por dia (h)</th><th>Dias abaixo da meta</th><th>Dias na meta</th><th>Dias que estourou</th></tr></thead><tbody id="tProj"></tbody></table></div></div>
+      <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Data</th><th>Quem trabalhou</th><th>Horas no dia (h)</th><th>Diferença para a meta</th><th>Situação</th></tr></thead><tbody id="tProjDay"></tbody></table></div></div>
+      <div class="card"><h3>Previsto × apontado por chamado</h3><p style="color:var(--muted);margin:0 0 10px"><b>Previsto</b> = horas que a pessoa informou: digitadas aqui, do campo personalizado do Movidesk ou lidas no texto do chamado pelo robô de regras ou pela IA (“previsão 20h”; “3 dias” vale 3 × a jornada). <b>Apontado</b> = todo o histórico de tempo lançado, sem filtro de período. <b>Restam</b> = previsto − apontado; <b>Excedeu</b> = apontado − previsto. Previsão digitada aqui tem prioridade e fica salva neste navegador.</p><div class="row noprint" style="margin-bottom:10px"><div class="fg"><label>Mostrar</label><select id="bScope" onchange="render()"><option value="p">Somente projetos (regra acima)</option><option value="a">Todos os chamados</option></select></div></div><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Previsto (h)</th><th>De onde veio a previsão</th><th>Apontado (h)</th><th>Restam ou excedeu</th><th>% da previsão</th><th>Situação</th><th>Início</th><th>Último apontamento</th><th>Duração (dias corridos)</th><th>Dias com apontamento</th></tr></thead><tbody id="tBudget"></tbody></table></div></div></div>
+    <div id="t-occ" class="hide"><div class="card"><h3>Colaboradores: horas apontadas e jornada</h3><p id="occInfo" style="color:var(--muted);margin:0 0 10px"></p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Lançamentos</th><th>Tickets</th><th>Clientes</th><th>Dias com apontamento</th><th>Horas apontadas (h)</th><th>Média por dia apontado (h)</th><th>Horas em dias não úteis (h)</th><th>Capacidade (h)</th><th>Mínimo exigido (h)</th><th>% da capacidade</th><th>Falta para o mínimo</th><th>Falta para a jornada completa</th><th>Situação</th></tr></thead><tbody id="tOcc"></tbody></table></div></div>
+      <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Horas no dia (h)</th><th>% da jornada</th><th>Falta ou sobra no dia</th><th>Situação</th></tr></thead><tbody id="tOccDay"></tbody></table></div></div></div>
+
+    <div id="t-diag" class="hide"><div class="card"><h3>Diagnóstico da extração</h3><div id="diagSummary"></div><pre id="rawJson">Sem dados.</pre></div></div>
+  </div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const FIELDS=[['owner_name','Colaborador'],['sector','Equipe'],['activity','Atividade'],['service_name','Serviço'],['category','Categoria'],['status','Status'],['client_name','Cliente']];
+let raw=[],rows=[],firstTicket=null;
+
+/* ---------- utilidades ---------- */
+// Pessoas no Movidesk usam "businessName" (não "name"). Esse era o motivo dos agentes virem vazios.
+function nm(p){
+  if(!p) return '';
+  if(typeof p==='string') return p.trim();
+  return String(p.businessName||p.name||p.fullName||p.userName||p.email||'').trim();
+}
+function lbl(x){return x&&typeof x==='object'?String(x.name||x.description||x.businessName||'').trim():String(x||'').trim()}
+function hrs(v){
+  if(v==null||v==='') return 0;
+  if(typeof v==='number') return v;
+  const p=String(v).split(':').map(Number);
+  if(p.length>1&&p.every(n=>!isNaN(n))) return p[0]+(p[1]||0)/60+(p[2]||0)/3600;
+  return parseFloat(v)||0;
+}
+const fmtDate=d=>d?d.split('-').reverse().join('/'):'—';
+const csvDate=d=>{const p=String(d||'').split('/');return p.length===3?`${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`:d||''};
+const log=(m,c)=>{$('log').className=c||'';$('log').textContent=m};
+const ticketUrl=id=>{const d=(localStorage.getItem('md_domain')||'').replace(/\/+$/,'');return d?`${d}/Ticket/Edit/${id}`:''};
+
+/* ---------- API Movidesk ---------- */
+const EXPANDS=[
+  'owner,clients($expand=organization),actions($select=id,createdDate,createdBy,description,timeAppointments;$expand=createdBy($select=id,businessName),timeAppointments)',
+  'owner,clients($expand=organization),actions($expand=createdBy,timeAppointments)',
+  'owner,clients,actions($expand=createdBy,timeAppointments)',
+  'owner,clients,actions'
+];
+const SELECT='id,createdDate,lastUpdate,subject,category,status,serviceFirstLevel,ownerTeam,owner,clients,actions,slaSolutionDate';
+let stats={},CF='';
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function build(all){stats={tk:all.length,ac:0,ap:0,tw:0};raw=all.flatMap(flatten)}
+
+let TK=new Map(),syncing=false,apiOn=false,EXP=null,lastSync=0,lastTry=0,lastFull=0,lastSig='',lastToday='',fails=0,lastErr='';
+let liveEvents=JSON.parse(localStorage.getItem('md_live_events')||'[]');
+function dueValue(t){const direct=t.slaSolutionDate||t.dueDate||t.expectedDate||t.forecastDate||'';if(direct)return String(direct);const vals=t.customFieldValues||[];const found=vals.filter(x=>(CF&&String(x.customFieldId)===String(CF))||/prazo|previs|venc|solu[cç][aã]o|entrega|data limite/i.test(String(x.customFieldName||x.name||x.label||''))).map(x=>String(x.value??''));return found.join(' | ')}
+function showLiveEvents(){
+ const el=$('liveChanges'),panel=$('livePanelList'),f=$('liveFilter')?.value||'all',q=norm($('liveSearch')?.value||'');
+ const due=liveEvents.filter(e=>e.kind==='PREVISÃO / PRAZO ALTERADO').length,st=liveEvents.filter(e=>e.kind==='STATUS ALTERADO').length,gen=liveEvents.filter(e=>e.kind==='CHAMADO ATUALIZADO').length;
+ if($('liveCount'))$('liveCount').textContent=liveEvents.length;if($('liveDue'))$('liveDue').textContent=due;if($('liveStatus'))$('liveStatus').textContent=st;if($('liveGeneral'))$('liveGeneral').textContent=gen;
+ const list=liveEvents.filter(e=>(f==='all'||e.kind===f)&&(!q||norm([e.id,e.subject,e.detail].join(' ')).includes(q)));
+ const html=list.length?list.slice(0,100).map(e=>`<div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:13px;border:1px solid #e5eaf2;border-radius:10px;margin:8px 0;background:#fff"><div style="min-width:0"><b style="color:#14213d">#${esc(e.id)}</b> · <b>${esc(e.subject)}</b><div style="margin-top:5px"><span class="pill">${esc(e.kind)}</span> ${esc(e.detail)}</div></div><small style="color:#778;white-space:nowrap">${new Date(e.at).toLocaleString('pt-BR')}</small></div>`).join(''):'<div style="padding:22px;text-align:center;color:var(--muted)">Nenhum ticket corresponde ao filtro. As novas alterações aparecerão aqui após a sincronização.</div>';
+ if(el)el.innerHTML=liveEvents.length?liveEvents.slice(0,20).map(e=>`<div style="padding:7px 0;border-bottom:1px solid #e1e8f3"><b>#${esc(e.id)}</b> · ${esc(e.subject)}<br><span style="color:#2457a7">${esc(e.kind)}</span> ${esc(e.detail)}<small style="display:block;color:#778">${new Date(e.at).toLocaleString('pt-BR')}</small></div>`).join(''):'Nenhuma alteração detectada ainda.';
+ if(panel)panel.innerHTML=html;
+}
+function clearLiveEvents(){if(!confirm('Limpar o histórico de alterações deste navegador?'))return;liveEvents=[];localStorage.removeItem('md_live_events');showLiveEvents()}
+function detectTicketChanges(incoming){const now=Date.now();for(const t of incoming){const old=TK.get(String(t.id));if(!old)continue;const oldDue=dueValue(old),newDue=dueValue(t);if(oldDue!==newDue){liveEvents.unshift({id:t.id,subject:t.subject||old.subject||'Sem assunto',kind:'PREVISÃO / PRAZO ALTERADO',detail:`${oldDue||'Não informado'} → ${newDue||'Não informado'}`,at:now});}
+if(String(old.status||'')!==String(t.status||'')){liveEvents.unshift({id:t.id,subject:t.subject||old.subject||'Sem assunto',kind:'STATUS ALTERADO',detail:`${old.status||'—'} → ${t.status||'—'}`,at:now});}
+if(old.lastUpdate&&t.lastUpdate&&String(old.lastUpdate)!==String(t.lastUpdate)&&oldDue===newDue&&String(old.status||'')===String(t.status||'')){liveEvents.unshift({id:t.id,subject:t.subject||old.subject||'Sem assunto',kind:'CHAMADO ATUALIZADO',detail:`Última atualização: ${new Date(t.lastUpdate).toLocaleString('pt-BR')}`,at:now});}}
+liveEvents=liveEvents.slice(0,100);localStorage.setItem('md_live_events',JSON.stringify(liveEvents));showLiveEvents()}
+
+const AUTO_FULL_MS=216e5;
+
+async function sync(auto){
+  if(syncing) return;
+  let dom=$('domain').value.trim().replace(/\/+$/,''),tok=$('token').value.trim(),ini=$('startDate').value;
+  if(dom&&!/^https?:\/\//i.test(dom)) dom='https://'+dom;
+  if(!dom||!tok) return auto?0:log('Preencha domínio e token.','err');
+  if(!ini) return auto?0:log('Informe a data inicial.','err');
+  localStorage.setItem('md_domain',dom);localStorage.setItem('md_token',tok);localStorage.setItem('md_ini',ini);
+  CF=$('cfId').value.trim();localStorage.setItem('md_cf',CF);const SEL=SELECT+(CF?',customFieldValues':'');
+  const began=Date.now(),t0=performance.now(),sig=[dom,ini,CF].join('|');
+  const full=!auto||!TK.size||sig!==lastSig||began-lastFull>AUTO_FULL_MS;
+  if(auto){ // virou o dia com a página aberta: empurra a data final junto
+    const today=iso(new Date());
+    if(today!==lastToday){if($('endDate').value===lastToday)$('endDate').value=today;if($('fEnd').value===lastToday)$('fEnd').value=today;lastToday=today}
+  }
+  syncing=true;apiOn=true;lastTry=began;autoLabel();
+  // sincronização completa: tudo desde a data inicial. Incremental: só o que mudou desde a última (com 5 min de folga).
+  const filter=full?`lastUpdate ge ${ini}T00:00:00.00z`:`lastUpdate ge ${new Date(lastSync-3e5).toISOString().slice(0,19)}.00z`;
+  const url=(exp,skip)=>`${dom}/public/v1/tickets?token=${encodeURIComponent(tok)}&$select=${SEL}&$expand=${encodeURIComponent(exp)}&$filter=${encodeURIComponent(filter)}&$orderby=${encodeURIComponent('lastUpdate desc')}&$top=100&$skip=${skip}`;
+  const get=async(exp,skip)=>{
+    for(let i=0;i<6;i++){
+      const r=await fetch(url(exp,skip));
+      if(r.status===429){log('Limite da API atingido, aguardando 20s e continuando...');await sleep(20000);continue}
+      if(!r.ok){const e=new Error('Erro '+r.status);e.status=r.status;throw e}
+      return r.json();
+    }
+    throw new Error('API com limite de requisições excedido. Tente de novo em 1 minuto.');
+  };
+  try{
+    log(full?'Conectando...':'Buscando alterações...');
+    if(full) EXP=null;
+    let first;
+    if(EXP) first=await get(EXP,0);
+    else{
+      for(const e of EXPANDS){
+        try{first=await get(e,0);EXP=e;break}
+        catch(err){
+          if(err.status===401||err.status===403){const x=new Error('Token inválido ou sem permissão ('+err.status+')');x.status=err.status;throw x}
+          if(!(err.status>=400)) throw err;
+        }
+      }
+      if(!EXP) throw new Error('A API recusou a consulta.');
+    }
+    let all=[...first],skip=100,done=first.length<100;
+    const live=!auto&&full;
+    if(live){build(all);start(`API Movidesk (${all.length} tickets...)`)}
+    const W=5;
+    while(!done&&all.length<20000){
+      log(`Buscando em paralelo... ${all.length} tickets`);
+      const pages=await Promise.all(Array.from({length:W},(_,i)=>get(EXP,skip+i*100)));
+      pages.forEach(p=>{all=all.concat(p);if(p.length<100)done=true});
+      skip+=W*100;
+      if(live){build(all);applyFilters()}
+    }
+    detectTicketChanges(all);
+    if(full) TK=new Map();
+    all.forEach(t=>TK.set(String(t.id),slim(t)));
+    const list=[...TK.values()];
+    lastSync=began;if(full)lastFull=began;lastSig=sig;fails=0;lastErr='';persist();
+    if(full||all.length){
+      firstTicket=list.find(t=>(t.actions||[]).length)||list[0]||null;
+      build(list);start(`API Movidesk (${list.length} tickets)`,auto);
+    }
+    log(full?`Concluído em ${((performance.now()-t0)/1000).toFixed(1)}s: ${list.length} tickets, ${raw.length} lançamentos de tempo.`
+            :`Atualizado: ${all.length} ticket(s) alterado(s), ${list.length} no total.`,'okc');
+    if(!raw.length&&!auto) showTab('diag');
+    iaRun(true);
+  }catch(e){
+    fails++;lastErr=e.message;
+    log('Erro: '+e.message+(e instanceof TypeError?' (falha de rede ou CORS: verifique o domínio ou rode por um servidor local)':''),'err');
+    if(auto&&(e.status===401||e.status===403)){$('autoMin').value='0';autoChanged()}
+  }finally{syncing=false;autoLabel()}
 }
 
-const SYSTEM = `Você lê textos de chamados de suporte e extrai a PREVISÃO DE HORAS de trabalho que o próprio texto informa (por exemplo "previsão de 3h", "estimado em 2 dias", "30 minutos", "meio período").
-Regras:
-- Só extraia o que está escrito no texto. Nunca invente nem estime por conta própria; se não houver previsão clara, omita o chamado.
-- Converta tudo para horas decimais. Para "dias", multiplique pela jornada diária (horas por dia) informada.
-- "trecho" é o pedaço curto do texto original (até 120 caracteres) que contém a previsão.
-- "confianca" é "alta", "media" ou "baixa".
-- Responda SOMENTE com JSON puro, sem markdown, no formato:
-{"resultados":[{"id":"123","horas":2.5,"confianca":"alta","trecho":"..."}]}`;
+/* ---------- atualização automática ---------- */
+const nextDelay=()=>{const m=+$('autoMin').value*6e4;return !m?0:fails?Math.min(Math.max(m,6e4)*2**fails,18e5):m};
+function autoLabel(){
+  const el=$('auto'),ch=$('chip'),m=+$('autoMin').value;
+  if(!apiOn){el.textContent='';ch.className='chip';return}
+  ch.className='chip '+(syncing?'busy':fails?'err':lastSync?'ok':'');
+  if(syncing){el.textContent=' · atualizando…';return}
+  if(!lastSync&&!fails){el.textContent='';return}
+  const t=lastSync?new Date(lastSync).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'—',nx=Math.max(0,Math.ceil((lastTry+nextDelay()-Date.now())/6e4));
+  el.textContent=fails?` · falha (${lastErr}); nova tentativa em ${nx} min; dados salvos de ${t}`:` · atualizado às ${t}`+(m?` · próxima em ${nx} min`:' · automático desligado');
+}
+function autoChanged(){localStorage.setItem('md_auto',$('autoMin').value);autoLabel();tick()}
+function tick(){
+  autoLabel();
+  const m=+$('autoMin').value;
+  if(!m||!apiOn||syncing||document.hidden||navigator.onLine===false) return;
+  if(Date.now()-lastTry<nextDelay()) return;
+  const a=document.activeElement; // não atualiza enquanto a pessoa digita numa tabela/lista
+  if(a&&a.closest&&a.closest('table,textarea')) return;
+  sync(true);
+}
+setInterval(tick,10000);
+document.addEventListener('visibilitychange',tick);
+addEventListener('online',()=>{fails=0;lastTry=0;tick()});
 
-function parseJson(text) {
-  const clean = String(text || '').replace(/```json|```/gi, '').trim();
-  const i = clean.indexOf('{');
-  const j = clean.lastIndexOf('}');
-  if (i < 0 || j <= i) return { resultados: [] };
-  return JSON.parse(clean.slice(i, j + 1));
+/* robô de leitura: procura no assunto e nas ações quantas horas a pessoa disse que ia levar */
+const stripH=x=>String(x||'').replace(/<[^>]*>/g,' ').replace(/&nbsp;/gi,' ').replace(/\s+/g,' ').trim().slice(0,4000);
+const WN={um:1,uma:1,dois:2,duas:2,'tres':3,'três':3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10};
+const EST_KW='previs[aã]o|previst[oa]s?|estimativa|estimad[oa]s?|estimo|esfor[cç]o|or[cç]ad[oa]s?|or[cç]amento|vai\\s+levar|levar[aá]|levaremos|leva\\s+(?:cerca\\s+de|uns?|aprox\\w*)|tempo\\s+(?:total\\s+)?(?:de\\s+)?(?:execu[cç][aã]o|desenvolvimento)';
+const NUM='(\\d{1,4}(?:[.,]\\d{1,2})?)(?:\\s*(?:a|à|-|até|ate)\\s*(\\d{1,4}(?:[.,]\\d{1,2})?))?';
+const UN='\\s*(horas?|hrs?|hs|h|min(?:utos?)?|dias?)(?![a-zà-ú])';
+const EST_A=new RegExp('(?:'+EST_KW+')([^0-9\\n]{0,30}?)'+NUM+UN,'i');
+const EST_B=new RegExp(NUM+UN+'\\s*(?:de\\s+|em\\s+)?(?:previst[ao]s?|estimad[ao]s?|esfor[cç]o|or[cç]ad[ao]s?)','i');
+const EST_BAD=/entreg|prazo|venc|respost|retorn|sla|atendiment|reuni|hor[aá]rio|janela|plant[aã]o|dispon/i; // prazo de entrega não é esforço
+const EST_NEG=/(?:\bsem|\bn[aã]o|nenhum[ao]?)\s+(?:\w+\s+){0,2}$/i; // "sem previsão de 2h"
+// normaliza "1h30", "2 horas e 15 min", "meia hora", "duas horas" para número + unidade
+const prep=x=>stripH(x)
+  .replace(/(\d{1,3})h(\d{2})(?!\d)/gi,(_,h,m)=>(+h+m/60).toFixed(2)+'h')
+  .replace(/(\d{1,3})\s*h(?:oras?)?\s*e\s*(\d{1,2})\s*min\w*/gi,(_,h,m)=>(+h+m/60).toFixed(2)+'h')
+  .replace(/(\d+)\s*horas?\s*e\s*meia/gi,(_,h)=>(+h+.5)+'h')
+  .replace(/\bmeia\s+hora\b/gi,'0.5h').replace(/\bmeio\s+dia\b/gi,'0.5 dia')
+  .replace(/\b(um|uma|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez)\s+(horas?|dias?)\b/gi,(_,w,u)=>WN[w.toLowerCase()]+' '+u);
+function readEstimate(t){
+  const acts=(t.actions||[]).slice().sort((a,b)=>String(a.createdDate).localeCompare(String(b.createdDate))).slice(0,12);
+  const T=[['assunto',t.subject],...acts.map((a,i)=>[i?'ação '+(i+1):'descrição',a.description||a.htmlDescription])],hits=[];
+  for(const [src,txt] of T){
+    const tx=prep(txt);if(!tx) continue;
+    let m=EST_A.exec(tx),a,b,u,sure=1;
+    if(m&&!EST_BAD.test(m[1])&&!EST_NEG.test(tx.slice(Math.max(0,m.index-25),m.index))){a=m[2];b=m[3];u=m[4]}
+    else if((m=EST_B.exec(tx))&&!EST_NEG.test(tx.slice(Math.max(0,m.index-25),m.index))){a=m[1];b=m[2];u=m[3];sure=0}
+    else continue;
+    let n=parseFloat((b||a).replace(',','.'));if(!(n>0)) continue; // faixa "10 a 20 h": usa o maior valor
+    const d=/^d/i.test(u);if(/^min/i.test(u)) n/=60;
+    hits.push({v:d ? n * (window.R ? window.R().jor : 8) : n, u:'h', origV:n, origU:d?'d':'h', src,snip:m[0].slice(0,70),conf:sure?'alta':'média',range:!!b});
+  }
+  if(!hits.length) return null;
+  const e=hits[hits.length-1];e.rev=hits.length;return e; // vale a estimativa mais recente
 }
 
-export default async function handler(req, res) {
-  res.setHeader('Cache-Control', 'no-store');
-  try {
-    if (req.method !== 'POST') {
-      res.setHeader('Allow', 'POST');
-      return res.status(405).json({ erro: 'Use POST.' });
-    }
-    if (!ACCESS_KEY || !API_KEY) {
-      return res.status(500).json({ erro: 'Servidor sem configuração: defina ACCESS_KEY e GEMINI_API_KEY na Vercel.' });
-    }
-    if (!sameKey(req.headers['x-access-key'], ACCESS_KEY)) {
-      return res.status(401).json({ erro: 'Senha da função inválida.' });
-    }
+const ticketText=t=>[t.subject,...(t.actions||[]).slice(0,3).map(a=>stripH(a.description||a.htmlDescription))].filter(Boolean).join(' | ').slice(0,3000);
 
-    let body = req.body;
-    if (typeof body === 'string') {
-      try { body = JSON.parse(body); } catch { return res.status(400).json({ erro: 'JSON malformatado.' }); }
-    }
-    const tickets = Array.isArray(body?.tickets) ? body.tickets.slice(0, 12) : [];
-    if (!tickets.length) return res.status(400).json({ erro: 'Nenhum chamado enviado.' });
-    const jornada = Number(body.jornada) > 0 ? Number(body.jornada) : 8;
+function flatten(t){
+  const owner=nm(t.owner),team=lbl(t.ownerTeam)||'Sem equipe';
+  const c=(t.clients||[])[0]||{};
+  const base={ticket_id:String(t.id),subject:t.subject||'Sem assunto',
+    client_name:nm(c.organization)||nm(c)||'Não informado',
+    planned:(()=>{const f=CF&&(t.customFieldValues||[]).find(x=>String(x.customFieldId)===CF);return f?parseFloat(String(f.value).replace(',','.'))||0:0})(),
+    service_name:t.serviceFirstLevel||'Geral',category:t.category||'Geral',status:t.status||'—',est:IG[String(t.id)]?null:readEstimate(t),txt:ticketText(t)};
+  const out=[];
+  (t.actions||[]).forEach(a=>{
+    stats.ac++;
+    const add=(h,agent,date,act,tm,src)=>{
+      if(!(h>0)) return;
+      out.push({...base,hours:h,
+        owner_name:agent||owner||'Não atribuído',
+        agent_src:agent?src:(owner?'responsável do ticket':'nenhum'),
+        sector:tm||team,activity:act||'Geral',
+        date:String(date||a.createdDate||t.createdDate||'').substring(0,10)});
+    };
+    const aps=Array.isArray(a.timeAppointments)?a.timeAppointments:[];
+    if(aps.length) stats.ap+=aps.length;
+    else if(a.timeWorked) stats.tw++;
+    if(aps.length) aps.forEach(p=>add(hrs(p.workTime??p.accountedTime),nm(p.createdBy)||nm(p.agent)||nm(a.createdBy),p.date,lbl(p.activity),lbl(p.createdByTeam),'apontamento'));
+    else add(hrs(a.timeWorked),nm(a.createdBy),a.createdDate,lbl(a.activity),'','ação');
+  });
+  return out;
+}
 
-    const payload = tickets.map(t => ({ id: String(t.id), texto: String(t.texto || '').slice(0, 3000) }));
+/* ---------- CSV ---------- */
+function loadCSV(e){
+  const f=e.target.files[0];if(!f) return;
+  Papa.parse(f,{header:true,skipEmptyLines:true,encoding:'ISO-8859-1',complete:res=>{
+    TK=new Map();apiOn=false;autoLabel();
+    raw=res.data.map((r,i)=>({
+      ticket_id:String(r['Ticket']||i),subject:r['Assunto']||'Sem assunto',
+      client_name:r['Cliente']||'Não informado',owner_name:(r['Agente']||'Não atribuído').trim(),
+      agent_src:'csv',sector:(r['Equipe']||'Sem equipe').trim(),activity:(r['Atividade']||'Geral').trim(),
+      service_name:(r['Serviço']||'Geral').trim(),category:(r['Categoria']||'Geral').trim(),
+      status:(r['Status']||'—').trim(),date:csvDate(r['Data']),hours:hrs(r['Horas Trabalhadas']||r['Horas Apontadas'])
+    }));
+    firstTicket=res.data[0]||null;
+    start(`CSV (${raw.length} linhas)`);
+    log(`CSV carregado: ${raw.length} linhas.`,'okc');
+  }});
+}
 
-    const reqBody = JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM }] },
-      contents: [{
-        role: 'user',
-        parts: [{ text: `Jornada diária: ${jornada} horas.\nChamados (JSON):\n${JSON.stringify(payload)}` }],
-      }],
-      generationConfig: { temperature: 0, maxOutputTokens: 8192, responseMimeType: 'application/json' },
+/* ---------- painel ---------- */
+function start(src,keep){
+  keep=keep&&!$('app').classList.contains('hide');
+  $('status').textContent='Fonte: '+src;
+  $('app').classList.remove('hide');
+  buildFilters(keep);applyFilters();
+  if(!keep) showTab(raw.length?'mgmt':'diag');
+}
+
+function buildFilters(keep){
+  const box=$('filters'),old={};
+  FIELDS.forEach(([k])=>{const e=$('f_'+k);if(e)old[k]=e.value});
+  box.querySelectorAll('.dyn').forEach(n=>n.remove());
+  FIELDS.forEach(([k,label])=>{
+    const vals=[...new Set(raw.map(r=>r[k]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const d=document.createElement('div');d.className='fg dyn';
+    d.innerHTML=`<label>${label}</label><select id="f_${k}" onchange="applyFilters()"><option value="">Todos</option>${vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>`;
+    if(old[k]&&vals.includes(old[k])) d.querySelector('select').value=old[k];
+    box.appendChild(d);
+  });
+  if(!keep){$('fStart').value=$('startDate').value;$('fEnd').value=$('endDate').value}
+  initPivot();
+}
+
+function applyFilters(){
+  const s=$('fStart').value,e=$('fEnd').value;
+  const sel=FIELDS.map(([k])=>[k,$('f_'+k).value]).filter(x=>x[1]);
+  const q=(ACT==='load'||ACT==='cfg'||ACT==='diag')?[]:qn(ACT).split(' ').filter(Boolean);lastQ=q.join(' ');
+  rows=raw.filter(r=>(!s||!r.date||r.date>=s)&&(!e||!r.date||r.date<=e)&&sel.every(([k,v])=>r[k]===v)&&(!q.length||q.every(w=>hay(r).includes(w))));
+  const qe=$('qc_'+ACT);if(qe) qe.textContent=q.length?`${rows.length} lançamento(s) encontrados`:'';
+  try{render()}catch(e){console.error(e);$('status').textContent='Erro ao desenhar: '+e.message}
+}
+function resetFilters(){Object.keys(CFLT).forEach(k=>delete CFLT[k]);FIELDS.forEach(([k])=>$('f_'+k).value='');$('fStart').value='';$('fEnd').value='';applyFilters()}
+
+function groupAgents(){
+  const m={};
+  rows.forEach(r=>{
+    const a=m[r.owner_name]??={name:r.owner_name,teams:{},n:0,h:0,tk:new Set(),cl:new Set(),days:new Set()};
+    a.teams[r.sector]=(a.teams[r.sector]||0)+r.hours;a.n++;a.h+=r.hours;a.tk.add(r.ticket_id);a.cl.add(r.client_name);if(r.date)a.days.add(r.date);
+  });
+  return Object.values(m).map(a=>({...a,team:Object.entries(a.teams).sort((x,y)=>y[1]-x[1])[0][0]})).sort((x,y)=>y.h-x.h);
+}
+
+function render(){
+  const c=R(),kd=mk(c);
+  const tot=rows.reduce((s,r)=>s+r.hours,0);
+  $('kT').textContent=new Set(rows.map(r=>r.ticket_id)).size;
+  $('kH').textContent=H(tot);
+  $('kA').textContent=new Set(rows.map(r=>r.owner_name)).size;
+  $('kC').textContent=new Set(rows.map(r=>r.client_name)).size;
+
+  const LIM=1000;
+  $('tEntries').innerHTML=rows.slice(0,LIM).map(r=>{
+    const u=ticketUrl(r.ticket_id);
+    return `<tr><td>${u?`<a href="${esc(u)}" target="_blank" rel="noopener">#${esc(r.ticket_id)}</a>`:'#'+esc(r.ticket_id)}</td><td>${fmtDate(r.date)} ${tag(kd(r.date))}</td><td><b>${esc(r.client_name)}</b></td><td>${esc(r.subject)}</td><td><b>${esc(r.owner_name)}</b></td><td><span class="pill">${esc(r.sector)}</span></td><td>${esc(r.activity)}</td><td><span class="pill">${esc(r.status)}</span></td><td><b>${H(r.hours)}</b></td></tr>`;
+  }).join('');
+  $('cap').textContent=rows.length>LIM?`Mostrando ${LIM} de ${rows.length} lançamentos. O Excel exporta todos.`:'';
+
+
+  renderPivot();renderDiag();
+  renderProj(c);renderBudget(c);renderOcc(c);renderMgmt(c);renderVip(c);renderCharts(c);renderBot(c);
+  enhanceTables();
+}
+
+
+function renderDiag(){
+  const c={};raw.forEach(r=>c[r.agent_src]=(c[r.agent_src]||0)+1);
+  $('diagSummary').innerHTML=`<p><b>Tickets:</b> ${stats.tk||0} · <b>Ações:</b> ${stats.ac||0} · <b>Apontamentos (timeAppointments):</b> ${stats.ap||0} · <b>Ações com timeWorked:</b> ${stats.tw||0}</p>`+'<p>Origem do nome do colaborador em cada lançamento:</p>'+Object.entries(c).map(([k,v])=>`<span class="pill" style="margin-right:6px">${esc(k)}: ${v}</span>`).join('')+
+    '<p style="color:var(--muted)">Se aparecer muito "responsável do ticket" ou "nenhum", o JSON abaixo mostra quais campos a API devolveu.</p>';
+  const jt=firstTicket?JSON.stringify(firstTicket,null,2).slice(0,12000):'Sem dados.',dq=norm(Q.diag||'');
+  $('rawJson').textContent=dq?(jt.split('\n').filter(l=>norm(l).includes(dq)).join('\n')||'Nenhuma linha corresponde à busca.'):jt;
+}
+
+const Q={};let lastQ='';
+const qn=t=>norm(Q[t]||'');
+let ACT='cfg';
+function showTab(t){
+  ACT=t;document.body.dataset.t=t;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  $('t-cfg').classList.toggle('hide',t!=='cfg');
+  ['live','mgmt','vip','charts','entries','pivot','proj','occ','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  if(t==='live')showLiveEvents();
+  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag');
+  if(raw.length&&t!=='load'&&t!=='cfg'&&t!=='diag'&&qn(t)!==lastQ) applyFilters();
+}
+$('tabs').addEventListener('click',e=>{const btn=e.target.closest('button');if(btn&&btn.dataset.t)showTab(btn.dataset.t)});
+
+
+/* ---------- regras e relatórios ---------- */
+const RF=['rMeta','rJor','rMin','rFld','rKw','rIds','rFac','rHol'];
+function R(){return{meta:+$('rMeta').value||4,jor:+$('rJor').value||8,min:(+$('rMin').value||80)/100,fld:$('rFld').value,kw:$('rKw').value.trim().toLowerCase(),ids:$('rIds').value.split(/[\s,;#]+/).filter(Boolean),fac:$('rFac').value,hol:$('rHol').value.split(/[,;\s]+/).map(csvDate).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x))}}
+function rulesChanged(){localStorage.setItem('md_rules',JSON.stringify(Object.fromEntries(RF.map(i=>[i,$(i).value]))));if(raw.length)render()}
+/* calendário: fins de semana e feriados nacionais */
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+function easter(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),n=h+l-7*m+114;return new Date(y,Math.floor(n/31)-1,n%31+1,12)}
+const HC={};
+function hols(y,c){
+  const key=y+c.fac;if(HC[key]) return HC[key];
+  const m=new Map(),E=easter(y),sh=n=>{const d=new Date(E);d.setDate(d.getDate()+n);return iso(d)};
+  [['01-01','Confraternização Universal'],['04-21','Tiradentes'],['05-01','Dia do Trabalho'],['09-07','Independência'],['09-08','N. Sra. da Luz dos Pinhais (Curitiba)'],['10-12','N. Sra. Aparecida'],['11-02','Finados'],['11-15','Proclamação da República'],['11-20','Consciência Negra'],['12-25','Natal']].forEach(([d,n])=>m.set(`${y}-${d}`,n));
+  m.set(sh(-2),'Sexta-feira Santa');
+  if(c.fac==='1'){m.set(sh(-48),'Carnaval');m.set(sh(-47),'Carnaval');m.set(sh(60),'Corpus Christi')}
+  return HC[key]=m;
+}
+function dayKind(d,c){
+  const n=hols(+d.slice(0,4),c).get(d)||(c.hol.includes(d)?'Feriado extra':'');
+  if(n) return {k:'Feriado',n};
+  const w=new Date(d+'T12:00:00').getDay();
+  return w===0?{k:'Domingo'}:w===6?{k:'Sábado'}:null;
+}
+function mk(c){const K={};return d=>d?(d in K?K[d]:(K[d]=dayKind(d,c))):null}
+const tag=k=>k?`<span class="pill warn">${esc(k.k+(k.n?': '+k.n:''))}</span>`:'';
+function period(c){
+  const dts=rows.map(r=>r.date).filter(Boolean).sort();
+  const o={s:$('fStart').value||dts[0],e:$('fEnd').value||dts[dts.length-1],work:0,wk:0,hol:[],cap:0};
+  if(!o.s||!o.e) return o;
+  for(let d=new Date(o.s+'T12:00:00'),x=new Date(o.e+'T12:00:00');d<=x;d.setDate(d.getDate()+1)){
+    const k=dayKind(iso(d),c);
+    if(!k) o.work++;else if(k.k==='Feriado') o.hol.push(iso(d)+'|'+k.n);else o.wk++;
+  }
+  o.cap=o.work*c.jor;return o;
+}
+const isProj=(r,c)=>c.ids.includes(r.ticket_id)||(c.kw&&String(r[c.fld]||'').toLowerCase().includes(c.kw));
+const bizDays=(a,b)=>{let n=0;for(let d=new Date(a+'T12:00:00'),e=new Date(b+'T12:00:00');d<=e;d.setDate(d.getDate()+1)){const w=d.getDay();if(w&&w<6)n++}return n};
+const nf=(v,d=2)=>v.toFixed(d).replace('.',',');
+const H=v=>nf(v)+' h';
+const dEq=(h,c)=>{const n=Math.abs(h)/c.jor;return n>=0.5?` (≈ ${nf(n,1)} ${n===1?'dia':'dias'} de ${c.jor} h)`:''};
+// diferença escrita por extenso: "Faltam 2,00 h (≈ 0,3 dia de 8 h)" ou "Passou 3,00 h"
+const gapTxt=(h,ref,c,low,high)=>{const d=h-ref;return Math.abs(d)<0.005?'Exato':d<0?`${low} ${H(-d)}${dEq(-d,c)}`:`${high} ${H(d)}${dEq(d,c)}`};
+const empty=n=>`<tr><td colspan="${n}" style="color:var(--muted)">Nenhum projeto encontrado. Ajuste "Projeto identificado por" e o texto, ou informe os números dos tickets.</td></tr>`;
+
+function renderProj(c){
+  const kd=mk(c),P={},tol=0.25,det=[];
+  rows.filter(r=>isProj(r,c)&&r.date).forEach(r=>{
+    const p=P[r.ticket_id]??={id:r.ticket_id,subject:r.subject,client:r.client_name,d:{}};
+    const d=p.d[r.date]??={h:0,a:new Set()};d.h+=r.hours;d.a.add(r.owner_name);
+  });
+  const st=h=>h<c.meta-tol?'low':h>c.meta+tol?'high':'ok';
+  $('tProj').innerHTML=Object.values(P).map(p=>{
+    const ds=Object.entries(p.d);let lo=0,ok=0,hi=0,tot=0;
+    ds.forEach(([dt,v])=>{const s=st(v.h);if(s==='low')lo++;else if(s==='ok')ok++;else hi++;tot+=v.h;det.push({p,dt,v,s})});
+    const avg=tot/ds.length,s=st(avg);
+    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${esc(p.client)}</td><td>${ds.length}</td><td><b>${H(tot)}</b></td><td><span class="pill ${s==='ok'?'ok':s==='high'?'bad':'warn'}">${H(avg)}</span></td><td>${lo}</td><td>${ok}</td><td>${hi?`<span class="pill bad">${hi}</span>`:0}</td></tr>`;
+  }).join('')||empty(9);
+  det.sort((a,b)=>b.dt.localeCompare(a.dt));
+  $('tProjDay').innerHTML=det.slice(0,1000).map(({p,dt,v,s})=>{
+    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${fmtDate(dt)} ${tag(kd(dt))}</td><td>${[...v.a].map(esc).join(', ')}</td><td><b>${H(v.h)}</b></td><td data-v="${(v.h-c.meta).toFixed(2)}">${gapTxt(v.h,c.meta,c,'Faltaram','Passou')}</td><td><span class="pill ${s==='ok'?'ok':s==='high'?'bad':'warn'}">${s==='ok'?'Meta cumprida':s==='high'?'Estourou':'Abaixo da meta'}</span></td></tr>`;
+  }).join('');
+}
+
+/* previsto x apontado. mode: 'p' só projetos, 'a' todos os chamados, 'g' projetos + chamados com previsão (visão da direção) */
+function budgetData(c,mode){
+  const bud=JSON.parse(localStorage.getItem('md_budget')||'{}'),M={};
+  raw.filter(r=>mode==='a'||isProj(r,c)||(mode==='g'&&(r.est||r.planned||+bud[r.ticket_id]))).forEach(r=>{
+    const p=M[r.ticket_id]??={id:r.ticket_id,subject:r.subject,client:r.client_name,status:r.status,h:0,days:new Set(),ag:new Set(),r};
+    p.h+=r.hours;if(r.date)p.days.add(r.date);p.ag.add(r.owner_name);
+  });
+  const inP={};rows.forEach(r=>{inP[r.ticket_id]=(inP[r.ticket_id]||0)+r.hours});
+  return Object.values(M).map(p=>{
+    let pl=+bud[p.id]||0,src=pl?'Digitada aqui':'';
+    if(!pl&&p.r.planned){pl=p.r.planned;src='Campo personalizado do Movidesk'}
+    if(!pl&&p.r.est){const e=p.r.est;pl=e.u==='d'?e.v*c.jor:e.v;src=`Robô leu no chamado (${e.src}): “${e.snip}”`+(e.u==='d'?` → ${e.v} dia(s) × ${c.jor} h`:'')}
+    if(!pl){const ia=IA[p.id];if(ia&&ia.horas>0&&p.r.txt&&ia.h===hash(p.r.txt)){pl=ia.horas;src=`IA leu (confiança ${ia.conf}): “${ia.trecho||'sem trecho'}” → ${nf(ia.horas,1)} h`}}
+    return {...p,pl,src,ds:[...p.days].sort(),pct:pl?p.h/pl:0,per:inP[p.id]||0};
+  });
+}
+const bst=p=>!p.pl?['','Sem previsão']:p.pct>1?['bad','Estourou']:p.pct>=.9?['warn','Quase no limite (90% ou mais)']:['ok','Dentro da previsão'];
+const byRisk=(a,b)=>(b.pct-a.pct)||(b.h-a.h);
+
+function renderBudget(c){
+  const B=budgetData(c,$('bScope').value==='a'?'a':'p').sort(byRisk);
+  $('tBudget').innerHTML=B.map(p=>{
+    const f=p.ds[0],l=p.ds[p.ds.length-1],span=f?Math.round((new Date(l)-new Date(f))/864e5)+1:0,s=bst(p);
+    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${esc(p.client)}</td><td data-v="${p.pl}"><input type="number" min="0" step="1" value="${p.pl||''}" style="width:80px" onchange="setBudget('${esc(p.id)}',this.value)"></td><td style="white-space:normal;min-width:200px">${p.src?esc(p.src):'—'}</td><td><b>${H(p.h)}</b></td><td data-v="${p.pl?(p.pl-p.h).toFixed(2):1e12}">${p.pl?gapTxt(p.h,p.pl,c,'Restam','Excedeu'):'—'}</td><td data-v="${p.pct}">${p.pl?nf(p.pct*100,0)+'%':'—'}</td><td><span class="pill ${s[0]}">${s[1]}</span></td><td>${fmtDate(f)}</td><td>${fmtDate(l)}</td><td>${span}</td><td>${p.ds.length}</td></tr>`;
+  }).join('')||empty(13);
+}
+function setBudget(id,v){const b=JSON.parse(localStorage.getItem('md_budget')||'{}');b[id]=+v||0;localStorage.setItem('md_budget',JSON.stringify(b));render()}
+
+function offByAgent(kd){const o={};rows.forEach(r=>{if(kd(r.date))o[r.owner_name]=(o[r.owner_name]||0)+r.hours});return o}
+const offPill=o=>o?`<span class="pill warn">${H(o)}</span>`:'—';
+const calTxt=(P,c)=>`${P.work} dias úteis (descontados ${P.wk} dias de fim de semana e ${P.hol.length} feriados) × ${c.jor} h = ${P.cap} h por colaborador`;
+
+function renderOcc(c){
+  const kd=mk(c),P=period(c),off=offByAgent(kd),min=P.cap*c.min;
+  $('occInfo').textContent=P.s?`Período de ${fmtDate(P.s)} a ${fmtDate(P.e)}: ${calTxt(P,c)}. Mínimo exigido: ${H(min)} (${(c.min*100).toFixed(0)}% da capacidade); abaixo disso é crítico. Horas em fim de semana e feriado contam no total e aparecem destacadas.`:'';
+  $('tOcc').innerHTML=groupAgents().sort((a,b)=>a.h-b.h).map(a=>{
+    const pct=P.cap?a.h/P.cap:0,ok=pct>=c.min;
+    return `<tr><td><b>${esc(a.name)}</b></td><td><span class="pill">${esc(a.team)}</span></td><td>${a.n}</td><td>${a.tk.size}</td><td>${a.cl.size}</td><td>${a.days.size}</td><td><b>${H(a.h)}</b></td><td>${a.days.size?H(a.h/a.days.size):'—'}</td><td>${offPill(off[a.name])}</td><td>${H(P.cap)}</td><td>${H(min)}</td><td><b>${nf(pct*100,0)}%</b></td><td data-v="${(a.h-min).toFixed(2)}">${gapTxt(a.h,min,c,'Faltam','Acima em')}</td><td data-v="${(a.h-P.cap).toFixed(2)}">${gapTxt(a.h,P.cap,c,'Faltam','Acima em')}</td><td><span class="pill ${ok?'ok':'bad'}">${ok?'Bom':'Crítico'}</span></td></tr>`;
+  }).join('');
+  const D={};
+  rows.forEach(r=>{if(r.date){const k=r.owner_name+'|'+r.date;D[k]=(D[k]||0)+r.hours}});
+  $('tOccDay').innerHTML=Object.entries(D).map(([k,h])=>{const i=k.lastIndexOf('|');return{n:k.slice(0,i),d:k.slice(i+1),h}})
+    .sort((x,y)=>y.d.localeCompare(x.d)||x.n.localeCompare(y.n)).slice(0,1000).map(({n,d,h})=>{
+      const p=h/c.jor,k=kd(d),ok=p>=c.min;
+      return `<tr><td>${fmtDate(d)} ${tag(k)}</td><td><b>${esc(n)}</b></td><td>${H(h)}</td><td>${nf(p*100,0)}%</td><td data-v="${(h-c.jor).toFixed(2)}">${k?'Dia não útil':gapTxt(h,c.jor,c,'Faltaram','Acima em')}</td><td><span class="pill ${k?'warn':ok?'ok':'bad'}">${k?'Dia não útil':ok?'Bom':'Crítico'}</span></td></tr>`;
+    }).join('');
+}
+
+function renderMgmt(c){
+  const kd=mk(c),P=period(c),tot=rows.reduce((s,r)=>s+r.hours,0),offH=rows.reduce((s,r)=>s+(kd(r.date)?r.hours:0),0);
+  const N=+$('mgTop').value||10,nAg=new Set(rows.map(r=>r.owner_name)).size,min=P.cap*c.min;
+  const pc=v=>tot?nf(v/tot*100,1)+'%':'0%';
+  $('mgInfo').innerHTML=P.s?`<b>Período:</b> ${fmtDate(P.s)} a ${fmtDate(P.e)} · ${calTxt(P,c)}.${P.hol.length?'<br><span style="color:var(--muted)">Feriados: '+P.hol.map(x=>{const [d,n]=x.split('|');return fmtDate(d).slice(0,5)+' '+esc(n)}).join(', ')+'</span>':''}`:'Carregue os dados para gerar o relatório.';
+  const kp=[['Horas apontadas',H(tot)],['Chamados',new Set(rows.map(r=>r.ticket_id)).size],['Empresas',new Set(rows.map(r=>r.client_name)).size],['Colaboradores',nAg],['Horas em dias não úteis',H(offH)+(tot?` (${(offH/tot*100).toFixed(0)}%)`:'')]];
+  $('mgKpi').innerHTML=kp.map(([l,v])=>`<div class="card"><small>${l}</small><div><b style="font-size:22px">${v}</b></div></div>`).join('');
+  const grp=key=>{const m={};rows.forEach(r=>{const g=m[r[key]]??={r,h:0,off:0,k:0,tk:new Set(),ag:new Set(),days:new Set()};g.h+=r.hours;g.k++;if(kd(r.date))g.off+=r.hours;g.tk.add(r.ticket_id);g.ag.add(r.owner_name);if(r.date)g.days.add(r.date)});return Object.values(m).sort((a,b)=>b.h-a.h)};
+  const cliAll=grp('client_name'),cli=cliAll.slice(0,N),mx=Math.max(1,...cli.map(g=>g.h));
+  $('mgBars').innerHTML=cli.map(g=>`<div class="bar"><span style="width:220px"><b>${esc(g.r.client_name)}</b></span><i><u style="width:${g.h/mx*100}%"></u></i><b style="width:90px;text-align:right">${H(g.h)}</b></div>`).join('');
+  const VL=vipList();
+  $('tMgCli').innerHTML=cli.map(g=>`<tr><td><b>${esc(g.r.client_name)}</b>${vipOf(g.r.client_name,VL)?' <span class="pill ok">VIP</span>':''}</td><td><b>${H(g.h)}</b></td><td>${pc(g.h)}</td><td>${g.tk.size}</td><td>${g.ag.size}</td><td>${offPill(g.off)}</td></tr>`).join('');
+  $('tMgTk').innerHTML=grp('ticket_id').slice(0,N).map(g=>`<tr><td>#${esc(g.r.ticket_id)}</td><td>${esc(g.r.subject)}</td><td>${esc(g.r.client_name)}</td><td><b>${H(g.h)}</b></td><td>${pc(g.h)}</td><td>${g.k}</td><td>${g.ag.size}</td><td>${g.days.size}</td><td>${offPill(g.off)}</td><td><span class="pill">${esc(g.r.status)}</span></td></tr>`).join('');
+
+  // colaboradores
+  const off=offByAgent(kd),AC={};
+  rows.forEach(r=>{const m=AC[r.owner_name]??={};m[r.client_name]=(m[r.client_name]||0)+r.hours});
+  const topCli=n=>{const e=Object.entries(AC[n]||{}).sort((a,b)=>b[1]-a[1])[0];return e?`${esc(e[0])} (${H(e[1])})`:'—'};
+  const agp=groupAgents().map(a=>({a,pct:P.cap?a.h/P.cap:0,o:off[a.name]||0})).sort((x,y)=>y.pct-x.pct);
+  $('tMgAg').innerHTML=agp.slice(0,N).map(({a,pct,o})=>{
+    const s=pct>1?['bad','Sobrecarregado']:pct>=.9?['warn','No limite']:['ok','Dentro da jornada'];
+    return `<tr><td><b>${esc(a.name)}</b></td><td><span class="pill">${esc(a.team)}</span></td><td><b>${H(a.h)}</b></td><td>${H(P.cap)}</td><td><b>${nf(pct*100,0)}%</b></td><td data-v="${(a.h-P.cap).toFixed(2)}">${gapTxt(a.h,P.cap,c,'Folga de','Passou')}</td><td>${a.tk.size}</td><td>${topCli(a.name)}</td><td>${P.work?H((a.h-o)/P.work):'—'}</td><td>${offPill(o)}</td><td><span class="pill ${s[0]}">${s[1]}</span></td></tr>`;
+  }).join('');
+
+  // projetos / chamados que estouram
+  const B=budgetData(c,'g').sort(byRisk);
+  $('tMgPrj').innerHTML=B.slice(0,N).map(p=>{
+    const s=bst(p);
+    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${esc(p.client)}</td><td>${p.pl?H(p.pl):'—'}</td><td><b>${H(p.h)}</b></td><td data-v="${p.pl?(p.pl-p.h).toFixed(2):1e12}">${p.pl?gapTxt(p.h,p.pl,c,'Restam','Excedeu'):'—'}</td><td data-v="${p.pct}">${p.pl?nf(p.pct*100,0)+'%':'—'}</td><td>${H(p.per)}</td><td>${p.ag.size}</td><td><span class="pill ${s[0]}">${s[1]}</span></td></tr>`;
+  }).join('')||empty(10);
+
+  // resumo em linguagem simples (também sai no PDF)
+  const S=[],list=(a,f,k=3)=>a.slice(0,k).map(f).join('; ');
+  if(!rows.length||!P.s){$('mgSum').innerHTML='<p style="color:var(--muted)">Carregue os dados para gerar o resumo.</p>';return}
+  const capT=P.cap*nAg;
+  S.push(['',`<b>Visão geral:</b> de ${fmtDate(P.s)} a ${fmtDate(P.e)} a equipe apontou <b>${H(tot)}</b> de uma capacidade de ${H(capT)} (${capT?nf(tot/capT*100,0):0}%), em ${P.work} dia(s) útil(eis) e ${nAg} colaborador(es).`]);
+  const over=agp.filter(x=>P.cap&&x.pct>1),low=agp.filter(x=>P.cap&&x.a.h<min).sort((x,y)=>x.a.h-y.a.h);
+  S.push(over.length?['al',`<b>Sobrecarga:</b> ${over.length} colaborador(es) passaram da capacidade. Os maiores: ${list(over,x=>`${esc(x.a.name)} (${nf(x.pct*100,0)}%, passou ${H(x.a.h-P.cap)})`)}.`]:['',`<b>Sobrecarga:</b> ninguém passou da capacidade no período.`]);
+  if(low.length) S.push(['wn',`<b>Abaixo do mínimo de ${(c.min*100).toFixed(0)}%:</b> ${low.length} colaborador(es). Os mais distantes: ${list(low,x=>`${esc(x.a.name)} (faltam ${H(min-x.a.h)}${dEq(min-x.a.h,c)})`)}.`]);
+  const bad=B.filter(p=>p.pl&&p.h>p.pl),near=B.filter(p=>p.pl&&p.pct>=.9&&p.pct<=1),nopl=B.filter(p=>!p.pl);
+  S.push(bad.length?['al',`<b>Projetos estourados:</b> ${bad.length} passaram da previsão. Os piores: ${list(bad,p=>`#${esc(p.id)} ${esc(p.subject.slice(0,50))} (excedeu ${H(p.h-p.pl)}; ${nf(p.pct*100,0)}% de ${H(p.pl)})`)}.`]:['',`<b>Projetos estourados:</b> nenhum chamado com previsão passou do limite.`]);
+  if(near.length) S.push(['wn',`<b>Quase no limite (90% ou mais):</b> ${near.length} — ${list(near,p=>`#${esc(p.id)} (restam ${H(p.pl-p.h)})`)}.`]);
+  if(nopl.length) S.push(['',`<b>Sem previsão de horas:</b> ${nopl.length} projeto(s)/chamado(s) sem previsão informada, então não dá para saber se estouraram. Informe na aba Projetos ou no texto do chamado (ex.: “previsão 20h”).`]);
+  if(cliAll[0]) S.push(['',`<b>Empresa que mais consome:</b> ${esc(cliAll[0].r.client_name)} com ${H(cliAll[0].h)} (${pc(cliAll[0].h)} do total).`]);
+  if(offH>0) S.push(['wn',`<b>Dias não úteis:</b> ${H(offH)} (${nf(offH/tot*100,0)}% do total) foram apontadas em fim de semana ou feriado.`]);
+  $('mgSum').innerHTML=S.map(([k,t])=>`<p class="${k}">• ${t}</p>`).join('');
+}
+
+/* ---------- clientes VIP ---------- */
+const norm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+const vipList=()=>$('vipList').value.split('\n').map(x=>x.trim()).filter(x=>x.length>=2);
+const vipOf=(name,V)=>{const n=` ${norm(name)} `;let b=null;V.forEach(v=>{const k=norm(v);if(k&&n.includes(` ${k} `)&&(!b||k.length>norm(b).length))b=v});return b};
+function vipChanged(){localStorage.setItem('md_vip',$('vipList').value);if(raw.length)render()}
+
+function renderVip(c){
+  const kd=mk(c),P=period(c),V=vipList(),tot=rows.reduce((s,r)=>s+r.hours,0);
+  const teamCap=P.cap*new Set(rows.map(r=>r.owner_name)).size,G={},O={},hit=new Set();
+  rows.forEach(r=>{
+    const v=vipOf(r.client_name,V),k=v||r.client_name;
+    if(v) hit.add(v);
+    const g=(v?G:O)[k]??={n:k,h:0,off:0,tk:new Set(),ag:{},cl:new Set()};
+    g.h+=r.hours;if(kd(r.date))g.off+=r.hours;g.tk.add(r.ticket_id);g.cl.add(r.client_name);
+    g.ag[r.owner_name]=(g.ag[r.owner_name]||0)+r.hours;
+  });
+  const vg=Object.values(G).sort((a,b)=>b.h-a.h),vh=vg.reduce((s,g)=>s+g.h,0);
+  const pc=v=>tot?(v/tot*100).toFixed(1)+'%':'0%';
+  const miss=V.filter(v=>!hit.has(v));
+  $('vipInfo').innerHTML=!V.length?'<span style="color:var(--muted)">Cole a lista acima para gerar o relatório.</span>':
+    `${V.length} clientes na lista, ${hit.size} com apontamento no período.`+(miss.length?`<br><span style="color:var(--muted)">Sem apontamento ou sem correspondência no nome: ${miss.map(esc).join(', ')}</span>`:'');
+  const kp=[['Horas dos VIPs',H(vh)],['% do total de horas',pc(vh)],['% da capacidade da equipe',teamCap?(vh/teamCap*100).toFixed(1)+'%':'—'],['Chamados VIP',vg.reduce((s,g)=>s+g.tk.size,0)]];
+  $('vipKpi').innerHTML=V.length?kp.map(([l,v])=>`<div class="card"><small>${l}</small><div><b style="font-size:22px">${v}</b></div></div>`).join(''):'';
+  $('tVip').innerHTML=vg.map(g=>{
+    const top=Object.entries(g.ag).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([n,h])=>`${esc(n)} (${H(h)})`).join(', ');
+    return `<tr><td><b>${esc(g.n)}</b><br><small style="color:var(--muted)">${esc([...g.cl].slice(0,3).join(', '))}</small></td><td><b>${H(g.h)}</b></td><td>${pc(g.h)}</td><td>${teamCap?(g.h/teamCap*100).toFixed(1)+'%':'—'}</td><td>${g.tk.size}</td><td>${Object.keys(g.ag).length}</td><td>${top}</td><td>${offPill(g.off)}</td></tr>`;
+  }).join('');
+  $('tVipOut').innerHTML=Object.values(O).sort((a,b)=>b.h-a.h).slice(0,15).map(g=>`<tr><td>${esc(g.n)}</td><td>${H(g.h)}</td><td>${pc(g.h)}</td><td>${g.tk.size}</td></tr>`).join('');
+}
+
+/* ---------- tabela dinâmica ---------- */
+const PF=[['client_name','Cliente'],['owner_name','Colaborador'],['sector','Equipe'],['activity','Atividade'],['service_name','Serviço'],['category','Categoria'],['status','Status'],['ticket_id','Chamado'],['mes','Mês'],['semana','Semana (segunda-feira)'],['date','Dia'],['dow','Dia da semana'],['tipo','Tipo de dia']];
+const TIMEF=['mes','semana','date'],DOW=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const DCOLS=[['ticket_id','Chamado'],['date','Data'],['mes','Mês'],['semana','Semana'],['dow','Dia da semana'],['tipo','Tipo de dia'],['client_name','Cliente'],['subject','Assunto'],['owner_name','Colaborador'],['sector','Equipe'],['activity','Atividade'],['service_name','Serviço'],['category','Categoria'],['status','Status']];
+const wk=d=>{const x=new Date(d+'T12:00:00');x.setDate(x.getDate()-((x.getDay()+6)%7));return iso(x)};
+function fv(r,f,kd){
+  const d=r.date;
+  if(f==='mes') return d?d.slice(0,7):'Sem data';
+  if(f==='semana') return d?wk(d):'Sem data';
+  if(f==='date') return d||'Sem data';
+  if(f==='dow') return d?DOW[new Date(d+'T12:00:00').getDay()]:'Sem data';
+  if(f==='tipo'){const k=kd(d);return k?(k.k==='Feriado'?'Feriado':'Fim de semana'):'Dia útil'}
+  return String(r[f]||'—');
+}
+let PV=null;
+function initPivot(){
+  if($('pvRow').options.length) return;
+  const o=PF.map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
+  $('pvRow').innerHTML=o;$('pvCol').innerHTML='<option value="">(nenhuma)</option>'+o;
+  $('pvRow').value='client_name';$('pvCol').value='mes';
+}
+function renderPivot(){
+  initPivot();
+  const c=R(),kd=mk(c),rf=$('pvRow').value,cf=$('pvCol').value,vm=$('pvVal').value;
+  const add=(o,k,r)=>{if(vm==='h')o[k]=(o[k]||0)+r.hours;else if(vm==='n')o[k]=(o[k]||0)+1;else(o[k]??=new Set()).add(vm==='t'?r.ticket_id:r.owner_name)};
+  const val=x=>x instanceof Set?x.size:(x||0);
+  const M={},RT={},CT={},G={};
+  rows.forEach(r=>{const a=fv(r,rf,kd),b=cf?fv(r,cf,kd):'Total';add(M,a+'\u0001'+b,r);add(RT,a,r);add(CT,b,r);add(G,'g',r)});
+  const srt=(o,f)=>Object.keys(o).sort((x,y)=>TIMEF.includes(f)?x.localeCompare(y):val(o[y])-val(o[x])||x.localeCompare(y));
+  const RL=srt(RT,rf),CL=srt(CT,cf),R2=RL.slice(0,60),C2=CL.slice(0,24);
+  const cells=R2.map(a=>C2.map(b=>val(M[a+'\u0001'+b])));
+  const mx=Math.max(1,...cells.flat()),fmt=v=>vm==='h'?v.toFixed(2):String(v);
+  const lab=Object.fromEntries(PF);
+  $('pvTable').innerHTML=`<thead><tr><th>${lab[rf]}${cf?' \\ '+lab[cf]:''}</th>${cf?C2.map(b=>`<th>${esc(b)}</th>`).join(''):''}<th>Total</th></tr></thead><tbody>`+
+    R2.map((a,i)=>`<tr><td><b>${esc(a)}</b></td>${cf?cells[i].map(v=>`<td style="background:rgba(37,99,235,${v?(.08+.4*v/mx).toFixed(2):0})">${v?fmt(v):''}</td>`).join(''):''}<td><b>${fmt(val(RT[a]))}</b></td></tr>`).join('')+
+    `<tr><td><b>Total</b></td>${cf?C2.map(b=>`<td><b>${fmt(val(CT[b]))}</b></td>`).join(''):''}<td><b>${fmt(val(G.g))}</b></td></tr></tbody>`;
+  $('pvNote').textContent=(RL.length>60||CL.length>24)?`Mostrando ${R2.length} de ${RL.length} linhas e ${cf?C2.length+' de '+CL.length:'0'} colunas, ordenadas por total. Os totais consideram tudo.`:'';
+  PV={rf,cf,vm,R:R2,C:cf?C2:[],cells,RT:R2.map(a=>val(RT[a])),CT:C2.map(b=>val(CT[b])),G:val(G.g)};
+}
+
+/* ---------- gráficos ---------- */
+const CH={},PAL=['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#475569','#ea580c'];
+const mkc=(id,cfg)=>{if(CH[id])CH[id].destroy();if(window.Chart){cfg.options=cfg.options||{};if(cfg.options.animation===undefined)cfg.options.animation={duration:1200,easing:'easeOutQuart'};CH[id]=new Chart($(id),cfg)}};
+const rangeDays=(a,b)=>{const o=[];for(let d=new Date(a+'T12:00:00'),x=new Date(b+'T12:00:00');d<=x;d.setDate(d.getDate()+1))o.push(iso(d));return o};
+function renderCharts(c){
+  const kd=mk(c),P=period(c),V=vipList(),agN=new Set(rows.map(r=>r.owner_name)).size;
+  const D={},W={},CL={},AC={},TM={};
+  rows.forEach(r=>{
+    if(r.date){D[r.date]=(D[r.date]||0)+r.hours;const o=W[wk(r.date)]??={};o[r.sector]=(o[r.sector]||0)+r.hours}
+    CL[r.client_name]=(CL[r.client_name]||0)+r.hours;AC[r.activity]=(AC[r.activity]||0)+r.hours;TM[r.sector]=(TM[r.sector]||0)+r.hours;
+  });
+  const ds=Object.keys(D).sort(),days=ds.length?rangeDays(ds[0],ds[ds.length-1]):[];
+  let ca=0,cb=0;const cum=[],cap=[];days.forEach(d=>{ca+=D[d]||0;cb+=kd(d)?0:c.jor*agN;cum.push(+ca.toFixed(2));cap.push(+cb.toFixed(2))});
+  mkc('chDay',{type:'line',data:{labels:days.map(fmtDate),datasets:[
+    {label:'Horas apontadas (acumulado)',data:cum,borderColor:'#2457d6',backgroundColor:'#2457d633',fill:true,tension:.2,pointRadius:0},
+    {label:'Capacidade acumulada (jornada × colaboradores, dias úteis)',data:cap,borderColor:'#c62828',borderDash:[6,4],pointRadius:0}]},options:{responsive:true,interaction:{mode:'index',intersect:false},scales:{y:{title:{display:true,text:'horas'}}}}});
+  const weeks=Object.keys(W).sort(),tops=Object.entries(TM).sort((a,b)=>b[1]-a[1]).slice(0,7).map(x=>x[0]);
+  const sets=tops.map((t,i)=>({label:t,backgroundColor:PAL[i],data:weeks.map(w=>+(W[w][t]||0).toFixed(2))}));
+  if(Object.keys(TM).length>tops.length) sets.push({label:'Demais equipes',backgroundColor:'#94a3b8',data:weeks.map(w=>+(Object.entries(W[w]).filter(([k])=>!tops.includes(k)).reduce((s,x)=>s+x[1],0)).toFixed(2))});
+  mkc('chWeek',{type:'bar',data:{labels:weeks.map(w=>'Sem. '+fmtDate(w).slice(0,5)),datasets:sets},options:{scales:{x:{stacked:true},y:{stacked:true}}}});
+  const cl=Object.entries(CL).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  mkc('chCli',{type:'bar',data:{labels:cl.map(x=>x[0]),datasets:[{label:'Horas',data:cl.map(x=>+x[1].toFixed(2)),backgroundColor:cl.map(x=>vipOf(x[0],V)?'#d97706':'#2563eb')}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+  const ag=groupAgents().slice(0,15);
+  const bar=(n,h,cp,cls)=>{const p=cp?h/cp:0,col=p>1?'var(--bad)':p>=c.min?'var(--ok)':'var(--warn)',dif=h-cp,delta=dif>0?`+${H(dif)} acima`:dif<0?`${H(Math.abs(dif))} abaixo`:'no limite';return `<div class="prog ${cls||''}"><span class="pn"><b>${esc(n)}</b></span><i title="Apontado: ${H(h)} | Capacidade prevista: ${H(cp)}"><u style="width:${Math.min(p,1)*100}%;background:${col}"></u>${cp?`<s style="left:${c.min*100}%" title="Mínimo esperado"></s>`:''}</i><b class="pv">Apontado: ${H(h)} · Previsto: ${H(cp)} · ${nf(p*100,0)}% (${delta})</b></div>`};
+  const totH=rows.reduce((x,r)=>x+r.hours,0);
+  $('agProg').innerHTML=(rows.length?bar('Equipe toda',totH,P.cap*agN,'tot'):'')+ag.map(a=>bar(a.name,a.h,P.cap)).join('')||'<p>Sem dados.</p>';
+  const ac=Object.entries(AC).sort((a,b)=>b[1]-a[1]),t8=ac.slice(0,8),rest=ac.slice(8).reduce((s,x)=>s+x[1],0);
+  if(rest) t8.push(['Outras',rest]);
+  mkc('chAct',{type:'doughnut',data:{labels:t8.map(x=>x[0]),datasets:[{data:t8.map(x=>+x[1].toFixed(2)),backgroundColor:PAL}]},options:{animation:{duration:1500,easing:'easeOutBounce',animateRotate:true,animateScale:true},plugins:{legend:{position:'right'}}}});
+}
+
+/* ---------- exportação (Excel e PDF da aba atual) ---------- */
+const plain=tb=>{const c=tb.cloneNode(true);c.querySelectorAll('input').forEach(i=>i.replaceWith(document.createTextNode(i.value)));c.querySelectorAll('.ar').forEach(x=>x.remove());c.querySelectorAll('button').forEach(x=>x.remove());c.querySelectorAll('tr').forEach(r=>{if(r.style.display==='none')r.remove()});c.querySelectorAll('th,td').forEach(x=>{if(x.style.display==='none')x.remove()});return c};
+const tabTitle=t=>(document.querySelector(`#tabs button[data-t="${t}"]`)||{}).textContent||t;
+
+function safeSheetName(value, used){
+  let base=String(value||'Dados').replace(/[\\/?*\[\]:]/g,' ').replace(/\s+/g,' ').trim().slice(0,31)||'Dados';
+  let name=base, n=2;
+  while(used.has(name.toLowerCase())){const suffix=' '+n++;name=base.slice(0,31-suffix.length)+suffix;}
+  used.add(name.toLowerCase());return name;
+}
+
+function makeChartImage(id){
+  const source=CH[id];
+  if(!source||!window.Chart) return null;
+  try{
+    const canvas=document.createElement('canvas');canvas.width=1000;canvas.height=480;
+    const cfg=JSON.parse(JSON.stringify({type:source.config.type,data:source.config.data,options:source.config.options||{}}));
+    cfg.options=cfg.options||{};cfg.options.responsive=false;cfg.options.animation=false;
+    cfg.options.devicePixelRatio=1;cfg.options.maintainAspectRatio=false;
+    const temp=new Chart(canvas.getContext('2d'),cfg);
+    temp.update('none');const url=canvas.toDataURL('image/png');temp.destroy();
+    return url;
+  }catch(e){console.warn('Não foi possível gerar imagem do gráfico '+id,e);return null;}
+}
+
+async function attachChartImages(arrayBuffer, sheetIndex, images){
+  if(!images.length||!window.JSZip) return arrayBuffer;
+  const zip=await JSZip.loadAsync(arrayBuffer);
+  const sheetPath=`xl/worksheets/sheet${sheetIndex}.xml`;
+  let sheet=await zip.file(sheetPath).async('string');
+  if(!sheet.includes('xmlns:r=')) sheet=sheet.replace('<worksheet ', '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ');
+  sheet=sheet.replace('</worksheet>','<drawing r:id="rId1"/></worksheet>');
+  zip.file(sheetPath,sheet);
+  zip.file(`xl/worksheets/_rels/sheet${sheetIndex}.xml.rels`,
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>'+
+    '</Relationships>');
+  let drawing='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
+  let rels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+  images.forEach((img,i)=>{
+    const file=`chart_${i+1}.png`,rid=`rId${i+1}`;
+    const col=(i%2)*9,row=2+Math.floor(i/2)*25;
+    zip.file(`xl/media/${file}`,img.data,{base64:true});
+    rels+=`<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${file}"/>`;
+    drawing+=`<xdr:oneCellAnchor><xdr:from><xdr:col>${col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="5943600" cy="2857500"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i+1}" name="${img.title}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`;
+  });
+  drawing+='</xdr:wsDr>';rels+='</Relationships>';
+  zip.file('xl/drawings/drawing1.xml',drawing);
+  zip.file('xl/drawings/_rels/drawing1.xml.rels',rels);
+  let types=await zip.file('[Content_Types].xml').async('string');
+  if(!types.includes('Extension="png"')) types=types.replace('</Types>','<Default Extension="png" ContentType="image/png"/></Types>');
+  if(!types.includes('/xl/drawings/drawing1.xml')) types=types.replace('</Types>','<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
+  zip.file('[Content_Types].xml',types);
+  return await zip.generateAsync({type:'arraybuffer',compression:'DEFLATE',compressionOptions:{level:6}});
+}
+
+async function exportXLSX(){
+  if(!rows.length) return alert('Nenhum dado para exportar.');
+  if(!window.XLSX) return alert('A biblioteca de Excel não carregou. Verifique sua conexão e tente novamente.');
+  const c=R(),kd=mk(c),wb=XLSX.utils.book_new(),used=new Set();
+  wb.Workbook={CalcPr:{fullCalcOnLoad:true}};
+  const TABLE_NAMES={
+    tMgAg:'Sobrecarga por Colaborador',tMgPrj:'Chamados e Previsões',tMgCli:'Consumo por Empresa',tMgTk:'Chamados Mais Impactantes',
+    tVip:'Consumo dos Clientes VIP',tVipOut:'Consumo Não VIP',tEntries:'Lançamentos de Tempo',
+    tProj:'Projetos e Metas',tProjDay:'Detalhamento Diário dos Projetos',tBudget:'Previsto e Apontado',
+    tOcc:'Jornada por Colaborador',tOccDay:'Jornada por Dia',tBot:'Previsões do Robô e IA'
+  };
+  const tidy=ws=>{
+    Object.keys(ws).forEach(a=>{
+      if(a[0]==='!') return;const x=ws[a];
+      if(x.t==='s'&&typeof x.v==='string'){
+        let m=/^(-?\d+(?:[.,]\d+)?)\s*h$/i.exec(x.v.trim());
+        if(m){x.t='n';x.v=+m[1].replace(',','.');x.z='0.00" h"';delete x.w;return;}
+        m=/^(\d+(?:[.,]\d+)?)%$/.exec(x.v.trim());
+        if(m){x.t='n';x.v=+m[1].replace(',','.')/100;x.z='0.0%';delete x.w;return;}
+      }
     });
-
-    // Tenta de novo em erros temporários (429/500/503/504); no fim, usa o modelo reserva se houver
-    const RETRY = new Set([429, 500, 502, 503, 504]);
-    const models = FALLBACK && FALLBACK !== MODEL ? [MODEL, MODEL, FALLBACK] : [MODEL, MODEL, MODEL];
-    const started = Date.now();
-    let r, j;
-    for (let k = 0; k < models.length; k++) {
-      try {
-        r = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(models[k])}:generateContent`,
-          {
-            method: 'POST',
-            headers: { 'x-goog-api-key': API_KEY, 'content-type': 'application/json' },
-            body: reqBody,
-            signal: AbortSignal.timeout(20000),
-          }
-        );
-        j = await r.json().catch(() => ({}));
-        if (r.ok || !RETRY.has(r.status)) break;
-      } catch (e) {
-        if (e?.name !== 'TimeoutError' && e?.name !== 'AbortError') throw e;
-        r = null;
-      }
-      if (k < models.length - 1) {
-        if (Date.now() - started > 40000) break; // não estoura o limite de 60s da Vercel
-        await new Promise(ok => setTimeout(ok, 1500 * (k + 1)));
-      }
-    }
-    if (!r) return res.status(504).json({ erro: 'O Gemini não respondeu a tempo. Tente novamente em instantes.' });
-    if (!r.ok) {
-      const temp = RETRY.has(r.status);
-      return res.status(temp ? 503 : 502).json({
-        erro: `Gemini ${r.status}: ${j?.error?.message || 'falha na chamada'}${temp ? ' (tentei 3 vezes; clique em "Analisar agora" de novo em alguns minutos)' : ''}`,
+    if(ws['!ref']) ws['!autofilter']={ref:ws['!ref']};return ws;
+  };
+  const N=rows.length+1,dl=DCOLS.length;
+  if(ACT==='pivot'&&PV){
+    const {rf,cf,vm,R:RR,C:CC,cells}=PV,cl=f=>XLSX.utils.encode_col(DCOLS.findIndex(x=>x[0]===f)),rg=l=>`Dados!$${l}$2:$${l}$${N}`;
+    const hdr=[PF.find(x=>x[0]===rf)[1],...CC,'Total'],aoa=[hdr,...RR.map((a,i)=>[a,...CC.map((b,j)=>cells[i][j]),PV.RT[i]]),['Total',...PV.CT,PV.G]];
+    const ws=XLSX.utils.aoa_to_sheet(aoa),fx=vm==='h'||vm==='n',last=XLSX.utils.encode_col(dl);
+    if(fx){
+      const body=vm==='h'?`*${rg(last)}`:'';
+      RR.forEach((a,i)=>{
+        CC.forEach((b,j)=>{const ad=XLSX.utils.encode_cell({r:i+1,c:j+1});ws[ad].f=`SUMPRODUCT((${rg(cl(rf))}=$A${i+2})*(${rg(cl(cf))}=${XLSX.utils.encode_col(j+1)}$1)${body}${vm==='n'?'*1':''})`});
+        const tc=XLSX.utils.encode_cell({r:i+1,c:CC.length+1});
+        ws[tc].f=cf?`SUM(B${i+2}:${XLSX.utils.encode_col(CC.length)}${i+2})`:`SUMPRODUCT((${rg(cl(rf))}=$A${i+2})${body}${vm==='n'?'*1':''})`;
       });
     }
-
-    const text = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
-    let out;
-    try { out = parseJson(text); } catch { return res.status(502).json({ erro: 'A IA devolveu uma resposta que não é JSON.' }); }
-
-    const ids = new Set(payload.map(t => t.id));
-    const resultados = (out.resultados || [])
-      .filter(x => x && ids.has(String(x.id)) && Number(x.horas) > 0)
-      .map(x => ({
-        id: String(x.id),
-        horas: Number(x.horas),
-        confianca: x.confianca ?? '',
-        trecho: String(x.trecho ?? '').slice(0, 200),
-      }));
-
-    return res.status(200).json({ resultados });
-  } catch (e) {
-    const timeout = e?.name === 'TimeoutError' || e?.name === 'AbortError';
-    return res.status(timeout ? 504 : 500).json({ erro: timeout ? 'A IA não respondeu a tempo.' : String(e.message || e) });
+    XLSX.utils.book_append_sheet(wb,ws,safeSheetName('Tabela Dinâmica',used));
+  }else{
+    document.querySelectorAll(`#t-${ACT} .card`).forEach(card=>{
+      const tb=card.querySelector('table');if(!tb)return;
+      const tableId=tb.id||tb.querySelector('tbody')?.id||'';
+      const heading=card.querySelector('h3')?.textContent||'Relatório';
+      const name=TABLE_NAMES[tableId]||heading;
+      const ws=tidy(XLSX.utils.table_to_sheet(plain(tb)));
+      // Make day-count columns numeric, and keep hour columns explicitly formatted as hours.
+      const headers=XLSX.utils.sheet_to_json(ws,{header:1,raw:true})[0]||[];
+      headers.forEach((header,col)=>{
+        const label=String(header||'').toLowerCase();
+        if(/dias com apontamento|dias corridos|dias abaixo|dias na meta|dias que estourou|lançamentos|chamados|colaboradores/.test(label)){
+          for(let rr=1;rr<=XLSX.utils.decode_range(ws['!ref']).e.r;rr++){
+            const cell=ws[XLSX.utils.encode_cell({r:rr,c:col})];
+            if(cell&&cell.t==='s'){const n=Number(String(cell.v).replace(',','.'));if(Number.isFinite(n)){cell.t='n';cell.v=n;delete cell.w;}}
+          }
+        }
+      });
+      ws['!cols']=headers.map(h=>({wch:Math.min(38,Math.max(16,String(h||'').length+5))}));
+      XLSX.utils.book_append_sheet(wb,ws,safeSheetName(name,used));
+    });
   }
+  const dados=[DCOLS.map(x=>x[1]).concat('Horas'),...rows.map(r=>DCOLS.map(([k])=>fv(r,k,kd)).concat(+r.hours.toFixed(4)))];
+  const wd=XLSX.utils.aoa_to_sheet(dados);wd['!autofilter']={ref:wd['!ref']};wd['!cols']=DCOLS.map((x,i)=>({wch:i===7?40:18}));
+  XLSX.utils.book_append_sheet(wb,wd,safeSheetName('Base de Dados',used));
+
+  // Gráficos: exporta imagens em alta resolução para uma aba própria do Excel.
+  const chartDefs=[['chDay','Evolução diária de horas'],['chWeek','Horas por semana e equipe'],['chCli','Horas por empresa'],['chAct','Distribuição por atividade']];
+  const images=chartDefs.map(([id,title])=>{const url=makeChartImage(id);return url?{title,data:url.split(',')[1]}:null;}).filter(Boolean);
+  if(images.length){
+    const chartSheet=XLSX.utils.aoa_to_sheet([['GRÁFICOS DA AUDITORIA'],['Gráficos ilustrativos gerados com os dados e filtros aplicados no painel.'],...images.map(x=>[x.title])]);
+    chartSheet['!cols']=[{wch:34},{wch:34},{wch:34},{wch:34},{wch:34},{wch:34},{wch:34},{wch:34},{wch:34},{wch:34}];
+    XLSX.utils.book_append_sheet(wb,chartSheet,safeSheetName('Gráficos',used));
+  }
+  try{
+    let output=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+    if(images.length&&window.JSZip) output=await attachChartImages(output,wb.SheetNames.length,images);
+    const blob=new Blob([output],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=`Auditoria_${tabTitle(ACT).replace(/[^\w]+/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }catch(e){console.error(e);alert('Não foi possível montar o Excel: '+(e.message||e));}
 }
+function exportPDF(){
+  if(!rows.length) return alert('Nenhum dado para exportar.');
+  const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'pt',format:'a4'}),W=doc.internal.pageSize.getWidth()-80,P=period(R());
+  let y=42;
+  const room=h=>{if(y+h>550){doc.addPage();y=42}};
+  doc.setFontSize(16);doc.text('Auditoria de Chamados · '+tabTitle(ACT),40,y);y+=16;
+  doc.setFontSize(9);doc.setTextColor(100);
+  doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')}${P.s?' · Período '+fmtDate(P.s)+' a '+fmtDate(P.e):''} · ${$('kT').textContent} chamados · ${$('kH').textContent} · ${$('kA').textContent} colaboradores`,40,y);y+=20;
+  doc.setTextColor(0);
+  document.querySelectorAll(`#t-${ACT} .card`).forEach(card=>{
+    const h=card.querySelector('h3');
+    if(h){room(30);doc.setFontSize(12);doc.text(h.textContent,40,y);y+=14}
+    card.querySelectorAll('p').forEach(p=>{if(p.textContent.trim()){doc.setFontSize(8);const t=doc.splitTextToSize(p.innerText,W);room(t.length*10);doc.text(t,40,y);y+=t.length*10+4}});
+    const k=card.querySelector('.kpis');
+    if(k&&k.children.length){doc.setFontSize(9);const t=doc.splitTextToSize([...k.children].map(x=>x.innerText.replace(/\s*\n+\s*/g,': ')).join('   ·   '),W);room(t.length*11);doc.text(t,40,y);y+=t.length*11+6}
+    card.querySelectorAll('canvas').forEach(cv=>{const tw=Math.min(W,cv.width>cv.height*3?W:480),th=tw*cv.height/cv.width;room(th);doc.addImage(cv.toDataURL('image/png'),'PNG',40,y,tw,th);y+=th+12});
+    card.querySelectorAll('table').forEach(tb=>{doc.autoTable({html:plain(tb),startY:y,styles:{fontSize:7,cellPadding:3},headStyles:{fillColor:[15,23,42]},margin:{left:40,right:40,bottom:40}});y=doc.lastAutoTable.finalY+16;if(y>550){doc.addPage();y=42}});
+  });
+  doc.save(`Auditoria_${tabTitle(ACT).replace(/[^\w]+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`);
+}
+
+
+/* ---------- período rápido ---------- */
+function quick(k){
+  const t=new Date(),e=iso(t);let s=e;
+  if(k==='7'){const d=new Date(t);d.setDate(d.getDate()-6);s=iso(d)}
+  if(k==='m') s=e.slice(0,8)+'01';
+  if(k==='all'){$('fStart').value='';$('fEnd').value=''}else{$('fStart').value=s;$('fEnd').value=e}
+  applyFilters();
+}
+
+/* ---------- tabelas: ordenar clicando no título e escolher colunas ---------- */
+const SORT={},DEFHID={tOcc:['Lançamentos','Clientes']};
+const colState=()=>{try{return JSON.parse(localStorage.getItem('md_cols')||'{}')}catch(e){return {}}};
+const tkey=t=>t.id||(t.tBodies[0]&&t.tBodies[0].id)||'';
+const tableOf=key=>{const e=document.getElementById(key);return e&&(e.tagName==='TABLE'?e:e.closest('table'))};
+function applyHid(t,flags){
+  [...t.rows].forEach(r=>{if(r.cells.length!==flags.length) return;[...r.cells].forEach((x,i)=>{x.style.display=flags[i]?'none':''})});
+}
+function sortTable(t,c,d){
+  const tb=t.tBodies[0],n=t.tHead.rows[0].cells.length,rs=[...tb.rows].filter(r=>r.cells.length===n);
+  if(rs.length<2) return;
+  const val=r=>{
+    const cell=r.cells[c];if(cell.dataset.v!=null&&cell.dataset.v!=='') return +cell.dataset.v;
+    const i=cell.querySelector('input'),x=(i?i.value:cell.textContent).trim(),m=/^(\d{2})\/(\d{2})\/(\d{4})/.exec(x);
+    if(m) return +(m[3]+m[2]+m[1]);
+    const q=/^#?(-?\d+(?:[.,]\d+)?)/.exec(x);return q?parseFloat(q[1].replace(',','.')):x.toLowerCase();
+  };
+  rs.sort((a,b)=>{const x=val(a),y=val(b);return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'pt-BR'))*d});
+  rs.forEach(r=>tb.appendChild(r));
+}
+function enhanceTables(){
+  const saved=colState();
+  document.querySelectorAll('#app .tw table').forEach(t=>{
+    const key=tkey(t);if(!key||key==='pvTable'||!t.tHead) return;
+    unperm(t,ORD[key]);const ths=[...t.tHead.rows[0].cells];
+    ths.forEach((h,ix)=>{if(h.dataset.n==null){h.dataset.i=ix;h.draggable=true;h.insertAdjacentHTML('beforeend','<span class="rz" title="Arraste para mudar a largura; duplo clique restaura"></span>');h.dataset.n=h.textContent;h.classList.add('sortable');h.title='Clique para ordenar; arraste o título para mover a coluna';const a=document.createElement('span');a.className='ar';h.appendChild(a);h.insertAdjacentHTML('beforeend','<button class="fb" type="button" title="Filtrar por nome" aria-label="Filtrar esta coluna">▾</button>')}});
+    const names=ths.map(h=>h.dataset.n),st=SORT[key];
+    if(st) sortTable(t,st.c,st.d);
+    ths.forEach((h,i)=>{h.querySelector('.ar').textContent=st&&st.c===i?(st.d>0?'▲':'▼'):''});
+    const hid=saved[key]||DEFHID[key]||[];
+    applyHid(t,names.map(n=>hid.includes(n)));applyRowFilter(t,key);
+    if(!document.getElementById('cc_'+key)){
+      const box=document.createElement('details');box.id='cc_'+key;box.className='colbtn noprint';
+      box.innerHTML='<summary>Colunas ▾</summary><div class="colbox">'+names.map((n,i)=>`<label><input type="checkbox" ${hid.includes(n)?'':'checked'} onchange="toggleCol('${key}',${i},this.checked)"> ${esc(n)}</label>`).join('')+'<button class="s" type="button" onclick="resetCols(\''+key+'\')">Restaurar ordem e largura</button></div>';
+      t.closest('.tw').before(box);
+    }
+    ORD[key]=orderFor(names,key);applyW(t,names,key);perm(t,ORD[key]);
+  });
+}
+/* ---------- colunas: arrastar para mudar a ordem e puxar a borda para mudar a largura ---------- */
+const ORD={};
+const lsj=k=>{try{return JSON.parse(localStorage.getItem(k)||'{}')}catch(e){return {}}};
+const lss=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+function orderFor(names,key){
+  if(new Set(names).size!==names.length) return names.map((_,i)=>i);
+  const sv=(lsj('md_ord')[key]||[]).filter(n=>names.includes(n));
+  return [...sv,...names.filter(n=>!sv.includes(n))].map(n=>names.indexOf(n));
+}
+// o corpo das tabelas é redesenhado na ordem original; a ordem do usuário é aplicada por último e desfeita antes de cada redesenho
+function perm(t,o){if(o.every((v,i)=>v===i)) return;[...t.rows].forEach(r=>{if(r.cells.length!==o.length) return;const cs=[...r.cells];o.forEach(i=>r.appendChild(cs[i]));r.dataset.p=1})}
+function unperm(t,o){if(!o) return;const inv=o.map((_,i)=>o.indexOf(i));[...t.rows].forEach(r=>{if(!r.dataset.p||r.cells.length!==o.length) return;const cs=[...r.cells];inv.forEach(p=>r.appendChild(cs[p]));delete r.dataset.p})}
+function applyW(t,names,key){
+  const W=lsj('md_w')[key]||{},n=names.length;
+  [...t.rows].forEach(r=>{if(r.cells.length!==n) return;[...r.cells].forEach((c,i)=>{const w=W[names[i]];
+    if(w){c.style.width=c.style.minWidth=c.style.maxWidth=w+'px';c.style.overflow='hidden';c.style.textOverflow='ellipsis';if(c.tagName==='TD') c.title=c.textContent.trim()}
+    else if(c.style.maxWidth){c.style.width=c.style.minWidth=c.style.maxWidth=c.style.overflow=c.style.textOverflow=''}})});
+}
+function resetCols(key){const O=lsj('md_ord'),W=lsj('md_w');delete O[key];delete W[key];lss('md_ord',O);lss('md_w',W);enhanceTables()}
+$('app').addEventListener('mousedown',e=>{
+  const z=e.target.closest('.rz');if(!z) return;
+  e.preventDefault();e.stopPropagation();
+  const th=z.closest('th'),t=th.closest('table'),key=tkey(t),name=th.dataset.n,x0=e.clientX,w0=th.offsetWidth;let w=w0,moved=false;th.draggable=false;
+  const mv=ev=>{moved=true;w=Math.max(60,Math.round(w0+ev.clientX-x0));const p=th.cellIndex,n=t.tHead.rows[0].cells.length;
+    [...t.rows].forEach(r=>{if(r.cells.length===n){const c=r.cells[p];c.style.width=c.style.minWidth=c.style.maxWidth=w+'px';c.style.overflow='hidden';c.style.textOverflow='ellipsis'}})};
+  const up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);th.draggable=true;
+    if(moved){const W=lsj('md_w');(W[key]??={})[name]=w;lss('md_w',W);enhanceTables()}};
+  document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
+});
+$('app').addEventListener('dblclick',e=>{const z=e.target.closest('.rz');if(!z) return;const th=z.closest('th'),key=tkey(th.closest('table')),W=lsj('md_w');if(W[key]){delete W[key][th.dataset.n];lss('md_w',W)}enhanceTables()});
+let DR=null;
+const clrDov=()=>document.querySelectorAll('th.dov').forEach(x=>x.classList.remove('dov'));
+$('app').addEventListener('dragstart',e=>{const th=e.target.closest&&e.target.closest('th[draggable=true]');if(!th) return;DR={t:th.closest('table'),n:th.dataset.n};e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',th.dataset.n)});
+$('app').addEventListener('dragover',e=>{const th=DR&&e.target.closest('th[draggable=true]');if(!th||th.closest('table')!==DR.t) return;e.preventDefault();clrDov();th.classList.add('dov')});
+$('app').addEventListener('drop',e=>{
+  const th=DR&&e.target.closest('th[draggable=true]');if(!th||th.closest('table')!==DR.t) return;e.preventDefault();
+  const t=DR.t,key=tkey(t),cur=[...t.tHead.rows[0].cells].map(h=>h.dataset.n),a=cur.indexOf(DR.n),b=cur.indexOf(th.dataset.n);
+  if(a>=0&&b>=0&&a!==b){cur.splice(a,1);cur.splice(b,0,DR.n);const O=lsj('md_ord');O[key]=cur;lss('md_ord',O)}
+  DR=null;clrDov();enhanceTables();
+});
+$('app').addEventListener('dragend',()=>{DR=null;clrDov()});
+
+/* ---------- filtro por coluna (escolher nomes) ---------- */
+const CFLT={};let FP=null;
+const cellTxt=c=>{const i=c.querySelector('input');return (i?i.value:c.textContent).trim()};
+function applyRowFilter(t,key){
+  const f=CFLT[key]||{},n=t.tHead.rows[0].cells.length,idx=Object.keys(f).filter(i=>f[i].size);
+  [...t.tBodies[0].rows].forEach(r=>{if(r.cells.length===n) r.style.display=idx.every(i=>f[i].has(cellTxt(r.cells[i])))?'':'none'});
+  [...t.tHead.rows[0].cells].forEach((h,i)=>{const b=h.querySelector('.fb');if(b) b.classList.toggle('on',!!(f[i]&&f[i].size))});
+}
+function closeFP(){if(FP){FP.remove();FP=null}}
+function openFilter(btn){
+  closeFP();
+  const th=btn.closest('th'),t=th.closest('table'),key=tkey(t),pos=th.cellIndex,i=+th.dataset.i,n=t.tHead.rows[0].cells.length;
+  const vals=[...new Set([...t.tBodies[0].rows].filter(r=>r.cells.length===n).map(r=>cellTxt(r.cells[pos])))].sort((a,b)=>a.localeCompare(b,'pt-BR',{numeric:true}));
+  const cur=((CFLT[key]??={})[i]??=new Set());
+  const p=document.createElement('div');p.className='fp';p._b=btn;
+  p.innerHTML='<input type="search" placeholder="Buscar nome" aria-label="Buscar nos valores da coluna"><div class="fl"></div><div class="fa"><button class="s" type="button" data-a="all">Marcar os listados</button><button class="s" type="button" data-a="clr">Limpar</button></div><p class="fn"></p>';
+  const list=p.querySelector('.fl'),q=p.querySelector('input'),note=p.querySelector('.fn');let shown=[];
+  const draw=()=>{const w=norm(q.value);const all=vals.filter(v=>!w||norm(v).includes(w));shown=all.slice(0,300);
+    list.innerHTML=shown.map(v=>`<label><input type="checkbox" value="${esc(v)}" ${cur.has(v)?'checked':''}> ${esc(v)||'(vazio)'}</label>`).join('')||'<em>Nenhum valor encontrado</em>';
+    note.textContent=(all.length>300?`Mostrando 300 de ${all.length}; use a busca. `:'')+(cur.size?`${cur.size} selecionado(s).`:'Nada selecionado = mostra tudo.')};
+  list.onchange=e=>{const c=e.target;c.checked?cur.add(c.value):cur.delete(c.value);enhanceTables();draw()};
+  q.oninput=draw;
+  p.querySelector('.fa').onclick=e=>{const a=e.target.dataset.a;if(!a) return;if(a==='all')shown.forEach(v=>cur.add(v));else cur.clear();enhanceTables();draw()};
+  draw();document.body.appendChild(p);FP=p;
+  const r=btn.getBoundingClientRect();p.style.left=Math.max(8,Math.min(r.left,innerWidth-p.offsetWidth-8))+'px';p.style.top=Math.min(r.bottom+4,innerHeight-p.offsetHeight-8)+'px';
+  q.focus();
+}
+document.addEventListener('click',e=>{if(FP&&!e.target.closest('.fp,.fb')) closeFP()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape') closeFP()});
+addEventListener('resize',closeFP);
+function toggleCol(key,i,on){
+  const t=tableOf(key);if(!t) return;
+  const names=[...t.tHead.rows[0].cells].sort((a,b)=>a.dataset.i-b.dataset.i).map(h=>h.dataset.n),cur=colState(),hid=new Set(cur[key]||DEFHID[key]||[]);
+  on?hid.delete(names[i]):hid.add(names[i]);
+  cur[key]=[...hid];localStorage.setItem('md_cols',JSON.stringify(cur));
+  enhanceTables();
+}
+$('app').addEventListener('click',e=>{
+  if(e.target.closest('.rz')) return;
+  const fb=e.target.closest('.fb');if(fb){if(FP&&FP._b===fb)closeFP();else openFilter(fb);return}
+  const h=e.target.closest('th.sortable');if(!h) return;
+  const t=h.closest('table'),key=tkey(t),c=+h.dataset.i,s=SORT[key];
+  SORT[key]={c,d:s&&s.c===c?-s.d:1};
+  enhanceTables();
+});
+
+/* ---------- leitura por IA (chama /api/estimar na Vercel; a chave fica no servidor) ---------- */
+let IA=(()=>{try{return JSON.parse(localStorage.getItem('md_ia')||'{}')}catch(e){return {}}})(),iaBusy=false;
+const hash=x=>{let h=5381;for(let i=0;i<x.length;i++)h=((h<<5)+h+x.charCodeAt(i))|0;return String(h)};
+const iaLog=(m,c)=>{$('iaMsg').className=c||'';$('iaMsg').textContent=m};
+function iaChanged(){localStorage.setItem('md_iamode',$('iaMode').value);localStorage.setItem('md_iakey',$('iaKey').value.trim());if($('iaMode').value!=='off'&&raw.length)iaRun()}
+async function iaRun(auto){
+  if(iaBusy) return;
+  const mode=$('iaMode').value,key=$('iaKey').value.trim();
+  if(mode==='off') return auto?0:iaLog('IA desligada. Escolha quais chamados analisar.');
+  if(!key) return auto?0:iaLog('Informe a senha da função (ACCESS_KEY).','err');
+  const c=R(),bud=JSON.parse(localStorage.getItem('md_budget')||'{}'),seen=new Set(),todo=[];
+  raw.forEach(r=>{
+    if(seen.has(r.ticket_id)) return;seen.add(r.ticket_id);
+    if(r.est||r.planned||+bud[r.ticket_id]||!r.txt) return;
+    if(mode==='proj'&&!isProj(r,c)) return;
+    const h=hash(r.txt),x=IA[r.ticket_id];
+    if(x&&x.h===h) return;
+    todo.push({id:r.ticket_id,h,texto:r.txt});
+  });
+  if(!todo.length) return auto?0:iaLog('Nada novo para analisar.','okc');
+  const MAXRUN=400,LOTE=8,fila=todo.slice(0,MAXRUN);let ok=0;
+  iaBusy=true;
+  try{
+    for(let i=0;i<fila.length;i+=LOTE){
+      const lote=fila.slice(i,i+LOTE);
+      iaLog(`IA analisando ${Math.min(i+LOTE,fila.length)} de ${todo.length} chamados pendentes...`);
+      const r=await fetch('/api/estimar',{method:'POST',headers:{'Content-Type':'application/json','x-access-key':key},body:JSON.stringify({jornada:c.jor,tickets:lote.map(t=>({id:t.id,texto:t.texto}))})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.erro||('erro '+r.status));
+      (j.resultados||[]).forEach(x=>{const t=lote.find(l=>l.id===String(x.id));if(t){const horas=Number(x.horas??x.hours),conf=x.confianca??x.confidence,trecho=x.trecho??x.excerpt;if(Number.isFinite(horas)&&horas>0){IA[t.id]={h:t.h,horas,conf:conf==null?'':String(conf),trecho:trecho==null?'':String(trecho)};ok++}}});
+      try{localStorage.setItem('md_ia',JSON.stringify(IA))}catch(e){}
+      render();
+      if(i+LOTE<fila.length) await sleep(900); // intervalo curto para reduzir risco de limite de requisições
+    }
+    iaLog(`IA: ${ok} chamado(s) analisado(s)`+(todo.length>fila.length?`; faltam ${todo.length-fila.length} (serão retomados na próxima sincronização ou em "Analisar agora").`:'.'),'okc');
+  }catch(e){
+    iaLog('IA: '+e.message+(e instanceof TypeError?' (a função /api/estimar não respondeu; ela só existe depois de publicar na Vercel)':''),'err');
+  }finally{iaBusy=false}
+}
+
+/* ---------- busca por módulo ---------- */
+const hay=r=>r._s??=norm([r.ticket_id,r.client_name,r.subject,r.owner_name,r.sector,r.activity,r.service_name,r.category,r.status,fmtDate(r.date)].join(' '));
+function doSearch(t){
+  Q[t]=$('q_'+t).value.trim();
+  if(t==='load'||t==='cfg'){const n=norm(Q[t]);$('t-'+t).querySelectorAll('.card').forEach(c=>c.classList.toggle('hide',!!n&&!norm(c.textContent).includes(n)));return}
+  if(t==='diag') return renderDiag();
+  if(raw.length) applyFilters();
+}
+function clearSearch(t){$('q_'+t).value='';doSearch(t)}
+const MODS={live:['Tickets atualizados','Histórico de alterações detectadas nos tickets do Movidesk.'],cfg:['Configurações','Regras de cálculo, lista de clientes VIP e leitura por IA.'],mgmt:['Gestão','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos','Evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
+
+/* ---------- robô: painel de leituras ---------- */
+let IG=(()=>{try{return JSON.parse(localStorage.getItem('md_ig')||'{}')}catch(e){return {}}})();
+const reflat=()=>{if(TK.size){build([...TK.values()]);applyFilters()}};
+function ignoreEst(id){IG[id]=1;localStorage.setItem('md_ig',JSON.stringify(IG));reflat()}
+function restoreIg(){IG={};localStorage.setItem('md_ig','{}');reflat()}
+function renderBot(c){
+  const ids=new Set(rows.map(r=>r.ticket_id));
+  const L=budgetData(c,'a').filter(p=>ids.has(p.id)).map(p=>{
+    const e=p.r.est,ia=IA[p.id];
+    if(e) return {p,id:p.id,by:'Regras',src:e.src,snip:e.snip,v:e.u==='d'?e.v*c.jor:e.v,conf:e.conf+(e.rev>1?` · ${e.rev} leituras, vale a mais recente`:'')+(e.range?' · faixa: usei o maior valor':'')};
+    if(ia&&ia.horas>0&&p.r.txt&&ia.h===hash(p.r.txt)) return {p,id:p.id,by:'IA',src:'texto do chamado',snip:ia.trecho||'',v:ia.horas,conf:ia.conf||''};
+    return null;
+  }).filter(Boolean).sort((a,b)=>b.p.h/b.v-a.p.h/a.v);
+  const nIg=Object.keys(IG).length;
+  $('botInfo').innerHTML=`<b>${L.length}</b> chamado(s) com previsão lida do texto (${L.filter(x=>x.by==='Regras').length} pelo robô de regras, ${L.filter(x=>x.by==='IA').length} pela IA); <b>${L.filter(x=>x.p.h>x.v).length}</b> já passaram do previsto.`+(nIg?` ${nIg} leitura(s) ignorada(s) · <a href="#" onclick="restoreIg();return false">restaurar</a>.`:'')+'<br><span style="color:var(--muted)">Entende “previsão 20h”, “estimativa de 3 dias”, “1h30”, “45 min”, “meia hora” e “10 a 20 horas”. Quando há várias leituras no chamado, vale a mais recente. Se o robô errou, clique em Ignorar ou digite o valor certo na aba Projetos.</span>';
+  $('tBot').innerHTML=L.map(x=>{const u=x.p.h/x.v,s=u>1?'bad':u>=.9?'warn':'ok';
+    return `<tr><td>#${esc(x.id)}</td><td>${esc(x.p.client)}</td><td>${esc(x.p.subject)}</td><td><span class="pill">${x.by}</span> ${esc(x.src)}</td><td>${x.snip?'“'+esc(x.snip)+'”':'—'}</td><td data-v="${x.v}"><b>${H(x.v)}</b></td><td data-v="${x.p.h}">${H(x.p.h)}</td><td data-v="${u}"><span class="pill ${s}">${nf(u*100,0)}%</span></td><td>${esc(x.conf)}</td><td>${x.by==='Regras'?`<button class="s" onclick="ignoreEst('${esc(x.id)}')">Ignorar</button>`:''}</td></tr>`;
+  }).join('')||'<tr><td colspan="10" style="color:var(--muted)">Nenhuma previsão lida nos chamados deste filtro.</td></tr>';
+}
+
+/* ---------- dados salvos no navegador (IndexedDB) ---------- */
+const IDB={db:null,
+  open(){return this.db||(this.db=new Promise((ok,no)=>{const q=indexedDB.open('central-auditoria',1);q.onupgradeneeded=()=>q.result.createObjectStore('kv');q.onsuccess=()=>ok(q.result);q.onerror=()=>no(q.error)}))},
+  async get(k){try{const d=await Promise.race([this.open(),new Promise((_,no)=>setTimeout(()=>no(new Error('IDB timeout')),4000))]);return await new Promise(ok=>{const r=d.transaction('kv').objectStore('kv').get(k);r.onsuccess=()=>ok(r.result);r.onerror=()=>ok(null)})}catch(e){this.db=null;return null}},
+  async set(k,v){try{const d=await this.open();return await new Promise(ok=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>ok(true);t.onerror=()=>ok(false)})}catch(e){return false}},
+  async del(k){try{const d=await this.open();return await new Promise(ok=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=()=>ok(true);t.onerror=()=>ok(false)})}catch(e){return false}}};
+// guarda só o necessário (textos limpos, sem HTML) para o cache ficar leve; os textos lidos pelo robô e pela IA não mudam
+const slim=t=>({...t,actions:(t.actions||[]).map((a,i)=>{const {htmlDescription,...x}=a;if(i<12){const d=a.description||htmlDescription;if(d)x.description=i<3?stripH(d):stripH(d).slice(0,1200)}else delete x.description;return x})});
+// compactação mais agressiva só para o payload enviado ao Supabase (o cache local continua usando slim)
+const cloudSlim=t=>({...t,actions:(t.actions||[]).map((a,i)=>{const {htmlDescription,...x}=a;if(i<5){const d=a.description||htmlDescription;if(d)x.description=stripH(d).slice(0,500)}else delete x.description;return x})});
+function cacheLabel(t){const e=$('cacheInfo');if(e) e.textContent=TK.size?`${TK.size} tickets salvos neste navegador`+(t?` (último salvamento às ${new Date(t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})})`:'')+'.':''}
+async function persist(){const ok=await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});cacheLabel(ok?Date.now():0);if(ok&&cloudReady){try{await cloudSaveTickets([...TK.values()])}catch(e){cloudMessage('Cache local atualizado; falha ao enviar à nuvem: '+e.message,'err')}}return ok}
+async function saveNow(){
+  if(!TK.size) return log('Não há dados da API para salvar. Clique em "Sincronizar agora" primeiro.','err');
+  localStorage.setItem('md_domain',$('domain').value.trim());localStorage.setItem('md_token',$('token').value.trim());
+  localStorage.setItem('md_ini',$('startDate').value);localStorage.setItem('md_cf',$('cfId').value.trim());
+  log('Salvando...');
+  const ok=await persist();
+  log(ok?`Dados salvos: ${TK.size} tickets, mais domínio, token e período. Eles aparecem sozinhos na próxima vez que abrir a página.`:'Não foi possível salvar: o navegador bloqueou o armazenamento local (modo anônimo ou sem espaço).',ok?'okc':'err');
+}
+async function clearCache(){
+  if(!confirm('Apagar os dados salvos neste navegador? A próxima sincronização será completa.')) return;
+  await IDB.del('cache');TK=new Map();lastSync=lastFull=0;lastSig='';cacheLabel();log('Dados salvos apagados.','okc');
+}
+
+/* ---------- sincronização central com Supabase via backend Vercel ---------- */
+const CLOUD_EXCLUDE=new Set(['md_token','md_iakey','md_cloudkey']);
+let cloudReady=false,cloudHydrating=true,cloudStateTimer=null,cloudLastPull=new Date(0).toISOString(),cloudStateUpdated='',cloudTicketSig=new Map(),cloudPullBusy=false;
+function cloudMessage(msg,cls){const e=$('cloudMsg');if(e){e.textContent=msg;e.className=cls||''}}
+function cloudAccessKey(){return (localStorage.getItem('md_cloudkey')||$('cloudKey')?.value||'').trim()}
+// ====== CONFIGURE AQUI (uma única vez): Supabase → Project Settings → API ======
+const SUPABASE_URL='https://dvaaicqajlppuigeyejr.supabase.co';
+const SUPABASE_ANON_KEY='sb_publishable_s--uKJIUHet04wnKAvDpeA_yvMVoFoW'; // chave "anon public" (NÃO use a service_role aqui)
+// ================================================================================
+function sbConfigured(){return /^https:\/\/.+\.supabase\.co/i.test(SUPABASE_URL)&&SUPABASE_ANON_KEY.length>40}
+async function sb(path,{method='GET',body,prefer}={}){
+  if(!sbConfigured())throw new Error('Preencha SUPABASE_URL e SUPABASE_ANON_KEY no script (bloco "CONFIGURE AQUI").');
+  const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),30000);let r,t;
+  try{
+    r=await fetch(SUPABASE_URL.replace(/\/$/,'')+'/rest/v1/'+path,{method,signal:ctl.signal,headers:{apikey:SUPABASE_ANON_KEY,...(SUPABASE_ANON_KEY.startsWith('sb_')?{}:{Authorization:'Bearer '+SUPABASE_ANON_KEY}),'Content-Type':'application/json',...(prefer?{Prefer:prefer}:{})},body:body===undefined?undefined:JSON.stringify(body)});
+    t=await r.text();
+  }catch(e){throw new Error(e.name==='AbortError'?'tempo esgotado (30s): o Supabase não respondeu (projeto pausado?)':e.message)}
+  finally{clearTimeout(tm)}
+  if(!r.ok){let m=t;try{m=JSON.parse(t).message||t}catch(e){}throw new Error('Supabase '+r.status+': '+String(m).slice(0,200))}
+  return t?JSON.parse(t):null;
+}
+// mantém a mesma interface usada pelo resto do código (loadState, saveState, loadTickets, changes, upsertTickets)
+async function cloudApi(action,method='GET',body=null,params={}){
+  if(action==='loadState'){const r=await sb('tm_state?select=state,updated_at&id=eq.main&limit=1');return{state:r?.[0]?.state||{},updated_at:r?.[0]?.updated_at||''}}
+  if(action==='saveState'){const u=new Date().toISOString();await sb('tm_state?on_conflict=id',{method:'POST',body:[{id:'main',state:body.state,updated_at:u}],prefer:'resolution=merge-duplicates,return=minimal'});return{ok:true,updated_at:u}}
+  if(action==='loadTickets'){const l=Math.min(+params.limit||50,200),o=+params.offset||0;const r=await sb(`tm_tickets?select=data&order=id.asc&limit=${l}&offset=${o}`);return{tickets:(r||[]).map(x=>x.data)}}
+  if(action==='changes'){const t=Date.parse(params.since||'');const since=new Date(Number.isFinite(t)?t:0).toISOString();const r=await sb(`tm_tickets?select=data&updated_at=gt.${encodeURIComponent(since)}&order=updated_at.asc&limit=500`);return{tickets:(r||[]).map(x=>x.data)}}
+  if(action==='upsertTickets'){const now=new Date().toISOString();const rows=(body.tickets||[]).filter(t=>t&&t.id!=null&&String(t.id)!=='').map(t=>({id:String(t.id),data:t,updated_at:now}));if(rows.length)await sb('tm_tickets?on_conflict=id',{method:'POST',body:rows,prefer:'resolution=merge-duplicates,return=minimal'});return{ok:true,saved:rows.length}}
+  throw new Error('Ação desconhecida: '+action);
+}
+function cloudStateSnapshot(){const out={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('md_')&&!CLOUD_EXCLUDE.has(k))out[k]=localStorage.getItem(k)}return out}
+function cloudScheduleState(){if(!cloudReady||cloudHydrating)return;clearTimeout(cloudStateTimer);cloudStateTimer=setTimeout(()=>cloudSaveState().catch(e=>cloudMessage('Falha ao salvar configurações na nuvem: '+e.message,'err')),1200)}
+async function cloudSaveState(){if(!cloudReady||cloudHydrating)return;await cloudApi('saveState','POST',{state:cloudStateSnapshot()});cloudMessage('Supabase conectado · configurações sincronizadas · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),'okc')}
+function installCloudStorageHooks(){
+  const originalSet=Storage.prototype.setItem,originalRemove=Storage.prototype.removeItem;
+  Storage.prototype.setItem=function(k,v){originalSet.call(this,k,v);if(this===localStorage&&String(k).startsWith('md_')&&!CLOUD_EXCLUDE.has(String(k)))cloudScheduleState()};
+  Storage.prototype.removeItem=function(k){originalRemove.call(this,k);if(this===localStorage&&String(k).startsWith('md_')&&!CLOUD_EXCLUDE.has(String(k)))cloudScheduleState()};
+}
+installCloudStorageHooks();
+function applyCloudSettings(){
+  $('domain').value=localStorage.getItem('md_domain')||$('domain').value||'';
+  $('startDate').value=localStorage.getItem('md_ini')||$('startDate').value;
+  $('cfId').value=localStorage.getItem('md_cf')||$('cfId').value||'';
+  $('vipList').value=localStorage.getItem('md_vip')??$('vipList').value;
+  try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{if(sv[i]!=null)$(i).value=sv[i]})}catch(e){}
+  $('autoMin').value=localStorage.getItem('md_auto')??$('autoMin').value;
+  $('iaMode').value=localStorage.getItem('md_iamode')||$('iaMode').value||'off';
+  try{IA=JSON.parse(localStorage.getItem('md_ia')||'{}')}catch(e){IA={}}
+  try{IG=JSON.parse(localStorage.getItem('md_ig')||'{}')}catch(e){IG={}}
+  try{liveEvents=JSON.parse(localStorage.getItem('md_live_events')||'[]');showLiveEvents()}catch(e){}
+}
+function cloudSig(t){return hash(JSON.stringify(t))}
+async function cloudSaveTickets(list){
+  if(!cloudReady||!list.length)return;
+  const pending=[];
+  for(const t of list){const id=String(t.id??'');if(!id)continue;const p=cloudSlim(t);const sig=cloudSig(p);if(cloudTicketSig.get(id)!==sig)pending.push({t:p,sig})}
+  // lotes de 5 tickets por requisição para manter o payload pequeno
+  const CHUNK_SIZE=5;let ok=0,failed=0,lastErr=null;
+  for(let i=0;i<pending.length;i+=CHUNK_SIZE){
+    const part=pending.slice(i,i+CHUNK_SIZE);
+    try{await cloudApi('upsertTickets','POST',{tickets:part.map(x=>x.t)});part.forEach(x=>cloudTicketSig.set(String(x.t.id),x.sig));ok+=part.length}
+    catch(err){failed+=part.length;lastErr=err;console.error('Falha ao enviar lote ao Supabase:',err)}
+  }
+  if(ok)cloudMessage(`Supabase conectado · ${ok} chamado(s) sincronizado(s) · ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`,'okc');
+  if(failed)throw new Error(`${failed} chamado(s) não enviados (${lastErr&&lastErr.message||lastErr})`);
+}
+async function cloudLoadState(){const j=await cloudApi('loadState');const state=j.state||{};cloudHydrating=true;try{Object.entries(state).forEach(([k,v])=>{if(k.startsWith('md_')&&!CLOUD_EXCLUDE.has(k)&&typeof v==='string')localStorage.setItem(k,v)});}finally{cloudHydrating=false}cloudStateUpdated=j.updated_at||'';applyCloudSettings()}
+async function cloudLoadAllTickets(){
+  const found=new Map(),limit=50;let offset=0;
+  for(let page=0;page<400;page++){
+    const j=await cloudApi('loadTickets','GET',null,{offset,limit});const batch=Array.isArray(j.tickets)?j.tickets:[];
+    let added=0;batch.forEach(t=>{const id=String(t.id);if(!found.has(id)){found.set(id,t);added++}cloudTicketSig.set(id,cloudSig(t))});
+    cloudMessage(`Conectando ao Supabase · ${found.size} chamado(s) baixados...`);
+    if(!batch.length||!added||batch.length<limit)break;
+    offset+=limit;
+  }
+  return [...found.values()];
+}
+function newerTicket(a,b){const da=Date.parse(a?.lastUpdate||a?.createdDate||'')||0,db=Date.parse(b?.lastUpdate||b?.createdDate||'')||0;return da>=db}
+let cloudBootPromise=null;
+function cloudBootstrap(){return cloudBootPromise||(cloudBootPromise=cloudBootstrapRun().finally(()=>{cloudBootPromise=null}))}
+async function cloudBootstrapRun(){
+  if(!sbConfigured()){cloudReady=false;cloudHydrating=false;cloudMessage('Banco ainda não configurado: preencha SUPABASE_URL e SUPABASE_ANON_KEY no script.','err');return false}
+  cloudMessage('Conectando ao Supabase e buscando dados...');
+  try{
+    cloudMessage('Conectando ao Supabase · lendo configurações...');await cloudLoadState();
+    const remote=await cloudLoadAllTickets();
+    cloudMessage('Conectando ao Supabase · lendo cache local...');const cache=await IDB.get('cache');const merged=new Map(remote.map(t=>[String(t.id),t]));
+    if(cache?.tickets?.length){for(const t of cache.tickets){const id=String(t.id),old=merged.get(id);if(!old||newerTicket(t,old))merged.set(id,t)}lastSync=Math.max(lastSync,cache.lastSync||0);lastFull=Math.max(lastFull,cache.lastFull||0);lastSig=cache.sig||lastSig;CF=cache.cf||CF}
+    TK=merged;cloudReady=true;cloudHydrating=false;cloudLastPull=new Date(Date.now()-3000).toISOString();
+    if(TK.size){await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});}
+    cloudMessage(`Supabase conectado · ${remote.length} chamado(s) recuperado(s)${cache?.tickets?.length?` · ${cache.tickets.length} do cache local conferidos`:''}.`,'okc');
+    if(TK.size){cloudMessage('Conectando ao Supabase · enviando alterações locais...');await cloudSaveTickets([...TK.values()])}
+    await cloudSaveState();
+    return true;
+  }catch(e){cloudReady=false;cloudHydrating=false;cloudMessage('Não foi possível conectar ao Supabase: '+e.message,'err');return false}
+}
+async function cloudConnect(){
+  const ok=await cloudBootstrap();
+  if(ok&&TK.size){firstTicket=[...TK.values()].find(t=>(t.actions||[]).length)||[...TK.values()][0]||null;build([...TK.values()]);start(`Supabase (${TK.size} tickets)`);log('Dados centrais carregados. Este computador já está sincronizado.','okc')}
+}
+async function cloudPoll(){
+  if(!cloudReady||cloudPullBusy||document.hidden||!navigator.onLine)return;cloudPullBusy=true;
+  try{
+    const j=await cloudApi('changes','GET',null,{since:cloudLastPull});const changed=Array.isArray(j.tickets)?j.tickets:[];
+    if(changed.length){changed.forEach(t=>{const id=String(t.id);TK.set(id,t);cloudTicketSig.set(id,cloudSig(t))});await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});const keep=!$('app').classList.contains('hide');build([...TK.values()]);start(`Supabase (${TK.size} tickets)`,keep);}
+    cloudLastPull=new Date().toISOString();
+    const st=await cloudApi('loadState');if(st.updated_at&&st.updated_at!==cloudStateUpdated){const active=document.activeElement;const editing=active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);if(!editing){cloudHydrating=true;try{Object.entries(st.state||{}).forEach(([k,v])=>{if(k.startsWith('md_')&&!CLOUD_EXCLUDE.has(k)&&typeof v==='string')localStorage.setItem(k,v)})}finally{cloudHydrating=false}cloudStateUpdated=st.updated_at;applyCloudSettings();}}
+  }catch(e){cloudMessage('Supabase temporariamente indisponível: '+e.message,'err')}finally{cloudPullBusy=false}
+}
+setInterval(cloudPoll,60000);
+
+/* ---------- inicialização ---------- */
+$('domain').value=localStorage.getItem('md_domain')||'';
+$('token').value=localStorage.getItem('md_token')||'';
+// grava domínio, token, início e ID do campo assim que o campo é alterado (sem depender de sincronizar ou salvar)
+[['domain','md_domain'],['token','md_token'],['startDate','md_ini'],['cfId','md_cf']].forEach(([id,k])=>$(id).addEventListener('change',()=>localStorage.setItem(k,$(id).value.trim())));
+const hoje=new Date(),pad=n=>String(n).padStart(2,'0');
+$('startDate').value=localStorage.getItem('md_ini')||`${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-01`;
+$('endDate').value=`${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-${pad(hoje.getDate())}`;
+$('cfId').value=localStorage.getItem('md_cf')||'';$('cloudKey').value=localStorage.getItem('md_cloudkey')||'';
+$('vipList').value=localStorage.getItem('md_vip')??['Dr Oculos','Ferri','Instituto','Paulo e Condah','Atacadão do Oculos','IMV','Paschoal LAB','Cardeal','Sr dos Oculos','Lux'].join('\n');
+try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{if(sv[i]!=null)$(i).value=sv[i]})}catch(e){}
+$('autoMin').value=localStorage.getItem('md_auto')??'1';
+$('iaMode').value=localStorage.getItem('md_iamode')||'off';$('iaKey').value=localStorage.getItem('md_iakey')||'';
+lastToday=$('endDate').value;
+showTab('cfg');
+showLiveEvents();
+Object.entries(MODS).forEach(([k,[t,d]])=>{
+  const el=$('t-'+k);if(!el) return;
+  el.insertAdjacentHTML('afterbegin',`<div class="mh noprint"><div><h2>${t}</h2><p>${d}</p></div><form class="sb" onsubmit="doSearch('${k}');return false"><input id="q_${k}" type="search" placeholder="Buscar em ${t.toLowerCase()}" aria-label="Buscar em ${t}" oninput="clearTimeout(window._qt);window._qt=setTimeout(()=>doSearch('${k}'),350)"><button class="b" type="submit">Buscar</button><button class="s" type="button" onclick="clearSearch('${k}')">Limpar</button><span class="qc" id="qc_${k}"></span></form></div>`);
+});
+if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Chart.defaults.color='#667085'}
+(async()=>{ // recupera primeiro o banco central; o cache local entra como apoio e fonte de migração
+  const cloudOK=await cloudBootstrap();
+  if(!TK.size){
+    const c=await IDB.get('cache');
+    if(c&&c.tickets&&c.tickets.length){TK=new Map(c.tickets.map(t=>[String(t.id),t]));CF=c.cf||CF;lastSync=c.lastSync||0;lastFull=c.lastFull||0;lastSig=c.sig||'';}
+  }
+  if(TK.size){
+    apiOn=true;const list=[...TK.values()];firstTicket=list.find(t=>(t.actions||[]).length)||list[0]||null;
+    build(list);start(`${cloudOK?'Supabase':'Dados locais'} (${TK.size} tickets)`);cacheLabel(Date.now());autoLabel();
+    await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:list});
+    if(cloudOK)await cloudSaveTickets(list);
+    log(cloudOK?'Dados carregados do Supabase. Buscando alterações do Movidesk...':'Dados carregados do navegador. Para compartilhar, ative a sincronização Supabase.','okc');
+  }
+  if($('domain').value&&$('token').value) sync(true); // sincroniza o Movidesk ao abrir
+})();
+</script>
+</body>
+</html>
