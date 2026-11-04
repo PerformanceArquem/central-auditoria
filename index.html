@@ -1572,7 +1572,7 @@ async function sync(auto){
   const get=async(exp,skip)=>{
     for(let i=0;i<6;i++){
       const r=await window.tmFetch(url(exp,skip));
-      if(r.status===401||r.status===403){window.tmSessionExpired();const e=new Error('Sessão expirada. Entre novamente.');e.status=401;throw e}
+      if(r.status===401||r.status===403){const e=new Error('A API Movidesk recusou a requisição ('+r.status+'). Verifique a autorização do backend /api/movidesk; seu login no Supabase foi mantido.');e.status=r.status;throw e}
       if(r.status===429){log('Limite da API atingido, aguardando 20s e continuando...');await sleep(20000);continue}
       if(!r.ok){const body=await r.json().catch(()=>null);const e=new Error(body?.error||('Erro '+r.status));e.status=r.status;throw e}
       return r.json();
@@ -2626,7 +2626,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
           }
           window.tmAuth = {getSession: requireSession};
           window.tmSessionExpired = () => {
-            showLogin('A sessão não foi aceita pelo servidor. Entre novamente.');
+            console.warn('A integração Movidesk recusou o acesso. A sessão Supabase foi preservada.');
           };
           window.tmFetch = async (url, options = {}) => {
             const target = new URL(url, location.origin);
@@ -2640,7 +2640,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
             const response = await fetch(target, {
               ...options, headers, cache: 'no-store', credentials: 'same-origin'
             });
-            if (response.status === 401) showLogin('Sua sessão expirou. Entre novamente.');
+            // Um 401 do Movidesk pode ser uma falha da própria integração,
+            // não uma sessão inválida do Supabase. Não bloquear a interface.
             return response;
           };
           form.addEventListener('submit', async event => {
@@ -2672,7 +2673,11 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
                 auth: {persistSession:true, autoRefreshToken:true, detectSessionInUrl:false}
               });
               // Nunca iniciar a aplicação apenas por existir um token no armazenamento.
-              const session = await validSession();
+              let session = await validSession();
+              if (!session) {
+                const refreshed = await client.auth.refreshSession().catch(() => ({error:true}));
+                if (!refreshed.error) session = await validSession();
+              }
               if (session) startApp();
               else showLogin('Entre para acessar os dados compartilhados.');
             } catch(e) { showLogin(e.message || 'Falha ao iniciar autenticação'); }
