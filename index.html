@@ -1,242 +1,1500 @@
 <!doctype html>
 <html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Auditoria de Chamados · Ticket Manager</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-<style>
-:root{--navy:#14213d;--blue:#2457d6;--bg:#f3f4f6;--line:#e3e6ea;--muted:#667085;--ink:#1d2433;--ok:#16803c;--bad:#c62828;--warn:#b45309;--r:10px}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif;display:grid;grid-template-columns:232px minmax(0,1fr);grid-template-rows:auto 1fr;min-height:100vh}
-header{grid-column:1/-1;background:var(--navy);color:#fff;padding:12px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-.brand b{font-size:17px;display:block;line-height:1.25}.brand small{color:#aab4cc;font-size:12px}
-.chip{display:flex;gap:8px;align-items:center;border:1px solid #ffffff30;border-radius:99px;padding:5px 14px;font-size:12px;color:#dbe2f0}
-.chip .dot{width:9px;height:9px;border-radius:50%;background:#8791a8;flex:none}.chip.ok .dot{background:#4ade80}.chip.busy .dot{background:#facc15;animation:pu 1s infinite}.chip.err .dot{background:#f87171}
-@keyframes pu{50%{opacity:.3}}@media(prefers-reduced-motion:reduce){.chip .dot{animation:none!important}}
-#status,#auto{font-size:12px;color:inherit}
-nav{display:flex;flex-direction:column;gap:2px;padding:14px 10px;background:#fff;border-right:1px solid var(--line);position:sticky;top:0;align-self:start;max-height:100vh;overflow-y:auto}
-nav button{border:0;background:none;padding:10px 12px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer;text-align:left;border-radius:8px;border-left:3px solid transparent}
-nav button:hover{background:#f5f6f8;color:var(--ink)}nav button.on{background:#eaf0fd;color:var(--blue);border-left-color:var(--blue)}
-main{padding:24px 28px;width:100%;max-width:1480px;margin:0 auto}
-.mh{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:18px}
-.mh h2{margin:0;font-size:22px;letter-spacing:-.01em}.mh p{margin:2px 0 0;color:var(--muted)}
-.sb{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.sb input{min-width:270px;padding-left:34px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23667085' stroke-width='2'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 4 4'/%3E%3C/svg%3E") no-repeat 11px center}
-.qc{font-size:12px;color:var(--muted);font-weight:600}
-.card{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:20px;margin-bottom:16px}
-h3{margin:0 0 12px;font-size:15px}
-.row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
-.fg{display:flex;flex-direction:column;gap:3px;min-width:150px}
-.fg label{font-size:12px;font-weight:600;color:var(--muted)}
-input,select,textarea{padding:8px 11px;border:1px solid #cfd5dd;border-radius:8px;font-size:13px;background:#fff;color:var(--ink)}
-button{font:inherit;transition:filter .15s}
-button.b{background:var(--blue);color:#fff;border:0;padding:9px 15px;border-radius:8px;font-weight:600;cursor:pointer}
-button.b:hover,button.s:hover{filter:brightness(.94)}
-button.g{background:var(--ok)}button.s{background:#e8ebf0;color:var(--ink);border:0;padding:9px 14px;border-radius:8px;font-weight:600;cursor:pointer}
-button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
-.kpis .card{margin:0;padding:15px 18px;border-left:4px solid var(--blue)}.kpis small{color:var(--muted);font-weight:600}.kpis div b{display:block;font-size:26px;color:var(--ink)}
-.tw{overflow-x:auto;max-height:560px;border:1px solid var(--line);border-radius:8px}
-table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
-th{position:sticky;top:0;background:#f6f7f9;color:var(--muted);text-align:left;padding:10px 12px;font-size:12px;font-weight:600;border-bottom:1px solid var(--line)}
-td{padding:9px 12px;border-bottom:1px solid #eef0f3}tbody tr:hover td{background:#f8faff}
-.pill{padding:2px 9px;border-radius:12px;font-size:11px;font-weight:600;background:#eef0f3}
-.pill.ok{background:#dcf5e5;color:#14532d}.pill.bad{background:#fde2e2;color:#991b1b}.pill.warn{background:#fdf0d0;color:#8a4b08}
-.bar{display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:12px}
-.bar i{flex:1;height:10px;background:#e8ebf0;border-radius:5px;overflow:hidden}.bar u{display:block;height:100%;background:var(--blue)}
-.zone{border:2px dashed #9db5ef;border-radius:10px;padding:18px;text-align:center;background:#f3f6fe;cursor:pointer;font-weight:600;color:var(--blue)}
-#log{margin-top:10px;font-weight:600}.err{color:var(--bad)}.okc{color:var(--ok)}
-pre{background:#1d2433;color:#9fd3ff;padding:14px;border-radius:8px;max-height:380px;overflow:auto;font-size:12px}
-.hide{display:none!important}
-th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--blue)}.ar{margin-left:4px;font-size:10px}
-.colbtn{margin:0 0 8px;font-size:12px}.colbtn summary{cursor:pointer;color:var(--blue);font-weight:600;width:max-content}
-.colbox{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 0}.colbox label{display:flex;gap:4px;align-items:center;font-weight:400;font-size:12px;color:var(--ink)}
-details.card summary{cursor:pointer;font-weight:700}details.card ul{margin:10px 0 0;padding-left:20px}details.card li{margin-bottom:4px}
-.sum p{margin:6px 0}.sum p.al{color:#991b1b}.sum p.wn{color:#92400e}
-.prog{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:12px}.prog .pn{width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.prog i{flex:1;height:14px;background:#e8ebf0;border-radius:7px;position:relative;overflow:hidden}.prog u{display:block;height:100%;border-radius:7px;transform-origin:left center;animation:progReveal 1.15s cubic-bezier(.2,.8,.2,1) both}.prog s{position:absolute;top:0;bottom:0;width:2px;background:#1d2433;opacity:.55}
-.prog .pv{width:230px;text-align:right}.prog.tot i{height:20px}.prog.tot{font-size:13px;margin-bottom:14px}@keyframes progReveal{from{transform:scaleX(0);opacity:.45}to{transform:scaleX(1);opacity:1}}.prog-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin:8px 0 12px}.prog-legend span{display:inline-flex;align-items:center;gap:5px}.prog-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
-body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #app>.kpis{display:none}
-.fb{border:0;background:none;color:var(--muted);cursor:pointer;padding:1px 4px;margin-left:4px;font-size:11px;border-radius:4px}.fb:hover{background:#e8ebf0}.fb.on{color:#fff;background:var(--blue)}
-.fp{position:fixed;z-index:50;width:270px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px rgba(20,33,61,.18);padding:10px}
-.fp>input{width:100%}.fl{max-height:230px;overflow:auto;margin:8px 0}.fl label{display:flex;gap:7px;align-items:flex-start;padding:3px 2px;font-size:12px;cursor:pointer}.fl input{padding:0;margin-top:2px}.fl em{color:var(--muted);font-size:12px}.fa{display:flex;gap:6px}.fa button{padding:6px 10px;font-size:12px}.fn{color:var(--muted);font-size:11px;margin:4px 0 0}
-.rz{position:absolute;top:0;right:0;width:8px;height:100%;cursor:col-resize}.rz:hover{background:var(--blue);opacity:.35}th.dov{box-shadow:inset 3px 0 0 var(--blue)}th[draggable=true]{cursor:pointer}
-@media(max-width:900px){.prog{flex-wrap:wrap}.prog .pn,.prog .pv{width:auto}body{display:block}nav{flex-direction:row;position:static;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px 12px}nav button{white-space:nowrap;border-left:0;border-bottom:3px solid transparent}nav button.on{border-bottom-color:var(--blue)}main{padding:16px}.sb input{min-width:0;width:100%}}
-@media print{.fb,.fp,.rz{display:none!important}header,nav,.filters,.noprint,#rules,.mh{display:none!important}body{display:block;background:#fff}main{padding:0}}
-</style>
-<style>
-body.tm-locked > :not(#tm-login):not(script){display:none!important}
-#tm-login[hidden]{display:none!important}
-#tm-login{max-width:420px;margin:64px auto;padding:28px}
-#tm-login input{width:100%;box-sizing:border-box}
-</style>
-</head>
-<body class="tm-locked">
-<section id="tm-login" class="card">
-<h1>Ticket Manager</h1>
-<form id="tm-login-form">
-<label for="tm-password">Senha de acesso</label>
-<input id="tm-password" type="password" autocomplete="current-password" maxlength="1024" required>
-<button id="tm-enter" class="b g" type="submit" disabled style="margin-top:16px">Entrar</button>
-<p id="tm-message" role="status">Verificando sessão…</p>
-</form>
-</section>
-<header><div class="brand"><b>Auditoria de Chamados</b><small>Ticket Manager · Movidesk</small></div><div class="chip" id="chip"><span class="dot"></span><span id="status">Aguardando dados</span><span id="auto"></span></div><button id="tm-logout" class="b noprint" type="button">Sair</button></header>
-<nav id="tabs">
-  <button data-t="live">Tickets atualizados</button>
-  <button data-t="cfg">Configurações</button>
-  <button data-t="mgmt">Gestão</button>
-  <button data-t="vip">Clientes VIP</button>
-  <button data-t="charts">Gráficos</button>
-  <button data-t="entries">Lançamentos</button>
-  <button data-t="pivot">Tabela dinâmica</button>
-  <button data-t="proj">Projetos</button>
-  <button data-t="occ">Colaboradores</button>
-  <button data-t="diag">Diagnóstico</button>
-</nav>
-<main>
-  <div id="t-live" class="hide">
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0 0 5px">Painel de tickets atualizados</h3><p style="margin:0;color:var(--muted)">Acompanhe chamados que tiveram alteração detectada na última sincronização do Movidesk.</p></div><button class="b g" onclick="sync()">Atualizar agora</button></div>
-      <div class="kpis" style="margin:14px 0"><div class="card"><small>Alterações registradas</small><b id="liveCount">0</b></div><div class="card"><small>Previsões / prazos</small><b id="liveDue">0</b></div><div class="card"><small>Status alterados</small><b id="liveStatus">0</b></div><div class="card"><small>Chamados atualizados</small><b id="liveGeneral">0</b></div></div>
-      <div class="row noprint" style="margin-bottom:12px"><div class="fg"><label>Filtrar alterações</label><select id="liveFilter" onchange="showLiveEvents()"><option value="all">Todas</option><option value="PREVISÃO / PRAZO ALTERADO">Previsão / prazo</option><option value="STATUS ALTERADO">Status</option><option value="CHAMADO ATUALIZADO">Atualizações gerais</option></select></div><div class="fg"><label>Pesquisar ticket ou assunto</label><input id="liveSearch" placeholder="Número ou assunto" oninput="showLiveEvents()"></div><button class="s" onclick="clearLiveEvents()">Limpar histórico</button></div>
-      <div id="livePanelList"></div>
-      <p style="font-size:12px;color:var(--muted);margin-top:12px">O painel registra alterações identificadas entre sincronizações. Para receber eventos instantaneamente, sem aguardar a próxima consulta, é necessário configurar webhook no backend.</p>
-    </div>
-  </div>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Auditoria de Chamados · Ticket Manager</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+        <style>
+            :root {
+                --navy: #14213d;
+                --blue: #2457d6;
+                --bg: #f3f4f6;
+                --line: #e3e6ea;
+                --muted: #667085;
+                --ink: #1d2433;
+                --ok: #16803c;
+                --bad: #c62828;
+                --warn: #b45309;
+                --r: 10px
+            }
 
-  <div id="t-cfg" class="hide">
-    <div class="card" style="border-left:4px solid var(--blue)"><h2 style="margin:0 0 5px">Conexão e carregamento de dados</h2><p style="margin:0;color:var(--muted)">Configure a API Movidesk, importe arquivos e acompanhe a sincronização automática.</p></div>
-    <div class="card" id="cloudCard" style="border:1px solid #b8c9e8;background:#f7faff">
-      <h3>Sincronização entre computadores · Supabase</h3>
-      <p style="margin:0 0 10px;color:var(--muted)">Compartilha chamados, histórico de alterações, previsões manuais, leituras da IA e configurações entre os computadores conectados à mesma base.</p>
-      <div class="row">
-        <div class="fg" style="flex:1;min-width:260px"><label>Chave de sincronização (definida na Vercel)</label><input id="cloudKey" type="password" autocomplete="off" placeholder="Cole a chave configurada em TICKET_SYNC_KEY"></div>
-        <button class="b" type="button" onclick="cloudConnect()">Ativar / carregar dados</button>
-      </div>
-      <p id="cloudMsg" style="margin:10px 0 0;font-weight:600">Nuvem ainda não conectada neste computador.</p>
-      <p style="font-size:12px;color:var(--muted);margin:7px 0 0">A chave acima não é a chave service_role do Supabase. Ela apenas autoriza este painel a chamar o backend da Vercel. A service_role permanece protegida no servidor.</p>
-    </div>
-  <div id="t-load">
-    <div class="card">
-      <h3>API Movidesk</h3>
-      <div class="row">
-        <div class="fg" style="flex:1;min-width:240px"><label>Domínio do portal (para abrir chamados)</label><input id="domain" placeholder="https://suaempresa.movidesk.com"></div>
-        <div class="fg"><label>Acesso à API</label><span>Conexão protegida pela sessão</span></div>
-        <div class="fg"><label>Início</label><input type="date" id="startDate"></div>
-        <div class="fg"><label>Fim</label><input type="date" id="endDate"></div>
-        <div class="fg"><label>ID do campo "horas previstas" (opcional)</label><input id="cfId" placeholder="ex.: 12345"></div>
-        <div class="fg"><label>Atualização automática</label><select id="autoMin" onchange="autoChanged()"><option value="0">Desligada</option><option value="1">A cada 1 min (quase em tempo real)</option><option value="5">A cada 5 min</option><option value="10">A cada 10 min</option><option value="15">A cada 15 min</option><option value="30">A cada 30 min</option><option value="60">A cada 60 min</option></select></div>
-        <button class="b g" onclick="sync()">Sincronizar agora</button><button class="b" onclick="saveNow()">Salvar dados</button><button class="s" onclick="clearCache()">Limpar dados salvos</button>
-      </div>
-      <div id="log"></div>
-      <div class="card" style="margin-top:12px;border:1px solid #b8c9e8;background:#f7faff"><h3 style="margin:0 0 8px">Monitor de alterações em tempo real</h3><p style="margin:0 0 8px;color:var(--muted)">Mostra atualizações detectadas na sincronização: mudança de previsão/prazo, status ou atualização do chamado.</p><div id="liveChanges" style="font-size:13px">Aguardando a primeira sincronização...</div></div>
-      <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. Com o Supabase ativado, os dados ficam disponíveis em outros computadores; o cache local continua como apoio para abrir o painel mais rápido. Sem ativar a nuvem, os dados permanecem apenas neste navegador. A verificação automática pode ocorrer a cada 1 minuto (quase em tempo real; depende da resposta da API e do limite de requisições do Movidesk). Alterações são registradas no Monitor de alterações. Uma sincronização completa roda a cada 6 horas. Se a conexão cair, o sistema tenta de novo sozinho, com intervalos cada vez maiores. Para alertas instantâneos sem espera, será necessário configurar um webhook no backend.</p><p id="cacheInfo" style="margin:8px 0 0;font-weight:600"></p>
-    </div>
-    <div class="card">
-      <h3>Ou importe o CSV "Tempo trabalhado nos tickets"</h3>
-      <div class="zone" onclick="csvFile.click()">Clique para escolher o arquivo CSV</div>
-      <input type="file" id="csvFile" accept=".csv,.txt" class="hide" onchange="loadCSV(event)">
-    </div>
-  </div>
-    <div class="card" style="border-left:4px solid var(--blue)"><h2 style="margin:0 0 5px">Robô de leitura</h2><p style="margin:0;color:var(--muted)">Consulte as previsões de horas identificadas automaticamente nos chamados.</p></div>
-    <div id="t-bot"><div class="card"><h3>Previsões lidas pelo robô nos chamados</h3><p id="botInfo" style="margin:0 0 12px"></p><div class="tw"><table><thead><tr><th>Chamado</th><th>Cliente</th><th>Assunto</th><th>Onde leu</th><th>Trecho</th><th>Previsto (h)</th><th>Apontado (h)</th><th>Uso</th><th>Confiança</th><th>Ação</th></tr></thead><tbody id="tBot"></tbody></table></div></div></div>
-    <div class="card" id="rules"><h3>Regras de cálculo</h3><div class="row">
-      <div class="fg"><label>Meta diária por projeto (h)</label><input id="rMeta" type="number" step="0.5" value="4" onchange="rulesChanged()"></div>
-      <div class="fg"><label>Jornada diária (h)</label><input id="rJor" type="number" step="0.5" value="8" onchange="rulesChanged()"></div>
-      <div class="fg"><label>Mínimo de horas apontadas (%)</label><input id="rMin" type="number" value="80" onchange="rulesChanged()"></div>
-      <div class="fg"><label>Projeto identificado por</label><select id="rFld" onchange="rulesChanged()"><option value="service_name">Serviço</option><option value="category">Categoria</option><option value="sector">Equipe</option><option value="subject">Assunto</option><option value="activity">Atividade</option><option value="client_name">Cliente</option></select></div>
-      <div class="fg"><label>Contém o texto</label><input id="rKw" value="projeto" onchange="rulesChanged()"></div>
-      <div class="fg"><label>Carnaval e Corpus Christi como feriado</label><select id="rFac" onchange="rulesChanged()"><option value="0">Não</option><option value="1">Sim</option></select></div>
-      <div class="fg" style="flex:1;min-width:220px"><label>Feriados extras (dd/mm/aaaa, separados por vírgula)</label><input id="rHol" onchange="rulesChanged()"></div>
-      <div class="fg" style="flex:1;min-width:220px"><label>Ou números de tickets (separados por vírgula)</label><input id="rIds" onchange="rulesChanged()"></div>
-    </div></div>
-    <div class="card"><h3>Clientes VIP</h3><div class="fg"><label>Lista de clientes VIP (um por linha; basta uma parte do nome)</label><textarea id="vipList" rows="6" placeholder="Cole aqui os nomes dos clientes VIP" style="padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit" onchange="vipChanged()"></textarea></div><p style="color:var(--muted);margin:8px 0 0">O relatório fica na aba Clientes VIP.</p></div>
-    <div class="card">
-      <h3>Leitura por IA (opcional)</h3>
-      <div class="row">
-        <div class="fg"><label>Analisar</label><select id="iaMode" onchange="iaChanged()"><option value="off">Desligada</option><option value="proj">Só chamados de projeto</option><option value="all">Todos com horas apontadas</option></select></div>
-        <div class="fg" style="flex:1;min-width:240px"><label>Senha da função (ACCESS_KEY)</label><input id="iaKey" type="password" onchange="iaChanged()"></div>
-        <button class="b" onclick="iaRun()">Analisar agora</button>
-      </div>
-      <div id="iaMsg"></div>
-      <p style="color:var(--muted);margin:10px 0 0">Só entram chamados sem previsão digitada, sem campo personalizado e sem previsão lida pelo robô de regras. Cada chamado é analisado uma vez (de novo só se o texto mudar) e o resultado fica salvo neste navegador. <b>O assunto e a descrição dos chamados são enviados ao provedor de IA configurado na função.</b></p>
-    </div>
-  </div>
+            * {
+                box-sizing: border-box
+            }
 
-  <div id="app" class="hide">
-    <div class="card filters">
-      <div class="row" id="filters">
-        <div class="fg"><label>Início</label><input type="date" id="fStart" onchange="applyFilters()"></div>
-        <div class="fg"><label>Fim</label><input type="date" id="fEnd" onchange="applyFilters()"></div>
-      </div>
-      <div class="row" style="margin-top:12px">
-        <span style="align-self:center;font-size:12px;font-weight:700;color:var(--muted)">Período rápido:</span>
-        <button class="s" onclick="quick('today')">Hoje</button><button class="s" onclick="quick('7')">Últimos 7 dias</button><button class="s" onclick="quick('m')">Mês atual</button><button class="s" onclick="quick('all')">Tudo carregado</button>
-        <button class="s" onclick="resetFilters()">Limpar filtros</button>
-        <button class="g b" onclick="exportXLSX()">Excel da aba</button>
-        <button class="b" style="background:var(--bad)" onclick="exportPDF()">PDF da aba</button>
-        <button class="s" onclick="print()">Imprimir</button>
-      </div>
-    </div>
-    <details class="card noprint" id="legend"><summary>Como ler horas e dias (clique para abrir)</summary><ul>
-      <li><b>h = horas</b>, <b>dias = quantidade de dias</b>. Horas aparecem sempre com vírgula e a unidade: 8,50 h = 8 horas e 30 minutos.</li>
-      <li><b>Dia útil</b>: segunda a sexta, menos feriados. <b>Capacidade</b> = dias úteis do período × jornada diária (ex.: 20 dias × 8 h = 160 h).</li>
-      <li><b>Mínimo exigido</b> = capacidade × o % mínimo definido (padrão 80%).</li>
-      <li><b>Faltam / Restam / Folga de</b> = quanto ainda falta (ou sobra) até a referência. <b>Passou / Excedeu / Acima em</b> = quanto passou dela. O trecho <b>(≈ 2,5 dias de 8 h)</b> converte as mesmas horas em dias de trabalho.</li>
-      <li><b>Previsto</b> = horas que a pessoa informou para o chamado: digitadas aqui, vindas do campo personalizado do Movidesk, ou <b>lidas no texto do chamado</b> pelo robô de regras ou pela IA (ex.: “previsão 20h”, “estimativa de 3 dias”). <b>Apontado</b> = tudo que já foi lançado de tempo no chamado.</li>
-      <li>Em qualquer tabela: <b>clique no título da coluna para ordenar</b> e use <b>“Colunas ▾”</b> para mostrar ou esconder colunas. O Excel e o PDF saem como você deixou a tabela.</li></ul></details>
-    <div class="kpis">
-      <div class="card"><small>Tickets</small><div><b id="kT">0</b></div></div>
-      <div class="card"><small>Horas apontadas</small><div><b id="kH">0</b></div></div>
-      <div class="card"><small>Colaboradores</small><div><b id="kA">0</b></div></div>
-      <div class="card"><small>Clientes</small><div><b id="kC">0</b></div></div>
-    </div>
+            body {
+                margin: 0;
+                background: var(--bg);
+                color: var(--ink);
+                font: 14px/1.5 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+                display: grid;
+                grid-template-columns: 232px minmax(0,1fr);
+                grid-template-rows: auto 1fr;
+                min-height: 100vh
+            }
 
-    <div id="t-mgmt" class="hide">
-      <div class="card"><h3>Resumo para a direção</h3><div class="sum" id="mgSum"></div></div>
-      <div class="card"><h3>Relatório de gestão</h3><p id="mgInfo" style="margin:0 0 12px"></p>
-        <div class="row noprint" style="margin-bottom:12px"><div class="fg"><label>Itens em cada ranking</label><select id="mgTop" onchange="render()"><option>5</option><option selected>10</option><option>20</option><option>50</option></select></div></div>
-        <div class="kpis" id="mgKpi" style="margin:0"></div></div>
-      <div class="card"><h3>Colaboradores que mais geram impacto e sobrecarga</h3><p style="color:var(--muted);margin:0 0 10px">Ordenado pelo % da capacidade usado no período. “Passou” = horas acima da capacidade; “Folga de” = horas que ainda cabiam.</p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Horas apontadas (h)</th><th>Capacidade (h)</th><th>% da capacidade</th><th>Passou ou folga</th><th>Chamados</th><th>Cliente com mais horas</th><th>Média por dia útil (h)</th><th>Horas em dias não úteis (h)</th><th>Situação</th></tr></thead><tbody id="tMgAg"></tbody></table></div></div>
-      <div class="card"><h3>Projetos e chamados que mais estouram a previsão</h3><p style="color:var(--muted);margin:0 0 10px">Inclui projetos (pela regra da aba Projetos) e qualquer chamado com previsão de horas informada. “Apontado” soma todo o histórico; “Apontado no período” respeita o filtro de datas.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Previsto (h)</th><th>Apontado (h)</th><th>Restam ou excedeu</th><th>% da previsão</th><th>Apontado no período (h)</th><th>Colaboradores</th><th>Situação</th></tr></thead><tbody id="tMgPrj"></tbody></table></div></div>
-      <div class="card"><h3>Empresas que mais consomem tempo</h3><div id="mgBars" style="margin-bottom:12px"></div><div class="tw"><table><thead><tr><th>Empresa</th><th>Horas (h)</th><th>% do total</th><th>Chamados</th><th>Colaboradores</th><th>Horas em dias não úteis (h)</th></tr></thead><tbody id="tMgCli"></tbody></table></div></div>
-      <div class="card"><h3>Chamados mais impactantes</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Empresa</th><th>Horas (h)</th><th>% do total</th><th>Apontamentos</th><th>Colaboradores</th><th>Dias com apontamento</th><th>Horas em dias não úteis (h)</th><th>Status</th></tr></thead><tbody id="tMgTk"></tbody></table></div></div></div>
-    <div id="t-vip" class="hide"><div class="card"><h3>Clientes VIP</h3>
-      
-      <p id="vipInfo" style="margin:10px 0"></p><div class="kpis" id="vipKpi" style="margin:0"></div></div>
-      <div class="card"><h3>VIPs que mais consomem a carga</h3><div class="tw"><table><thead><tr><th>Cliente VIP</th><th>Horas</th><th>% do total</th><th>% da capacidade da equipe</th><th>Chamados</th><th>Colaboradores</th><th>Quem mais atende</th><th>Horas em dias não úteis (h)</th></tr></thead><tbody id="tVip"></tbody></table></div></div>
-      <div class="card"><h3>Clientes não VIP que mais consomem (comparação)</h3><div class="tw"><table><thead><tr><th>Cliente</th><th>Horas</th><th>% do total</th><th>Chamados</th></tr></thead><tbody id="tVipOut"></tbody></table></div></div></div>
-    <div id="t-entries" class="hide"><div class="card"><h3>Lançamentos de tempo</h3><div class="tw"><table>
-      <thead><tr><th>Ticket</th><th>Data</th><th>Cliente</th><th>Assunto</th><th>Colaborador</th><th>Equipe</th><th>Atividade</th><th>Status</th><th>Horas</th></tr></thead><tbody id="tEntries"></tbody></table></div><p id="cap" style="color:var(--muted)"></p></div></div>
-    <div id="t-pivot" class="hide"><div class="card"><h3>Tabela dinâmica</h3>
-      <div class="row"><div class="fg"><label>Linhas</label><select id="pvRow" onchange="renderPivot()"></select></div>
-      <div class="fg"><label>Colunas</label><select id="pvCol" onchange="renderPivot()"></select></div>
-      <div class="fg"><label>Valor</label><select id="pvVal" onchange="renderPivot()"><option value="h">Horas</option><option value="n">Lançamentos</option><option value="t">Chamados distintos</option><option value="a">Colaboradores distintos</option></select></div></div>
-      <div class="tw" style="margin-top:12px"><table id="pvTable"></table></div><p id="pvNote" style="color:var(--muted)"></p></div></div>
-    <div id="t-charts" class="hide"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px">
-      <div class="card" style="grid-column:1/-1"><h3>Progresso acumulado: horas apontadas × capacidade</h3><canvas id="chDay" height="80"></canvas></div>
-      <div class="card"><h3>Horas por semana e equipe</h3><canvas id="chWeek"></canvas></div>
-      <div class="card"><h3>Empresas que mais consomem (laranja = VIP)</h3><canvas id="chCli"></canvas></div>
-      <div class="card"><h3>Horas apontadas × capacidade prevista</h3><p style="color:var(--muted);margin:0 0 10px">Compare o total de horas efetivamente apontadas com a capacidade prevista para o período, por colaborador e para a equipe.</p><div class="prog-legend"><span><i class="prog-dot" style="background:#16a34a"></i>Dentro da capacidade</span><span><i class="prog-dot" style="background:#d97706"></i>Abaixo do mínimo</span><span><i class="prog-dot" style="background:#dc2626"></i>Acima da capacidade</span><span>│ mínimo esperado</span></div><div id="agProg"></div></div>
-      <div class="card"><h3>Distribuição por atividade</h3><canvas id="chAct"></canvas></div></div></div>
-    <div id="t-proj" class="hide"><div class="card"><h3>Projetos: horas por dia × meta</h3><p style="color:var(--muted);margin:0 0 10px">Soma de todos os colaboradores no projeto, dia a dia, dentro do período filtrado. Tolerância de 15 min em torno da meta.</p><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Dias com apontamento</th><th>Total (h)</th><th>Média por dia (h)</th><th>Dias abaixo da meta</th><th>Dias na meta</th><th>Dias que estourou</th></tr></thead><tbody id="tProj"></tbody></table></div></div>
-      <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Data</th><th>Quem trabalhou</th><th>Horas no dia (h)</th><th>Diferença para a meta</th><th>Situação</th></tr></thead><tbody id="tProjDay"></tbody></table></div></div>
-      <div class="card"><h3>Previsto × apontado por chamado</h3><p style="color:var(--muted);margin:0 0 10px"><b>Previsto</b> = horas que a pessoa informou: digitadas aqui, do campo personalizado do Movidesk ou lidas no texto do chamado pelo robô de regras ou pela IA (“previsão 20h”; “3 dias” vale 3 × a jornada). <b>Apontado</b> = todo o histórico de tempo lançado, sem filtro de período. <b>Restam</b> = previsto − apontado; <b>Excedeu</b> = apontado − previsto. Previsão digitada aqui tem prioridade e fica salva neste navegador.</p><div class="row noprint" style="margin-bottom:10px"><div class="fg"><label>Mostrar</label><select id="bScope" onchange="render()"><option value="p">Somente projetos (regra acima)</option><option value="a">Todos os chamados</option></select></div></div><div class="tw"><table><thead><tr><th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Previsto (h)</th><th>De onde veio a previsão</th><th>Apontado (h)</th><th>Restam ou excedeu</th><th>% da previsão</th><th>Situação</th><th>Início</th><th>Último apontamento</th><th>Duração (dias corridos)</th><th>Dias com apontamento</th></tr></thead><tbody id="tBudget"></tbody></table></div></div></div>
-    <div id="t-occ" class="hide"><div class="card"><h3>Colaboradores: horas apontadas e jornada</h3><p id="occInfo" style="color:var(--muted);margin:0 0 10px"></p><div class="tw"><table><thead><tr><th>Colaborador</th><th>Equipe</th><th>Lançamentos</th><th>Tickets</th><th>Clientes</th><th>Dias com apontamento</th><th>Horas apontadas (h)</th><th>Média por dia apontado (h)</th><th>Horas em dias não úteis (h)</th><th>Capacidade (h)</th><th>Mínimo exigido (h)</th><th>% da capacidade</th><th>Falta para o mínimo</th><th>Falta para a jornada completa</th><th>Situação</th></tr></thead><tbody id="tOcc"></tbody></table></div></div>
-      <div class="card"><h3>Detalhe por dia</h3><div class="tw"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Horas no dia (h)</th><th>% da jornada</th><th>Falta ou sobra no dia</th><th>Situação</th></tr></thead><tbody id="tOccDay"></tbody></table></div></div></div>
+            header {
+                grid-column: 1/-1;
+                background: var(--navy);
+                color: #fff;
+                padding: 12px 24px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 12px;
+                flex-wrap: wrap
+            }
 
-    <div id="t-diag" class="hide"><div class="card"><h3>Diagnóstico da extração</h3><div id="diagSummary"></div><pre id="rawJson">Sem dados.</pre></div></div>
-  </div>
-</main>
+            .brand b {
+                font-size: 17px;
+                display: block;
+                line-height: 1.25
+            }
 
-<script type="text/plain" id="tm-application-source">
+            .brand small {
+                color: #aab4cc;
+                font-size: 12px
+            }
+
+            .chip {
+                display: flex;
+                gap: 8px;
+                align-items: center;
+                border: 1px solid #ffffff30;
+                border-radius: 99px;
+                padding: 5px 14px;
+                font-size: 12px;
+                color: #dbe2f0
+            }
+
+            .chip .dot {
+                width: 9px;
+                height: 9px;
+                border-radius: 50%;
+                background: #8791a8;
+                flex: none
+            }
+
+            .chip.ok .dot {
+                background: #4ade80
+            }
+
+            .chip.busy .dot {
+                background: #facc15;
+                animation: pu 1s infinite
+            }
+
+            .chip.err .dot {
+                background: #f87171
+            }
+
+            @keyframes pu {
+                50% {
+                    opacity: .3
+                }
+            }
+
+            @media(prefers-reduced-motion:reduce) {
+                .chip .dot {
+                    animation: none!important
+                }
+            }
+
+            #status,#auto {
+                font-size: 12px;
+                color: inherit
+            }
+
+            nav {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                padding: 14px 10px;
+                background: #fff;
+                border-right: 1px solid var(--line);
+                position: sticky;
+                top: 0;
+                align-self: start;
+                max-height: 100vh;
+                overflow-y: auto
+            }
+
+            nav button {
+                border: 0;
+                background: none;
+                padding: 10px 12px;
+                font: inherit;
+                font-weight: 600;
+                color: var(--muted);
+                cursor: pointer;
+                text-align: left;
+                border-radius: 8px;
+                border-left: 3px solid transparent
+            }
+
+            nav button:hover {
+                background: #f5f6f8;
+                color: var(--ink)
+            }
+
+            nav button.on {
+                background: #eaf0fd;
+                color: var(--blue);
+                border-left-color: var(--blue)
+            }
+
+            main {
+                padding: 24px 28px;
+                width: 100%;
+                max-width: 1480px;
+                margin: 0 auto
+            }
+
+            .mh {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-end;
+                gap: 14px;
+                flex-wrap: wrap;
+                margin-bottom: 18px
+            }
+
+            .mh h2 {
+                margin: 0;
+                font-size: 22px;
+                letter-spacing: -.01em
+            }
+
+            .mh p {
+                margin: 2px 0 0;
+                color: var(--muted)
+            }
+
+            .sb {
+                display: flex;
+                gap: 8px;
+                align-items: center;
+                flex-wrap: wrap
+            }
+
+            .sb input {
+                min-width: 270px;
+                padding-left: 34px;
+                background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23667085' stroke-width='2'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 4 4'/%3E%3C/svg%3E") no-repeat 11px center
+            }
+
+            .qc {
+                font-size: 12px;
+                color: var(--muted);
+                font-weight: 600
+            }
+
+            .card {
+                background: #fff;
+                border: 1px solid var(--line);
+                border-radius: var(--r);
+                padding: 20px;
+                margin-bottom: 16px
+            }
+
+            h3 {
+                margin: 0 0 12px;
+                font-size: 15px
+            }
+
+            .row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+                align-items: flex-end
+            }
+
+            .fg {
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+                min-width: 150px
+            }
+
+            .fg label {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--muted)
+            }
+
+            input,select,textarea {
+                padding: 8px 11px;
+                border: 1px solid #cfd5dd;
+                border-radius: 8px;
+                font-size: 13px;
+                background: #fff;
+                color: var(--ink)
+            }
+
+            button {
+                font: inherit;
+                transition: filter .15s
+            }
+
+            button.b {
+                background: var(--blue);
+                color: #fff;
+                border: 0;
+                padding: 9px 15px;
+                border-radius: 8px;
+                font-weight: 600;
+                cursor: pointer
+            }
+
+            button.b:hover,button.s:hover {
+                filter: brightness(.94)
+            }
+
+            button.g {
+                background: var(--ok)
+            }
+
+            button.s {
+                background: #e8ebf0;
+                color: var(--ink);
+                border: 0;
+                padding: 9px 14px;
+                border-radius: 8px;
+                font-weight: 600;
+                cursor: pointer
+            }
+
+            button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible {
+                outline: 2px solid var(--blue);
+                outline-offset: 1px
+            }
+
+            .kpis {
+                display: grid;
+                grid-template-columns: repeat(auto-fit,minmax(180px,1fr));
+                gap: 12px;
+                margin-bottom: 16px
+            }
+
+            .kpis .card {
+                margin: 0;
+                padding: 15px 18px;
+                border-left: 4px solid var(--blue)
+            }
+
+            .kpis small {
+                color: var(--muted);
+                font-weight: 600
+            }
+
+            .kpis div b {
+                display: block;
+                font-size: 26px;
+                color: var(--ink)
+            }
+
+            .tw {
+                overflow-x: auto;
+                max-height: 560px;
+                border: 1px solid var(--line);
+                border-radius: 8px
+            }
+
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 13px;
+                white-space: nowrap
+            }
+
+            th {
+                position: sticky;
+                top: 0;
+                background: #f6f7f9;
+                color: var(--muted);
+                text-align: left;
+                padding: 10px 12px;
+                font-size: 12px;
+                font-weight: 600;
+                border-bottom: 1px solid var(--line)
+            }
+
+            td {
+                padding: 9px 12px;
+                border-bottom: 1px solid #eef0f3
+            }
+
+            tbody tr:hover td {
+                background: #f8faff
+            }
+
+            .pill {
+                padding: 2px 9px;
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: 600;
+                background: #eef0f3
+            }
+
+            .pill.ok {
+                background: #dcf5e5;
+                color: #14532d
+            }
+
+            .pill.bad {
+                background: #fde2e2;
+                color: #991b1b
+            }
+
+            .pill.warn {
+                background: #fdf0d0;
+                color: #8a4b08
+            }
+
+            .bar {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 6px;
+                font-size: 12px
+            }
+
+            .bar i {
+                flex: 1;
+                height: 10px;
+                background: #e8ebf0;
+                border-radius: 5px;
+                overflow: hidden
+            }
+
+            .bar u {
+                display: block;
+                height: 100%;
+                background: var(--blue)
+            }
+
+            .zone {
+                border: 2px dashed #9db5ef;
+                border-radius: 10px;
+                padding: 18px;
+                text-align: center;
+                background: #f3f6fe;
+                cursor: pointer;
+                font-weight: 600;
+                color: var(--blue)
+            }
+
+            #log {
+                margin-top: 10px;
+                font-weight: 600
+            }
+
+            .err {
+                color: var(--bad)
+            }
+
+            .okc {
+                color: var(--ok)
+            }
+
+            pre {
+                background: #1d2433;
+                color: #9fd3ff;
+                padding: 14px;
+                border-radius: 8px;
+                max-height: 380px;
+                overflow: auto;
+                font-size: 12px
+            }
+
+            .hide {
+                display: none!important
+            }
+
+            th.sortable {
+                cursor: pointer;
+                user-select: none
+            }
+
+            th.sortable:hover {
+                color: var(--blue)
+            }
+
+            .ar {
+                margin-left: 4px;
+                font-size: 10px
+            }
+
+            .colbtn {
+                margin: 0 0 8px;
+                font-size: 12px
+            }
+
+            .colbtn summary {
+                cursor: pointer;
+                color: var(--blue);
+                font-weight: 600;
+                width: max-content
+            }
+
+            .colbox {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px 16px;
+                padding: 8px 0
+            }
+
+            .colbox label {
+                display: flex;
+                gap: 4px;
+                align-items: center;
+                font-weight: 400;
+                font-size: 12px;
+                color: var(--ink)
+            }
+
+            details.card summary {
+                cursor: pointer;
+                font-weight: 700
+            }
+
+            details.card ul {
+                margin: 10px 0 0;
+                padding-left: 20px
+            }
+
+            details.card li {
+                margin-bottom: 4px
+            }
+
+            .sum p {
+                margin: 6px 0
+            }
+
+            .sum p.al {
+                color: #991b1b
+            }
+
+            .sum p.wn {
+                color: #92400e
+            }
+
+            .prog {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin: 8px 0;
+                font-size: 12px
+            }
+
+            .prog .pn {
+                width: 190px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap
+            }
+
+            .prog i {
+                flex: 1;
+                height: 14px;
+                background: #e8ebf0;
+                border-radius: 7px;
+                position: relative;
+                overflow: hidden
+            }
+
+            .prog u {
+                display: block;
+                height: 100%;
+                border-radius: 7px;
+                transform-origin: left center;
+                animation: progReveal 1.15s cubic-bezier(.2,.8,.2,1) both
+            }
+
+            .prog s {
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                width: 2px;
+                background: #1d2433;
+                opacity: .55
+            }
+
+            .prog .pv {
+                width: 230px;
+                text-align: right
+            }
+
+            .prog.tot i {
+                height: 20px
+            }
+
+            .prog.tot {
+                font-size: 13px;
+                margin-bottom: 14px
+            }
+
+            @keyframes progReveal {
+                from {
+                    transform: scaleX(0);
+                    opacity: .45
+                }
+
+                to {
+                    transform: scaleX(1);
+                    opacity: 1
+                }
+            }
+
+            .prog-legend {
+                display: flex;
+                gap: 14px;
+                flex-wrap: wrap;
+                font-size: 11px;
+                color: var(--muted);
+                margin: 8px 0 12px
+            }
+
+            .prog-legend span {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px
+            }
+
+            .prog-dot {
+                width: 9px;
+                height: 9px;
+                border-radius: 50%;
+                display: inline-block
+            }
+
+            body[data-t=cfg] #app>.filters,body[data-t=cfg] #app>#legend,body[data-t=cfg] #app>.kpis {
+                display: none
+            }
+
+            .fb {
+                border: 0;
+                background: none;
+                color: var(--muted);
+                cursor: pointer;
+                padding: 1px 4px;
+                margin-left: 4px;
+                font-size: 11px;
+                border-radius: 4px
+            }
+
+            .fb:hover {
+                background: #e8ebf0
+            }
+
+            .fb.on {
+                color: #fff;
+                background: var(--blue)
+            }
+
+            .fp {
+                position: fixed;
+                z-index: 50;
+                width: 270px;
+                background: #fff;
+                border: 1px solid var(--line);
+                border-radius: 10px;
+                box-shadow: 0 8px 28px rgba(20,33,61,.18);
+                padding: 10px
+            }
+
+            .fp>input {
+                width: 100%
+            }
+
+            .fl {
+                max-height: 230px;
+                overflow: auto;
+                margin: 8px 0
+            }
+
+            .fl label {
+                display: flex;
+                gap: 7px;
+                align-items: flex-start;
+                padding: 3px 2px;
+                font-size: 12px;
+                cursor: pointer
+            }
+
+            .fl input {
+                padding: 0;
+                margin-top: 2px
+            }
+
+            .fl em {
+                color: var(--muted);
+                font-size: 12px
+            }
+
+            .fa {
+                display: flex;
+                gap: 6px
+            }
+
+            .fa button {
+                padding: 6px 10px;
+                font-size: 12px
+            }
+
+            .fn {
+                color: var(--muted);
+                font-size: 11px;
+                margin: 4px 0 0
+            }
+
+            .rz {
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 8px;
+                height: 100%;
+                cursor: col-resize
+            }
+
+            .rz:hover {
+                background: var(--blue);
+                opacity: .35
+            }
+
+            th.dov {
+                box-shadow: inset 3px 0 0 var(--blue)
+            }
+
+            th[draggable=true] {
+                cursor: pointer
+            }
+
+            @media(max-width: 900px) {
+                .prog {
+                    flex-wrap:wrap
+                }
+
+                .prog .pn,.prog .pv {
+                    width: auto
+                }
+
+                body {
+                    display: block
+                }
+
+                nav {
+                    flex-direction: row;
+                    position: static;
+                    overflow-x: auto;
+                    border-right: 0;
+                    border-bottom: 1px solid var(--line);
+                    padding: 8px 12px
+                }
+
+                nav button {
+                    white-space: nowrap;
+                    border-left: 0;
+                    border-bottom: 3px solid transparent
+                }
+
+                nav button.on {
+                    border-bottom-color: var(--blue)
+                }
+
+                main {
+                    padding: 16px
+                }
+
+                .sb input {
+                    min-width: 0;
+                    width: 100%
+                }
+            }
+
+            @media print {
+                .fb,.fp,.rz {
+                    display: none!important
+                }
+
+                header,nav,.filters,.noprint,#rules,.mh {
+                    display: none!important
+                }
+
+                body {
+                    display: block;
+                    background: #fff
+                }
+
+                main {
+                    padding: 0
+                }
+            }
+        </style>
+        <style>
+            body.tm-locked > :not(#tm-login):not(script) {
+                display: none!important
+            }
+
+            #tm-login[hidden] {
+                display: none!important
+            }
+
+            #tm-login {
+                width: min(420px,calc(100% - 32px));
+                max-width: 420px;
+                box-sizing: border-box;
+                flex: none;
+                margin: 64px auto;
+                padding: 28px
+            }
+
+            #tm-login input {
+                width: 100%;
+                box-sizing: border-box
+            }
+        </style>
+        <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js"></script>
+    </head>
+    <body class="tm-locked">
+        <section id="tm-login" class="card">
+            <h1>Ticket Manager</h1>
+            <p>Acesso restrito a performance@arquem.com.br</p>
+            <button id="tm-enter" class="b g" type="button" disabled>Entrar com Google</button>
+            <p id="tm-message" role="status">Preparando login…</p>
+        </section>
+        <header>
+            <div class="brand">
+                <b>Auditoria de Chamados</b>
+                <small>Ticket Manager · Movidesk</small>
+            </div>
+            <div class="chip" id="chip">
+                <span class="dot"></span>
+                <span id="status">Aguardando dados</span>
+                <span id="auto"></span>
+            </div>
+            <button id="tm-logout" class="b noprint" type="button">Sair</button>
+        </header>
+        <nav id="tabs">
+            <button data-t="live">Tickets atualizados</button>
+            <button data-t="cfg">Configurações</button>
+            <button data-t="mgmt">Gestão</button>
+            <button data-t="vip">Clientes VIP</button>
+            <button data-t="charts">Gráficos</button>
+            <button data-t="entries">Lançamentos</button>
+            <button data-t="pivot">Tabela dinâmica</button>
+            <button data-t="proj">Projetos</button>
+            <button data-t="occ">Colaboradores</button>
+            <button data-t="diag">Diagnóstico</button>
+        </nav>
+        <main>
+            <div id="t-live" class="hide">
+                <div class="card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+                        <div>
+                            <h3 style="margin:0 0 5px">Painel de tickets atualizados</h3>
+                            <p style="margin:0;color:var(--muted)">Acompanhe chamados que tiveram alteração detectada na última sincronização do Movidesk.</p>
+                        </div>
+                        <button class="b g" onclick="sync()">Atualizar agora</button>
+                    </div>
+                    <div class="kpis" style="margin:14px 0">
+                        <div class="card">
+                            <small>Alterações registradas</small>
+                            <b id="liveCount">0</b>
+                        </div>
+                        <div class="card">
+                            <small>Previsões / prazos</small>
+                            <b id="liveDue">0</b>
+                        </div>
+                        <div class="card">
+                            <small>Status alterados</small>
+                            <b id="liveStatus">0</b>
+                        </div>
+                        <div class="card">
+                            <small>Chamados atualizados</small>
+                            <b id="liveGeneral">0</b>
+                        </div>
+                    </div>
+                    <div class="row noprint" style="margin-bottom:12px">
+                        <div class="fg">
+                            <label>Filtrar alterações</label>
+                            <select id="liveFilter" onchange="showLiveEvents()">
+                                <option value="all">Todas</option>
+                                <option value="PREVISÃO / PRAZO ALTERADO">Previsão / prazo</option>
+                                <option value="STATUS ALTERADO">Status</option>
+                                <option value="CHAMADO ATUALIZADO">Atualizações gerais</option>
+                            </select>
+                        </div>
+                        <div class="fg">
+                            <label>Pesquisar ticket ou assunto</label>
+                            <input id="liveSearch" placeholder="Número ou assunto" oninput="showLiveEvents()">
+                        </div>
+                        <button class="s" onclick="clearLiveEvents()">Limpar histórico</button>
+                    </div>
+                    <div id="livePanelList"></div>
+                    <p style="font-size:12px;color:var(--muted);margin-top:12px">O painel registra alterações identificadas entre sincronizações. Para receber eventos instantaneamente, sem aguardar a próxima consulta, é necessário configurar webhook no backend.</p>
+                </div>
+            </div>
+            <div id="t-cfg" class="hide">
+                <div class="card" style="border-left:4px solid var(--blue)">
+                    <h2 style="margin:0 0 5px">Conexão e carregamento de dados</h2>
+                    <p style="margin:0;color:var(--muted)">Configure a API Movidesk, importe arquivos e acompanhe a sincronização automática.</p>
+                </div>
+                <div class="card" id="cloudCard" style="border:1px solid #b8c9e8;background:#f7faff">
+                    <h3>Sincronização entre computadores · Supabase</h3>
+                    <p style="margin:0 0 10px;color:var(--muted)">Compartilha chamados, histórico de alterações, previsões manuais, leituras da IA e configurações entre os computadores conectados à mesma base.</p>
+                    <div class="row">
+                        <div class="fg" style="flex:1;min-width:260px">
+                            <label>Chave de sincronização (definida na Vercel)</label>
+                            <input id="cloudKey" type="password" autocomplete="off" placeholder="Cole a chave configurada em TICKET_SYNC_KEY">
+                        </div>
+                        <button class="b" type="button" onclick="cloudConnect()">Ativar / carregar dados</button>
+                    </div>
+                    <p id="cloudMsg" style="margin:10px 0 0;font-weight:600">Nuvem ainda não conectada neste computador.</p>
+                    <p style="font-size:12px;color:var(--muted);margin:7px 0 0">A chave acima não é a chave service_role do Supabase. Ela apenas autoriza este painel a chamar o backend da Vercel. A service_role permanece protegida no servidor.</p>
+                </div>
+                <div id="t-load">
+                    <div class="card">
+                        <h3>API Movidesk</h3>
+                        <div class="row">
+                            <div class="fg" style="flex:1;min-width:240px">
+                                <label>Domínio do portal (para abrir chamados)</label>
+                                <input id="domain" placeholder="https://suaempresa.movidesk.com">
+                            </div>
+                            <div class="fg">
+                                <label>Acesso à API</label>
+                                <span>Conexão protegida pela sessão</span>
+                            </div>
+                            <div class="fg">
+                                <label>Início</label>
+                                <input type="date" id="startDate">
+                            </div>
+                            <div class="fg">
+                                <label>Fim</label>
+                                <input type="date" id="endDate">
+                            </div>
+                            <div class="fg">
+                                <label>ID do campo "horas previstas" (opcional)</label>
+                                <input id="cfId" placeholder="ex.: 12345">
+                            </div>
+                            <div class="fg">
+                                <label>Atualização automática</label>
+                                <select id="autoMin" onchange="autoChanged()">
+                                    <option value="0">Desligada</option>
+                                    <option value="1">A cada 1 min (quase em tempo real)</option>
+                                    <option value="5">A cada 5 min</option>
+                                    <option value="10">A cada 10 min</option>
+                                    <option value="15">A cada 15 min</option>
+                                    <option value="30">A cada 30 min</option>
+                                    <option value="60">A cada 60 min</option>
+                                </select>
+                            </div>
+                            <button class="b g" onclick="sync()">Sincronizar agora</button>
+                            <button class="b" onclick="saveNow()">Salvar dados</button>
+                            <button class="s" onclick="clearCache()">Limpar dados salvos</button>
+                        </div>
+                        <div id="log"></div>
+                        <div class="card" style="margin-top:12px;border:1px solid #b8c9e8;background:#f7faff">
+                            <h3 style="margin:0 0 8px">Monitor de alterações em tempo real</h3>
+                            <p style="margin:0 0 8px;color:var(--muted)">Mostra atualizações detectadas na sincronização: mudança de previsão/prazo, status ou atualização do chamado.</p>
+                            <div id="liveChanges" style="font-size:13px">Aguardando a primeira sincronização...</div>
+                        </div>
+                        <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. Com o Supabase ativado, os dados ficam disponíveis em outros computadores; o cache local continua como apoio para abrir o painel mais rápido. Sem ativar a nuvem, os dados permanecem apenas neste navegador. A verificação automática pode ocorrer a cada 1 minuto (quase em tempo real; depende da resposta da API e do limite de requisições do Movidesk). Alterações são registradas no Monitor de alterações. Uma sincronização completa roda a cada 6 horas. Se a conexão cair, o sistema tenta de novo sozinho, com intervalos cada vez maiores. Para alertas instantâneos sem espera, será necessário configurar um webhook no backend.</p>
+                        <p id="cacheInfo" style="margin:8px 0 0;font-weight:600"></p>
+                    </div>
+                    <div class="card">
+                        <h3>Ou importe o CSV "Tempo trabalhado nos tickets"</h3>
+                        <div class="zone" onclick="csvFile.click()">Clique para escolher o arquivo CSV</div>
+                        <input type="file" id="csvFile" accept=".csv,.txt" class="hide" onchange="loadCSV(event)">
+                    </div>
+                </div>
+                <div class="card" style="border-left:4px solid var(--blue)">
+                    <h2 style="margin:0 0 5px">Robô de leitura</h2>
+                    <p style="margin:0;color:var(--muted)">Consulte as previsões de horas identificadas automaticamente nos chamados.</p>
+                </div>
+                <div id="t-bot">
+                    <div class="card">
+                        <h3>Previsões lidas pelo robô nos chamados</h3>
+                        <p id="botInfo" style="margin:0 0 12px"></p>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Chamado</th>
+                                        <th>Cliente</th>
+                                        <th>Assunto</th>
+                                        <th>Onde leu</th>
+                                        <th>Trecho</th>
+                                        <th>Previsto (h)</th>
+                                        <th>Apontado (h)</th>
+                                        <th>Uso</th>
+                                        <th>Confiança</th>
+                                        <th>Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tBot"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="card" id="rules">
+                    <h3>Regras de cálculo</h3>
+                    <div class="row">
+                        <div class="fg">
+                            <label>Meta diária por projeto (h)</label>
+                            <input id="rMeta" type="number" step="0.5" value="4" onchange="rulesChanged()">
+                        </div>
+                        <div class="fg">
+                            <label>Jornada diária (h)</label>
+                            <input id="rJor" type="number" step="0.5" value="8" onchange="rulesChanged()">
+                        </div>
+                        <div class="fg">
+                            <label>Mínimo de horas apontadas (%)</label>
+                            <input id="rMin" type="number" value="80" onchange="rulesChanged()">
+                        </div>
+                        <div class="fg">
+                            <label>Projeto identificado por</label>
+                            <select id="rFld" onchange="rulesChanged()">
+                                <option value="service_name">Serviço</option>
+                                <option value="category">Categoria</option>
+                                <option value="sector">Equipe</option>
+                                <option value="subject">Assunto</option>
+                                <option value="activity">Atividade</option>
+                                <option value="client_name">Cliente</option>
+                            </select>
+                        </div>
+                        <div class="fg">
+                            <label>Contém o texto</label>
+                            <input id="rKw" value="projeto" onchange="rulesChanged()">
+                        </div>
+                        <div class="fg">
+                            <label>Carnaval e Corpus Christi como feriado</label>
+                            <select id="rFac" onchange="rulesChanged()">
+                                <option value="0">Não</option>
+                                <option value="1">Sim</option>
+                            </select>
+                        </div>
+                        <div class="fg" style="flex:1;min-width:220px">
+                            <label>Feriados extras (dd/mm/aaaa, separados por vírgula)</label>
+                            <input id="rHol" onchange="rulesChanged()">
+                        </div>
+                        <div class="fg" style="flex:1;min-width:220px">
+                            <label>Ou números de tickets (separados por vírgula)</label>
+                            <input id="rIds" onchange="rulesChanged()">
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Clientes VIP</h3>
+                    <div class="fg">
+                        <label>Lista de clientes VIP (um por linha; basta uma parte do nome)</label>
+                        <textarea id="vipList" rows="6" placeholder="Cole aqui os nomes dos clientes VIP" style="padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit" onchange="vipChanged()"></textarea>
+                    </div>
+                    <p style="color:var(--muted);margin:8px 0 0">O relatório fica na aba Clientes VIP.</p>
+                </div>
+                <div class="card">
+                    <h3>Leitura por IA (opcional)</h3>
+                    <div class="row">
+                        <div class="fg">
+                            <label>Analisar</label>
+                            <select id="iaMode" onchange="iaChanged()">
+                                <option value="off">Desligada</option>
+                                <option value="proj">Só chamados de projeto</option>
+                                <option value="all">Todos com horas apontadas</option>
+                            </select>
+                        </div>
+                        <div class="fg" style="flex:1;min-width:240px">
+                            <label>Senha da função (ACCESS_KEY)</label>
+                            <input id="iaKey" type="password" onchange="iaChanged()">
+                        </div>
+                        <button class="b" onclick="iaRun()">Analisar agora</button>
+                    </div>
+                    <div id="iaMsg"></div>
+                    <p style="color:var(--muted);margin:10px 0 0">
+                        Só entram chamados sem previsão digitada, sem campo personalizado e sem previsão lida pelo robô de regras. Cada chamado é analisado uma vez (de novo só se o texto mudar) e o resultado fica salvo neste navegador. <b>O assunto e a descrição dos chamados são enviados ao provedor de IA configurado na função.</b>
+                    </p>
+                </div>
+            </div>
+            <div id="app" class="hide">
+                <div class="card filters">
+                    <div class="row" id="filters">
+                        <div class="fg">
+                            <label>Início</label>
+                            <input type="date" id="fStart" onchange="applyFilters()">
+                        </div>
+                        <div class="fg">
+                            <label>Fim</label>
+                            <input type="date" id="fEnd" onchange="applyFilters()">
+                        </div>
+                    </div>
+                    <div class="row" style="margin-top:12px">
+                        <span style="align-self:center;font-size:12px;font-weight:700;color:var(--muted)">Período rápido:</span>
+                        <button class="s" onclick="quick('today')">Hoje</button>
+                        <button class="s" onclick="quick('7')">Últimos 7 dias</button>
+                        <button class="s" onclick="quick('m')">Mês atual</button>
+                        <button class="s" onclick="quick('all')">Tudo carregado</button>
+                        <button class="s" onclick="resetFilters()">Limpar filtros</button>
+                        <button class="g b" onclick="exportXLSX()">Excel da aba</button>
+                        <button class="b" style="background:var(--bad)" onclick="exportPDF()">PDF da aba</button>
+                        <button class="s" onclick="print()">Imprimir</button>
+                    </div>
+                </div>
+                <details class="card noprint" id="legend">
+                    <summary>Como ler horas e dias (clique para abrir)</summary>
+                    <ul>
+                        <li>
+                            <b>h = horas</b>
+                            , <b>dias = quantidade de dias</b>
+                            . Horas aparecem sempre com vírgula e a unidade: 8,50 h = 8 horas e 30 minutos.
+                        </li>
+                        <li>
+                            <b>Dia útil</b>
+                            : segunda a sexta, menos feriados. <b>Capacidade</b>
+                            = dias úteis do período × jornada diária (ex.: 20 dias × 8 h = 160 h).
+                        </li>
+                        <li>
+                            <b>Mínimo exigido</b>
+                            = capacidade × o % mínimo definido (padrão 80%).
+                        </li>
+                        <li>
+                            <b>Faltam / Restam / Folga de</b>
+                            = quanto ainda falta (ou sobra) até a referência. <b>Passou / Excedeu / Acima em</b>
+                            = quanto passou dela. O trecho <b>(≈ 2,5 dias de 8 h)</b>
+                            converte as mesmas horas em dias de trabalho.
+                        </li>
+                        <li>
+                            <b>Previsto</b>
+                            = horas que a pessoa informou para o chamado: digitadas aqui, vindas do campo personalizado do Movidesk, ou <b>lidas no texto do chamado</b>
+                            pelo robô de regras ou pela IA (ex.: “previsão 20h”, “estimativa de 3 dias”). <b>Apontado</b>
+                            = tudo que já foi lançado de tempo no chamado.
+                        </li>
+                        <li>
+                            Em qualquer tabela: <b>clique no título da coluna para ordenar</b>
+                            e use <b>“Colunas ▾”</b>
+                            para mostrar ou esconder colunas. O Excel e o PDF saem como você deixou a tabela.
+                        </li>
+                    </ul>
+                </details>
+                <div class="kpis">
+                    <div class="card">
+                        <small>Tickets</small>
+                        <div>
+                            <b id="kT">0</b>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <small>Horas apontadas</small>
+                        <div>
+                            <b id="kH">0</b>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <small>Colaboradores</small>
+                        <div>
+                            <b id="kA">0</b>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <small>Clientes</small>
+                        <div>
+                            <b id="kC">0</b>
+                        </div>
+                    </div>
+                </div>
+                <div id="t-mgmt" class="hide">
+                    <div class="card">
+                        <h3>Resumo para a direção</h3>
+                        <div class="sum" id="mgSum"></div>
+                    </div>
+                    <div class="card">
+                        <h3>Relatório de gestão</h3>
+                        <p id="mgInfo" style="margin:0 0 12px"></p>
+                        <div class="row noprint" style="margin-bottom:12px">
+                            <div class="fg">
+                                <label>Itens em cada ranking</label>
+                                <select id="mgTop" onchange="render()">
+                                    <option>5</option>
+                                    <option selected>10</option>
+                                    <option>20</option>
+                                    <option>50</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="kpis" id="mgKpi" style="margin:0"></div>
+                    </div>
+                    <div class="card">
+                        <h3>Colaboradores que mais geram impacto e sobrecarga</h3>
+                        <p style="color:var(--muted);margin:0 0 10px">Ordenado pelo % da capacidade usado no período. “Passou” = horas acima da capacidade; “Folga de” = horas que ainda cabiam.</p>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Colaborador</th>
+                                        <th>Equipe</th>
+                                        <th>Horas apontadas (h)</th>
+                                        <th>Capacidade (h)</th>
+                                        <th>% da capacidade</th>
+                                        <th>Passou ou folga</th>
+                                        <th>Chamados</th>
+                                        <th>Cliente com mais horas</th>
+                                        <th>Média por dia útil (h)</th>
+                                        <th>Horas em dias não úteis (h)</th>
+                                        <th>Situação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tMgAg"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Projetos e chamados que mais estouram a previsão</h3>
+                        <p style="color:var(--muted);margin:0 0 10px">Inclui projetos (pela regra da aba Projetos) e qualquer chamado com previsão de horas informada. “Apontado” soma todo o histórico; “Apontado no período” respeita o filtro de datas.</p>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Ticket</th>
+                                        <th>Assunto</th>
+                                        <th>Cliente</th>
+                                        <th>Previsto (h)</th>
+                                        <th>Apontado (h)</th>
+                                        <th>Restam ou excedeu</th>
+                                        <th>% da previsão</th>
+                                        <th>Apontado no período (h)</th>
+                                        <th>Colaboradores</th>
+                                        <th>Situação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tMgPrj"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Empresas que mais consomem tempo</h3>
+                        <div id="mgBars" style="margin-bottom:12px"></div>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Empresa</th>
+                                        <th>Horas (h)</th>
+                                        <th>% do total</th>
+                                        <th>Chamados</th>
+                                        <th>Colaboradores</th>
+                                        <th>Horas em dias não úteis (h)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tMgCli"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Chamados mais impactantes</h3>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Ticket</th>
+                                        <th>Assunto</th>
+                                        <th>Empresa</th>
+                                        <th>Horas (h)</th>
+                                        <th>% do total</th>
+                                        <th>Apontamentos</th>
+                                        <th>Colaboradores</th>
+                                        <th>Dias com apontamento</th>
+                                        <th>Horas em dias não úteis (h)</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tMgTk"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div id="t-vip" class="hide">
+                    <div class="card">
+                        <h3>Clientes VIP</h3>
+                        <p id="vipInfo" style="margin:10px 0"></p>
+                        <div class="kpis" id="vipKpi" style="margin:0"></div>
+                    </div>
+                    <div class="card">
+                        <h3>VIPs que mais consomem a carga</h3>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Cliente VIP</th>
+                                        <th>Horas</th>
+                                        <th>% do total</th>
+                                        <th>% da capacidade da equipe</th>
+                                        <th>Chamados</th>
+                                        <th>Colaboradores</th>
+                                        <th>Quem mais atende</th>
+                                        <th>Horas em dias não úteis (h)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tVip"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Clientes não VIP que mais consomem (comparação)</h3>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Cliente</th>
+                                        <th>Horas</th>
+                                        <th>% do total</th>
+                                        <th>Chamados</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tVipOut"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div id="t-entries" class="hide">
+                    <div class="card">
+                        <h3>Lançamentos de tempo</h3>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Ticket</th>
+                                        <th>Data</th>
+                                        <th>Cliente</th>
+                                        <th>Assunto</th>
+                                        <th>Colaborador</th>
+                                        <th>Equipe</th>
+                                        <th>Atividade</th>
+                                        <th>Status</th>
+                                        <th>Horas</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tEntries"></tbody>
+                            </table>
+                        </div>
+                        <p id="cap" style="color:var(--muted)"></p>
+                    </div>
+                </div>
+                <div id="t-pivot" class="hide">
+                    <div class="card">
+                        <h3>Tabela dinâmica</h3>
+                        <div class="row">
+                            <div class="fg">
+                                <label>Linhas</label>
+                                <select id="pvRow" onchange="renderPivot()"></select>
+                            </div>
+                            <div class="fg">
+                                <label>Colunas</label>
+                                <select id="pvCol" onchange="renderPivot()"></select>
+                            </div>
+                            <div class="fg">
+                                <label>Valor</label>
+                                <select id="pvVal" onchange="renderPivot()">
+                                    <option value="h">Horas</option>
+                                    <option value="n">Lançamentos</option>
+                                    <option value="t">Chamados distintos</option>
+                                    <option value="a">Colaboradores distintos</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="tw" style="margin-top:12px">
+                            <table id="pvTable"></table>
+                        </div>
+                        <p id="pvNote" style="color:var(--muted)"></p>
+                    </div>
+                </div>
+                <div id="t-charts" class="hide">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px">
+                        <div class="card" style="grid-column:1/-1">
+                            <h3>Progresso acumulado: horas apontadas × capacidade</h3>
+                            <canvas id="chDay" height="80"></canvas>
+                        </div>
+                        <div class="card">
+                            <h3>Horas por semana e equipe</h3>
+                            <canvas id="chWeek"></canvas>
+                        </div>
+                        <div class="card">
+                            <h3>Empresas que mais consomem (laranja = VIP)</h3>
+                            <canvas id="chCli"></canvas>
+                        </div>
+                        <div class="card">
+                            <h3>Horas apontadas × capacidade prevista</h3>
+                            <p style="color:var(--muted);margin:0 0 10px">Compare o total de horas efetivamente apontadas com a capacidade prevista para o período, por colaborador e para a equipe.</p>
+                            <div class="prog-legend">
+                                <span>
+                                    <i class="prog-dot" style="background:#16a34a"></i>
+                                    Dentro da capacidade
+                                </span>
+                                <span>
+                                    <i class="prog-dot" style="background:#d97706"></i>
+                                    Abaixo do mínimo
+                                </span>
+                                <span>
+                                    <i class="prog-dot" style="background:#dc2626"></i>
+                                    Acima da capacidade
+                                </span>
+                                <span>│ mínimo esperado</span>
+                            </div>
+                            <div id="agProg"></div>
+                        </div>
+                        <div class="card">
+                            <h3>Distribuição por atividade</h3>
+                            <canvas id="chAct"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div id="t-proj" class="hide">
+                    <div class="card">
+                        <h3>Projetos: horas por dia × meta</h3>
+                        <p style="color:var(--muted);margin:0 0 10px">Soma de todos os colaboradores no projeto, dia a dia, dentro do período filtrado. Tolerância de 15 min em torno da meta.</p>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Ticket</th>
+                                        <th>Assunto</th>
+                                        <th>Cliente</th>
+                                        <th>Dias com apontamento</th>
+                                        <th>Total (h)</th>
+                                        <th>Média por dia (h)</th>
+                                        <th>Dias abaixo da meta</th>
+                                        <th>Dias na meta</th>
+                                        <th>Dias que estourou</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tProj"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Detalhe por dia</h3>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Ticket</th>
+                                        <th>Assunto</th>
+                                        <th>Data</th>
+                                        <th>Quem trabalhou</th>
+                                        <th>Horas no dia (h)</th>
+                                        <th>Diferença para a meta</th>
+                                        <th>Situação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tProjDay"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Previsto × apontado por chamado</h3>
+                        <p style="color:var(--muted);margin:0 0 10px">
+                            <b>Previsto</b>
+                            = horas que a pessoa informou: digitadas aqui, do campo personalizado do Movidesk ou lidas no texto do chamado pelo robô de regras ou pela IA (“previsão 20h”; “3 dias” vale 3 × a jornada). <b>Apontado</b>
+                            = todo o histórico de tempo lançado, sem filtro de período. <b>Restam</b>
+                            = previsto − apontado; <b>Excedeu</b>
+                            = apontado − previsto. Previsão digitada aqui tem prioridade e fica salva neste navegador.
+                        </p>
+                        <div class="row noprint" style="margin-bottom:10px">
+                            <div class="fg">
+                                <label>Mostrar</label>
+                                <select id="bScope" onchange="render()">
+                                    <option value="p">Somente projetos (regra acima)</option>
+                                    <option value="a">Todos os chamados</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Ticket</th>
+                                        <th>Assunto</th>
+                                        <th>Cliente</th>
+                                        <th>Previsto (h)</th>
+                                        <th>De onde veio a previsão</th>
+                                        <th>Apontado (h)</th>
+                                        <th>Restam ou excedeu</th>
+                                        <th>% da previsão</th>
+                                        <th>Situação</th>
+                                        <th>Início</th>
+                                        <th>Último apontamento</th>
+                                        <th>Duração (dias corridos)</th>
+                                        <th>Dias com apontamento</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tBudget"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div id="t-occ" class="hide">
+                    <div class="card">
+                        <h3>Colaboradores: horas apontadas e jornada</h3>
+                        <p id="occInfo" style="color:var(--muted);margin:0 0 10px"></p>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Colaborador</th>
+                                        <th>Equipe</th>
+                                        <th>Lançamentos</th>
+                                        <th>Tickets</th>
+                                        <th>Clientes</th>
+                                        <th>Dias com apontamento</th>
+                                        <th>Horas apontadas (h)</th>
+                                        <th>Média por dia apontado (h)</th>
+                                        <th>Horas em dias não úteis (h)</th>
+                                        <th>Capacidade (h)</th>
+                                        <th>Mínimo exigido (h)</th>
+                                        <th>% da capacidade</th>
+                                        <th>Falta para o mínimo</th>
+                                        <th>Falta para a jornada completa</th>
+                                        <th>Situação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tOcc"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Detalhe por dia</h3>
+                        <div class="tw">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Data</th>
+                                        <th>Colaborador</th>
+                                        <th>Horas no dia (h)</th>
+                                        <th>% da jornada</th>
+                                        <th>Falta ou sobra no dia</th>
+                                        <th>Situação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tOccDay"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div id="t-diag" class="hide">
+                    <div class="card">
+                        <h3>Diagnóstico da extração</h3>
+                        <div id="diagSummary"></div>
+                        <pre id="rawJson">Sem dados.</pre>
+                    </div>
+                </div>
+            </div>
+        </main>
+        <script type="text/plain" id="tm-application-source">
+            
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const FIELDS=[['owner_name','Colaborador'],['sector','Equipe'],['activity','Atividade'],['service_name','Serviço'],['category','Categoria'],['status','Status'],['client_name','Cliente']];
@@ -317,8 +1575,8 @@ async function sync(auto){
   const url=(exp,skip)=>'/api/movidesk?'+new URLSearchParams({$select:SEL,$expand:exp,$filter:filter,$orderby:'lastUpdate desc',$top:'100',$skip:String(skip)});
   const get=async(exp,skip)=>{
     for(let i=0;i<6;i++){
-      const r=await fetch(url(exp,skip),{credentials:'same-origin',cache:'no-store'});
-      if(r.status===401){window.tmSessionExpired();const e=new Error('Sessão expirada. Entre novamente.');e.status=401;throw e}
+      const r=await window.tmFetch(url(exp,skip));
+      if(r.status===401||r.status===403){window.tmSessionExpired();const e=new Error('Sessão expirada. Entre novamente.');e.status=401;throw e}
       if(r.status===429){log('Limite da API atingido, aguardando 20s e continuando...');await sleep(20000);continue}
       if(!r.ok){const body=await r.json().catch(()=>null);const e=new Error(body?.error||('Erro '+r.status));e.status=r.status;throw e}
       return r.json();
@@ -1331,83 +2589,182 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   }
   sync(true); // sincroniza o Movidesk com a sessão autenticada
 })();
-</script>
 
-<script>
-(() => {
-  const byId = id => document.getElementById(id);
-  let started = false;
-  let checking = false;
-  const auth = (options = {}) => fetch('/api/auth', {
-    credentials: 'same-origin', cache: 'no-store', ...options
-  });
-  window.tmSessionExpired = () => {
-    document.body.classList.add('tm-locked');
-    location.reload();
-  };
-  function startApplication() {
-    if (started) return;
-    started = true;
-    byId('tm-password').value = '';
-    localStorage.removeItem('md_token');
-    const script = document.createElement('script');
-    script.textContent = byId('tm-application-source').textContent;
-    document.body.appendChild(script);
-    byId('tm-login').hidden = true;
-    document.body.classList.remove('tm-locked');
-    setTimeout(window.tmSessionExpired, 12 * 60 * 60 * 1000);
-  }
-  async function checkSession() {
-    if (checking) return;
-    checking = true;
-    try {
-      const response = await auth();
-      if (response.ok && (await response.json()).authenticated === true) startApplication();
-      else if (started && response.status === 401) window.tmSessionExpired();
-      else byId('tm-message').textContent = response.status === 401
-        ? 'Digite sua senha para continuar.' : 'Acesso indisponível. Tente novamente.';
-    } catch {
-      byId('tm-message').textContent = 'Não foi possível conectar ao servidor.';
-    } finally {
-      checking = false;
-      byId('tm-enter').disabled = false;
-    }
-  }
-  byId('tm-login-form').addEventListener('submit', async event => {
-    event.preventDefault();
-    byId('tm-enter').disabled = true;
-    const body = JSON.stringify({password: byId('tm-password').value});
-    byId('tm-password').value = '';
-    try {
-      const response = await auth({method:'POST', headers:{'Content-Type':'application/json'}, body});
-      if (response.ok && (await response.json()).authenticated === true) startApplication();
-      else byId('tm-message').textContent = response.status === 401 ? 'Senha incorreta.'
-        : response.status === 429 ? 'Muitas tentativas. Aguarde para tentar novamente.'
-        : 'Acesso indisponível. Verifique a configuração do servidor.';
-    } catch {
-      byId('tm-message').textContent = 'Não foi possível conectar ao servidor.';
-    } finally {
-      byId('tm-enter').disabled = false;
-    }
-  });
-  byId('tm-logout').addEventListener('click', async () => {
-    byId('tm-logout').disabled = true;
-    try {
-      const response = await auth({method:'DELETE'});
-      if (!response.ok || (await response.json()).authenticated !== false) throw new Error();
-      window.tmSessionExpired();
-    } catch {
-      alert('Não foi possível encerrar a sessão. Tente novamente.');
-      byId('tm-logout').disabled = false;
-    }
-  });
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && started) checkSession();
-  });
-  setInterval(() => { if (started && !document.hidden) checkSession(); }, 60000);
-  checkSession();
-})();
-</script>
-
-</body>
+        </script>
+        <script>
+            (async () => {
+                const element = id => document.getElementById(id);
+                const message = text => {
+                    element('tm-message').textContent = text;
+                }
+                ;
+                let client;
+                let started = false;
+                let checking = false;
+                let signingOut = false;
+                window.tmSessionExpired = () => {
+                    document.body.classList.add('tm-locked');
+                    location.reload();
+                }
+                ;
+                window.tmFetch = async (url, options={}) => {
+                    const target = new URL(url,location.origin);
+                    if (target.origin !== location.origin || !['/api/auth', '/api/movidesk'].includes(target.pathname)) {
+                        throw new Error('Destino de autenticação inválido.');
+                    }
+                    const {data, error} = await client.auth.getSession();
+                    if (error || !data.session) {
+                        if (started)
+                            window.tmSessionExpired();
+                        throw new Error('Entre com sua Conta Google.');
+                    }
+                    const headers = new Headers(options.headers);
+                    headers.set('Authorization', 'Bearer ' + data.session.access_token);
+                    return fetch(target, {
+                        ...options,
+                        headers,
+                        cache: 'no-store',
+                        credentials: 'same-origin'
+                    });
+                }
+                ;
+                function openApplication() {
+                    if (started)
+                        return;
+                    started = true;
+                    localStorage.removeItem('md_token');
+                    const script = document.createElement('script');
+                    script.textContent = element('tm-application-source').textContent;
+                    document.body.appendChild(script);
+                    element('tm-login').hidden = true;
+                    document.body.classList.remove('tm-locked');
+                }
+                async function checkSession() {
+                    if (checking || signingOut)
+                        return;
+                    checking = true;
+                    try {
+                        const {data, error} = await client.auth.getSession();
+                        if (error)
+                            throw error;
+                        if (!data.session) {
+                            if (started)
+                                window.tmSessionExpired();
+                            else
+                                message('Entre com a conta autorizada.');
+                            return;
+                        }
+                        const response = await window.tmFetch('/api/auth', {
+                            method: 'POST'
+                        });
+                        const result = await response.json();
+                        if (response.ok && result.authenticated)
+                            openApplication();
+                        else if (response.status === 401 || response.status === 403) {
+                            await client.auth.signOut({
+                                scope: 'local'
+                            });
+                            if (started)
+                                window.tmSessionExpired();
+                            else
+                                message(result.error || 'Acesso não autorizado.');
+                        } else
+                            message(result.error || 'Não foi possível verificar o acesso.');
+                    } catch {
+                        message('Não foi possível verificar o acesso. Tente novamente.');
+                    } finally {
+                        checking = false;
+                    }
+                }
+                element('tm-enter').addEventListener('click', async () => {
+                    element('tm-enter').disabled = true;
+                    try {
+                        const {error} = await client.auth.signInWithOAuth({
+                            provider: 'google',
+                            options: {
+                                redirectTo: location.origin + '/',
+                                queryParams: {
+                                    prompt: 'select_account'
+                                }
+                            }
+                        });
+                        if (error)
+                            throw error;
+                    } catch {
+                        message('Não foi possível iniciar o login. Confira a configuração Google no Supabase.');
+                        element('tm-enter').disabled = false;
+                    }
+                }
+                );
+                element('tm-logout').addEventListener('click', async () => {
+                    signingOut = true;
+                    element('tm-logout').disabled = true;
+                    try {
+                        const {error} = await client.auth.signOut({
+                            scope: 'local'
+                        });
+                        if (error)
+                            throw error;
+                        window.tmSessionExpired();
+                    } catch {
+                        signingOut = false;
+                        element('tm-logout').disabled = false;
+                        alert('Não foi possível encerrar a sessão. Tente novamente.');
+                    }
+                }
+                );
+                try {
+                    const response = await fetch('/api/auth', {
+                        cache: 'no-store'
+                    });
+                    const config = await response.json();
+                    if (!response.ok) {
+                        message(config.error || 'Login indisponível.');
+                        return;
+                    }
+                    if (!window.supabase)
+                        throw new Error('Biblioteca de autenticação indisponível.');
+                    client = window.supabase.createClient(config.url, config.key, {
+                        auth: {
+                            flowType: 'pkce',
+                            detectSessionInUrl: true,
+                            persistSession: true,
+                            autoRefreshToken: true,
+                            storageKey: 'tm-google-auth'
+                        }
+                    });
+                    const callback = new URL(location.href);
+                    if (callback.searchParams.has('error')) {
+                        message('O Google não concluiu o login. Tente novamente.');
+                        history.replaceState(null, '', location.pathname);
+                    } else {
+                        await checkSession();
+                        if (callback.searchParams.has('code'))
+                            history.replaceState(null, '', location.pathname);
+                    }
+                    element('tm-enter').disabled = false;
+                    client.auth.onAuthStateChange( (event) => {
+                        if (event === 'SIGNED_OUT' && started)
+                            window.tmSessionExpired();
+                        if (event === 'SIGNED_IN')
+                            setTimeout(checkSession, 0);
+                    }
+                    );
+                    document.addEventListener('visibilitychange', () => {
+                        if (!document.hidden)
+                            checkSession();
+                    }
+                    );
+                    setInterval( () => {
+                        if (!document.hidden)
+                            checkSession();
+                    }
+                    , 60000);
+                } catch {
+                    message('Login indisponível. Confira a conexão e a configuração Supabase.');
+                }
+            }
+            )();
+        </script>
+    </body>
 </html>
