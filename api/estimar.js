@@ -3,10 +3,10 @@ import { timingSafeEqual } from 'node:crypto';
 // Variáveis de ambiente na Vercel (Settings → Environment Variables):
 //   ACCESS_KEY          a "Senha da função" digitada no painel (Leitura por IA)
 //   GEMINI_API_KEY      chave da API do Gemini (Google AI Studio; fica só no servidor)
-//   GEMINI_MODEL        opcional; padrão: gemini-2.5-flash
+//   GEMINI_MODEL        opcional; padrão: gemini-3.8-flash
 const ACCESS_KEY = process.env.ACCESS_KEY || '';
 const API_KEY = process.env.GEMINI_API_KEY || '';
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 export const config = { maxDuration: 60 };
 
