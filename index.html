@@ -1175,7 +1175,7 @@ function renderBot(c){
 /* ---------- dados salvos no navegador (IndexedDB) ---------- */
 const IDB={db:null,
   open(){return this.db||(this.db=new Promise((ok,no)=>{const q=indexedDB.open('central-auditoria',1);q.onupgradeneeded=()=>q.result.createObjectStore('kv');q.onsuccess=()=>ok(q.result);q.onerror=()=>no(q.error)}))},
-  async get(k){try{const d=await this.open();return await new Promise(ok=>{const r=d.transaction('kv').objectStore('kv').get(k);r.onsuccess=()=>ok(r.result);r.onerror=()=>ok(null)})}catch(e){return null}},
+  async get(k){try{const d=await Promise.race([this.open(),new Promise((_,no)=>setTimeout(()=>no(new Error('IDB timeout')),4000))]);return await new Promise(ok=>{const r=d.transaction('kv').objectStore('kv').get(k);r.onsuccess=()=>ok(r.result);r.onerror=()=>ok(null)})}catch(e){this.db=null;return null}},
   async set(k,v){try{const d=await this.open();return await new Promise(ok=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>ok(true);t.onerror=()=>ok(false)})}catch(e){return false}},
   async del(k){try{const d=await this.open();return await new Promise(ok=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=()=>ok(true);t.onerror=()=>ok(false)})}catch(e){return false}}};
 // guarda só o necessário (textos limpos, sem HTML) para o cache ficar leve; os textos lidos pelo robô e pela IA não mudam
@@ -1207,7 +1207,10 @@ async function cloudApi(action,method='GET',body=null,params={}){
   const u=new URL('/api/ticket-manager',location.origin);u.searchParams.set('action',action);Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,String(v)));
   const opt={method,headers:{'x-access-key':key,'Accept':'application/json'}};
   if(body!==null){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body)}
-  const r=await fetch(u.toString(),opt);const j=await r.json().catch(()=>({}));
+  const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),30000);let r,j;
+  try{r=await fetch(u.toString(),{...opt,signal:ctl.signal});j=await r.json().catch(()=>({}))}
+  catch(e){throw new Error(e.name==='AbortError'?`tempo esgotado (30s) na ação "${action}": a Vercel não respondeu`:e.message)}
+  finally{clearTimeout(tm)}
   if(!r.ok)throw new Error(j.error||('Erro HTTP '+r.status+' ao acessar o Supabase'));
   return j;
 }
@@ -1249,24 +1252,32 @@ async function cloudSaveTickets(list){
 }
 async function cloudLoadState(){const j=await cloudApi('loadState');const state=j.state||{};cloudHydrating=true;try{Object.entries(state).forEach(([k,v])=>{if(k.startsWith('md_')&&!CLOUD_EXCLUDE.has(k)&&typeof v==='string')localStorage.setItem(k,v)});}finally{cloudHydrating=false}cloudStateUpdated=j.updated_at||'';applyCloudSettings()}
 async function cloudLoadAllTickets(){
-  const found=[];let offset=0,limit=150;
-  while(true){const j=await cloudApi('loadTickets','GET',null,{offset,limit});const batch=Array.isArray(j.tickets)?j.tickets:[];found.push(...batch);batch.forEach(t=>cloudTicketSig.set(String(t.id),cloudSig(t)));if(batch.length<limit)break;offset+=limit}
-  return found;
+  const found=new Map(),limit=50;let offset=0;
+  for(let page=0;page<400;page++){
+    const j=await cloudApi('loadTickets','GET',null,{offset,limit});const batch=Array.isArray(j.tickets)?j.tickets:[];
+    let added=0;batch.forEach(t=>{const id=String(t.id);if(!found.has(id)){found.set(id,t);added++}cloudTicketSig.set(id,cloudSig(t))});
+    cloudMessage(`Conectando ao Supabase · ${found.size} chamado(s) baixados...`);
+    if(!batch.length||!added||batch.length<limit)break;
+    offset+=limit;
+  }
+  return [...found.values()];
 }
 function newerTicket(a,b){const da=Date.parse(a?.lastUpdate||a?.createdDate||'')||0,db=Date.parse(b?.lastUpdate||b?.createdDate||'')||0;return da>=db}
-async function cloudBootstrap(){
+let cloudBootPromise=null;
+function cloudBootstrap(){return cloudBootPromise||(cloudBootPromise=cloudBootstrapRun().finally(()=>{cloudBootPromise=null}))}
+async function cloudBootstrapRun(){
   const key=$('cloudKey')?.value.trim()||localStorage.getItem('md_cloudkey')||'';
   if(!key){cloudReady=false;cloudHydrating=false;cloudMessage('Informe a chave de sincronização para conectar este computador ao Supabase.');return false}
   localStorage.setItem('md_cloudkey',key);cloudMessage('Conectando ao Supabase e buscando dados...');
   try{
-    await cloudLoadState();
+    cloudMessage('Conectando ao Supabase · lendo configurações...');await cloudLoadState();
     const remote=await cloudLoadAllTickets();
-    const cache=await IDB.get('cache');const merged=new Map(remote.map(t=>[String(t.id),t]));
+    cloudMessage('Conectando ao Supabase · lendo cache local...');const cache=await IDB.get('cache');const merged=new Map(remote.map(t=>[String(t.id),t]));
     if(cache?.tickets?.length){for(const t of cache.tickets){const id=String(t.id),old=merged.get(id);if(!old||newerTicket(t,old))merged.set(id,t)}lastSync=Math.max(lastSync,cache.lastSync||0);lastFull=Math.max(lastFull,cache.lastFull||0);lastSig=cache.sig||lastSig;CF=cache.cf||CF}
     TK=merged;cloudReady=true;cloudHydrating=false;cloudLastPull=new Date(Date.now()-3000).toISOString();
     if(TK.size){await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});}
     cloudMessage(`Supabase conectado · ${remote.length} chamado(s) recuperado(s)${cache?.tickets?.length?` · ${cache.tickets.length} do cache local conferidos`:''}.`,'okc');
-    if(TK.size)await cloudSaveTickets([...TK.values()]);
+    if(TK.size){cloudMessage('Conectando ao Supabase · enviando alterações locais...');await cloudSaveTickets([...TK.values()])}
     await cloudSaveState();
     return true;
   }catch(e){cloudReady=false;cloudHydrating=false;cloudMessage('Não foi possível conectar ao Supabase: '+e.message,'err');return false}
