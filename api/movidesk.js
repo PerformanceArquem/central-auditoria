@@ -1,49 +1,200 @@
-const { verifyAccess } = require('./_session.js');
 
-const expands = new Set([
-  'owner,clients($expand=organization),actions($select=id,createdDate,createdBy,description,timeAppointments;$expand=createdBy($select=id,businessName),timeAppointments)',
-  'owner,clients($expand=organization),actions($expand=createdBy,timeAppointments)',
-  'owner,clients,actions($expand=createdBy,timeAppointments)',
-  'owner,clients,actions'
-]);
-const select = 'id,createdDate,lastUpdate,subject,category,status,serviceFirstLevel,ownerTeam,owner,clients,actions,slaSolutionDate';
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const MOVIDESK_TOKEN = process.env.MOVIDESK_TOKEN || '';
 
-module.exports = async function handler(req, res) {
+const MOVIDESK_URL = 'https://api.movidesk.com/public/v1/tickets';
+
+function respond(res, status, data) {
   res.setHeader('Cache-Control', 'no-store');
+  return res.status(status).json(data);
+}
+
+async function authenticate(req) {
+  const authorization = req.headers.authorization || '';
+  const match = /^Bearer\s+(.+)$/i.exec(authorization);
+
+  if (!match) {
+    return { error: 'Sessão não enviada', status: 401 };
+  }
+
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${match[1]}`
+    },
+    signal: AbortSignal.timeout(12000)
+  });
+
+  if (!response.ok) {
+    return { error: 'Sessão inválida ou expirada', status: 401 };
+  }
+
+  const user = await response.json();
+
+  if (!user.id || !user.email) {
+    return { error: 'Usuário inválido', status: 401 };
+  }
+
+  const allowed = (process.env.SUPABASE_ALLOWED_EMAILS || '')
+    .split(',')
+    .map(email => email.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (!allowed.length) {
+    return {
+      error: 'Configure SUPABASE_ALLOWED_EMAILS na Vercel',
+      status: 503
+    };
+  }
+
+  if (!allowed.includes(user.email.toLowerCase())) {
+    return {
+      error: 'Usuário sem autorização para consultar Movidesk',
+      status: 403
+    };
+  }
+
+  return { user };
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Allow', 'GET, OPTIONS');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+
   if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET');
-    return res.status(405).json({ error: 'Método não permitido.' });
+    return respond(res, 405, {
+      error: 'Método não permitido'
+    });
   }
-  const access = await verifyAccess(req);
-  if (access.status !== 200) return res.status(access.status).json({ error: access.error });
 
-  const { $select, $expand, $filter, $orderby, $top, $skip } = req.query || {};
-  if (($select !== select && $select !== select + ',customFieldValues') ||
-      !expands.has($expand) || typeof $filter !== 'string' ||
-      !/^lastUpdate ge \d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.00z$/.test($filter) ||
-      $orderby !== 'lastUpdate desc' || $top !== '100' ||
-      typeof $skip !== 'string' || !/^\d{1,5}$/.test($skip) || Number($skip) > 20000) {
-    return res.status(400).json({ error: 'Parâmetros de consulta inválidos.' });
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return respond(res, 503, {
+      error: 'Supabase não configurado na Vercel'
+    });
   }
-  const token = process.env.MOVIDESK_TOKEN;
-  if (!token) return res.status(503).json({ error: 'Integração Movidesk indisponível.' });
 
-  const url = new URL('https://api.movidesk.com/public/v1/tickets');
-  url.search = new URLSearchParams({ token, $select, $expand, $filter, $orderby, $top, $skip });
+  if (!MOVIDESK_TOKEN) {
+    return respond(res, 503, {
+      error: 'MOVIDESK_TOKEN não configurado na Vercel'
+    });
+  }
+
   try {
-    const upstream = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(25000) });
-    if (!upstream.ok) {
-      if (upstream.status === 429) return res.status(429).json({ error: 'Limite da API Movidesk atingido.' });
-      if (upstream.status === 400) return res.status(400).json({ error: 'O Movidesk recusou a consulta.' });
-      if ([401, 403].includes(upstream.status)) {
-        return res.status(502).json({ error: 'O Movidesk recusou a credencial configurada na Vercel.' });
-      }
-      return res.status(502).json({ error: 'O Movidesk retornou um erro.' });
+    const auth = await authenticate(req);
+
+    if (auth.error) {
+      return respond(res, auth.status, {
+        error: auth.error
+      });
     }
-    const tickets = await upstream.json();
-    if (!Array.isArray(tickets)) return res.status(502).json({ error: 'Resposta inesperada do Movidesk.' });
-    return res.status(200).json(tickets);
-  } catch {
-    return res.status(502).json({ error: 'Falha na conexão com o Movidesk.' });
+
+    const allowedParams = [
+      '$select',
+      '$expand',
+      '$filter',
+      '$orderby',
+      '$top',
+      '$skip'
+    ];
+
+    const params = new URLSearchParams();
+
+    for (const key of allowedParams) {
+      const value = req.query[key];
+
+      if (value === undefined) continue;
+
+      if (typeof value !== 'string') {
+        return respond(res, 400, {
+          error: `Parâmetro inválido: ${key}`
+        });
+      }
+
+      if (value.length > 3000) {
+        return respond(res, 400, {
+          error: `Parâmetro muito longo: ${key}`
+        });
+      }
+
+      params.set(key, value);
+    }
+
+    const top = Number(params.get('$top') || 100);
+    const skip = Number(params.get('$skip') || 0);
+
+    if (
+      !Number.isInteger(top) ||
+      top < 1 ||
+      top > 100 ||
+      !Number.isInteger(skip) ||
+      skip < 0 ||
+      skip > 1000000
+    ) {
+      return respond(res, 400, {
+        error: 'Paginação inválida'
+      });
+    }
+
+    params.set('$top', String(top));
+    params.set('$skip', String(skip));
+    params.set('token', MOVIDESK_TOKEN);
+
+    const url = `${MOVIDESK_URL}?${params.toString()}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json'
+      },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(25000)
+    });
+
+    if (!response.ok) {
+      console.error(
+        'Movidesk HTTP:',
+        response.status
+      );
+
+      if (response.status === 401 || response.status === 403) {
+        return respond(res, 502, {
+          error: 'Movidesk recusou as credenciais configuradas no servidor',
+          source: 'movidesk'
+        });
+      }
+
+      if (response.status === 429) {
+        return respond(res, 429, {
+          error: 'Limite de requisições do Movidesk atingido',
+          source: 'movidesk'
+        });
+      }
+
+      return respond(res, 502, {
+        error: `Falha na consulta Movidesk (HTTP ${response.status})`,
+        source: 'movidesk'
+      });
+    }
+
+    const data = await response.json();
+
+    if (!Array.isArray(data)) {
+      return respond(res, 502, {
+        error: 'Resposta inesperada da API Movidesk'
+      });
+    }
+
+    return respond(res, 200, data);
+
+  } catch (error) {
+    console.error('Erro API Movidesk:', error.message);
+
+    return respond(res, 502, {
+      error: 'Falha de comunicação com a API Movidesk'
+    });
   }
-};
+}
