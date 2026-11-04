@@ -75,7 +75,9 @@ async function db(path, { method = 'GET', body, prefer } = {}) {
 }
 
 function parseBody(req) {
-  if (typeof req.body === 'string') return JSON.parse(req.body);
+  if (typeof req.body === 'string') {
+    return JSON.parse(req.body);
+  }
   return req.body || {};
 }
 
@@ -83,7 +85,9 @@ export default async function handler(req, res) {
   res.setHeader('Allow', 'GET, POST');
 
   if (!['GET', 'POST'].includes(req.method)) {
-    return reply(res, 405, { error: 'Método não permitido' });
+    return reply(res, 405, {
+      error: 'Método não permitido'
+    });
   }
 
   if (!urlBase || !adminKey || !anonKey) {
@@ -120,6 +124,7 @@ export default async function handler(req, res) {
 
     const action = String(req.query.action || '');
 
+    // CARREGAR TODOS OS CHAMADOS
     if (req.method === 'GET' && action === 'loadTickets') {
       const offset = Math.max(
         0,
@@ -132,34 +137,38 @@ export default async function handler(req, res) {
       );
 
       const data = await db(
-        `tm_tickets?select=payload&order=ticket_id.asc&offset=${offset}&limit=${limit}`
+        `tm_tickets?select=data&order=id.asc&offset=${offset}&limit=${limit}`
       );
 
       return reply(res, 200, {
-        tickets: data.map(x => x.payload)
+        tickets: data.map(x => x.data)
       });
     }
 
+    // CONSULTAR ALTERAÇÕES
     if (req.method === 'GET' && action === 'changes') {
       const since = String(
         req.query.since || '1970-01-01T00:00:00.000Z'
       );
 
       if (!Number.isFinite(Date.parse(since))) {
-        return reply(res, 400, { error: 'Data since inválida' });
+        return reply(res, 400, {
+          error: 'Data since inválida'
+        });
       }
 
       const data = await db(
-        `tm_tickets?select=payload&updated_at=gt.${encodeURIComponent(
+        `tm_tickets?select=data&updated_at=gt.${encodeURIComponent(
           new Date(since).toISOString()
         )}&order=updated_at.asc&limit=1000`
       );
 
       return reply(res, 200, {
-        tickets: data.map(x => x.payload)
+        tickets: data.map(x => x.data)
       });
     }
 
+    // CARREGAR CONFIGURAÇÕES
     if (req.method === 'GET' && action === 'loadState') {
       const data = await db(
         `tm_state?select=state,updated_at&id=eq.${stateId}&limit=1`
@@ -171,6 +180,7 @@ export default async function handler(req, res) {
       });
     }
 
+    // SALVAR CHAMADOS
     if (req.method === 'POST' && action === 'upsertTickets') {
       const body = parseBody(req);
 
@@ -201,13 +211,13 @@ export default async function handler(req, res) {
         }
 
         return {
-          ticket_id: id,
-          payload: t,
+          id,
+          data: t,
           updated_at: new Date().toISOString()
         };
       });
 
-      await db('tm_tickets?on_conflict=ticket_id', {
+      await db('tm_tickets?on_conflict=id', {
         method: 'POST',
         body: tickets,
         prefer: 'resolution=merge-duplicates,return=minimal'
@@ -219,6 +229,7 @@ export default async function handler(req, res) {
       });
     }
 
+    // SALVAR CONFIGURAÇÕES
     if (req.method === 'POST' && action === 'saveState') {
       const { state } = parseBody(req);
 
@@ -275,4 +286,3 @@ export default async function handler(req, res) {
     );
   }
 }
-
