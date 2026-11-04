@@ -2585,52 +2585,99 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
 
         </script>
         <script>
-            (() => {
-                window.tmSessionExpired = () => {
-                    alert('O servidor recusou o acesso aos dados. Verifique a configuração do /api/movidesk.');
-                };
-                window.tmFetch = (url, options = {}) => {
-                    const target = new URL(url, location.origin);
-                    if (target.origin !== location.origin || !['/api/auth', '/api/movidesk'].includes(target.pathname)) {
-                        throw new Error('Destino inválido.');
-                    }
-                    return fetch(target, {
-                        ...options,
-                        cache: 'no-store',
-                        credentials: 'same-origin'
-                    });
-                };
-                localStorage.removeItem('md_token');
-                async function launch(){
-                  const script=document.createElement('script');
-                  script.textContent=document.getElementById('tm-application-source').textContent;
-                  document.body.appendChild(script);
-                }
-                (async()=>{
-                  const form=document.getElementById('tm-login');
-                  const error=document.getElementById('tm-login-error');
-                  try{
-                    const response=await fetch('/api/public-config',{cache:'no-store'});
-                    const config=await response.json();
-                    if(!response.ok)throw new Error(config.error||'Configuração indisponível');
-                    if(!window.supabase?.createClient)throw new Error('Biblioteca de autenticação indisponível');
-                    const client=window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
-                    window.tmAuth={getSession:async()=> (await client.auth.getSession()).data.session};
-                    const {data:{session}}=await client.auth.getSession();
-                    const enter=async()=>{document.body.classList.remove('tm-locked');form.hidden=true;await launch()};
-                    if(session){await enter();return}
-                    form.hidden=false;
-                    form.addEventListener('submit',async e=>{
-                      e.preventDefault();error.textContent='Entrando...';
-                      const email=document.getElementById('tm-email').value.trim();
-                      const password=document.getElementById('tm-password').value;
-                      const {error:authError}=await client.auth.signInWithPassword({email,password});
-                      if(authError){error.textContent='Não foi possível entrar. Verifique e-mail e senha.';return}
-                      error.textContent='';await enter();
-                    });
-                  }catch(e){form.hidden=false;error.textContent=e.message}
-                })();
-            })();
+        (() => {
+          const form = document.getElementById('tm-login');
+          const errorBox = document.getElementById('tm-login-error');
+          let client, launched = false, busy = false;
+          const showLogin = (message = '') => {
+            document.body.classList.add('tm-locked');
+            form.hidden = false;
+            errorBox.textContent = message;
+          };
+          const startApp = () => {
+            if (launched) return;
+            launched = true;
+            document.body.classList.remove('tm-locked');
+            form.hidden = true;
+            const script = document.createElement('script');
+            script.textContent = document.getElementById('tm-application-source').textContent;
+            document.body.appendChild(script);
+          };
+          async function validSession() {
+            if (!client) return null;
+            const {data, error} = await client.auth.getSession();
+            if (error || !data.session?.access_token) return null;
+            // getUser valida o JWT no servidor, ao contrário de getSession isolado.
+            const check = await client.auth.getUser();
+            if (check.error || !check.data.user) return null;
+            return (await client.auth.getSession()).data.session || null;
+          }
+          async function requireSession() {
+            let session = await validSession();
+            if (!session) {
+              const refreshed = await client.auth.refreshSession().catch(() => ({error:true}));
+              if (!refreshed.error) session = await validSession();
+            }
+            if (!session) {
+              showLogin('Sua sessão expirou. Entre novamente para sincronizar.');
+              throw new Error('Sessão expirada. Entre novamente.');
+            }
+            return session;
+          }
+          window.tmAuth = {getSession: requireSession};
+          window.tmSessionExpired = () => {
+            showLogin('A sessão não foi aceita pelo servidor. Entre novamente.');
+          };
+          window.tmFetch = async (url, options = {}) => {
+            const target = new URL(url, location.origin);
+            if (target.origin !== location.origin ||
+                !['/api/auth', '/api/movidesk'].includes(target.pathname)) {
+              throw new Error('Destino inválido.');
+            }
+            const session = await requireSession();
+            const headers = new Headers(options.headers || {});
+            headers.set('Authorization', `Bearer ${session.access_token}`);
+            const response = await fetch(target, {
+              ...options, headers, cache: 'no-store', credentials: 'same-origin'
+            });
+            if (response.status === 401) showLogin('Sua sessão expirou. Entre novamente.');
+            return response;
+          };
+          form.addEventListener('submit', async event => {
+            event.preventDefault();
+            if (!client || busy) return;
+            busy = true;
+            errorBox.textContent = 'Autenticando...';
+            try {
+              const email = document.getElementById('tm-email').value.trim();
+              const password = document.getElementById('tm-password').value;
+              const result = await client.auth.signInWithPassword({email, password});
+              if (result.error) throw result.error;
+              await requireSession();
+              errorBox.textContent = '';
+              if (launched) {
+                location.reload(); // reexecuta inicialização após uma sessão perdida
+              } else startApp();
+            } catch (e) {
+              showLogin('Não foi possível entrar. Confira e-mail e senha.');
+            } finally { busy = false; }
+          });
+          (async () => {
+            try {
+              const response = await fetch('/api/public-config', {cache:'no-store'});
+              const config = await response.json();
+              if (!response.ok) throw new Error(config.error || 'Configuração indisponível');
+              if (!window.supabase?.createClient) throw new Error('Biblioteca Supabase indisponível');
+              client = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+                auth: {persistSession:true, autoRefreshToken:true, detectSessionInUrl:false}
+              });
+              // Nunca iniciar a aplicação apenas por existir um token no armazenamento.
+              const session = await validSession();
+              if (session) startApp();
+              else showLogin('Entre para acessar os dados compartilhados.');
+            } catch(e) { showLogin(e.message || 'Falha ao iniciar autenticação'); }
+          })();
+        })();
         </script>
     </body>
 </html>
