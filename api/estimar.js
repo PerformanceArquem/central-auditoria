@@ -4,9 +4,11 @@ import { timingSafeEqual } from 'node:crypto';
 //   ACCESS_KEY          a "Senha da função" digitada no painel (Leitura por IA)
 //   GEMINI_API_KEY      chave da API do Gemini (Google AI Studio; fica só no servidor)
 //   GEMINI_MODEL        opcional; padrão: gemini-3.8-flash
+//   GEMINI_FALLBACK_MODEL  opcional; modelo reserva usado se o principal estiver sobrecarregado
 const ACCESS_KEY = process.env.ACCESS_KEY || '';
 const API_KEY = process.env.GEMINI_API_KEY || '';
 const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+const FALLBACK = process.env.GEMINI_FALLBACK_MODEL || '';
 
 export const config = { maxDuration: 60 };
 
@@ -57,26 +59,48 @@ export default async function handler(req, res) {
 
     const payload = tickets.map(t => ({ id: String(t.id), texto: String(t.texto || '').slice(0, 3000) }));
 
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`,
-      {
-        method: 'POST',
-        headers: { 'x-goog-api-key': API_KEY, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM }] },
-          contents: [{
-            role: 'user',
-            parts: [{ text: `Jornada diária: ${jornada} horas.\nChamados (JSON):\n${JSON.stringify(payload)}` }],
-          }],
-          generationConfig: { temperature: 0, maxOutputTokens: 8192, responseMimeType: 'application/json' },
-        }),
-        signal: AbortSignal.timeout(50000),
-      }
-    );
+    const reqBody = JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM }] },
+      contents: [{
+        role: 'user',
+        parts: [{ text: `Jornada diária: ${jornada} horas.\nChamados (JSON):\n${JSON.stringify(payload)}` }],
+      }],
+      generationConfig: { temperature: 0, maxOutputTokens: 8192, responseMimeType: 'application/json' },
+    });
 
-    const j = await r.json().catch(() => ({}));
+    // Tenta de novo em erros temporários (429/500/503/504); no fim, usa o modelo reserva se houver
+    const RETRY = new Set([429, 500, 502, 503, 504]);
+    const models = FALLBACK && FALLBACK !== MODEL ? [MODEL, MODEL, FALLBACK] : [MODEL, MODEL, MODEL];
+    const started = Date.now();
+    let r, j;
+    for (let k = 0; k < models.length; k++) {
+      try {
+        r = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(models[k])}:generateContent`,
+          {
+            method: 'POST',
+            headers: { 'x-goog-api-key': API_KEY, 'content-type': 'application/json' },
+            body: reqBody,
+            signal: AbortSignal.timeout(20000),
+          }
+        );
+        j = await r.json().catch(() => ({}));
+        if (r.ok || !RETRY.has(r.status)) break;
+      } catch (e) {
+        if (e?.name !== 'TimeoutError' && e?.name !== 'AbortError') throw e;
+        r = null;
+      }
+      if (k < models.length - 1) {
+        if (Date.now() - started > 40000) break; // não estoura o limite de 60s da Vercel
+        await new Promise(ok => setTimeout(ok, 1500 * (k + 1)));
+      }
+    }
+    if (!r) return res.status(504).json({ erro: 'O Gemini não respondeu a tempo. Tente novamente em instantes.' });
     if (!r.ok) {
-      return res.status(502).json({ erro: `Gemini ${r.status}: ${j?.error?.message || 'falha na chamada'}` });
+      const temp = RETRY.has(r.status);
+      return res.status(temp ? 503 : 502).json({
+        erro: `Gemini ${r.status}: ${j?.error?.message || 'falha na chamada'}${temp ? ' (tentei 3 vezes; clique em "Analisar agora" de novo em alguns minutos)' : ''}`,
+      });
     }
 
     const text = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
