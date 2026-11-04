@@ -1,4 +1,4 @@
-const { hasSession } = require('./_session.js');
+const { verifyAccess } = require('./_session.js');
 
 const expands = new Set([
   'owner,clients($expand=organization),actions($select=id,createdDate,createdBy,description,timeAppointments;$expand=createdBy($select=id,businessName),timeAppointments)',
@@ -14,7 +14,8 @@ module.exports = async function handler(req, res) {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ error: 'Método não permitido.' });
   }
-  if (!hasSession(req)) return res.status(401).json({ error: 'Sessão inválida ou expirada.' });
+  const access = await verifyAccess(req);
+  if (access.status !== 200) return res.status(access.status).json({ error: access.error });
 
   const { $select, $expand, $filter, $orderby, $top, $skip } = req.query || {};
   if (($select !== select && $select !== select + ',customFieldValues') ||
