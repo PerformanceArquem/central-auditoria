@@ -738,6 +738,10 @@
             }
         </style>
         <style>
+            body.tm-locked {
+                display: block
+            }
+
             body.tm-locked > :not(#tm-login):not(script) {
                 display: none!important
             }
@@ -2692,8 +2696,9 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
                         if (error)
                             throw error;
                         // onAuthStateChange (SIGNED_IN) chama checkSession e abre o sistema
-                    } catch {
-                        message('E-mail ou senha inválidos.');
+                    } catch (err) {
+                        console.error('Erro no login:', err);
+                        message('Erro no login: ' + (err && err.message ? err.message : 'desconhecido') + (err && err.status ? ' (status ' + err.status + ')' : ''));
                         element('tm-enter').disabled = false;
                     }
                 }
