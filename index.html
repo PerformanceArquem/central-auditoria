@@ -765,8 +765,12 @@
     <body class="tm-locked">
         <section id="tm-login" class="card">
             <h1>Ticket Manager</h1>
-            <p>Acesso restrito a performance@arquem.com.br</p>
-            <button id="tm-enter" class="b g" type="button" disabled>Entrar com Google</button>
+            <p>Acesso restrito</p>
+            <form id="tm-form" autocomplete="on">
+                <input id="tm-email" type="email" placeholder="E-mail" autocomplete="username" required style="margin-bottom:10px">
+                <input id="tm-password" type="password" placeholder="Senha" autocomplete="current-password" required style="margin-bottom:14px">
+                <button id="tm-enter" class="b g" type="submit" disabled>Entrar</button>
+            </form>
             <p id="tm-message" role="status">Preparando login…</p>
         </section>
         <header>
@@ -2616,7 +2620,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
                     if (error || !data.session) {
                         if (started)
                             window.tmSessionExpired();
-                        throw new Error('Entre com sua Conta Google.');
+                        throw new Error('Entre com seu e-mail e senha.');
                     }
                     const headers = new Headers(options.headers);
                     headers.set('Authorization', 'Bearer ' + data.session.access_token);
@@ -2676,22 +2680,20 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
                         checking = false;
                     }
                 }
-                element('tm-enter').addEventListener('click', async () => {
+                element('tm-form').addEventListener('submit', async (event) => {
+                    event.preventDefault();
                     element('tm-enter').disabled = true;
+                    message('Entrando…');
                     try {
-                        const {error} = await client.auth.signInWithOAuth({
-                            provider: 'google',
-                            options: {
-                                redirectTo: location.origin + '/',
-                                queryParams: {
-                                    prompt: 'select_account'
-                                }
-                            }
+                        const {error} = await client.auth.signInWithPassword({
+                            email: element('tm-email').value.trim(),
+                            password: element('tm-password').value
                         });
                         if (error)
                             throw error;
+                        // onAuthStateChange (SIGNED_IN) chama checkSession e abre o sistema
                     } catch {
-                        message('Não foi possível iniciar o login. Confira a configuração Google no Supabase.');
+                        message('E-mail ou senha inválidos.');
                         element('tm-enter').disabled = false;
                     }
                 }
@@ -2726,22 +2728,14 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
                         throw new Error('Biblioteca de autenticação indisponível.');
                     client = window.supabase.createClient(config.url, config.key, {
                         auth: {
-                            flowType: 'pkce',
-                            detectSessionInUrl: true,
+                            detectSessionInUrl: false,
                             persistSession: true,
                             autoRefreshToken: true,
-                            storageKey: 'tm-google-auth'
+                            storageKey: 'tm-auth'
                         }
                     });
                     const callback = new URL(location.href);
-                    if (callback.searchParams.has('error')) {
-                        message('O Google não concluiu o login. Tente novamente.');
-                        history.replaceState(null, '', location.pathname);
-                    } else {
-                        await checkSession();
-                        if (callback.searchParams.has('code'))
-                            history.replaceState(null, '', location.pathname);
-                    }
+                    await checkSession();
                     element('tm-enter').disabled = false;
                     client.auth.onAuthStateChange( (event) => {
                         if (event === 'SIGNED_OUT' && started)
