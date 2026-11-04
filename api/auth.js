@@ -17,7 +17,16 @@ module.exports = function handler(req, res) {
     res.setHeader('Set-Cookie', sessionCookie(false));
     return res.status(200).json({ authenticated: false });
   }
-  if (!configured()) return res.status(503).json({ error: 'Autenticação indisponível.' });
+  if (!configured()) {
+    const problems = [];
+    const password = process.env.TM_ACCESS_PASSWORD || '';
+    const secret = process.env.TM_SESSION_SECRET || '';
+    if (!password) problems.push('TM_ACCESS_PASSWORD ausente nesta publicação.');
+    else if (Buffer.byteLength(password) < 16) problems.push('TM_ACCESS_PASSWORD abaixo do mínimo de 16 bytes.');
+    if (!secret) problems.push('TM_SESSION_SECRET ausente nesta publicação.');
+    else if (!/^[a-f0-9]{64}$/i.test(secret)) problems.push('TM_SESSION_SECRET deve conter exatamente 64 caracteres hexadecimais, sem espaços ou aspas.');
+    return res.status(503).json({ error: problems.join(' ') || 'Autenticação indisponível.' });
+  }
   if (req.headers['content-type']?.split(';')[0] !== 'application/json') {
     return res.status(415).json({ error: 'Formato inválido.' });
   }
