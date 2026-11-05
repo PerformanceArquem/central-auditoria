@@ -1014,6 +1014,18 @@
         <button type="button" class="b" id="emailTestSend">Enviar e-mail de teste</button>
       </div>
       <p id="emailIntegrationStatus" class="coverage-note" role="status" aria-live="polite">Integração não verificada. O cadastro de destinatários não ativa o envio automático.</p>
+      <div style="border-top:1px solid #d5e2fb;margin-top:14px;padding-top:14px">
+        <h3>Prévia das métricas reais por destinatário</h3>
+        <p class="subtle">Usa os mesmos tickets e lançamentos carregados nos cards. Não envia e-mails nem altera os dados. Confira os resultados antes de ativar o agendamento.</p>
+        <div class="row" style="gap:10px;align-items:end">
+          <div class="fg"><label for="reportPreviewPeriod">Período</label><select id="reportPreviewPeriod"><option value="daily">Último dia útil</option><option value="weekly">Semana anterior (seg–dom)</option></select></div>
+          <button type="button" class="s" id="reportPreviewBuild">Gerar prévia do relatório</button>
+          <button type="button" class="s" id="reportPreviewCopy">Copiar prévia</button>
+        </div>
+        <p id="reportPreviewStatus" class="coverage-note" role="status">Nenhuma prévia gerada.</p>
+        <textarea id="reportPreviewText" rows="13" readonly style="width:100%;line-height:1.55;resize:vertical" aria-label="Prévia do relatório por destinatário"></textarea>
+      </div>
+
     </div>
     <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Diário</th><th>Semanal</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="8">Abra o módulo para carregar.</td></tr></tbody></table></div>
     <h3 style="margin-top:22px">Histórico dos últimos envios</h3><div class="tw"><table><thead><tr><th>Data</th><th>Destinatário</th><th>Tipo</th><th>Período</th><th>Status</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
@@ -3336,6 +3348,85 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   sync(true); // sincroniza o Movidesk com a sessão autenticada
 })();
 
+
+/* Prévia local: fonte idêntica aos cards (TK e raw), sem envio automático. */
+function reportPreviewDay(d){
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d);
+  const p=Object.fromEntries(parts.filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return `${p.year}-${p.month}-${p.day}`;
+}
+function reportPreviewShift(iso,n){const d=new Date(iso+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)}
+function reportPreviewRange(mode){
+  const today=reportPreviewDay(new Date());const dow=new Date(today+'T12:00:00Z').getUTCDay();
+  if(mode==='weekly'){
+    const monday=reportPreviewShift(today,-((dow+6)%7)-7);return [monday,reportPreviewShift(monday,6)];
+  }
+  let previous=reportPreviewShift(today,-1);
+  while([0,6].includes(new Date(previous+'T12:00:00Z').getUTCDay()))previous=reportPreviewShift(previous,-1);
+  return [previous,previous];
+}
+function reportPreviewBuild(){
+  const msg=document.getElementById('reportPreviewStatus'),out=document.getElementById('reportPreviewText');
+  const select=document.getElementById('emailTestRecipient');
+  const option=select?.selectedOptions?.[0];
+  if(!select?.value){msg.textContent='Selecione um destinatário cadastrado no campo acima.';return}
+  if(!TK.size && !raw.length){msg.textContent='Ainda não há tickets ou apontamentos carregados neste navegador. Sincronize o painel antes da prévia.';return}
+  const emailRecords=Array.isArray(window.auditEmailRecipientsCache)?window.auditEmailRecipientsCache:[];
+  const rec=emailRecords.find(x=>String(x.id)===select.value);
+  if(!rec){msg.textContent='Atualize a lista de destinatários e selecione novamente.';return}
+  const all=rec.scope==='management';const normName=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+  const sector=normName(rec.sector),worker=normName(rec.collaborator_name),scope=t=>all||normName(alarmTeamName(t))===sector;
+  const [from,to]=reportPreviewRange(document.getElementById('reportPreviewPeriod').value);
+  const tickets=[...TK.values()].filter(t=>scope(t));
+  const ticketById=new Map(tickets.map(t=>[String(t.id),t]));
+  const opened=tickets.filter(t=>{const d=liveDay(liveCreatedDate(t));return d>=from&&d<=to});
+  const closed=tickets.filter(t=>{const d=liveClosedDay(t);return !!d&&d>=from&&d<=to});
+  const filtered=raw.filter(a=>{
+    if(!a.date||a.date<from||a.date>to)return false;
+    if(worker&&normName(a.owner_name)!==worker)return false;
+    if(all)return true;
+    return normName(a.sector)===sector || (ticketById.has(String(a.ticket_id))&&normName(a.sector)==='');
+  });
+  const totals=new Map();let minutes=0;
+  for(const a of filtered){const m=Math.round(Number(a.hours||0)*60);if(!Number.isFinite(m)||m<=0)continue;minutes+=m;const key=a.owner_name||'Não informado';const old=totals.get(key)||{minutes:0,entries:0,tickets:new Set()};old.minutes+=m;old.entries++;old.tickets.add(String(a.ticket_id));totals.set(key,old)}
+  const typ={Melhoria:0,Incidente:0,Venda:0,Outros:0};for(const t of opened)typ[liveType(t)]++;
+  const fmtMin=m=>{const sec=Math.round(m*60);return `${String(Math.floor(sec/3600)).padStart(2,'0')}:${String(Math.floor(sec/60)%60).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`};
+  const last=to+'T12:00:00Z';const pending=tickets.filter(t=>!alarmIsClosed(t.status)).map(t=>({t,d:liveDay(t.lastUpdate||t.last_update_source||t.createdDate)})).map(x=>({...x,days:x.d?Math.max(0,Math.floor((new Date(last)-new Date(x.d+'T12:00:00Z'))/86400000)):null})).filter(x=>x.days!==null&&x.days>=7).sort((a,b)=>b.days-a.days).slice(0,6);
+  const withoutDate=tickets.filter(t=>alarmIsClosed(t.status)&&!liveClosedDay(t)).length;
+  const lines=[
+   `CENTRAL DE AUDITORIA — ${all?'GESTÃO GERAL':rec.sector||'SETOR NÃO INFORMADO'}`,
+   `Destinatário: ${rec.name||''} · Período: ${from} a ${to}`,
+   `Fonte: ${TK.size} tickets e ${raw.length} lançamentos carregados no painel.`,
+   '',`Chamados abertos no período: ${opened.length}`,
+   `Chamados com fechamento confirmado no período: ${closed.length}`,
+   `Classificação dos abertos: Melhoria ${typ.Melhoria} · Incidente ${typ.Incidente} · Venda ${typ.Venda} · Outros ${typ.Outros}`,
+   `Apontamentos no período: ${filtered.length}`,
+   `Horas apontadas: ${fmtMin(minutes)}`,
+   `Chamados distintos com horas: ${new Set(filtered.map(a=>String(a.ticket_id))).size}`,
+   '', 'COLABORADORES — HORAS NO PERÍODO',
+   ...([...totals].sort((a,b)=>b[1].minutes-a[1].minutes).slice(0,20).map(([n,r])=>`${n}: ${fmtMin(r.minutes)} | ${r.entries} apontamentos | ${r.tickets.size} chamados`)),
+   '', 'CHAMADOS PARADOS HÁ 7 DIAS OU MAIS',
+   ...(pending.map(x=>`#${x.t.id} | ${x.days} dias | ${String(x.t.subject||'').slice(0,90)}`)),
+   '',`Limitações: ${withoutDate} ticket(s) encerrado(s) sem data de fechamento confirmada no escopo. O setor do ticket representa a equipe atual; a equipe histórica pode diferir.`,
+   'Os resultados dependem da cobertura dos dados carregados e não comprovam sincronização concluída no servidor.',
+   'PRÉVIA LOCAL — NÃO ENVIADA POR E-MAIL.'
+  ];
+  if(!totals.size)lines.splice(lines.indexOf('COLABORADORES — HORAS NO PERÍODO')+1,0,'Nenhum apontamento identificado no período.');
+  if(!pending.length)lines.splice(lines.indexOf('CHAMADOS PARADOS HÁ 7 DIAS OU MAIS')+1,0,'Nenhuma pendência identificada nesse critério.');
+  out.value=lines.join('\n');
+  msg.textContent=`Prévia gerada com ${tickets.length} tickets do escopo e ${filtered.length} lançamentos no período. NÃO é envio automático. ${!cloudReady?'Supabase não confirmado nesta sessão.':''}`;
+}
+function reportPreviewInit(){
+ const btn=document.getElementById('reportPreviewBuild');if(!btn||btn.dataset.ready)return;
+ btn.dataset.ready='1';btn.addEventListener('click',reportPreviewBuild);
+ document.getElementById('reportPreviewCopy').addEventListener('click',async()=>{
+   const value=document.getElementById('reportPreviewText').value;
+   if(!value){document.getElementById('reportPreviewStatus').textContent='Gere a prévia antes de copiar.';return}
+   try{await navigator.clipboard.writeText(value);document.getElementById('reportPreviewStatus').textContent='Prévia copiada para a área de transferência.'}
+   catch{document.getElementById('reportPreviewText').select();document.getElementById('reportPreviewStatus').textContent='Use Ctrl+C para copiar a prévia selecionada.'}
+ });
+}
+reportPreviewInit();
+
         </script>
         <script>
         (() => {
@@ -3471,7 +3562,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       await verify();say('Carregando destinatários e histórico...');
       const r=await client.from('audit_email_recipients').select('*').order('name');
       if(r.error)throw r.error;
-      records=r.data||[];
+      records=r.data||[];window.auditEmailRecipientsCache=records;
       $('emailTestRecipient').innerHTML='<option value="">Selecione um cadastro ativo</option>'+records.filter(x=>x.active).map(x=>`<option value="${esc(x.id)}">${esc(x.name)} — ${esc(x.email)}</option>`).join('');
       $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
       const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
