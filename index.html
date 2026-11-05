@@ -830,7 +830,14 @@
             @media print{.header-siren,.alert-hero-actions{display:none!important}}
         </style>
         <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js"></script>
-    </head>
+    <style id="auditoria-print-controls-style">
+  .aud-print-toolbar{display:flex;justify-content:flex-end;align-items:center;gap:7px;margin:-7px 0 10px;min-height:27px}
+  .aud-print-button{border:1px solid #cad7e8;background:#f4f7fc;color:#254b80;font:600 11px/1.2 "Segoe UI",Arial,sans-serif;padding:6px 10px;border-radius:7px;cursor:pointer}
+  .aud-print-button:hover{background:#e7effb}
+  .aud-print-button:focus-visible{outline:2px solid #2765dc;outline-offset:2px}
+  @media print{.aud-print-toolbar{display:none!important}}
+</style>
+</head>
     <body class="tm-locked">
         <form id="tm-login" class="card" hidden>
           <h2>Central de Auditoria</h2>
@@ -1824,7 +1831,7 @@ async function copyManagerReport(){
 function printManagerReport(){
  const el=$('managerReportText');if(!el)return;
  if(!el.value.trim())generateManagerReport();
- const w=window.open('','_blank','noopener,noreferrer,width=850,height=650');
+ const w=window.open('','_blank','width=850,height=650');
  if(!w){$('managerReportNotice').textContent='Permita pop-ups para imprimir o resumo.';return}
  const safe=esc(el.value);
  w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Resumo Gerencial</title><style>body{font:14px/1.6 Arial,sans-serif;padding:34px;color:#192842}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body><h2>Resumo Gerencial de Chamados</h2><pre>'+safe+'</pre></body></html>');
@@ -3242,5 +3249,83 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
           })();
         })();
         </script>
-    </body>
+    <script id="auditoria-print-controls-script">
+/* Impressão individual de gráficos e indicadores, sem alterar dados ou APIs. */
+(function(){
+  'use strict';
+  const areas=['t-live','t-mgmt','t-alerts','t-charts','t-vip','t-occ','t-proj','t-entries','t-pivot'];
+  const areaSel=areas.map(id=>'#'+id).join(',');
+  function tituloDoCard(card){
+    const heading=Array.from(card.querySelectorAll('h1,h2,h3,h4')).find(h=>h.closest('.card')===card);
+    if(heading) return heading.textContent.trim();
+    const small=card.querySelector('small');
+    if(small) return small.textContent.trim();
+    return card.querySelector('b,strong')?.textContent?.trim()?.slice(0,65)||'Indicador';
+  }
+  function adicionarControles(){
+    document.querySelectorAll(areaSel).forEach(area=>{
+      area.querySelectorAll('.card').forEach(card=>{
+        if(card.classList.contains('filters')||card.closest('.filters')||card.querySelector(':scope > .aud-print-toolbar')) return;
+        const toolbar=document.createElement('div');
+        toolbar.className='aud-print-toolbar noprint';
+        const btn=document.createElement('button');
+        btn.type='button';btn.className='aud-print-button';
+        const temGrafico=!!card.querySelector('canvas');
+        btn.textContent=temGrafico?'🖨 Imprimir gráfico/card':'🖨 Imprimir card';
+        btn.setAttribute('aria-label','Imprimir '+tituloDoCard(card));
+        btn.addEventListener('click',()=>imprimirCard(card));
+        toolbar.append(btn);
+        card.prepend(toolbar);
+      });
+    });
+  }
+  function imprimirCard(card){
+    const title=tituloDoCard(card);
+    const clone=card.cloneNode(true);
+    clone.querySelectorAll('.aud-print-toolbar,button,select,input,textarea,script,.noprint').forEach(el=>el.remove());
+    const originals=card.querySelectorAll('canvas');
+    const copies=clone.querySelectorAll('canvas');
+    originals.forEach((canvas,i)=>{
+      if(!copies[i]) return;
+      try{
+        const img=document.createElement('img');
+        img.src=canvas.toDataURL('image/png');
+        img.alt=canvas.getAttribute('aria-label')||'Gráfico';
+        img.style.cssText='display:block;max-width:100%;height:auto;margin:12px auto;';
+        copies[i].replaceWith(img);
+      }catch(e){copies[i].replaceWith(document.createTextNode('Gráfico indisponível para impressão.'));}
+    });
+    const w=window.open('','_blank','width=1050,height=820');
+    if(!w){alert('O navegador bloqueou a janela de impressão. Autorize pop-ups para este site e tente novamente.');return;}
+    const doc=w.document;
+    doc.open();
+    doc.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Impressão - Central de Auditoria</title><style>'+ 
+      'body{margin:24px;font:14px/1.5 "Segoe UI",Arial,sans-serif;color:#192842;background:white}' +
+      'h1{font-size:21px;margin:0 0 6px}p.meta{color:#667085;font-size:12px;margin:0 0 20px}' +
+      '.card{background:white;border:1px solid #dde4ee;border-radius:12px;padding:18px;box-shadow:none;margin:0}' +
+      '.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}' +
+      '.kpis .card{border-left:3px solid #2765dc}.tw{overflow:visible;max-height:none}' +
+      'table{border-collapse:collapse;width:100%;font-size:11px;white-space:normal}th,td{padding:6px;border:1px solid #d7dfeb;text-align:left}th{background:#f1f4f9}' +
+      '.chart-frame{height:auto!important;min-height:0!important}img{max-width:100%} .hide,.noprint,.aud-print-toolbar{display:none!important}' +
+      '@page{size:auto;margin:12mm}@media print{body{margin:0}.card{break-inside:avoid}}' +
+      '</style></head><body><h1>Central de Auditoria — '+escapeHTML(title)+'</h1><p class="meta">Impresso em '+new Date().toLocaleString('pt-BR')+'</p><div id="print-content"></div></body></html>');
+    doc.close();
+    doc.getElementById('print-content').append(doc.importNode(clone,true));
+    w.focus();
+    setTimeout(()=>{try{w.print();}catch(e){console.error('Falha na impressão',e)}},250);
+  }
+  function escapeHTML(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  let scheduled=false;
+  function agendar(){if(scheduled)return;scheduled=true;setTimeout(()=>{scheduled=false;adicionarControles()},100)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',iniciar,{once:true});else iniciar();
+  function iniciar(){
+    adicionarControles();
+    const observer=new MutationObserver(changes=>{
+      if(changes.some(x=>Array.from(x.addedNodes).some(n=>n.nodeType===1 && !n.classList?.contains('aud-print-toolbar'))))agendar();
+    });
+    areas.forEach(id=>{const el=document.getElementById(id);if(el)observer.observe(el,{childList:true,subtree:true})});
+  }
+})();
+</script>
+</body>
 </html>
