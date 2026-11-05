@@ -837,6 +837,15 @@
   .aud-print-button:focus-visible{outline:2px solid #2765dc;outline-offset:2px}
   @media print{.aud-print-toolbar{display:none!important}}
 </style>
+<style id="emailAdminStyle">
+.email-admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:12px;margin-top:14px}
+#emailAdminPanel .tw{max-height:340px;margin-top:10px}
+#emailAdminPanel label{font-weight:600}
+#emailAdminPanel .row label{display:inline-flex;align-items:center;gap:6px}
+#emailAdminPanel .row input[type=checkbox]{width:auto}
+#emailAdminPanel td button{white-space:nowrap}
+@media print{#emailAdminCard{display:none!important}}
+</style>
 </head>
     <body class="tm-locked">
         <form id="tm-login" class="card" hidden>
@@ -938,10 +947,11 @@
                     <section class="card" id="liveManagerAssistant" aria-label="Assistente de resumo gerencial" style="border-left:4px solid #2765dc;background:linear-gradient(135deg,#fff,#f8fbff)">
                         <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between">
                             <div><h3 style="margin:0 0 4px">✦ Assistente de Resumo Gerencial</h3>
-                            <p style="margin:0;color:var(--muted)">Analisa os cards e as tabelas de movimentação diária e gera um texto editável para enviar ao gestor.</p></div>
+                            <p style="margin:0;color:var(--muted)">Consolida chamados, horas apontadas, colaboradores, clientes, prazos e pendências do setor em um relatório editável para o gestor.</p></div>
                             <div class="row noprint">
-                                <div class="fg"><label for="managerReportStyle">Formato do texto</label><select id="managerReportStyle" onchange="generateManagerReport()"><option value="short">Executivo (curto)</option><option value="full">Detalhado por setor</option></select></div>
-                                <button type="button" class="b" id="managerGenerateButton" onclick="generateManagerReport()">✦ Gerar resumo</button>
+                                <div class="fg"><label for="managerReportSector">Setor do relatório</label><select id="managerReportSector" onchange="generateManagerReport()"><option value="">Todos os setores</option></select></div>
+                                <div class="fg"><label for="managerReportStyle">Formato do texto</label><select id="managerReportStyle" onchange="generateManagerReport()"><option value="short">Executivo (curto)</option><option value="full">Detalhado por setor</option><option value="complete" selected>Análise completa do setor</option></select></div>
+                                <div class="fg"><label for="managerReportPeriod">Período das horas</label><select id="managerReportPeriod" onchange="generateManagerReport()"><option value="day">Somente o dia</option><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="all">Todo o histórico carregado</option></select></div><button type="button" class="b" id="managerGenerateButton" onclick="generateManagerReport()">✦ Gerar resumo</button>
                                 <button type="button" class="s" onclick="copyManagerReport()">Copiar texto</button>
                                 <button type="button" class="s" onclick="printManagerReport()">Imprimir</button>
                             </div>
@@ -979,7 +989,28 @@
                     <h3>Dados compartilhados</h3>
                     <p id="cloudMsg" role="status" style="margin:0">Conectando automaticamente ao banco de dados...</p>
                 </div>
-                <div id="t-load">
+                
+<div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
+  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Cadastre setores, colaboradores e Gestão. Envio programado às 9h do próximo dia útil; segunda inclui resumo semanal.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
+  <div id="emailAdminPanel" class="hide">
+    <p id="emailAdminStatus" role="status" class="coverage-note">Aguardando abertura.</p>
+    <form id="emailAdminForm"><input id="emailRecordId" type="hidden">
+      <div class="email-admin-grid">
+        <div class="fg"><label for="emailName">Nome / destinatário</label><input id="emailName" required placeholder="Letícia / Diretoria"></div>
+        <div class="fg"><label for="emailAddress">E-mail corporativo autorizado</label><input id="emailAddress" type="email" required placeholder="destinatario@empresa.com.br"></div>
+        <div class="fg"><label for="emailScope">Escopo</label><select id="emailScope"><option value="sector">Setorial</option><option value="management">Gestão — todos os setores</option></select></div>
+        <div class="fg" id="emailSectorBox"><label for="emailSector">Setor (como no Movidesk)</label><input id="emailSector" list="emailSectors" placeholder="Implantação"><datalist id="emailSectors"></datalist></div>
+        <div class="fg" id="emailCollabBox"><label for="emailCollaborator">Colaborador (opcional)</label><input id="emailCollaborator" list="emailCollaborators" placeholder="Vazio: todos do setor"><datalist id="emailCollaborators"></datalist></div>
+      </div>
+      <div class="row" style="margin:12px 0"><label><input id="emailDaily" type="checkbox" checked> Diário às 9h</label><label><input id="emailWeekly" type="checkbox" checked> Semanal às 9h</label><label><input id="emailActive" type="checkbox" checked> Ativo</label></div>
+      <div class="row"><button type="submit" class="b">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button></div>
+    </form>
+    <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Diário</th><th>Semanal</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="8">Abra o módulo para carregar.</td></tr></tbody></table></div>
+    <h3 style="margin-top:22px">Histórico dos últimos envios</h3><div class="tw"><table><thead><tr><th>Data</th><th>Destinatário</th><th>Tipo</th><th>Período</th><th>Status</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
+    <p class="subtle" style="margin-top:12px">O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
+  </div>
+</div>
+<div id="t-load">
                     <div class="card">
                         <h3>API Movidesk</h3>
                         <div class="row">
@@ -1047,8 +1078,8 @@
                                         <th>Assunto</th>
                                         <th>Onde leu</th>
                                         <th>Trecho</th>
-                                        <th>Previsto (h)</th>
-                                        <th>Apontado (h)</th>
+                                        <th>Previsto (HH:MM:SS)</th>
+                                        <th>Apontado (HH:MM:SS)</th>
                                         <th>Uso</th>
                                         <th>Confiança</th>
                                         <th>Ação</th>
@@ -1167,7 +1198,7 @@
                         <li>
                             <b>h = horas</b>
                             , <b>dias = quantidade de dias</b>
-                            . Horas aparecem sempre com vírgula e a unidade: 8,50 h = 8 horas e 30 minutos.
+                            . Durações são apresentadas em HH:MM:SS: 08:30:00 = 8 horas e 30 minutos. Totais acima de 24 horas não reiniciam.
                         </li>
                         <li>
                             <b>Dia útil</b>
@@ -1289,14 +1320,14 @@
                                     <tr>
                                         <th>Colaborador</th>
                                         <th>Equipe</th>
-                                        <th>Horas apontadas (h)</th>
-                                        <th>Capacidade (h)</th>
+                                        <th>Horas apontadas (HH:MM:SS)</th>
+                                        <th>Capacidade (HH:MM:SS)</th>
                                         <th>% da capacidade</th>
                                         <th>Passou ou folga</th>
                                         <th>Chamados</th>
                                         <th>Cliente com mais horas</th>
-                                        <th>Média por dia útil (h)</th>
-                                        <th>Horas em dias não úteis (h)</th>
+                                        <th>Média por dia útil (HH:MM:SS)</th>
+                                        <th>Horas em dias não úteis (HH:MM:SS)</th>
                                         <th>Situação</th>
                                     </tr>
                                 </thead>
@@ -1314,11 +1345,11 @@
                                         <th>Ticket</th>
                                         <th>Assunto</th>
                                         <th>Cliente</th>
-                                        <th>Previsto (h)</th>
-                                        <th>Apontado (h)</th>
+                                        <th>Previsto (HH:MM:SS)</th>
+                                        <th>Apontado (HH:MM:SS)</th>
                                         <th>Restam ou excedeu</th>
                                         <th>% da previsão</th>
-                                        <th>Apontado no período (h)</th>
+                                        <th>Apontado no período (HH:MM:SS)</th>
                                         <th>Colaboradores</th>
                                         <th>Situação</th>
                                     </tr>
@@ -1335,11 +1366,11 @@
                                 <thead>
                                     <tr>
                                         <th>Empresa</th>
-                                        <th>Horas (h)</th>
+                                        <th>Horas (HH:MM:SS)</th>
                                         <th>% do total</th>
                                         <th>Chamados</th>
                                         <th>Colaboradores</th>
-                                        <th>Horas em dias não úteis (h)</th>
+                                        <th>Horas em dias não úteis (HH:MM:SS)</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tMgCli"></tbody>
@@ -1355,12 +1386,12 @@
                                         <th>Ticket</th>
                                         <th>Assunto</th>
                                         <th>Empresa</th>
-                                        <th>Horas (h)</th>
+                                        <th>Horas (HH:MM:SS)</th>
                                         <th>% do total</th>
                                         <th>Apontamentos</th>
                                         <th>Colaboradores</th>
                                         <th>Dias com apontamento</th>
-                                        <th>Horas em dias não úteis (h)</th>
+                                        <th>Horas em dias não úteis (HH:MM:SS)</th>
                                         <th>Status</th>
                                     </tr>
                                 </thead>
@@ -1388,7 +1419,7 @@
                                         <th>Chamados</th>
                                         <th>Colaboradores</th>
                                         <th>Quem mais atende</th>
-                                        <th>Horas em dias não úteis (h)</th>
+                                        <th>Horas em dias não úteis (HH:MM:SS)</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tVip"></tbody>
@@ -1530,8 +1561,8 @@
                                         <th>Assunto</th>
                                         <th>Cliente</th>
                                         <th>Dias com apontamento</th>
-                                        <th>Total (h)</th>
-                                        <th>Média por dia (h)</th>
+                                        <th>Total (HH:MM:SS)</th>
+                                        <th>Média por dia (HH:MM:SS)</th>
                                         <th>Dias abaixo da meta</th>
                                         <th>Dias na meta</th>
                                         <th>Dias que estourou</th>
@@ -1551,7 +1582,7 @@
                                         <th>Assunto</th>
                                         <th>Data</th>
                                         <th>Quem trabalhou</th>
-                                        <th>Horas no dia (h)</th>
+                                        <th>Horas no dia (HH:MM:SS)</th>
                                         <th>Diferença para a meta</th>
                                         <th>Situação</th>
                                     </tr>
@@ -1585,9 +1616,9 @@
                                         <th>Ticket</th>
                                         <th>Assunto</th>
                                         <th>Cliente</th>
-                                        <th>Previsto (h)</th>
+                                        <th>Previsto (HH:MM:SS)</th>
                                         <th>De onde veio a previsão</th>
-                                        <th>Apontado (h)</th>
+                                        <th>Apontado (HH:MM:SS)</th>
                                         <th>Restam ou excedeu</th>
                                         <th>% da previsão</th>
                                         <th>Situação</th>
@@ -1616,11 +1647,11 @@
                                         <th>Tickets</th>
                                         <th>Clientes</th>
                                         <th>Dias com apontamento</th>
-                                        <th>Horas apontadas (h)</th>
-                                        <th>Média por dia apontado (h)</th>
-                                        <th>Horas em dias não úteis (h)</th>
-                                        <th>Capacidade (h)</th>
-                                        <th>Mínimo exigido (h)</th>
+                                        <th>Horas apontadas (HH:MM:SS)</th>
+                                        <th>Média por dia apontado (HH:MM:SS)</th>
+                                        <th>Horas em dias não úteis (HH:MM:SS)</th>
+                                        <th>Capacidade (HH:MM:SS)</th>
+                                        <th>Mínimo exigido (HH:MM:SS)</th>
                                         <th>% da capacidade</th>
                                         <th>Falta para o mínimo</th>
                                         <th>Falta para a jornada completa</th>
@@ -1639,7 +1670,7 @@
                                     <tr>
                                         <th>Data</th>
                                         <th>Colaborador</th>
-                                        <th>Horas no dia (h)</th>
+                                        <th>Horas no dia (HH:MM:SS)</th>
                                         <th>% da jornada</th>
                                         <th>Falta ou sobra no dia</th>
                                         <th>Situação</th>
@@ -1791,13 +1822,27 @@ function renderLiveDaily(){
  }
 }
 /* Assistente de resumo gerencial local: cálculos determinísticos, sem IA externa. */
+function refreshManagerSectors(){
+  const select=$('managerReportSector');if(!select)return;
+  const current=select.value;
+  const sectors=[...new Set([...TK.values()].map(t=>alarmTeamName(t)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const values=['',...sectors];
+  const old=[...select.options].map(x=>x.value);
+  if(old.length!==values.length||old.some((v,i)=>v!==values[i])){
+    select.replaceChildren(new Option('Todos os setores',''),...sectors.map(x=>new Option(x,x)));
+    select.value=values.includes(current)?current:'';
+  }
+}
 function managerReportData(){
+  refreshManagerSectors();
+  const selectedSector=$('managerReportSector')?.value||'';
   const day=$('liveDailyDate')?.value||liveDay(new Date());
   const opened=new Map(),closed=new Map(),types=['Melhoria','Incidente','Venda','Outros'];
   const overall={opened:0,closed:0,openedType:{},closedType:{}};
   let withoutClosedDate=0;
   for(const t of TK.values()){
-    const team=alarmTeamName(t),type=liveType(t),o=liveDay(liveCreatedDate(t)),c=liveClosedDay(t);
+    const team=alarmTeamName(t);if(selectedSector&&team!==selectedSector)continue;
+    const type=liveType(t),o=liveDay(liveCreatedDate(t)),c=liveClosedDay(t);
     if(alarmIsClosed(t.status)&&!c&&!liveClosedDate(t))withoutClosedDate++;
     for(const [date,map,key] of [[o,opened,'opened'],[c,closed,'closed']]){
       if(date!==day)continue;
@@ -1807,66 +1852,124 @@ function managerReportData(){
     }
   }
   const sortable=m=>[...m].sort((a,b)=>b[1].total-a[1].total||a[0].localeCompare(b[0],'pt-BR'));
-  return {day,types,opened:sortable(opened),closed:sortable(closed),overall,withoutClosedDate};
+  return {day,types,opened:sortable(opened),closed:sortable(closed),overall,withoutClosedDate,selectedSector,matchingCount:[...TK.values()].filter(t=>!selectedSector||alarmTeamName(t)===selectedSector).length};
 }
 function generateManagerReport(){
-  const el=$('managerReportText'), notice=$('managerReportNotice');
-  if(!el) return;
-  const button=$('managerGenerateButton');
-  try {
+  const el=$('managerReportText'),notice=$('managerReportNotice'),button=$('managerGenerateButton');
+  if(!el)return false;
+  try{
     if(button){button.disabled=true;button.textContent='✦ Gerando...'}
-    // Não utilizar os cards do DOM como fonte: eles podem estar desatualizados.
-    // A fonte é o conjunto de tickets carregados no sistema.
-    const d=managerReportData(),f=d.day.split('-').reverse().join('/'),a=d.overall;
-    const full=$('managerReportStyle')?.value==='full';
-    const count=TK.size;
-    const typeLine=key=>d.types.map(t=>`${t.toLowerCase()}: ${a[key][t]||0}`).join('; ');
-    const top=m=>m.length?m.slice(0,3).map(([name,r])=>`${name} (${r.total})`).join(', '):'nenhum setor com registro confirmado';
-    const lines=[`Assunto: Acompanhamento diário de chamados — ${f}`,'','Prezados,','',
-      `Conforme os registros disponíveis na Central de Auditoria, em ${f} foram identificados ${a.opened} chamados abertos e ${a.closed} fechamentos com data confirmada.`,
-      `Aberturas por tipo: ${typeLine('openedType')}.`,
-      `Fechamentos por tipo: ${typeLine('closedType')}.`,
-      `Setores com mais aberturas: ${top(d.opened)}.`,
-      `Setores com mais fechamentos: ${top(d.closed)}.`];
-    if(full){
-      const detail=(title,items)=>{
-        lines.push('',title);
-        if(!items.length){lines.push('• Nenhum registro confirmado para a data selecionada.');return;}
-        for(const [team,r] of items)lines.push(`• ${team}: ${r.total} chamado(s) — ${d.types.map(t=>`${t.toLowerCase()} ${r.types[t]||0}`).join(', ')}.`);
-      };
-      detail('Abertos por setor:',d.opened);
-      detail('Fechados por setor:',d.closed);
+    const d=managerReportData(),f=d.day.split('-').reverse().join('/'),sector=d.selectedSector;
+    const selected=$('managerReportStyle')?.value||'complete';
+    const scope=sector||'Todos os setores';
+    const timespan=$('managerReportPeriod')?.value||'30';
+    const date0=new Date(d.day+'T12:00:00');
+    if(!Number.isFinite(date0.valueOf()))throw new Error('Selecione uma data válida na tela Tempo real.');
+    const dateStart=n=>{const dt=new Date(date0);dt.setDate(dt.getDate()-n+1);return iso(dt)};
+    const startDate=timespan==='all'?'':timespan==='day'?d.day:dateStart(Number(timespan));
+    const rangeName=timespan==='all'?'todo o histórico disponível':startDate===d.day?f:`${fmtDate(startDate)} a ${f}`;
+    const relevantTickets=[...TK.values()].filter(t=>!sector||alarmTeamName(t)===sector);
+    const relevantIds=new Set(relevantTickets.map(t=>String(t.id)));
+    // Apontamentos usam a equipe registrada no lançamento quando disponível.
+    const entries=raw.filter(r=>{
+      if(sector&&r.sector!==sector&&!(!r.sector&&relevantIds.has(String(r.ticket_id))))return false;
+      return (!startDate||r.date>=startDate)&&(!d.day||r.date<=d.day);
+    });
+    const hours=entries.reduce((v,r)=>v+(Number(r.hours)||0),0);
+    const uniqTickets=new Set(entries.map(r=>String(r.ticket_id)));
+    const byPerson=new Map(),byClient=new Map(),byActivity=new Map();
+    function add(map,key,record){
+      const k=String(key||'Não informado').trim()||'Não informado';
+      let item=map.get(k);
+      if(!item){item={hours:0,count:0,tickets:new Set(),days:new Set()};map.set(k,item)}
+      item.hours+=Number(record.hours)||0;item.count++;item.tickets.add(String(record.ticket_id));if(record.date)item.days.add(record.date);
     }
-    const alertLimit=Math.max(1,Number($('alarmMinDays')?.value||7));
-    const pending=[...TK.values()].filter(t=>!alarmIsClosed(t.status)).map(t=>{
-      const last=alarmDate(t.lastUpdate)||alarmDate(liveCreatedDate(t));
-      return {t,days:last?Math.max(0,Math.floor((Date.now()-last)/86400000)):null};
-    }).filter(x=>x.days!==null&&x.days>=alertLimit).sort((x,y)=>y.days-x.days);
-    if(pending.length){
-      const critical=pending[0];
-      lines.push('',`Pontos de atenção: ${pending.length} chamados abertos estão há pelo menos ${alertLimit} dia(s) sem atualização. O mais antigo identificado é o ticket #${critical.t.id}, do setor ${alarmTeamName(critical.t)}, com ${critical.days} dias sem atualização.`);
+    entries.forEach(r=>{add(byPerson,r.owner_name,r);add(byClient,r.client_name,r);add(byActivity,r.activity,r)});
+    const rank=map=>[...map].sort((a,b)=>b[1].hours-a[1].hours||a[0].localeCompare(b[0],'pt-BR'));
+    const kinds=['Melhoria','Incidente','Venda','Outros'];
+    const kindCounts=Object.fromEntries(kinds.map(x=>[x,0]));
+    const statusCounts=new Map();
+    const openTickets=[];
+    const now=Date.now();
+    for(const t of relevantTickets){
+      const kind=liveType(t);kindCounts[kind]++;
+      const status=String(t.status||'Não informado');statusCounts.set(status,(statusCounts.get(status)||0)+1);
+      if(!alarmIsClosed(t.status)){
+        const updated=alarmDate(t.lastUpdate)||alarmDate(liveCreatedDate(t));
+        openTickets.push({t,idle:updated?Math.max(0,Math.floor((now-updated)/86400000)):null});
+      }
     }
-    if(d.withoutClosedDate)lines.push('',`Limitação: ${d.withoutClosedDate} chamados encerrados não têm data de fechamento confirmada na base; não foram somados aos fechamentos do dia.`);
-    if(!count){
-      lines.push('', 'Atenção: a base de tickets está vazia neste acesso. Não é possível confirmar números reais sem carregar e sincronizar os dados do Movidesk/Supabase.');
-    }else if(!a.opened&&!a.closed){
-      lines.push('', `Embora existam ${count} tickets carregados, não foram encontrados registros de abertura ou fechamento confirmado em ${f}. Isso pode indicar ausência de movimentação ou cobertura incompleta da consulta, e não deve ser interpretado como zero absoluto no Movidesk.`);
+    openTickets.sort((x,y)=>(y.idle??-1)-(x.idle??-1));
+    const oldLimit=Math.max(1,Number($('alarmMinDays')?.value||7));
+    const delayed=openTickets.filter(x=>x.idle!==null&&x.idle>=oldLimit);
+    const a=d.overall;
+    const typeLine=key=>kinds.map(t=>`${t.toLowerCase()}: ${a[key][t]||0}`).join('; ');
+    const lines=[`Assunto: Relatório gerencial — ${scope} — ${f}`,'','Prezados,','',
+      `Segue análise do setor ${scope}, elaborada com base nos registros disponíveis na Central de Auditoria.`,
+      `Referência de movimentação: ${f}. Período dos apontamentos: ${rangeName}.`,
+      '',`1. MOVIMENTAÇÃO DE CHAMADOS`,
+      `• Abertos no dia: ${a.opened}; fechamentos com data confirmada no dia: ${a.closed}.`,
+      `• Aberturas por tipo: ${typeLine('openedType')}.`,
+      `• Fechamentos por tipo: ${typeLine('closedType')}.`,
+      `• Carteira disponível do setor: ${relevantTickets.length} ticket(s), incluindo ${openTickets.length} em situação não encerrada.`,
+      `• Tipos na carteira: ${kinds.map(k=>`${k.toLowerCase()} ${kindCounts[k]}`).join(', ')}.`];
+    if(selected!=='short'){
+      lines.push('',`2. APONTAMENTOS E HORAS (${rangeName})`,
+        `• Horas trabalhadas registradas: ${H(hours)}.`,
+        `• Lançamentos de horas: ${entries.length}.`,
+        `• Chamados com apontamento: ${uniqTickets.size}.`,
+        `• Colaboradores com apontamento: ${byPerson.size}.`,
+        `• Média por lançamento: ${entries.length?H(hours/entries.length):'não calculável'}.`);
+      lines.push('','3. COLABORADORES E PRODUTIVIDADE');
+      const people=rank(byPerson);
+      if(!people.length)lines.push('• Nenhum apontamento de colaborador encontrado para o período e setor selecionados.');
+      else people.slice(0,selected==='complete'?30:10).forEach(([n,r],i)=>lines.push(`• ${i+1}. ${n}: ${H(r.hours)} apontadas, ${r.count} lançamento(s), ${r.tickets.size} ticket(s), ${r.days.size} dia(s) com registro${hours?`, ${nf(r.hours/hours*100,1)}% das horas do recorte`:''}.`));
+      lines.push('','4. SITUAÇÃO DOS CHAMADOS');
+      for(const [state,count] of [...statusCounts].sort((a,b)=>b[1]-a[1]).slice(0,15))lines.push(`• ${state}: ${count} chamado(s).`);
+      if(!statusCounts.size)lines.push('• Sem tickets identificados para esse setor.');
+      lines.push('',`5. ATRASOS E PENDÊNCIAS`,
+        `• Sem atualização há ${oldLimit} dias ou mais: ${delayed.length} chamado(s).`,
+        `• Sem data válida de atualização/abertura: ${openTickets.filter(x=>x.idle===null).length} chamado(s).`);
+      delayed.slice(0,selected==='complete'?15:5).forEach(({t,idle})=>lines.push(`• Ticket #${t.id} — ${idle} dia(s) sem atualização — ${String(t.subject||'Sem assunto').slice(0,110)} — responsável: ${nm(t.owner)||'Não atribuído'}.`));
     }
-    lines.push('',liveTicketSource(),
-      '',`Critério de apuração: ${count} tickets disponíveis no sistema; setores conforme equipe atual do ticket; tipos por categoria, serviço e assunto. Fechamentos sem data confirmada não foram atribuídos ao dia.`,
+    if(selected==='complete'){
+      lines.push('','6. CLIENTES COM MAIOR CONSUMO DE HORAS');
+      const clients=rank(byClient);
+      if(!clients.length)lines.push('• Sem clientes com horas apontadas no recorte.');
+      else clients.slice(0,10).forEach(([name,r],i)=>lines.push(`• ${i+1}. ${name}: ${H(r.hours)}, ${r.tickets.size} chamado(s).`));
+      lines.push('','7. ATIVIDADES COM MAIOR TEMPO APONTADO');
+      const activities=rank(byActivity);
+      if(!activities.length)lines.push('• Sem atividades apontadas no recorte.');
+      else activities.slice(0,10).forEach(([name,r])=>lines.push(`• ${name}: ${H(r.hours)}, ${r.count} lançamento(s).`));
+      lines.push('','8. CHAMADOS QUE MAIS CONSUMIRAM HORAS');
+      const byTicket=new Map();
+      for(const r of entries){
+        const id=String(r.ticket_id),item=byTicket.get(id)||{hours:0,count:0,subject:r.subject||'Sem assunto',people:new Set()};
+        item.hours+=Number(r.hours)||0;item.count++;item.people.add(r.owner_name);byTicket.set(id,item);
+      }
+      const ranking=[...byTicket].sort((a,b)=>b[1].hours-a[1].hours).slice(0,12);
+      if(!ranking.length)lines.push('• Nenhum chamado com apontamento encontrado.');
+      else ranking.forEach(([id,r])=>lines.push(`• #${id} — ${H(r.hours)} em ${r.count} lançamento(s), ${r.people.size} colaborador(es) — ${r.subject.slice(0,100)}.`));
+      lines.push('','9. ANÁLISE E RECOMENDAÇÕES');
+      if(delayed.length)lines.push(`• Priorizar a revisão dos ${delayed.length} chamados sem atualização há pelo menos ${oldLimit} dias, começando pelos mais antigos.`);
+      if(byPerson.size)lines.push('• Conferir a distribuição de horas entre os colaboradores e investigar concentrações de esforço em poucos chamados.');
+      if(openTickets.length)lines.push('• Revisar os chamados abertos e atualizar responsáveis, status e previsões conforme o fluxo do setor.');
+      if(!entries.length)lines.push('• Verificar a disponibilidade e o período dos apontamentos antes de concluir que o setor não registrou horas.');
+    }
+    if(d.withoutClosedDate)lines.push('',`Ressalva: ${d.withoutClosedDate} ticket(s) encerrados na carteira não possuem data de fechamento confirmada.`);
+    lines.push('',`FONTES E LIMITAÇÕES: ${liveTicketSource()}`,
+      `Foram analisados ${relevantTickets.length} tickets e ${entries.length} lançamentos de horas do recorte selecionado. A carteira e os eventos diários são atribuídos à equipe atual do ticket; as horas são agrupadas pela equipe informada em cada apontamento. Mudanças históricas de setor não podem ser reconstituídas apenas com esses campos. Os totais dependem dos registros efetivamente sincronizados, e ausência de registro não significa necessariamente ausência de trabalho.`,
       '', 'Atenciosamente,', 'Equipe de Qualidade e Auditoria');
-    el.value=lines.join('\n');
+    el.value=lines.join('\n').replace(/\\n/g,'\n');
     window.managerReportEdited=false;
-    if(notice)notice.textContent=`Texto gerado em ${new Date().toLocaleTimeString('pt-BR')} para ${f} · ${count} tickets disponíveis. ${lastSync?'Última consulta Movidesk: '+new Date(lastSync).toLocaleString('pt-BR'):'Consulta Movidesk não confirmada nesta sessão'}. Revise os números antes de enviar.`;
+    if(notice)notice.textContent=`Relatório ${selected==='complete'?'completo':selected==='full'?'detalhado':'executivo'} gerado para ${scope}: ${relevantTickets.length} ticket(s), ${entries.length} apontamento(s), ${H(hours)} · ${rangeName}. ${lastSync?'Última sincronização: '+new Date(lastSync).toLocaleString('pt-BR'):'Sem sincronização confirmada nesta sessão'}.`;
     return true;
   }catch(error){
-    console.error('Falha ao gerar resumo gerencial:',error);
-    if(notice)notice.textContent='Falha ao montar o resumo: '+(error?.message||'erro inesperado')+'. Verifique a sincronização e tente novamente.';
-    el.value=`Não foi possível gerar o relatório nesta tentativa.\nDetalhe técnico: ${error?.message||'erro inesperado'}\nNenhum dado foi alterado.`;
+    console.error('Erro no relatório por setor:',error);
+    if(notice)notice.textContent='Não foi possível gerar o relatório: '+(error.message||'erro desconhecido');
+    el.value='Falha ao gerar relatório. Verifique os dados sincronizados e tente novamente.\n'+(error.message||'');
     return false;
-  }finally{
-    if(button){button.disabled=false;button.textContent='✦ Gerar resumo'}
-  }
+  }finally{if(button){button.disabled=false;button.textContent='✦ Gerar resumo'}}
 }
 async function copyManagerReport(){
  const el=$('managerReportText');if(!el)return;
@@ -1880,7 +1983,79 @@ function printManagerReport(){
  const w=window.open('','_blank','width=850,height=650');
  if(!w){$('managerReportNotice').textContent='Permita pop-ups para imprimir o resumo.';return}
  const safe=esc(el.value);
- w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Resumo Gerencial</title><style>body{font:14px/1.6 Arial,sans-serif;padding:34px;color:#192842}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body><h2>Resumo Gerencial de Chamados</h2><pre>'+safe+'</pre></body></html>');
+ w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Resumo Gerencial</title><style>body{font:14px/1.6 Arial,sans-serif;padding:34px;color:#192842}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body><h2>Resumo Gerencial de Chamados</h2><pre>'+safe+'</pre><script id="emailAdminIntegratedScript">
+(()=>{'use strict';
+  const $=id=>document.getElementById(id);
+  let client=null, records=[], loaded=false, loading=false;
+  const say=t=>{if($('emailAdminStatus'))$('emailAdminStatus').textContent=t};
+  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaborator').value=''}};
+  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope() }
+  function populateSuggestions(){
+    try{
+      const tickets=Array.from(window.TK?.values?.()||[]);
+      const sectors=[...new Set(tickets.map(t=>t.sector||t.ownerTeam||t.owner_team||t.team||t.service_name).filter(Boolean))].sort();
+      $('emailSectors').innerHTML=sectors.map(x=>`<option value="${esc(x)}"></option>`).join('');
+      const people=[...new Set(tickets.map(t=>t.owner_name||t.ownerName).filter(Boolean))].sort();
+      $('emailCollaborators').innerHTML=people.map(x=>`<option value="${esc(x)}"></option>`).join('');
+    }catch(e){console.warn('Sugestões de setor indisponíveis',e)}
+  }
+  async function verify(){
+    client=window.tmEmailAdminClient;
+    if(!client)throw Error('Aguardando a autenticação da Central de Auditoria.');
+    const {data:{user},error}=await client.auth.getUser();
+    if(error||!user)throw Error('Faça login na Central de Auditoria.');
+    const r=await client.rpc('audit_is_email_admin');
+    if(r.error)throw Error('Permissões não instaladas ou indisponíveis: '+r.error.message);
+    if(!r.data)throw Error('Seu usuário não tem permissão de administrador para configurar destinatários.');
+  }
+  async function reload(){
+    if(loading)return;loading=true;
+    try{
+      await verify();say('Carregando destinatários e histórico...');
+      const r=await client.from('audit_email_recipients').select('*').order('name');
+      if(r.error)throw r.error;
+      records=r.data||[];
+      $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
+      const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
+      $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
+      loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
+      populateSuggestions();
+    }catch(e){say('Não foi possível carregar: '+e.message)}finally{loading=false}
+  }
+  $('emailAdminOpen').addEventListener('click',()=>{
+    const panel=$('emailAdminPanel'),show=panel.classList.contains('hide');panel.classList.toggle('hide',!show);
+    $('emailAdminOpen').textContent=show?'Fechar destinatários':'Gerenciar destinatários';
+    if(show&&!loaded)reload();
+  });
+  $('emailScope').addEventListener('change',scope);
+  $('emailNew').addEventListener('click',reset);
+  $('emailReload').addEventListener('click',reload);
+  $('emailRecipients').addEventListener('click',e=>{
+    const id=e.target.closest('[data-email-edit]')?.dataset.emailEdit;
+    const x=records.find(r=>r.id===id);if(!x)return;
+    $('emailRecordId').value=x.id;$('emailName').value=x.name;$('emailAddress').value=x.email;
+    $('emailScope').value=x.scope||'sector';scope();$('emailSector').value=x.sector||'';
+    $('emailCollaborator').value=x.collaborator_name||'';$('emailDaily').checked=x.daily_enabled;
+    $('emailWeekly').checked=x.weekly_enabled;$('emailActive').checked=x.active;
+    $('emailAdminCard').scrollIntoView({behavior:'smooth',block:'start'});
+  });
+  $('emailAdminForm').addEventListener('submit',async e=>{
+    e.preventDefault();
+    try{
+      await verify();
+      const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:$('emailSector').value.trim(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaborator').value.trim()||null),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
+      if(!data.daily_enabled&&!data.weekly_enabled)throw Error('Marque ao menos uma frequência.');
+      if(data.scope==='sector'&&!data.sector)throw Error('Informe o setor.');
+      say('Salvando cadastro...');const id=$('emailRecordId').value;
+      const r=id?await client.from('audit_email_recipients').update(data).eq('id',id):await client.from('audit_email_recipients').insert(data);
+      if(r.error)throw r.error;
+      reset();await reload();say('Destinatário salvo com sucesso.');
+    }catch(e){say('Não foi possível salvar: '+e.message)}
+  });
+})();
+</script>
+</body></html>');
  w.document.close();w.focus();w.print();
 }
 function showLiveEvents(){
@@ -2387,7 +2562,17 @@ function period(c){
 const isProj=(r,c)=>c.ids.includes(r.ticket_id)||(c.kw&&String(r[c.fld]||'').toLowerCase().includes(c.kw));
 const bizDays=(a,b)=>{let n=0;for(let d=new Date(a+'T12:00:00'),e=new Date(b+'T12:00:00');d<=e;d.setDate(d.getDate()+1)){const w=d.getDay();if(w&&w<6)n++}return n};
 const nf=(v,d=2)=>v.toFixed(d).replace('.',',');
-const H=v=>nf(v)+' h';
+// Durações em horas decimais nos cálculos; exibição em HH:MM:SS (inclusive >24h).
+const H=v=>{
+  const number=Number(v);
+  if(!Number.isFinite(number)) return '—';
+  const sign=number<0?'-':'';
+  const totalSeconds=Math.round(Math.abs(number)*3600);
+  const hh=Math.floor(totalSeconds/3600);
+  const mm=Math.floor(totalSeconds%3600/60);
+  const ss=totalSeconds%60;
+  return sign+String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0');
+};
 const dEq=(h,c)=>{const n=Math.abs(h)/c.jor;return n>=0.5?` (≈ ${nf(n,1)} ${n===1?'dia':'dias'} de ${c.jor} h)`:''};
 // diferença escrita por extenso: "Faltam 2,00 h (≈ 0,3 dia de 8 h)" ou "Passou 3,00 h"
 const gapTxt=(h,ref,c,low,high)=>{const d=h-ref;return Math.abs(d)<0.005?'Exato':d<0?`${low} ${H(-d)}${dEq(-d,c)}`:`${high} ${H(d)}${dEq(d,c)}`};
@@ -2569,7 +2754,7 @@ function renderPivot(){
   const srt=(o,f)=>Object.keys(o).sort((x,y)=>TIMEF.includes(f)?x.localeCompare(y):val(o[y])-val(o[x])||x.localeCompare(y));
   const RL=srt(RT,rf),CL=srt(CT,cf),R2=RL.slice(0,60),C2=CL.slice(0,24);
   const cells=R2.map(a=>C2.map(b=>val(M[a+'\u0001'+b])));
-  const mx=Math.max(1,...cells.flat()),fmt=v=>vm==='h'?v.toFixed(2):String(v);
+  const mx=Math.max(1,...cells.flat()),fmt=v=>vm==='h'?H(v):String(v);
   const lab=Object.fromEntries(PF);
   $('pvTable').innerHTML=`<thead><tr><th>${lab[rf]}${cf?' \\ '+lab[cf]:''}</th>${cf?C2.map(b=>`<th>${esc(b)}</th>`).join(''):''}<th>Total</th></tr></thead><tbody>`+
     R2.map((a,i)=>`<tr><td><b>${esc(a)}</b></td>${cf?cells[i].map(v=>`<td style="background:rgba(37,99,235,${v?(.08+.4*v/mx).toFixed(2):0})">${v?fmt(v):''}</td>`).join(''):''}<td><b>${fmt(val(RT[a]))}</b></td></tr>`).join('')+
@@ -2580,7 +2765,26 @@ function renderPivot(){
 
 /* ---------- gráficos ---------- */
 const CH={},PAL=['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#475569','#ea580c'];
-const mkc=(id,cfg)=>{if(CH[id])CH[id].destroy();if(window.Chart){cfg.options=cfg.options||{};if(cfg.options.animation===undefined)cfg.options.animation={duration:1200,easing:'easeOutQuart'};CH[id]=new Chart($(id),cfg)}};
+const HOUR_CHARTS=new Set(['chDay','chWeek','chCli','chAct']);
+const mkc=(id,cfg)=>{
+  if(CH[id])CH[id].destroy();
+  if(!window.Chart)return;
+  cfg.options=cfg.options||{};
+  if(cfg.options.animation===undefined)cfg.options.animation={duration:1200,easing:'easeOutQuart'};
+  const hourChart=HOUR_CHARTS.has(id)||(['chMonthly','chAnnual'].includes(id)&&$('cmpMetric')?.value==='hours');
+  if(hourChart){
+    cfg.options.plugins=cfg.options.plugins||{};
+    cfg.options.plugins.tooltip=cfg.options.plugins.tooltip||{};
+    const callbacks=cfg.options.plugins.tooltip.callbacks||{};
+    callbacks.label=ctx=>`${ctx.dataset?.label?ctx.dataset.label+': ':''}${H(Number(typeof ctx.parsed==='number'?ctx.parsed:(ctx.parsed?.[cfg.options.indexAxis==='y'?'x':'y']??ctx.raw))||0)}`;
+    cfg.options.plugins.tooltip.callbacks=callbacks;
+    cfg.options.scales=cfg.options.scales||{};
+    const axis=cfg.options.indexAxis==='y'?'x':'y';
+    cfg.options.scales[axis]=cfg.options.scales[axis]||{};
+    cfg.options.scales[axis].ticks={...(cfg.options.scales[axis].ticks||{}),callback:value=>H(Number(value))};
+  }
+  CH[id]=new Chart($(id),cfg);
+};
 const rangeDays=(a,b)=>{const o=[];for(let d=new Date(a+'T12:00:00'),x=new Date(b+'T12:00:00');d<=x;d.setDate(d.getDate()+1))o.push(iso(d));return o};
 function renderCharts(c){
   const kd=mk(c),P=period(c),V=vipList(),agN=new Set(rows.map(r=>r.owner_name)).size;
@@ -3283,6 +3487,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
               client = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
                 auth: {persistSession:true, autoRefreshToken:true, detectSessionInUrl:false}
               });
+              window.tmEmailAdminClient = client;
               // Nunca iniciar a aplicação apenas por existir um token no armazenamento.
               let session = await validSession();
               if (!session) {
