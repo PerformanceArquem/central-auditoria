@@ -924,8 +924,9 @@
                     <section class="card" id="liveDailySummary" style="background:#f8faff;border:1px solid #dbe6fa" aria-label="Movimentação diária dos chamados">
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
                             <div><h3 style="margin:0 0 4px">Abertos e fechados no dia, por setor</h3><p style="margin:0;color:var(--muted)">Contagem por data de abertura e de fechamento, independente dos apontamentos de horas.</p></div>
-                            <div class="fg noprint"><label for="liveDailyDate">Data da análise</label><input type="date" id="liveDailyDate" onchange="renderLiveDaily()"></div>
+                            <div class="fg noprint"><label for="liveDailyDate">Data da análise</label><input type="date" id="liveDailyDate" onchange="renderLiveDaily();generateManagerReport()"></div>
                         </div>
+                        <div class="row noprint" style="margin:0 0 12px;align-items:center"><button type="button" class="s" onclick="refreshManagerData()">↻ Sincronizar e atualizar indicadores</button><span id="liveDataFreshness" style="font-size:12px;color:var(--muted)" role="status"></span></div>
                         <div class="kpis" id="liveDailyKpis" style="margin:0 0 14px"></div>
                         <p id="liveDailyCoverage" class="coverage-note" role="status"></p>
                         <div class="compare-grid">
@@ -947,7 +948,7 @@
                         </div>
                         <p class="coverage-note" id="managerReportNotice" role="status">O resumo será produzido a partir dos registros carregados no painel, sem enviar dados a serviços de IA externos.</p>
                         <label for="managerReportText" style="display:block;font-weight:700;margin:8px 0 6px">Mensagem pronta para o gestor (você pode editar)</label>
-                        <textarea id="managerReportText" rows="11" style="width:100%;resize:vertical;line-height:1.65" placeholder="Clique em Gerar resumo para montar a mensagem."></textarea>
+                        <textarea id="managerReportText" oninput="window.managerReportEdited=true" rows="11" style="width:100%;resize:vertical;line-height:1.65" placeholder="Clique em Gerar resumo para montar a mensagem."></textarea>
                     </section>
                     <div class="row noprint" style="margin-bottom:12px">
                         <div class="fg">
@@ -1706,11 +1707,31 @@ let liveEvents=JSON.parse(localStorage.getItem('md_live_events')||'[]');
 function dueValue(t){const direct=t.slaSolutionDate||t.dueDate||t.expectedDate||t.forecastDate||'';if(direct)return String(direct);const vals=t.customFieldValues||[];const found=vals.filter(x=>(CF&&String(x.customFieldId)===String(CF))||/prazo|previs|venc|solu[cç][aã]o|entrega|data limite/i.test(String(x.customFieldName||x.name||x.label||''))).map(x=>String(x.value??''));return found.join(' | ')}
 /* Indicadores diários: não usam a data da última atualização como fechamento. */
 function liveDay(value){
-  if(!value)return '';
+  if(value===null||value===undefined||value==='')return '';
+  const str=String(value).trim();
+  const isoMatch=/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/.exec(str);
+  if(isoMatch){
+    const [year,month,day]=isoMatch.slice(1).map(Number);
+    const check=new Date(year,month-1,day);
+    if(check.getFullYear()===year&&check.getMonth()+1===month&&check.getDate()===day)return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+  const br=/^(\d{2})\/(\d{2})\/(\d{4})/.exec(str);
+  if(br)return `${br[3]}-${br[2]}-${br[1]}`;
   const d=new Date(value);
-  if(!Number.isFinite(d.getTime()))return '';
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return Number.isFinite(d.getTime()) ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : '';
 }
+function liveCreatedDate(t){return t.createdDate||t.created_at_source||t.created_at||t.openedAt||t.opened_at||''}
+function liveClosedDate(t){return t.closedIn||t.closedAt||t.closedDate||t.resolvedIn||t.closed_at||t.resolved_at||''}
+function liveTicketSource(){return `Base: ${TK.size.toLocaleString('pt-BR')} chamados; ${lastSync?'Movidesk consultado em '+new Date(lastSync).toLocaleString('pt-BR'):'sem sincronização Movidesk confirmada nesta sessão'}${cloudReady?' · Supabase conectado':' · Supabase não confirmado'}.`}
+async function refreshManagerData(){
+ const b=document.querySelector('button[onclick="refreshManagerData()"]');
+ if(b){b.disabled=true;b.textContent='↻ Sincronizando...'}
+ try{await sync(false)}finally{
+   renderLiveDaily();generateManagerReport();
+   if(b){b.disabled=false;b.textContent='↻ Sincronizar e atualizar indicadores'}
+ }
+}
+
 function liveType(t){
   // Prioriza categoria (tabulação) e, caso vazia/genérica, o serviço/assunto.
   const cat=norm(lbl(t.category));
@@ -1724,7 +1745,7 @@ function liveType(t){
 function liveClosedDay(t){
   if(!alarmIsClosed(t.status))return '';
   // closedIn é a data real do fechamento. Não inferir encerramento por lastUpdate.
-  const actual=t.closedIn||t.closedAt||t.closedDate||t.resolvedIn||'';
+  const actual=liveClosedDate(t);
   if(actual)return liveDay(actual);
   // Mudança de status capturada pelo próprio monitor após a abertura da página.
   const transitions=liveEvents.filter(e=>String(e.id)===String(t.id)&&e.kind==='STATUS ALTERADO'&&/→\s*(fechad|conclu[ií]d|resolvid|encerrad|finalizad|solucionad)/i.test(e.detail||''));
@@ -1737,9 +1758,9 @@ function renderLiveDaily(){
  const groups={opened:new Map(),closed:new Map()};const totals={opened:0,closed:0};
  let unknownClosure=0,invalidOpen=0;
  for(const t of TK.values()){
-   const team=alarmTeamName(t),kind=liveType(t),openDay=liveDay(t.createdDate),closeDay=liveClosedDay(t);
+   const team=alarmTeamName(t),kind=liveType(t),openDay=liveDay(liveCreatedDate(t)),closeDay=liveClosedDay(t);
    if(!openDay)invalidOpen++;
-   if(alarmIsClosed(t.status)&&!t.closedIn&&!t.closedAt&&!t.closedDate&&!t.resolvedIn&&!closeDay)unknownClosure++;
+   if(alarmIsClosed(t.status)&&!liveClosedDate(t)&&!closeDay)unknownClosure++;
    for(const [bucket,matching] of [['opened',openDay===day],['closed',closeDay===day]]){
      if(!matching)continue;let row=groups[bucket].get(team);
      if(!row){row={total:0,Melhoria:0,Incidente:0,Venda:0,Outros:0};groups[bucket].set(team,row)}
@@ -1757,6 +1778,7 @@ function renderLiveDaily(){
  };
  $('liveOpenedSector').innerHTML=table('opened');$('liveClosedSector').innerHTML=table('closed');
  const coverage=$('liveDailyCoverage');
+ if($('liveDataFreshness'))$('liveDataFreshness').textContent=liveTicketSource();
  coverage.textContent=`Data: ${day.split('-').reverse().join('/')} · ${TK.size} tickets disponíveis na base carregada. `+
     (unknownClosure?`${unknownClosure} ticket(s) com status encerrado sem data de fechamento confirmada; não foram contabilizados como fechados neste dia. `:'')+
     (invalidOpen?`${invalidOpen} ticket(s) sem data de abertura válida. `:'')+
@@ -1775,8 +1797,8 @@ function managerReportData(){
   const overall={opened:0,closed:0,openedType:{},closedType:{}};
   let withoutClosedDate=0;
   for(const t of TK.values()){
-    const team=alarmTeamName(t),type=liveType(t),o=liveDay(t.createdDate),c=liveClosedDay(t);
-    if(alarmIsClosed(t.status)&&!c&&!t.closedIn&&!t.closedAt&&!t.closedDate&&!t.resolvedIn)withoutClosedDate++;
+    const team=alarmTeamName(t),type=liveType(t),o=liveDay(liveCreatedDate(t)),c=liveClosedDay(t);
+    if(alarmIsClosed(t.status)&&!c&&!liveClosedDate(t))withoutClosedDate++;
     for(const [date,map,key] of [[o,opened,'opened'],[c,closed,'closed']]){
       if(date!==day)continue;
       let row=map.get(team);if(!row){row={total:0,types:{}};map.set(team,row)}
@@ -1788,6 +1810,7 @@ function managerReportData(){
   return {day,types,opened:sortable(opened),closed:sortable(closed),overall,withoutClosedDate};
 }
 function generateManagerReport(){
+  window.managerReportEdited=false;
   const el=$('managerReportText');if(!el)return;
   const d=managerReportData(),f=d.day.split('-').reverse().join('/'),a=d.overall;
   const full=$('managerReportStyle')?.value==='full';
@@ -1818,9 +1841,12 @@ function generateManagerReport(){
     lines.push('',`Atenção: ${pending.length} chamado(s) aberto(s) estão há pelo menos ${alertLimit} dia(s) sem atualização entre os dados disponíveis. O mais antigo é o #${critical.t.id}, do setor ${alarmTeamName(critical.t)}, há ${critical.days} dias.`);
   }
   if(d.withoutClosedDate)lines.push('',`Ressalva: ${d.withoutClosedDate} chamado(s) encerrado(s) não possuem data de fechamento confirmada na base e não puderam ser atribuídos ao dia.`);
+  if(!TK.size)lines.push('', 'ATENÇÃO: nenhum chamado foi carregado. Conecte e sincronize com o Movidesk antes de usar este relatório.');
+  else if(!a.opened&&!a.closed)lines.push('', `Nenhuma abertura ou fechamento foi identificado em ${f} dentre os ${TK.size} chamados carregados. Isso não comprova ausência de movimentação no Movidesk; verifique a cobertura e as datas da sincronização.`);
+  lines.push('',liveTicketSource());
   lines.push('',`Observação: os indicadores consideram somente os ${TK.size} tickets disponíveis no sistema. A divisão por setor usa a equipe atual do chamado e a classificação segue categoria, serviço e assunto.`, '', 'Atenciosamente,', 'Equipe de Qualidade e Auditoria');
   el.value=lines.join('\n');
-  $('managerReportNotice').textContent=`Resumo atualizado para ${f}. Revise o conteúdo e edite o texto antes de enviar. Nenhum dado foi enviado para IA externa.`;
+  $('managerReportNotice').textContent=`Resumo atualizado para ${f} · ${TK.size} tickets na base. ${lastSync?'Última consulta Movidesk: '+new Date(lastSync).toLocaleString('pt-BR'):'Sem consulta Movidesk confirmada nesta sessão'}. Revise antes de enviar.`;
 }
 async function copyManagerReport(){
  const el=$('managerReportText');if(!el)return;
@@ -2107,7 +2133,7 @@ function render(){
   $('cap').textContent=rows.length>LIM?`Mostrando ${LIM} de ${rows.length} lançamentos. O Excel exporta todos.`:'';
 
 
-  renderPivot();renderDiag();renderLiveDaily();
+  renderPivot();renderDiag();renderLiveDaily();if(ACT==='live'&&!window.managerReportEdited)generateManagerReport();
   renderProj(c);renderBudget(c);renderOcc(c);renderMgmt(c);renderVip(c);renderCharts(c);renderComparisons();renderBot(c);renderAlerts();
   enhanceTables();
 }
@@ -2297,7 +2323,7 @@ function showTab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-cfg').classList.toggle('hide',t!=='cfg');
   ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='live'){showLiveEvents();renderLiveDaily();if(!$('managerReportText')?.value)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons()}
+  if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons()}
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag');
   if(raw.length&&!['load','cfg','diag','alerts'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
@@ -3253,8 +3279,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
 /* Impressão individual de gráficos e indicadores, sem alterar dados ou APIs. */
 (function(){
   'use strict';
-  const areas=['t-live','t-mgmt','t-alerts','t-charts','t-vip','t-occ','t-proj','t-entries','t-pivot'];
-  const areaSel=areas.map(id=>'#'+id).join(',');
+  const areas=['app','t-cfg','t-live','t-mgmt','t-alerts','t-charts','t-vip','t-occ','t-proj','t-entries','t-pivot','t-diag'];
+  const areaSel='main';
   function tituloDoCard(card){
     const heading=Array.from(card.querySelectorAll('h1,h2,h3,h4')).find(h=>h.closest('.card')===card);
     if(heading) return heading.textContent.trim();
@@ -3265,7 +3291,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   function adicionarControles(){
     document.querySelectorAll(areaSel).forEach(area=>{
       area.querySelectorAll('.card').forEach(card=>{
-        if(card.classList.contains('filters')||card.closest('.filters')||card.querySelector(':scope > .aud-print-toolbar')) return;
+        if(card.classList.contains('filters')||card.closest('.filters')||card.id==='rules'||card.querySelector(':scope > .aud-print-toolbar')) return;
         const toolbar=document.createElement('div');
         toolbar.className='aud-print-toolbar noprint';
         const btn=document.createElement('button');
@@ -3282,7 +3308,10 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   function imprimirCard(card){
     const title=tituloDoCard(card);
     const clone=card.cloneNode(true);
-    clone.querySelectorAll('.aud-print-toolbar,button,select,input,textarea,script,.noprint').forEach(el=>el.remove());
+    const inputs=card.querySelectorAll('textarea');
+    const outputFields=clone.querySelectorAll('textarea');
+    outputFields.forEach((node,i)=>{const pre=document.createElement('pre');pre.textContent=inputs[i]?.value||'';pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;';node.replaceWith(pre)});
+    clone.querySelectorAll('.aud-print-toolbar,button,select,input,script,.noprint').forEach(el=>el.remove());
     const originals=card.querySelectorAll('canvas');
     const copies=clone.querySelectorAll('canvas');
     originals.forEach((canvas,i)=>{
@@ -3323,7 +3352,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     const observer=new MutationObserver(changes=>{
       if(changes.some(x=>Array.from(x.addedNodes).some(n=>n.nodeType===1 && !n.classList?.contains('aud-print-toolbar'))))agendar();
     });
-    areas.forEach(id=>{const el=document.getElementById(id);if(el)observer.observe(el,{childList:true,subtree:true})});
+    const main=document.querySelector('main');if(main)observer.observe(main,{childList:true,subtree:true});
   }
 })();
 </script>
