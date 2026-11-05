@@ -3485,7 +3485,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     const sessionResult=await client.auth.getSession();
     const accessToken=sessionResult.data?.session?.access_token;
     if(!accessToken)throw Error('Sua sessão expirou; faça login novamente.');
-    const {data,error}=await client.functions.invoke('audit-sector-email',{
+    const {data,error}=await client.functions.invoke('audit-email-dispatch',{
       body: {action, ...(recipientId?{recipientId}:{})},
       headers:{Authorization:'Bearer '+accessToken}
     });
@@ -3501,7 +3501,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const source=d.dataSources||{};
       const sourcesOk=source.tickets===true&&source.appointments===true;
       integrationMessage('Gmail: '+(d.gmailConfigured?'Secrets configurados':'Secrets incompletos')+' · Chamados: '+(source.tickets===true?'tabela disponível':'fonte não localizada')+' · Apontamentos: '+(source.appointments===true?'tabela disponível':'fonte não localizada')+' · Agendamento: verificar no Supabase (não é ativado por este botão).',!d.gmailConfigured||!sourcesOk);
-    }catch(e){integrationMessage('Não foi possível verificar: '+readableError(e)+'. Confirme a publicação da Edge Function audit-sector-email e a sessão administrativa.',true)}
+    }catch(e){integrationMessage('Não foi possível verificar: '+readableError(e)+'. Confirme a publicação da Edge Function audit-email-dispatch e a sessão administrativa.',true)}
     finally{btn.disabled=false}
   });
   $('emailTestSend').addEventListener('click',async()=>{
