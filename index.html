@@ -1983,79 +1983,7 @@ function printManagerReport(){
  const w=window.open('','_blank','width=850,height=650');
  if(!w){$('managerReportNotice').textContent='Permita pop-ups para imprimir o resumo.';return}
  const safe=esc(el.value);
- w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Resumo Gerencial</title><style>body{font:14px/1.6 Arial,sans-serif;padding:34px;color:#192842}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body><h2>Resumo Gerencial de Chamados</h2><pre>'+safe+'</pre><script id="emailAdminIntegratedScript">
-(()=>{'use strict';
-  const $=id=>document.getElementById(id);
-  let client=null, records=[], loaded=false, loading=false;
-  const say=t=>{if($('emailAdminStatus'))$('emailAdminStatus').textContent=t};
-  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaborator').value=''}};
-  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope() }
-  function populateSuggestions(){
-    try{
-      const tickets=Array.from(window.TK?.values?.()||[]);
-      const sectors=[...new Set(tickets.map(t=>t.sector||t.ownerTeam||t.owner_team||t.team||t.service_name).filter(Boolean))].sort();
-      $('emailSectors').innerHTML=sectors.map(x=>`<option value="${esc(x)}"></option>`).join('');
-      const people=[...new Set(tickets.map(t=>t.owner_name||t.ownerName).filter(Boolean))].sort();
-      $('emailCollaborators').innerHTML=people.map(x=>`<option value="${esc(x)}"></option>`).join('');
-    }catch(e){console.warn('Sugestões de setor indisponíveis',e)}
-  }
-  async function verify(){
-    client=window.tmEmailAdminClient;
-    if(!client)throw Error('Aguardando a autenticação da Central de Auditoria.');
-    const {data:{user},error}=await client.auth.getUser();
-    if(error||!user)throw Error('Faça login na Central de Auditoria.');
-    const r=await client.rpc('audit_is_email_admin');
-    if(r.error)throw Error('Permissões não instaladas ou indisponíveis: '+r.error.message);
-    if(!r.data)throw Error('Seu usuário não tem permissão de administrador para configurar destinatários.');
-  }
-  async function reload(){
-    if(loading)return;loading=true;
-    try{
-      await verify();say('Carregando destinatários e histórico...');
-      const r=await client.from('audit_email_recipients').select('*').order('name');
-      if(r.error)throw r.error;
-      records=r.data||[];
-      $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
-      const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
-      $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
-      loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
-      populateSuggestions();
-    }catch(e){say('Não foi possível carregar: '+e.message)}finally{loading=false}
-  }
-  $('emailAdminOpen').addEventListener('click',()=>{
-    const panel=$('emailAdminPanel'),show=panel.classList.contains('hide');panel.classList.toggle('hide',!show);
-    $('emailAdminOpen').textContent=show?'Fechar destinatários':'Gerenciar destinatários';
-    if(show&&!loaded)reload();
-  });
-  $('emailScope').addEventListener('change',scope);
-  $('emailNew').addEventListener('click',reset);
-  $('emailReload').addEventListener('click',reload);
-  $('emailRecipients').addEventListener('click',e=>{
-    const id=e.target.closest('[data-email-edit]')?.dataset.emailEdit;
-    const x=records.find(r=>r.id===id);if(!x)return;
-    $('emailRecordId').value=x.id;$('emailName').value=x.name;$('emailAddress').value=x.email;
-    $('emailScope').value=x.scope||'sector';scope();$('emailSector').value=x.sector||'';
-    $('emailCollaborator').value=x.collaborator_name||'';$('emailDaily').checked=x.daily_enabled;
-    $('emailWeekly').checked=x.weekly_enabled;$('emailActive').checked=x.active;
-    $('emailAdminCard').scrollIntoView({behavior:'smooth',block:'start'});
-  });
-  $('emailAdminForm').addEventListener('submit',async e=>{
-    e.preventDefault();
-    try{
-      await verify();
-      const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:$('emailSector').value.trim(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaborator').value.trim()||null),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
-      if(!data.daily_enabled&&!data.weekly_enabled)throw Error('Marque ao menos uma frequência.');
-      if(data.scope==='sector'&&!data.sector)throw Error('Informe o setor.');
-      say('Salvando cadastro...');const id=$('emailRecordId').value;
-      const r=id?await client.from('audit_email_recipients').update(data).eq('id',id):await client.from('audit_email_recipients').insert(data);
-      if(r.error)throw r.error;
-      reset();await reload();say('Destinatário salvo com sucesso.');
-    }catch(e){say('Não foi possível salvar: '+e.message)}
-  });
-})();
-</script>
-</body></html>');
+ w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Resumo Gerencial</title><style>body{font:14px/1.6 Arial,sans-serif;padding:34px;color:#192842}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body><h2>Resumo Gerencial de Chamados</h2><pre>'+safe+'</pre></body></html>');
  w.document.close();w.focus();w.print();
 }
 function showLiveEvents(){
@@ -3500,6 +3428,78 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
           })();
         })();
         </script>
+    <script id="emailAdminIntegratedScript">
+(()=>{'use strict';
+  const $=id=>document.getElementById(id);
+  let client=null, records=[], loaded=false, loading=false;
+  const say=t=>{if($('emailAdminStatus'))$('emailAdminStatus').textContent=t};
+  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaborator').value=''}};
+  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope() }
+  function populateSuggestions(){
+    try{
+      const tickets=Array.from(window.TK?.values?.()||[]);
+      const sectors=[...new Set(tickets.map(t=>t.sector||t.ownerTeam||t.owner_team||t.team||t.service_name).filter(Boolean))].sort();
+      $('emailSectors').innerHTML=sectors.map(x=>`<option value="${esc(x)}"></option>`).join('');
+      const people=[...new Set(tickets.map(t=>t.owner_name||t.ownerName).filter(Boolean))].sort();
+      $('emailCollaborators').innerHTML=people.map(x=>`<option value="${esc(x)}"></option>`).join('');
+    }catch(e){console.warn('Sugestões de setor indisponíveis',e)}
+  }
+  async function verify(){
+    client=window.tmEmailAdminClient;
+    if(!client)throw Error('Aguardando a autenticação da Central de Auditoria.');
+    const {data:{user},error}=await client.auth.getUser();
+    if(error||!user)throw Error('Faça login na Central de Auditoria.');
+    const r=await client.rpc('audit_is_email_admin');
+    if(r.error)throw Error('Permissões não instaladas ou indisponíveis: '+r.error.message);
+    if(!r.data)throw Error('Seu usuário não tem permissão de administrador para configurar destinatários.');
+  }
+  async function reload(){
+    if(loading)return;loading=true;
+    try{
+      await verify();say('Carregando destinatários e histórico...');
+      const r=await client.from('audit_email_recipients').select('*').order('name');
+      if(r.error)throw r.error;
+      records=r.data||[];
+      $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
+      const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
+      $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
+      loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
+      populateSuggestions();
+    }catch(e){say('Não foi possível carregar: '+e.message)}finally{loading=false}
+  }
+  $('emailAdminOpen').addEventListener('click',()=>{
+    const panel=$('emailAdminPanel'),show=panel.classList.contains('hide');panel.classList.toggle('hide',!show);
+    $('emailAdminOpen').textContent=show?'Fechar destinatários':'Gerenciar destinatários';
+    if(show&&!loaded)reload();
+  });
+  $('emailScope').addEventListener('change',scope);
+  $('emailNew').addEventListener('click',reset);
+  $('emailReload').addEventListener('click',reload);
+  $('emailRecipients').addEventListener('click',e=>{
+    const id=e.target.closest('[data-email-edit]')?.dataset.emailEdit;
+    const x=records.find(r=>r.id===id);if(!x)return;
+    $('emailRecordId').value=x.id;$('emailName').value=x.name;$('emailAddress').value=x.email;
+    $('emailScope').value=x.scope||'sector';scope();$('emailSector').value=x.sector||'';
+    $('emailCollaborator').value=x.collaborator_name||'';$('emailDaily').checked=x.daily_enabled;
+    $('emailWeekly').checked=x.weekly_enabled;$('emailActive').checked=x.active;
+    $('emailAdminCard').scrollIntoView({behavior:'smooth',block:'start'});
+  });
+  $('emailAdminForm').addEventListener('submit',async e=>{
+    e.preventDefault();
+    try{
+      await verify();
+      const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:$('emailSector').value.trim(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaborator').value.trim()||null),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
+      if(!data.daily_enabled&&!data.weekly_enabled)throw Error('Marque ao menos uma frequência.');
+      if(data.scope==='sector'&&!data.sector)throw Error('Informe o setor.');
+      say('Salvando cadastro...');const id=$('emailRecordId').value;
+      const r=id?await client.from('audit_email_recipients').update(data).eq('id',id):await client.from('audit_email_recipients').insert(data);
+      if(r.error)throw r.error;
+      reset();await reload();say('Destinatário salvo com sucesso.');
+    }catch(e){say('Não foi possível salvar: '+e.message)}
+  });
+})();
+</script>
     <script id="auditoria-print-controls-script">
 /* Impressão individual de gráficos e indicadores, sem alterar dados ou APIs. */
 (function(){
