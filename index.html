@@ -764,6 +764,71 @@
                 box-sizing: border-box
             }
         </style>
+
+        <style>
+            :root{--navy:#0f1e38;--blue:#2765dc;--bg:#f2f5fb;--line:#e1e8f2;--ink:#192842;--r:14px}
+            body{grid-template-columns:254px minmax(0,1fr);background:var(--bg);font-size:13.5px}
+            header{padding:12px 24px;background:linear-gradient(112deg,#10213e,#20385d);gap:16px;box-shadow:0 2px 14px #07132312}
+            .brand b{font-size:18px;letter-spacing:-.025em}
+            .header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+            .header-siren{border:1px solid #ffffff30;background:#ffffff12;border-radius:999px;color:#e4edf9;padding:8px 14px;display:flex;gap:8px;align-items:center;cursor:pointer;font-weight:700;font-size:12px}
+            .header-siren.hot{border-color:#fca5a5;background:#8f1e30;color:#fff;box-shadow:0 0 0 2px #fca5a51c}
+            .header-siren.hot .siren-icon{display:inline-block;animation:siren-pulse 1.35s ease-in-out infinite}
+            @keyframes siren-pulse{0%,100%{transform:scale(1);filter:none}50%{transform:scale(1.24);filter:drop-shadow(0 0 5px #ffaaa1)}}
+            .nav-section{color:#8695b0;font-size:10px;font-weight:800;letter-spacing:.10em;margin:17px 11px 6px}
+            nav{padding:15px 10px;background:#fff;gap:3px;max-height:calc(100vh - 60px);top:0}
+            nav button{padding:11px 12px;font-size:13px;color:#516079;border-radius:10px;border:0;display:flex;align-items:center;justify-content:space-between;min-height:40px}
+            nav button.on{background:#e9f1ff;border-left:0;box-shadow:inset 3px 0 var(--blue);color:#1a50af}
+            nav button.nav-alerts.on{background:#fff1f0;box-shadow:inset 3px 0 #d52c36;color:#a52231}
+            .nav-count{background:#eef1f6;color:#65748b;border-radius:999px;font-size:11px;padding:1px 8px;font-weight:800}
+            .nav-count.hot{background:#ffe1e3;color:#ad1a29}
+            main{max-width:1700px;padding:26px 28px}
+            .card{box-shadow:0 2px 12px #182a4608;border-color:#e2e8f0;border-radius:14px}
+            .kpis .card{border-left-width:3px;box-shadow:0 2px 12px #182a4608}
+            .mh h2{font-size:24px;letter-spacing:-.03em}
+            .eyebrow{font-size:11px;font-weight:800;letter-spacing:.12em;color:#3b70d1;margin-bottom:5px}
+            .alert-heading{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px}
+            .alert-heading h3{font-size:19px;margin:0 0 7px;letter-spacing:-.025em}
+            .alert-heading p{margin:0;color:var(--muted);max-width:780px}
+            .alert-hero{border-top:4px solid #e0565e;background:linear-gradient(135deg,#fff,#fff9f9)}
+            .alert-hero-actions{display:flex;gap:8px;flex-wrap:wrap}
+            .alert-controls{padding:14px 0;margin:10px 0 5px;border-top:1px solid #edf0f5;border-bottom:1px solid #edf0f5}
+            .alert-kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:14px}
+            .alert-kpis .card{background:#fff;border-left:3px solid #d83948;margin:0}
+            .alert-kpis .card small{display:block;font-size:12px}
+            .alert-kpis .card b{font-size:23px}
+            .alert-split{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(290px,.65fr);gap:16px;align-items:start}
+            .subtle{color:var(--muted);font-size:12px;margin:0 0 12px}
+            .coverage-note{font-size:12px;color:#586b88;background:#f2f5fb;padding:10px 12px;border-radius:9px;margin:12px 0}
+            .chart-frame{height:300px;width:100%;position:relative}
+            .chart-frame.tall{height:320px}
+            .chart-frame canvas{max-height:100%;width:100%!important}
+            .compare-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+            .executive-action{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#fffafa;border-left:4px solid #e0565e}
+            .executive-action strong{color:#ad2933;white-space:nowrap}
+            .executive-action span{flex:1;min-width:200px}
+            .pill.extreme{background:#ffe1e2;color:#991b1b}
+            .pill.alert-warn{background:#fff2cf;color:#8e5300}
+            #t-alerts .tw{max-height:540px}
+            #t-alerts th{white-space:nowrap}
+            #t-alerts td:nth-child(4){white-space:normal;min-width:240px;max-width:460px}
+            button.s{border:1px solid #d9e2ef;background:#f0f4fa}
+            @media(max-width:1180px){.alert-split,.compare-grid{grid-template-columns:minmax(0,1fr)}}
+            @media(max-width:900px){
+                body{display:block}header{padding:12px 16px}
+                .header-actions{width:100%;justify-content:space-between}
+                nav{max-height:none;padding:8px 12px;flex-direction:row;overflow-x:auto;gap:6px}
+                nav button{flex:0 0 auto;white-space:nowrap}
+                .nav-section{display:none}
+                main{padding:16px}
+                .header-siren{font-size:11px}
+                .compare-grid,.alert-split{display:block}
+                .compare-grid>.card,.alert-split>.card{margin-bottom:16px}
+                #t-charts>div[style*="grid-template-columns"]{grid-template-columns:1fr!important}
+            }
+            @media(prefers-reduced-motion:reduce){.header-siren.hot .siren-icon{animation:none}}
+            @media print{.header-siren,.alert-hero-actions{display:none!important}}
+        </style>
         <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js"></script>
     </head>
     <body class="tm-locked">
@@ -780,23 +845,31 @@
                 <b>Auditoria de Chamados</b>
                 <small>Ticket Manager · Movidesk</small>
             </div>
+            <div class="header-actions">
+                <button id="headerSiren" class="header-siren" type="button" onclick="showTab('alerts')" title="Abrir alertas dos chamados parados" aria-live="polite"><span class="siren-icon">🚨</span> <span id="headerSirenText">Monitorando pendências</span></button>
             <div class="chip" id="chip">
                 <span class="dot"></span>
                 <span id="status">Aguardando dados</span>
                 <span id="auto"></span>
             </div>
+            </div>
         </header>
-        <nav id="tabs">
-            <button data-t="live">Tempo real</button>
-            <button data-t="cfg">Configurações</button>
-            <button data-t="mgmt">Gestão</button>
-            <button data-t="vip">Clientes VIP</button>
-            <button data-t="charts">Gráficos</button>
-            <button data-t="entries">Lançamentos</button>
-            <button data-t="pivot">Tabela dinâmica</button>
-            <button data-t="proj">Projetos</button>
-            <button data-t="occ">Colaboradores</button>
-            <button data-t="diag">Diagnóstico</button>
+        <nav id="tabs" aria-label="Menu principal">
+            <div class="nav-section">MONITORAMENTO</div>
+            <button data-t="mgmt">▦ &nbsp;Visão geral</button>
+            <button data-t="alerts" class="nav-alerts">🚨 &nbsp;Alertas e pendências <span id="navAlarmCount" class="nav-count" aria-label="Alertas críticos">0</span></button>
+            <button data-t="live">◉ &nbsp;Tempo real</button>
+            <div class="nav-section">INDICADORES</div>
+            <button data-t="charts">▥ &nbsp;Gráficos comparativos</button>
+            <button data-t="vip">★ &nbsp;Clientes VIP</button>
+            <button data-t="occ">♙ &nbsp;Colaboradores</button>
+            <button data-t="proj">▤ &nbsp;Projetos e prazos</button>
+            <div class="nav-section">DADOS E RELATÓRIOS</div>
+            <button data-t="entries">≡ &nbsp;Lançamentos</button>
+            <button data-t="pivot">▦ &nbsp;Tabela dinâmica</button>
+            <div class="nav-section">SISTEMA</div>
+            <button data-t="cfg">⚙ &nbsp;Configurações</button>
+            <button data-t="diag">◈ &nbsp;Diagnóstico</button>
         </nav>
         <main>
             <div id="t-live" class="hide">
@@ -1114,7 +1187,43 @@
                         </div>
                     </div>
                 </div>
+                <div id="t-alerts" class="hide">
+                    <div class="card alert-hero">
+                        <div class="alert-heading">
+                            <div><div class="eyebrow">CENTRAL DE PRIORIDADES</div><h3>🚨 Chamados parados em todos os setores</h3>
+                            <p>Ordenados pelo tempo desde a última atualização do Movidesk, independentemente de apontamento de horas. Chamados fechados, concluídos, resolvidos e cancelados não entram no ranking.</p></div>
+                            <div class="alert-hero-actions">
+                                <button class="b" type="button" onclick="sync(false)">Atualizar chamados</button>
+                                <button class="s" type="button" id="historyScanBtn" onclick="scanHistorical(true)">Varrer histórico de todos os setores</button>
+                                <button class="s" type="button" id="alarmSoundBtn" onclick="toggleAlarmSound()">🔇 Som desligado</button>
+                            </div>
+                        </div>
+                        <div class="row alert-controls noprint">
+                            <div class="fg"><label for="alarmMinDays">Sirene para chamados parados há</label><select id="alarmMinDays" onchange="alarmSettingsChanged()">
+                                <option value="1">1 dia ou mais</option><option value="3">3 dias ou mais</option><option value="7" selected>7 dias ou mais</option><option value="15">15 dias ou mais</option><option value="30">30 dias ou mais</option><option value="60">60 dias ou mais</option><option value="90">90 dias ou mais</option>
+                            </select></div>
+                            <div class="fg"><label for="alarmTeam">Setor / equipe</label><select id="alarmTeam" onchange="renderAlerts()"><option value="">Todos os setores</option></select></div>
+                            <div class="fg" style="flex:1;min-width:210px"><label for="alarmSearch">Pesquisar</label><input id="alarmSearch" oninput="renderAlerts()" placeholder="Nº ticket, assunto, cliente, responsável"></div>
+                            <div class="fg"><label for="alarmSort">Ordenar chamados</label><select id="alarmSort" onchange="renderAlerts()"><option value="idle">Mais dias parados</option><option value="opened">Mais antigos por abertura</option></select></div>
+                        </div>
+                        <p class="coverage-note" id="alarmCoverage" role="status">Aguardando a leitura dos chamados.</p>
+                        <div class="kpis alert-kpis" id="alertKpis"></div>
+                    </div>
+                    <div class="alert-split">
+                        <div class="card"><h3>🚨 Mais antigo por setor</h3>
+                            <p class="subtle">O ticket com mais tempo sem atualização em cada equipe.</p>
+                            <div class="tw"><table><thead><tr><th>Setor</th><th>Chamados abertos</th><th>Parados ≥ limite</th><th>Mais antigo</th><th>Dias sem atualizar</th><th>Última atualização</th></tr></thead><tbody id="tAlarmSector"></tbody></table></div>
+                        </div>
+                        <div class="card"><h3>Tempo máximo de paralisação por setor</h3><div class="chart-frame"><canvas id="chIdleSector"></canvas></div></div>
+                    </div>
+                    <div class="card">
+                        <div class="alert-heading"><div><h3>Ranking de chamados sem movimentação</h3><p class="subtle" id="alarmRowsCount">Todos os chamados abertos identificados, inclusive sem horas apontadas.</p></div>
+                        <span class="pill bad">Prioridade: maior tempo parado</span></div>
+                        <div class="tw"><table><thead><tr><th>Chamado</th><th>Setor</th><th>Cliente</th><th>Assunto</th><th>Responsável</th><th>Status</th><th>Aberto em</th><th>Última atualização</th><th>Dias parado</th><th>Dias aberto</th><th>Abrir</th></tr></thead><tbody id="tAlarmOldest"></tbody></table></div>
+                    </div>
+                </div>
                 <div id="t-mgmt" class="hide">
+                    <div class="card executive-action" id="executiveAlarm"><strong>🚨 Monitoramento de pendências</strong><span id="executiveAlarmText">Carregando informações dos chamados abertos…</span><button class="s" onclick="showTab('alerts')">Ver alertas por setor</button></div>
                     <div class="card">
                         <h3>Resumo para a direção</h3>
                         <div class="sum" id="mgSum"></div>
@@ -1320,7 +1429,21 @@
                     </div>
                 </div>
                 <div id="t-charts" class="hide">
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px">
+                    <div class="card">
+                        <div class="alert-heading"><div><div class="eyebrow">EVOLUÇÃO HISTÓRICA</div><h3>Comparativos mensais e anuais</h3><p class="subtle">Acompanhe a evolução de horas apontadas, chamados trabalhados ou lançamentos, comparando períodos equivalentes.</p></div></div>
+                        <div class="row noprint">
+                            <div class="fg"><label for="cmpMetric">Indicador</label><select id="cmpMetric" onchange="renderComparisons()"><option value="hours">Horas apontadas</option><option value="opened">Chamados abertos</option><option value="tickets">Chamados trabalhados</option><option value="entries">Lançamentos</option></select></div>
+                            <div class="fg"><label for="cmpYear">Ano de comparação</label><select id="cmpYear" onchange="renderComparisons()"></select></div>
+                            <div class="fg"><label for="cmpScope">Filtrar setores / clientes</label><select id="cmpScope" onchange="renderComparisons()"><option value="all">Toda a base carregada</option><option value="dimensions">Respeitar filtros de equipe e cliente</option></select></div>
+                            <button class="s" type="button" onclick="loadHistoricalHours()">Buscar horas desde janeiro do ano anterior</button>
+                        </div>
+                        <p id="cmpCoverage" class="coverage-note">Os indicadores utilizam as datas dos apontamentos que constam na base, não a data de atualização do chamado.</p>
+                    </div>
+                    <div class="compare-grid">
+                        <div class="card"><h3 id="cmpMonthlyTitle">Comparativo mensal · ano atual × anterior</h3><div class="chart-frame tall"><canvas id="chMonthly"></canvas></div></div>
+                        <div class="card"><h3 id="cmpAnnualTitle">Comparativo anual · evolução do histórico</h3><div class="chart-frame tall"><canvas id="chAnnual"></canvas></div></div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px">
                         <div class="card" style="grid-column:1/-1">
                             <h3>Progresso acumulado: horas apontadas × capacidade</h3>
                             <canvas id="chDay" height="80"></canvas>
@@ -1616,7 +1739,10 @@ async function sync(auto){
       if(live){build(all);applyFilters()}
     }
     detectTicketChanges(all);
-    if(full) TK=new Map();
+    if(full&&lastSig&&lastSig.split('|')[0]!==dom){
+      TK=new Map(); // portal diferente: não misturar chamados de empresas diferentes
+      localStorage.removeItem('md_alarm_scan_time');localStorage.removeItem('md_alarm_scan_complete');
+    }
     all.forEach(t=>TK.set(String(t.id),slim(t)));
     const list=[...TK.values()];
     lastSync=began;if(full)lastFull=began;lastSig=sig;fails=0;lastErr='';persist();
@@ -1626,8 +1752,9 @@ async function sync(auto){
     }
     log(full?`Concluído em ${((performance.now()-t0)/1000).toFixed(1)}s: ${list.length} tickets, ${raw.length} lançamentos de tempo.`
             :`Atualizado: ${all.length} ticket(s) alterado(s), ${list.length} no total.`,'okc');
-    if(!raw.length&&!auto) showTab('diag');
+    if(!raw.length&&!auto) showTab(TK.size?'alerts':'diag');
     iaRun(true);
+    if(!historyScanning&&!document.hidden)setTimeout(()=>scanHistorical(false),100); // após liberar o bloqueio de sincronização
   }catch(e){
     fails++;lastErr=e.message;
     log('Erro: '+e.message+(e instanceof TypeError?' (falha de conexão com o servidor)':''),'err');
@@ -1758,7 +1885,7 @@ function start(src,keep){
   $('status').textContent='Fonte: '+src;
   $('app').classList.remove('hide');
   buildFilters(keep);applyFilters();
-  if(!keep) showTab(raw.length?'mgmt':'diag');
+  if(!keep) showTab(raw.length?'mgmt':TK.size?'alerts':'diag');
 }
 
 function buildFilters(keep){
@@ -1812,7 +1939,7 @@ function render(){
 
 
   renderPivot();renderDiag();
-  renderProj(c);renderBudget(c);renderOcc(c);renderMgmt(c);renderVip(c);renderCharts(c);renderBot(c);
+  renderProj(c);renderBudget(c);renderOcc(c);renderMgmt(c);renderVip(c);renderCharts(c);renderComparisons();renderBot(c);renderAlerts();
   enhanceTables();
 }
 
@@ -1825,6 +1952,197 @@ function renderDiag(){
   $('rawJson').textContent=dq?(jt.split('\n').filter(l=>norm(l).includes(dq)).join('\n')||'Nenhuma linha corresponde à busca.'):jt;
 }
 
+
+/* ---------- AUDITORIA DE PARALISAÇÃO: SEM DEPENDÊNCIA DE APONTAMENTOS ---------- */
+let alarmSoundEnabled=false,alarmAudio=null,alarmSeen=null,historyScanning=false,historyScanStatus='';
+const ALARM_REFRESH_MS=24*60*60*1000;
+const alarmSafeStatus=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+function alarmIsClosed(status){
+  const v=alarmSafeStatus(status);
+  return /^(fechad|concluid|resolvid|cancelad|encerrad|finalizad|solucionad|closed|resolved|cancelled|canceled|done|deleted|excluid)/.test(v);
+}
+function alarmDate(x){
+  const n=Date.parse(String(x||''));
+  return Number.isFinite(n)&&n>315532800000&&n<Date.now()+86400000?n:0;
+}
+function alarmTeamName(t){
+  const v=t.ownerTeam??t.team??t.sector;
+  const name=Array.isArray(v)?v.map(lbl).filter(Boolean).join(', '):lbl(v);
+  return name||'Sem setor identificado';
+}
+function alarmDateLabel(t){return t?new Date(t).toLocaleDateString('pt-BR'):'—'}
+function alarmList(){
+  const now=Date.now(),items=[];
+  for(const t of TK.values()){
+    const status=String(t.status||'').trim();
+    if(!status||alarmIsClosed(status)) continue;
+    const created=alarmDate(t.createdDate),updated=alarmDate(t.lastUpdate);
+    const last=updated||created;
+    if(!last) continue; // não inventar data para chamados sem data válida
+    const c=(t.clients||[])[0]||{},client=nm(c.organization)||nm(c)||'Não informado';
+    const owner=nm(t.owner)||'Não atribuído';
+    items.push({id:String(t.id),team:alarmTeamName(t),status,subject:t.subject||'Sem assunto',
+      client,owner,created,updated,last,estimated:!updated,
+      idle:Math.max(0,Math.floor((now-last)/86400000)),
+      open:created?Math.max(0,Math.floor((now-created)/86400000)):null});
+  }
+  return items.sort((a,b)=>b.idle-a.idle||b.open-a.open||a.id.localeCompare(b.id));
+}
+function alarmThreshold(){return Math.max(1,Number($('alarmMinDays')?.value||localStorage.getItem('md_alarm_days')||7))}
+function alarmSettingsChanged(){
+  localStorage.setItem('md_alarm_days',String(alarmThreshold()));
+  renderAlerts();
+}
+function playAlarm(){
+  if(!alarmSoundEnabled) return;
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+    alarmAudio=alarmAudio||new AC();
+    if(alarmAudio.state==='suspended')alarmAudio.resume().catch(()=>{});
+    const start=alarmAudio.currentTime;
+    for(let i=0;i<2;i++){
+      const osc=alarmAudio.createOscillator(),vol=alarmAudio.createGain(),at=start+i*.32;
+      osc.type='sine';osc.frequency.setValueAtTime(540,at);osc.frequency.linearRampToValueAtTime(780,at+.25);
+      vol.gain.setValueAtTime(.0001,at);vol.gain.linearRampToValueAtTime(.065,at+.025);vol.gain.linearRampToValueAtTime(.0001,at+.27);
+      osc.connect(vol).connect(alarmAudio.destination);osc.start(at);osc.stop(at+.3);
+    }
+  }catch(e){console.warn('Som da sirene não disponível',e)}
+}
+function toggleAlarmSound(){
+  alarmSoundEnabled=!alarmSoundEnabled;
+  $('alarmSoundBtn').textContent=alarmSoundEnabled?'🔊 Som ligado · desligar':'🔇 Som desligado · ligar';
+  if(alarmSoundEnabled)playAlarm(); // áudio somente após gesto explícito
+}
+function alarmCellTicket(id){
+  const url=ticketUrl(id);
+  return url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">#${esc(id)}</a>`:`#${esc(id)}`;
+}
+function alarmBadge(days,threshold){
+  const severe=days>=Math.max(30,threshold),warn=days>=threshold;
+  return `<span class="pill ${severe?'extreme':warn?'alert-warn':'ok'}">${days} d</span>`;
+}
+function alarmSetTeamOptions(all){
+  const select=$('alarmTeam');if(!select)return;
+  const chosen=select.value;
+  const teams=[...new Set(all.map(x=>x.team))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const sig=teams.join('\u0000');if(select.dataset.sig===sig)return;
+  select.innerHTML='<option value="">Todos os setores</option>'+teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  select.value=teams.includes(chosen)?chosen:'';select.dataset.sig=sig;
+}
+function renderAlerts(){
+  if(!$('t-alerts'))return;
+  const all=alarmList(),limit=alarmThreshold(),alerted=all.filter(x=>x.idle>=limit);
+  alarmSetTeamOptions(all);
+  const teams=new Map();
+  all.forEach(t=>{
+    const v=teams.get(t.team)||{team:t.team,total:0,alert:0,worst:null};
+    v.total++;if(t.idle>=limit)v.alert++;if(!v.worst||t.idle>v.worst.idle)v.worst=t;teams.set(t.team,v);
+  });
+  const team=$('alarmTeam')?.value||'',q=norm(($('alarmSearch')?.value||'')+' '+(Q.alerts||'')).trim();
+  const list=all.filter(t=>(!team||t.team===team)&&(!q||norm([t.id,t.team,t.client,t.subject,t.owner,t.status].join(' ')).includes(q)));
+  if($('alarmSort')?.value==='opened')list.sort((a,b)=>(b.open??-1)-(a.open??-1)||b.idle-a.idle);
+  const display=list.slice(0,700);
+  const hiddenUnknown=[...TK.values()].filter(t=>!t.status||(!alarmDate(t.lastUpdate)&&!alarmDate(t.createdDate))).length;
+  const counts=[
+    ['Chamados em aberto',all.length,'Inclui todos os setores'],
+    [`Parados há ≥ ${limit} dias`,alerted.length,'Sirene visual ativa'],
+    ['Maior paralisação',all.length?all[0].idle+' dias':'—',all.length?'Ticket #'+all[0].id:'Sem dados'],
+    ['Setores com pendências',new Set(alerted.map(x=>x.team)).size,'Com alertas acima do limite']
+  ];
+  $('alertKpis').innerHTML=counts.map(([k,v,d])=>`<div class="card"><small>${esc(k)}</small><div><b>${esc(v)}</b></div><span class="subtle">${esc(d)}</span></div>`).join('');
+  const groups=[...teams.values()].sort((a,b)=>(b.worst?.idle||0)-(a.worst?.idle||0));
+  $('tAlarmSector').innerHTML=groups.length?groups.map(g=>`<tr><td><b>${esc(g.team)}</b></td><td>${g.total}</td><td><b>${g.alert}</b></td><td>${alarmCellTicket(g.worst.id)}</td><td>${alarmBadge(g.worst.idle,limit)}</td><td>${alarmDateLabel(g.worst.last)}${g.worst.estimated?' <small title="Sem lastUpdate; usada data de abertura">¹</small>':''}</td></tr>`).join(''):'<tr><td colspan="6">Ainda não há chamados com informações suficientes para esse ranking.</td></tr>';
+  $('tAlarmOldest').innerHTML=display.length?display.map(t=>`<tr><td><b>${alarmCellTicket(t.id)}</b></td><td>${esc(t.team)}</td><td>${esc(t.client)}</td><td title="${esc(t.subject)}">${esc(t.subject)}</td><td>${esc(t.owner)}</td><td><span class="pill">${esc(t.status)}</span></td><td>${alarmDateLabel(t.created)}</td><td>${alarmDateLabel(t.last)}${t.estimated?' <span title="Sem última atualização informada; usada a abertura">¹</span>':''}</td><td>${alarmBadge(t.idle,limit)}</td><td>${t.open==null?'—':t.open+' d'}</td><td>${ticketUrl(t.id)?`<a href="${esc(ticketUrl(t.id))}" target="_blank" rel="noopener noreferrer">Abrir ↗</a>`:'Sem portal'}</td></tr>`).join(''):'<tr><td colspan="11">Nenhum chamado corresponde aos critérios ou não há dados carregados.</td></tr>';
+  $('alarmRowsCount').textContent=`Exibindo ${display.length} de ${list.length} chamados abertos identificados.${display.length<list.length?' A exportação Excel inclui todos.':''} O total não depende das horas apontadas.`;
+  const missingLabel=hiddenUnknown?` · ${hiddenUnknown} chamado(s) sem status ou data suficiente para classificar`:'';
+  const stamp=Number(localStorage.getItem('md_alarm_scan_time')||0);
+  const complete=localStorage.getItem('md_alarm_scan_complete')==='1';
+  $('alarmCoverage').textContent=historyScanning?historyScanStatus:
+    `${TK.size} tickets no repositório · ${all.length} abertos identificados · `+
+    (stamp?`varredura histórica ${complete?'concluída':'parcial'} em ${new Date(stamp).toLocaleString('pt-BR')}`:
+      'varredura histórica completa ainda não confirmada; use o botão para buscar antigos fora do período de horas')+
+    missingLabel+' · ¹ sem lastUpdate, dias estimados desde a abertura.';
+  const header=$('headerSiren'),headerText=$('headerSirenText'),nav=$('navAlarmCount');
+  const worst=all[0];
+  header.classList.toggle('hot',alerted.length>0);
+  headerText.textContent=alerted.length?
+    `${alerted.length} parado(s) ≥ ${limit}d · mais antigo #${worst.id} (${worst.idle}d)`:
+    !TK.size?'Aguardando tickets do Movidesk':all.length?`Sem alertas ≥ ${limit} dias`:'Sem chamados abertos classificados';
+  nav.textContent=String(alerted.length);nav.classList.toggle('hot',alerted.length>0);
+  const summary=$('executiveAlarmText');
+  if(summary)summary.textContent=alerted.length?
+    `${alerted.length} ticket(s) sem atualização há ${limit} dias ou mais em ${new Set(alerted.map(x=>x.team)).size} setor(es). Maior paralisação: #${worst.id}, ${worst.idle} dias (${worst.team}).`:
+    !TK.size?'Aguardando carregamento dos tickets do Movidesk.':
+    `Nenhum chamado acima do limite de ${limit} dias entre os ${all.length} abertos identificados.`;
+  const alertIds=new Set(alerted.map(x=>x.id));
+  if(alarmSeen!==null&&alarmSoundEnabled&&[...alertIds].some(id=>!alarmSeen.has(id)))playAlarm();
+  alarmSeen=alertIds;
+  if(window.Chart&&$('chIdleSector')){
+    const chartGroups=groups.slice(0,15);
+    mkc('chIdleSector',{type:'bar',data:{labels:chartGroups.map(g=>g.team),
+      datasets:[{label:'Maior nº de dias sem atualização',data:chartGroups.map(g=>g.worst.idle),
+       backgroundColor:chartGroups.map(g=>g.worst.idle>=limit?'#d63a48':'#6c8ac5'),borderRadius:5}]},
+       options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}},
+         scales:{x:{beginAtZero:true,title:{display:true,text:'Dias parados'}}}}});
+  }
+}
+async function scanHistorical(force=false){
+  if(historyScanning||syncing)return;
+  const last=Number(localStorage.getItem('md_alarm_scan_time')||0);
+  if(!force&&last&&Date.now()-last<ALARM_REFRESH_MS)return;
+  if(!navigator.onLine){historyScanStatus='Sem conexão para varrer o histórico.';renderAlerts();return}
+  historyScanning=true;
+  if($('historyScanBtn'))$('historyScanBtn').disabled=true;
+  const MAX=20000,PAGE=100,select='id,createdDate,lastUpdate,subject,category,status,serviceFirstLevel,ownerTeam,owner,clients,slaSolutionDate';
+  let scanned=0,changed=0,complete=false,expands=['owner,clients($expand=organization)','owner,clients',''],expIndex=0;
+  try{
+    for(let skip=0;skip<MAX;skip+=PAGE){
+      let result=null;
+      while(result===null){
+        const query=new URLSearchParams({$select:select,$orderby:'lastUpdate asc',$top:String(PAGE),$skip:String(skip)});
+        if(expands[expIndex])query.set('$expand',expands[expIndex]);
+        const response=await window.tmFetch('/api/movidesk?'+query.toString());
+        if(response.status===400&&expIndex<expands.length-1){expIndex++;continue}
+        if(response.status===429)throw new Error('Limite de requisições do Movidesk; tente mais tarde.');
+        if(!response.ok){const er=await response.json().catch(()=>({}));throw new Error(er.error||`HTTP ${response.status}`)}
+        result=await response.json();
+        if(!Array.isArray(result))throw new Error('A consulta histórica não retornou uma lista de tickets.');
+      }
+      scanned+=result.length;
+      for(const t of result){
+        const id=String(t.id||'');if(!id)continue;
+        const old=TK.get(id);
+        if(alarmIsClosed(t.status)&&!old)continue;
+        if(old&&alarmDate(old.lastUpdate)>alarmDate(t.lastUpdate))continue;
+        const incoming={...old,...t,actions:old?.actions||t.actions||[]};
+        if(old?.clients?.length&&!t.clients?.length)incoming.clients=old.clients;
+        TK.set(id,slim(incoming));changed++;
+      }
+      historyScanStatus=`Varrendo histórico do Movidesk: ${scanned} registros consultados, ${changed} atualizados. Os alertas serão recalculados.`;
+      if(skip%500===0)renderAlerts();
+      if(result.length<PAGE){complete=true;break}
+    }
+    localStorage.setItem('md_alarm_scan_time',String(Date.now()));
+    localStorage.setItem('md_alarm_scan_complete',complete?'1':'0');
+    firstTicket=firstTicket||[...TK.values()].find(t=>(t.actions||[]).length)||null;
+    build([...TK.values()]);
+    if(!$('app').classList.contains('hide')){buildFilters(true);applyFilters()}
+    else if(TK.size)start(`Supabase / Movidesk (${TK.size} tickets)`);
+    await persist();
+    if(!complete)historyScanStatus='A varredura atingiu o limite de 20.000 registros; cobertura parcial. Restrinja a consulta no backend para garantir todos os abertos.';
+    else historyScanStatus=`Varredura concluída · ${scanned} registros consultados.`;
+  }catch(e){
+    historyScanStatus=`Não foi possível concluir a varredura histórica: ${e.message}. Os dados existentes foram preservados.`;
+    console.warn(historyScanStatus);
+    if(changed){build([...TK.values()]);if(!$('app').classList.contains('hide')){buildFilters(true);applyFilters()}await persist();}
+  }finally{
+    historyScanning=false;if($('historyScanBtn'))$('historyScanBtn').disabled=false;
+    renderAlerts();
+    if(historyScanStatus&&$('alarmCoverage'))$('alarmCoverage').textContent=historyScanStatus+' · '+$('alarmCoverage').textContent;
+  }
+}
+setInterval(()=>{if(TK.size)renderAlerts()},60000);
+
 const Q={};let lastQ='';
 const qn=t=>norm(Q[t]||'');
 let ACT='cfg';
@@ -1832,10 +2150,10 @@ function showTab(t){
   ACT=t;document.body.dataset.t=t;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-cfg').classList.toggle('hide',t!=='cfg');
-  ['live','mgmt','vip','charts','entries','pivot','proj','occ','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='live'){showLiveEvents();liveStatus()}
+  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  if(t==='live'){showLiveEvents();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons()}
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag');
-  if(raw.length&&t!=='load'&&t!=='cfg'&&t!=='diag'&&qn(t)!==lastQ) applyFilters();
+  if(raw.length&&!['load','cfg','diag','alerts'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
 $('tabs').addEventListener('click',e=>{const btn=e.target.closest('button');if(btn&&btn.dataset.t)showTab(btn.dataset.t)});
 
@@ -2099,6 +2417,74 @@ function renderCharts(c){
   mkc('chAct',{type:'doughnut',data:{labels:t8.map(x=>x[0]),datasets:[{data:t8.map(x=>+x[1].toFixed(2)),backgroundColor:PAL}]},options:{animation:{duration:1500,easing:'easeOutBounce',animateRotate:true,animateScale:true},plugins:{legend:{position:'right'}}}});
 }
 
+
+/* ---------- COMPARATIVOS MENSAL × ANTERIOR E ANUAL ---------- */
+function comparisonBase(){
+  const base=$('cmpMetric').value==='opened'?[...TK.values()].map(t=>{
+    const c=(t.clients||[])[0]||{};
+    return {date:String(t.createdDate||'').slice(0,10),hours:0,ticket_id:String(t.id),
+      sector:alarmTeamName(t),client_name:nm(c.organization)||nm(c)||'Não informado'};
+  }):raw;
+  if($('cmpScope').value!=='dimensions')return base.filter(r=>/^\d{4}-\d{2}-\d{2}$/.test(r.date||''));
+  return base.filter(r=>/^\d{4}-\d{2}-\d{2}$/.test(r.date||'')&&
+    ['sector','client_name'].every(k=>{const sel=$('f_'+k);return !sel||!sel.value||r[k]===sel.value}));
+}
+function loadHistoricalHours(){
+  const first=`${new Date().getFullYear()-1}-01-01`;
+  if($('startDate').value>first||!$('startDate').value){$('startDate').value=first;localStorage.setItem('md_ini',first)}
+  showTab('charts');
+  sync(false);
+}
+function renderComparisons(){
+  if(!$('cmpYear')||!window.Chart)return;
+  const list=comparisonBase(),years=[...new Set(list.map(r=>Number(r.date.slice(0,4))))].sort((a,b)=>a-b);
+  const currentYear=new Date().getFullYear(),latest=years.length?years[years.length-1]:currentYear;
+  const yearSelect=$('cmpYear'),wanted=Number(yearSelect.value)||latest;
+  const available=[...new Set([...years,currentYear])].sort((a,b)=>b-a);
+  const signature=available.join(',');
+  if(yearSelect.dataset.years!==signature){
+    yearSelect.innerHTML=available.map(y=>`<option value="${y}">${y}</option>`).join('');
+    yearSelect.dataset.years=signature;
+    yearSelect.value=available.includes(wanted)?String(wanted):String(latest);
+  }
+  const selected=Number(yearSelect.value)||currentYear,previous=selected-1,metric=$('cmpMetric').value;
+  const label={hours:'Horas apontadas',opened:'Chamados abertos (data de criação)',tickets:'Chamados distintos trabalhados',entries:'Quantidade de lançamentos'}[metric];
+  const byMonth=new Map(),byYear=new Map();
+  function bucket(map,key){if(!map.has(key))map.set(key,{hours:0,entries:0,tickets:new Set()});return map.get(key)}
+  list.forEach(r=>{
+    const y=r.date.slice(0,4),m=r.date.slice(0,7);
+    for(const x of [bucket(byMonth,m),bucket(byYear,y)]){
+      x.hours+=Number(r.hours)||0;x.entries++;x.tickets.add(String(r.ticket_id));
+    }
+  });
+  const val=obj=>obj?(metric==='tickets'||metric==='opened'?obj.tickets.size:metric==='entries'?obj.entries:+obj.hours.toFixed(2)):0;
+  const mos=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const yearPoints=y=>mos.map((_,i)=>val(byMonth.get(`${y}-${String(i+1).padStart(2,'0')}`)));
+  const a=yearPoints(selected),b=yearPoints(previous),sum=x=>x.reduce((s,n)=>s+n,0);
+  const yTotal=val(byYear.get(String(selected))),prevTotal=val(byYear.get(String(previous)));
+  const difference=prevTotal>0?((yTotal-prevTotal)/prevTotal*100):null;
+  $('cmpMonthlyTitle').textContent=`Comparativo mensal · ${selected} × ${previous}`;
+  const observed=years.length?`${years[0]} a ${years[years.length-1]}`:'sem registros';
+  $('cmpCoverage').textContent=`${label}. Histórico ${metric==='opened'?'de criação de tickets':'de apontamentos'} disponível: ${observed} (${list.length} registros). `+
+    `${selected}: ${metric==='hours'?H(yTotal):yTotal} · ${previous}: ${metric==='hours'?H(prevTotal):prevTotal}`+
+    (difference===null?' · variação indisponível sem base de comparação':` · variação ${difference>=0?'+':''}${nf(difference,1)}%`)+
+    '. Comparativos ignoram o filtro de datas do painel, mas respeitam a opção de setor/cliente acima. A cobertura depende dos chamados efetivamente importados da API.';
+  mkc('chMonthly',{type:'bar',data:{labels:mos,datasets:[
+    {label:String(previous),data:b,backgroundColor:'#9bb7dc',borderRadius:5,maxBarThickness:32},
+    {label:String(selected),data:a,backgroundColor:'#275dd7',borderRadius:5,maxBarThickness:32}]},
+    options:{maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom'}},
+      scales:{y:{beginAtZero:true,title:{display:true,text:metric==='hours'?'Horas':(metric==='tickets'||metric==='opened')?'Chamados':'Lançamentos'}}}}});
+  const yearMin=years.length?Math.max(years[0],currentYear-9):currentYear-4;
+  const yearMax=Math.max(currentYear,years.length?years[years.length-1]:currentYear);
+  const axisYears=Array.from({length:yearMax-yearMin+1},(_,i)=>yearMin+i);
+  const v=axisYears.map(y=>val(byYear.get(String(y))));
+  $('cmpAnnualTitle').textContent=`Comparativo anual · ${yearMin}–${yearMax}`;
+  mkc('chAnnual',{type:'bar',data:{labels:axisYears.map(String),datasets:[{
+    label,data:v,backgroundColor:axisYears.map(y=>y===selected?'#275dd7':'#72b4a6'),
+    borderRadius:6,maxBarThickness:52}]},options:{maintainAspectRatio:false,
+      plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:metric==='hours'?'Horas':(metric==='tickets'||metric==='opened')?'Chamados':'Lançamentos'}}}}});
+}
+
 /* ---------- exportação (Excel e PDF da aba atual) ---------- */
 const plain=tb=>{const c=tb.cloneNode(true);c.querySelectorAll('input').forEach(i=>i.replaceWith(document.createTextNode(i.value)));c.querySelectorAll('.ar').forEach(x=>x.remove());c.querySelectorAll('button').forEach(x=>x.remove());c.querySelectorAll('tr').forEach(r=>{if(r.style.display==='none')r.remove()});c.querySelectorAll('th,td').forEach(x=>{if(x.style.display==='none')x.remove()});return c};
 const tabTitle=t=>(document.querySelector(`#tabs button[data-t="${t}"]`)||{}).textContent||t;
@@ -2158,7 +2544,7 @@ async function attachChartImages(arrayBuffer, sheetIndex, images){
 }
 
 async function exportXLSX(){
-  if(!rows.length) return alert('Nenhum dado para exportar.');
+  if(!rows.length&&!(TK.size&&['alerts','charts'].includes(ACT))) return alert('Nenhum dado para exportar.');
   if(!window.XLSX) return alert('A biblioteca de Excel não carregou. Verifique sua conexão e tente novamente.');
   const c=R(),kd=mk(c),wb=XLSX.utils.book_new(),used=new Set();
   wb.Workbook={CalcPr:{fullCalcOnLoad:true}};
@@ -2166,7 +2552,8 @@ async function exportXLSX(){
     tMgAg:'Sobrecarga por Colaborador',tMgPrj:'Chamados e Previsões',tMgCli:'Consumo por Empresa',tMgTk:'Chamados Mais Impactantes',
     tVip:'Consumo dos Clientes VIP',tVipOut:'Consumo Não VIP',tEntries:'Lançamentos de Tempo',
     tProj:'Projetos e Metas',tProjDay:'Detalhamento Diário dos Projetos',tBudget:'Previsto e Apontado',
-    tOcc:'Jornada por Colaborador',tOccDay:'Jornada por Dia',tBot:'Previsões do Robô e IA'
+    tOcc:'Jornada por Colaborador',tOccDay:'Jornada por Dia',tBot:'Previsões do Robô e IA',
+    tAlarmSector:'Paralisacoes por Setor',tAlarmOldest:'Chamados Antigos'
   };
   const tidy=ws=>{
     Object.keys(ws).forEach(a=>{
@@ -2216,12 +2603,19 @@ async function exportXLSX(){
       XLSX.utils.book_append_sheet(wb,ws,safeSheetName(name,used));
     });
   }
+  if(ACT==='alerts'){
+    const entries=alarmList(),matrix=[['Chamado','Setor','Cliente','Assunto','Responsável','Status','Aberto em','Última atualização','Dias parado','Dias aberto','Data estimada por abertura'],
+      ...entries.map(a=>[a.id,a.team,a.client,a.subject,a.owner,a.status,alarmDateLabel(a.created),alarmDateLabel(a.last),a.idle,a.open??'',a.estimated?'Sim':'Não'])];
+    const wa=XLSX.utils.aoa_to_sheet(matrix);wa['!autofilter']={ref:wa['!ref']};
+    wa['!cols']=[{wch:14},{wch:24},{wch:28},{wch:55},{wch:25},{wch:18},{wch:17},{wch:20},{wch:16},{wch:18}];
+    XLSX.utils.book_append_sheet(wb,wa,safeSheetName('Todos Chamados Abertos',used));
+  }
   const dados=[DCOLS.map(x=>x[1]).concat('Horas'),...rows.map(r=>DCOLS.map(([k])=>fv(r,k,kd)).concat(+r.hours.toFixed(4)))];
   const wd=XLSX.utils.aoa_to_sheet(dados);wd['!autofilter']={ref:wd['!ref']};wd['!cols']=DCOLS.map((x,i)=>({wch:i===7?40:18}));
   XLSX.utils.book_append_sheet(wb,wd,safeSheetName('Base de Dados',used));
 
   // Gráficos: exporta imagens em alta resolução para uma aba própria do Excel.
-  const chartDefs=[['chDay','Evolução diária de horas'],['chWeek','Horas por semana e equipe'],['chCli','Horas por empresa'],['chAct','Distribuição por atividade']];
+  const chartDefs=[['chMonthly','Comparativo mensal'],['chAnnual','Comparativo anual'],['chIdleSector','Paralisacao por setor'],['chDay','Evolução diária de horas'],['chWeek','Horas por semana e equipe'],['chCli','Horas por empresa'],['chAct','Distribuição por atividade']];
   const images=chartDefs.map(([id,title])=>{const url=makeChartImage(id);return url?{title,data:url.split(',')[1]}:null;}).filter(Boolean);
   if(images.length){
     const chartSheet=XLSX.utils.aoa_to_sheet([['GRÁFICOS DA AUDITORIA'],['Gráficos ilustrativos gerados com os dados e filtros aplicados no painel.'],...images.map(x=>[x.title])]);
@@ -2238,7 +2632,7 @@ async function exportXLSX(){
   }catch(e){console.error(e);alert('Não foi possível montar o Excel: '+(e.message||e));}
 }
 function exportPDF(){
-  if(!rows.length) return alert('Nenhum dado para exportar.');
+  if(!rows.length&&!(TK.size&&['alerts','charts'].includes(ACT))) return alert('Nenhum dado para exportar.');
   const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'pt',format:'a4'}),W=doc.internal.pageSize.getWidth()-80,P=period(R());
   let y=42;
   const room=h=>{if(y+h>550){doc.addPage();y=42}};
@@ -2441,10 +2835,11 @@ function doSearch(t){
   Q[t]=$('q_'+t).value.trim();
   if(t==='load'||t==='cfg'){const n=norm(Q[t]);$('t-'+t).querySelectorAll('.card').forEach(c=>c.classList.toggle('hide',!!n&&!norm(c.textContent).includes(n)));return}
   if(t==='diag') return renderDiag();
+  if(t==='alerts'){renderAlerts();return}
   if(raw.length) applyFilters();
 }
 function clearSearch(t){$('q_'+t).value='';doSearch(t)}
-const MODS={live:['Tempo real','Alterações de previsão, status e atualização dos chamados, detectadas a cada sincronização.'],cfg:['Configurações','Regras de cálculo, lista de clientes VIP e leitura por IA.'],mgmt:['Gestão','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos','Evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
+const MODS={alerts:['Alertas e pendências','Monitoramento de chamados abertos, com ranking dos mais antigos em todos os setores.'],live:['Tempo real','Alterações de previsão, status e atualização dos chamados, detectadas a cada sincronização.'],cfg:['Configurações','Regras de cálculo, lista de clientes VIP e leitura por IA.'],mgmt:['Visão geral','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos comparativos','Comparativo mensal e anual, evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
 
 /* ---------- robô: painel de leituras ---------- */
 let IG=(()=>{try{return JSON.parse(localStorage.getItem('md_ig')||'{}')}catch(e){return {}}})();
@@ -2520,6 +2915,7 @@ function applyCloudSettings(){
   $('vipList').value=localStorage.getItem('md_vip')??$('vipList').value;
   try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{if(sv[i]!=null)$(i).value=sv[i]})}catch(e){}
   $('autoMin').value=localStorage.getItem('md_auto')??$('autoMin').value;
+  $('alarmMinDays').value=localStorage.getItem('md_alarm_days')||$('alarmMinDays').value;
   $('iaMode').value=localStorage.getItem('md_iamode')||$('iaMode').value||'off';
   try{IA=JSON.parse(localStorage.getItem('md_ia')||'{}')}catch(e){IA={}}
   try{IG=JSON.parse(localStorage.getItem('md_ig')||'{}')}catch(e){IG={}}
@@ -2583,6 +2979,7 @@ $('autoMin').value=localStorage.getItem('md_auto')??'1';
 $('iaMode').value=localStorage.getItem('md_iamode')||'off';$('iaKey').value=localStorage.getItem('md_iakey')||'';
 lastToday=$('endDate').value;
 showTab('cfg');
+$('alarmMinDays').value=localStorage.getItem('md_alarm_days')||'7';
 showLiveEvents();
 Object.entries(MODS).forEach(([k,[t,d]])=>{
   const el=$('t-'+k);if(!el) return;
