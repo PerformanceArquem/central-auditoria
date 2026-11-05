@@ -991,9 +991,9 @@
                 </div>
                 
 <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
-  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Cadastre setores, colaboradores e Gestão. Envio programado às 9h do próximo dia útil; segunda inclui resumo semanal.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
+  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail <small style="font-size:11px;color:#65748b">(versão de correção 2)</small></h3><p class="subtle">Cadastre setores, colaboradores e Gestão. Envio programado às 9h do próximo dia útil; segunda inclui resumo semanal.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
   <div id="emailAdminPanel" class="hide">
-    <p id="emailAdminStatus" role="status" class="coverage-note">Aguardando abertura.</p>
+    <p id="emailAdminStatus" role="status" aria-live="polite" class="coverage-note">Clique em Gerenciar destinatários para verificar a conexão.</p>
     <form id="emailAdminForm"><input id="emailRecordId" type="hidden">
       <div class="email-admin-grid">
         <div class="fg"><label for="emailName">Nome / destinatário</label><input id="emailName" required placeholder="Letícia / Diretoria"></div>
@@ -1003,11 +1003,11 @@
         <div class="fg" id="emailCollabBox"><label for="emailCollaborator">Colaborador (opcional)</label><input id="emailCollaborator" list="emailCollaborators" placeholder="Vazio: todos do setor"><datalist id="emailCollaborators"></datalist></div>
       </div>
       <div class="row" style="margin:12px 0"><label><input id="emailDaily" type="checkbox" checked> Diário às 9h</label><label><input id="emailWeekly" type="checkbox" checked> Semanal às 9h</label><label><input id="emailActive" type="checkbox" checked> Ativo</label></div>
-      <div class="row"><button type="submit" class="b">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button></div>
+      <div class="row"><button type="submit" class="b" id="emailSaveBtn">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button></div>
     </form>
     <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Diário</th><th>Semanal</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="8">Abra o módulo para carregar.</td></tr></tbody></table></div>
     <h3 style="margin-top:22px">Histórico dos últimos envios</h3><div class="tw"><table><thead><tr><th>Data</th><th>Destinatário</th><th>Tipo</th><th>Período</th><th>Status</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
-    <p class="subtle" style="margin-top:12px">O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
+    <p class="subtle" style="margin-top:12px">Se surgir erro de tabela ou de permissão, será necessário instalar as configurações do Supabase fornecidas no pacote. O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
   </div>
 </div>
 <div id="t-load">
@@ -3432,7 +3432,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
 (()=>{'use strict';
   const $=id=>document.getElementById(id);
   let client=null, records=[], loaded=false, loading=false;
-  const say=t=>{if($('emailAdminStatus'))$('emailAdminStatus').textContent=t};
+  const say=(t,isError=false)=>{const el=$('emailAdminStatus');if(el){el.textContent=t;el.style.color=isError?'#991b1b':'#304562';el.style.background=isError?'#fff0f0':'#f2f5fb';} };
+  const readableError=e=>{const msg=String(e?.message||e||'Erro não identificado');if(/audit_email_recipients|audit_email_sector_dispatches|PGRST205|42P01|does not exist|schema cache/i.test(msg))return 'Tabelas de e-mail não instaladas no Supabase. Execute o SQL 01_tabelas.sql do pacote. Detalhe: '+msg;if(/audit_is_email_admin|PGRST202|42883|function.*does not exist/i.test(msg))return 'Permissões administrativas não instaladas. Execute 03_permissoes_admin.sql. Detalhe: '+msg;if(/permission denied|row.level.security|42501|403|Unauthorized|not allowed/i.test(msg))return 'Sem permissão para salvar. Confira sua conta em audit_users, com role admin e is_active=true, e aplique o SQL de permissões. Detalhe: '+msg;if(/Failed to fetch|NetworkError|fetch failed/i.test(msg))return 'Sem conexão com o Supabase. Verifique a internet e a configuração /api/public-config. Detalhe: '+msg;return msg};
   const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaborator').value=''}};
   function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope() }
@@ -3447,7 +3448,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   }
   async function verify(){
     client=window.tmEmailAdminClient;
-    if(!client)throw Error('Aguardando a autenticação da Central de Auditoria.');
+    if(!client)throw Error('Aguardando a autenticação da Central de Auditoria. Recarregue a página e entre novamente.');
     const {data:{user},error}=await client.auth.getUser();
     if(error||!user)throw Error('Faça login na Central de Auditoria.');
     const r=await client.rpc('audit_is_email_admin');
@@ -3466,7 +3467,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
       loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
       populateSuggestions();
-    }catch(e){say('Não foi possível carregar: '+e.message)}finally{loading=false}
+    }catch(e){say('Não foi possível carregar: '+readableError(e),true)}finally{loading=false}
   }
   $('emailAdminOpen').addEventListener('click',()=>{
     const panel=$('emailAdminPanel'),show=panel.classList.contains('hide');panel.classList.toggle('hide',!show);
@@ -3487,16 +3488,24 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   });
   $('emailAdminForm').addEventListener('submit',async e=>{
     e.preventDefault();
+    const btn=$('emailSaveBtn');if(btn.disabled)return;
+    btn.disabled=true;btn.textContent='Verificando e salvando…';
     try{
+      say('Validando autenticação e permissão administrativa…');
       await verify();
       const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:$('emailSector').value.trim(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaborator').value.trim()||null),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
+      if(!data.name||!data.email)throw Error('Informe o nome e o e-mail do destinatário.');
       if(!data.daily_enabled&&!data.weekly_enabled)throw Error('Marque ao menos uma frequência.');
       if(data.scope==='sector'&&!data.sector)throw Error('Informe o setor.');
-      say('Salvando cadastro...');const id=$('emailRecordId').value;
-      const r=id?await client.from('audit_email_recipients').update(data).eq('id',id):await client.from('audit_email_recipients').insert(data);
+      say('Gravando cadastro no Supabase…');
+      const id=$('emailRecordId').value;
+      const r=id?await client.from('audit_email_recipients').update(data).eq('id',id).select('id').single():await client.from('audit_email_recipients').insert(data).select('id').single();
       if(r.error)throw r.error;
-      reset();await reload();say('Destinatário salvo com sucesso.');
-    }catch(e){say('Não foi possível salvar: '+e.message)}
+      if(!r.data?.id)throw Error('O Supabase não confirmou a gravação. Verifique a política RLS.');
+      reset();await reload();
+      say('Destinatário salvo e confirmado no Supabase. O agendamento de envio precisa estar habilitado separadamente.');
+    }catch(err){console.error('Falha ao salvar destinatário',err);say('Não foi possível salvar: '+readableError(err),true)}
+    finally{btn.disabled=false;btn.textContent='Salvar destinatário'}
   });
 })();
 </script>
