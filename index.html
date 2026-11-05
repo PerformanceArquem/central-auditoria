@@ -787,7 +787,7 @@
             </div>
         </header>
         <nav id="tabs">
-            <button data-t="live">Tickets atualizados</button>
+            <button data-t="live">Tempo real</button>
             <button data-t="cfg">Configurações</button>
             <button data-t="mgmt">Gestão</button>
             <button data-t="vip">Clientes VIP</button>
@@ -803,10 +803,25 @@
                 <div class="card">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
                         <div>
-                            <h3 style="margin:0 0 5px">Painel de tickets atualizados</h3>
-                            <p style="margin:0;color:var(--muted)">Acompanhe chamados que tiveram alteração detectada na última sincronização do Movidesk.</p>
+                            <h3 style="margin:0 0 5px"><span id="liveDot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#9aa5b8;margin-right:8px;vertical-align:middle"></span>Monitor de alterações em tempo real</h3>
+                            <p style="margin:0;color:var(--muted)">Mostra atualizações detectadas na sincronização: mudança de previsão/prazo, status ou atualização do chamado.</p>
+                            <p id="liveStatusLine" role="status" style="margin:6px 0 0;font-size:13px;font-weight:600"></p>
                         </div>
-                        <button class="b g" onclick="sync()">Atualizar agora</button>
+                        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+                            <div class="fg">
+                                <label>Atualização automática</label>
+                                <select id="liveAutoMin" onchange="$('autoMin').value=this.value;autoChanged()">
+                                    <option value="0">Desligada</option>
+                                    <option value="1">A cada 1 min</option>
+                                    <option value="5">A cada 5 min</option>
+                                    <option value="10">A cada 10 min</option>
+                                    <option value="15">A cada 15 min</option>
+                                    <option value="30">A cada 30 min</option>
+                                    <option value="60">A cada 60 min</option>
+                                </select>
+                            </div>
+                            <button class="b g" onclick="sync()">Atualizar agora</button>
+                        </div>
                     </div>
                     <div class="kpis" style="margin:14px 0">
                         <div class="card">
@@ -896,12 +911,8 @@
                             <button class="s" onclick="clearCache()">Limpar dados salvos</button>
                         </div>
                         <div id="log"></div>
-                        <div class="card" style="margin-top:12px;border:1px solid #b8c9e8;background:#f7faff">
-                            <h3 style="margin:0 0 8px">Monitor de alterações em tempo real</h3>
-                            <p style="margin:0 0 8px;color:var(--muted)">Mostra atualizações detectadas na sincronização: mudança de previsão/prazo, status ou atualização do chamado.</p>
-                            <div id="liveChanges" style="font-size:13px">Aguardando a primeira sincronização...</div>
-                        </div>
-                        <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. Os dados compartilhados são carregados automaticamente do Supabase quando a sessão tem acesso autorizado. O cache local serve apenas como apoio. A verificação automática pode ocorrer a cada 1 minuto (quase em tempo real; depende da resposta da API e do limite de requisições do Movidesk). Alterações são registradas no Monitor de alterações. Uma sincronização completa roda a cada 6 horas. Se a conexão cair, o sistema tenta de novo sozinho, com intervalos cada vez maiores. Para alertas instantâneos sem espera, será necessário configurar um webhook no backend.</p>
+                        
+                        <p style="color:var(--muted);margin:10px 0 0">Só entram horas realmente apontadas. Os dados compartilhados são carregados automaticamente do Supabase quando a sessão tem acesso autorizado. O cache local serve apenas como apoio. A verificação automática pode ocorrer a cada 1 minuto (quase em tempo real; depende da resposta da API e do limite de requisições do Movidesk). Alterações são registradas na aba Tempo real. Uma sincronização completa roda a cada 6 horas. Se a conexão cair, o sistema tenta de novo sozinho, com intervalos cada vez maiores. Para alertas instantâneos sem espera, será necessário configurar um webhook no backend.</p>
                         <p id="cacheInfo" style="margin:8px 0 0;font-weight:600"></p>
                     </div>
                     <div class="card">
@@ -1626,7 +1637,18 @@ async function sync(auto){
 
 /* ---------- atualização automática ---------- */
 const nextDelay=()=>{const m=+$('autoMin').value*6e4;return !m?0:fails?Math.min(Math.max(m,6e4)*2**fails,18e5):m};
+function liveStatus(){
+  const l=$('liveStatusLine'),d=$('liveDot'),sel=$('liveAutoMin');if(!l)return;
+  const m=+$('autoMin').value;if(sel&&sel.value!==String(m))sel.value=String(m);
+  const t=lastSync?new Date(lastSync).toLocaleTimeString('pt-BR'):'',nx=Math.max(0,Math.ceil((lastTry+nextDelay()-Date.now())/6e4));
+  let txt='Aguardando a primeira sincronização...',col='#9aa5b8',tc='var(--muted)';
+  if(syncing){txt='Atualizando agora…';col='#e0a100';tc='#8a6500'}
+  else if(fails){txt='Falha na última tentativa ('+lastErr+'). Nova tentativa em '+nx+' min.';col='#c62828';tc='#c62828'}
+  else if(lastSync){txt='Ao vivo · última verificação às '+t+(m?' · próxima em '+nx+' min':' · automático desligado');col=m?'#1b8a3a':'#9aa5b8';tc=m?'#1b6b32':'var(--muted)'}
+  l.textContent=txt;l.style.color=tc;d.style.background=col;
+}
 function autoLabel(){
+  liveStatus();
   const el=$('auto'),ch=$('chip'),m=+$('autoMin').value;
   if(!apiOn){el.textContent='';ch.className='chip';return}
   ch.className='chip '+(syncing?'busy':fails?'err':lastSync?'ok':'');
@@ -1811,7 +1833,7 @@ function showTab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-cfg').classList.toggle('hide',t!=='cfg');
   ['live','mgmt','vip','charts','entries','pivot','proj','occ','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='live')showLiveEvents();
+  if(t==='live'){showLiveEvents();liveStatus()}
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag');
   if(raw.length&&t!=='load'&&t!=='cfg'&&t!=='diag'&&qn(t)!==lastQ) applyFilters();
 }
@@ -2422,7 +2444,7 @@ function doSearch(t){
   if(raw.length) applyFilters();
 }
 function clearSearch(t){$('q_'+t).value='';doSearch(t)}
-const MODS={live:['Tickets atualizados','Histórico de alterações detectadas nos tickets do Movidesk.'],cfg:['Configurações','Regras de cálculo, lista de clientes VIP e leitura por IA.'],mgmt:['Gestão','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos','Evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
+const MODS={live:['Tempo real','Alterações de previsão, status e atualização dos chamados, detectadas a cada sincronização.'],cfg:['Configurações','Regras de cálculo, lista de clientes VIP e leitura por IA.'],mgmt:['Gestão','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos','Evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
 
 /* ---------- robô: painel de leituras ---------- */
 let IG=(()=>{try{return JSON.parse(localStorage.getItem('md_ig')||'{}')}catch(e){return {}}})();
