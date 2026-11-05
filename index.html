@@ -991,7 +991,7 @@
                 </div>
                 
 <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
-  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail <small style="font-size:11px;color:#65748b">(versão de correção 2)</small></h3><p class="subtle">Cadastre setores, colaboradores e Gestão. Envio programado às 9h do próximo dia útil; segunda inclui resumo semanal.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
+  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail <small style="font-size:11px;color:#65748b">(envio Gmail integrado)</small></h3><p class="subtle">Cadastre setores, colaboradores e Gestão. Envio programado às 9h do próximo dia útil; segunda inclui resumo semanal.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
   <div id="emailAdminPanel" class="hide">
     <p id="emailAdminStatus" role="status" aria-live="polite" class="coverage-note">Clique em Gerenciar destinatários para verificar a conexão.</p>
     <form id="emailAdminForm"><input id="emailRecordId" type="hidden">
@@ -1005,6 +1005,16 @@
       <div class="row" style="margin:12px 0"><label><input id="emailDaily" type="checkbox" checked> Diário às 9h</label><label><input id="emailWeekly" type="checkbox" checked> Semanal às 9h</label><label><input id="emailActive" type="checkbox" checked> Ativo</label></div>
       <div class="row"><button type="submit" class="b" id="emailSaveBtn">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button></div>
     </form>
+    <div class="card" id="emailGmailTools" style="margin:18px 0 8px;background:#f7faff;border:1px solid #d5e2fb">
+      <h3>✉ Gmail — Teste e diagnóstico</h3>
+      <p class="subtle">Verifique a função de envio antes de ativar a programação. Um teste envia uma mensagem apenas para um endereço já cadastrado e autorizado; não dispara relatórios para toda a equipe.</p>
+      <div class="row" style="gap:10px;align-items:end">
+        <button type="button" class="s" id="emailCheckIntegration">Verificar integração</button>
+        <div class="fg" style="min-width:260px;flex:1"><label for="emailTestRecipient">Destinatário do e-mail de teste</label><select id="emailTestRecipient"><option value="">Selecione um cadastro ativo</option></select></div>
+        <button type="button" class="b" id="emailTestSend">Enviar e-mail de teste</button>
+      </div>
+      <p id="emailIntegrationStatus" class="coverage-note" role="status" aria-live="polite">Integração não verificada. O cadastro de destinatários não ativa o envio automático.</p>
+    </div>
     <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Diário</th><th>Semanal</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="8">Abra o módulo para carregar.</td></tr></tbody></table></div>
     <h3 style="margin-top:22px">Histórico dos últimos envios</h3><div class="tw"><table><thead><tr><th>Data</th><th>Destinatário</th><th>Tipo</th><th>Período</th><th>Status</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
     <p class="subtle" style="margin-top:12px">Se surgir erro de tabela ou de permissão, será necessário instalar as configurações do Supabase fornecidas no pacote. O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
@@ -3462,6 +3472,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const r=await client.from('audit_email_recipients').select('*').order('name');
       if(r.error)throw r.error;
       records=r.data||[];
+      $('emailTestRecipient').innerHTML='<option value="">Selecione um cadastro ativo</option>'+records.filter(x=>x.active).map(x=>`<option value="${esc(x.id)}">${esc(x.name)} — ${esc(x.email)}</option>`).join('');
       $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
       const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
       $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
@@ -3469,6 +3480,41 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       populateSuggestions();
     }catch(e){say('Não foi possível carregar: '+readableError(e),true)}finally{loading=false}
   }
+  async function backendAction(action,recipientId){
+    await verify();
+    const sessionResult=await client.auth.getSession();
+    const accessToken=sessionResult.data?.session?.access_token;
+    if(!accessToken)throw Error('Sua sessão expirou; faça login novamente.');
+    const {data,error}=await client.functions.invoke('audit-sector-email',{
+      body: {action, ...(recipientId?{recipientId}:{})},
+      headers:{Authorization:'Bearer '+accessToken}
+    });
+    if(error){const context=error.context;let details='';try{details=JSON.stringify(await context?.json?.())}catch(_e){}throw Error((error.message||'Falha na Edge Function')+(details?' — '+details:''));}
+    if(!data||data.ok===false||data.error)throw Error(data?.error||'O servidor não confirmou a operação.');
+    return data;
+  }
+  function integrationMessage(message,isError){const el=$('emailIntegrationStatus');el.textContent=message;el.style.color=isError?'#991b1b':'#304562';el.style.background=isError?'#fff0f0':'#edf3ff';}
+  $('emailCheckIntegration').addEventListener('click',async()=>{
+    const btn=$('emailCheckIntegration');btn.disabled=true;integrationMessage('Verificando Gmail, permissões e fonte dos dados…');
+    try{
+      const d=await backendAction('status');
+      const source=d.dataSources||{};
+      const sourcesOk=source.tickets===true&&source.appointments===true;
+      integrationMessage('Gmail: '+(d.gmailConfigured?'Secrets configurados':'Secrets incompletos')+' · Chamados: '+(source.tickets===true?'tabela disponível':'fonte não localizada')+' · Apontamentos: '+(source.appointments===true?'tabela disponível':'fonte não localizada')+' · Agendamento: verificar no Supabase (não é ativado por este botão).',!d.gmailConfigured||!sourcesOk);
+    }catch(e){integrationMessage('Não foi possível verificar: '+readableError(e)+'. Confirme a publicação da Edge Function audit-sector-email e a sessão administrativa.',true)}
+    finally{btn.disabled=false}
+  });
+  $('emailTestSend').addEventListener('click',async()=>{
+    const id=$('emailTestRecipient').value;
+    if(!id){integrationMessage('Selecione primeiro um destinatário cadastrado.',true);return}
+    const rec=records.find(r=>r.id===id);
+    if(!rec||!rec.active){integrationMessage('Selecione um destinatário ativo.',true);return}
+    if(!confirm('Enviar uma mensagem de teste para '+rec.email+'?'))return;
+    const btn=$('emailTestSend');btn.disabled=true;integrationMessage('Solicitando envio de teste pelo Gmail para '+rec.email+'…');
+    try{const d=await backendAction('test',id);integrationMessage('Google Apps Script confirmou a aceitação da mensagem de teste para '+rec.email+'. Verifique a caixa de entrada e spam. Isso não garante entrega nem ativa envios automáticos.',false)}
+    catch(e){integrationMessage('Teste não enviado: '+readableError(e),true)}
+    finally{btn.disabled=false}
+  });
   $('emailAdminOpen').addEventListener('click',()=>{
     const panel=$('emailAdminPanel'),show=panel.classList.contains('hide');panel.classList.toggle('hide',!show);
     $('emailAdminOpen').textContent=show?'Fechar destinatários':'Gerenciar destinatários';
