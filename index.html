@@ -941,7 +941,7 @@
                             <p style="margin:0;color:var(--muted)">Analisa os cards e as tabelas de movimentação diária e gera um texto editável para enviar ao gestor.</p></div>
                             <div class="row noprint">
                                 <div class="fg"><label for="managerReportStyle">Formato do texto</label><select id="managerReportStyle" onchange="generateManagerReport()"><option value="short">Executivo (curto)</option><option value="full">Detalhado por setor</option></select></div>
-                                <button type="button" class="b" onclick="generateManagerReport()">✦ Gerar resumo</button>
+                                <button type="button" class="b" id="managerGenerateButton" onclick="generateManagerReport()">✦ Gerar resumo</button>
                                 <button type="button" class="s" onclick="copyManagerReport()">Copiar texto</button>
                                 <button type="button" class="s" onclick="printManagerReport()">Imprimir</button>
                             </div>
@@ -1726,8 +1726,8 @@ function liveTicketSource(){return `Base: ${TK.size.toLocaleString('pt-BR')} cha
 async function refreshManagerData(){
  const b=document.querySelector('button[onclick="refreshManagerData()"]');
  if(b){b.disabled=true;b.textContent='↻ Sincronizando...'}
- try{await sync(false)}finally{
-   renderLiveDaily();generateManagerReport();
+ try{await sync(false)}catch(error){const n=$('managerReportNotice');if(n)n.textContent='Falha ao sincronizar: '+error.message;}finally{
+   try{renderLiveDaily()}catch(e){console.error(e)}generateManagerReport();
    if(b){b.disabled=false;b.textContent='↻ Sincronizar e atualizar indicadores'}
  }
 }
@@ -1810,43 +1810,63 @@ function managerReportData(){
   return {day,types,opened:sortable(opened),closed:sortable(closed),overall,withoutClosedDate};
 }
 function generateManagerReport(){
-  window.managerReportEdited=false;
-  const el=$('managerReportText');if(!el)return;
-  const d=managerReportData(),f=d.day.split('-').reverse().join('/'),a=d.overall;
-  const full=$('managerReportStyle')?.value==='full';
-  const typeLine=key=>d.types.map(t=>`${t.toLowerCase()}: ${a[key][t]||0}`).join('; ');
-  const top=m=>m.length?m.slice(0,3).map(([name,r])=>`${name} (${r.total})`).join(', '):'nenhum setor com registro';
-  const lines=[`Assunto: Resumo diário de chamados — ${f}`,'',`Prezados,`, '',
-    `Na data de ${f}, a base atualmente carregada registra ${a.opened} chamado(s) aberto(s) e ${a.closed} fechamento(s) com data confirmada.`,
-    `Aberturas por tipo: ${typeLine('openedType')}.`,
-    `Fechamentos por tipo: ${typeLine('closedType')}.`,
-    `Setores com maior volume de aberturas: ${top(d.opened)}.`,
-    `Setores com maior volume de fechamentos: ${top(d.closed)}.`];
-  if(full){
-    const detail=(title,items)=>{
-      lines.push('',title);
-      if(!items.length){lines.push('• Sem registros confirmados.');return}
-      for(const [team,r] of items)lines.push(`• ${team}: ${r.total} — ${d.types.map(t=>`${t.toLowerCase()} ${r.types[t]||0}`).join(', ')}.`);
-    };
-    detail('Abertos por setor:',d.opened);
-    detail('Fechados por setor:',d.closed);
+  const el=$('managerReportText'), notice=$('managerReportNotice');
+  if(!el) return;
+  const button=$('managerGenerateButton');
+  try {
+    if(button){button.disabled=true;button.textContent='✦ Gerando...'}
+    // Não utilizar os cards do DOM como fonte: eles podem estar desatualizados.
+    // A fonte é o conjunto de tickets carregados no sistema.
+    const d=managerReportData(),f=d.day.split('-').reverse().join('/'),a=d.overall;
+    const full=$('managerReportStyle')?.value==='full';
+    const count=TK.size;
+    const typeLine=key=>d.types.map(t=>`${t.toLowerCase()}: ${a[key][t]||0}`).join('; ');
+    const top=m=>m.length?m.slice(0,3).map(([name,r])=>`${name} (${r.total})`).join(', '):'nenhum setor com registro confirmado';
+    const lines=[`Assunto: Acompanhamento diário de chamados — ${f}`,'','Prezados,','',
+      `Conforme os registros disponíveis na Central de Auditoria, em ${f} foram identificados ${a.opened} chamados abertos e ${a.closed} fechamentos com data confirmada.`,
+      `Aberturas por tipo: ${typeLine('openedType')}.`,
+      `Fechamentos por tipo: ${typeLine('closedType')}.`,
+      `Setores com mais aberturas: ${top(d.opened)}.`,
+      `Setores com mais fechamentos: ${top(d.closed)}.`];
+    if(full){
+      const detail=(title,items)=>{
+        lines.push('',title);
+        if(!items.length){lines.push('• Nenhum registro confirmado para a data selecionada.');return;}
+        for(const [team,r] of items)lines.push(`• ${team}: ${r.total} chamado(s) — ${d.types.map(t=>`${t.toLowerCase()} ${r.types[t]||0}`).join(', ')}.`);
+      };
+      detail('Abertos por setor:',d.opened);
+      detail('Fechados por setor:',d.closed);
+    }
+    const alertLimit=Math.max(1,Number($('alarmMinDays')?.value||7));
+    const pending=[...TK.values()].filter(t=>!alarmIsClosed(t.status)).map(t=>{
+      const last=alarmDate(t.lastUpdate)||alarmDate(liveCreatedDate(t));
+      return {t,days:last?Math.max(0,Math.floor((Date.now()-last)/86400000)):null};
+    }).filter(x=>x.days!==null&&x.days>=alertLimit).sort((x,y)=>y.days-x.days);
+    if(pending.length){
+      const critical=pending[0];
+      lines.push('',`Pontos de atenção: ${pending.length} chamados abertos estão há pelo menos ${alertLimit} dia(s) sem atualização. O mais antigo identificado é o ticket #${critical.t.id}, do setor ${alarmTeamName(critical.t)}, com ${critical.days} dias sem atualização.`);
+    }
+    if(d.withoutClosedDate)lines.push('',`Limitação: ${d.withoutClosedDate} chamados encerrados não têm data de fechamento confirmada na base; não foram somados aos fechamentos do dia.`);
+    if(!count){
+      lines.push('', 'Atenção: a base de tickets está vazia neste acesso. Não é possível confirmar números reais sem carregar e sincronizar os dados do Movidesk/Supabase.');
+    }else if(!a.opened&&!a.closed){
+      lines.push('', `Embora existam ${count} tickets carregados, não foram encontrados registros de abertura ou fechamento confirmado em ${f}. Isso pode indicar ausência de movimentação ou cobertura incompleta da consulta, e não deve ser interpretado como zero absoluto no Movidesk.`);
+    }
+    lines.push('',liveTicketSource(),
+      '',`Critério de apuração: ${count} tickets disponíveis no sistema; setores conforme equipe atual do ticket; tipos por categoria, serviço e assunto. Fechamentos sem data confirmada não foram atribuídos ao dia.`,
+      '', 'Atenciosamente,', 'Equipe de Qualidade e Auditoria');
+    el.value=lines.join('\n');
+    window.managerReportEdited=false;
+    if(notice)notice.textContent=`Texto gerado em ${new Date().toLocaleTimeString('pt-BR')} para ${f} · ${count} tickets disponíveis. ${lastSync?'Última consulta Movidesk: '+new Date(lastSync).toLocaleString('pt-BR'):'Consulta Movidesk não confirmada nesta sessão'}. Revise os números antes de enviar.`;
+    return true;
+  }catch(error){
+    console.error('Falha ao gerar resumo gerencial:',error);
+    if(notice)notice.textContent='Falha ao montar o resumo: '+(error?.message||'erro inesperado')+'. Verifique a sincronização e tente novamente.';
+    el.value=`Não foi possível gerar o relatório nesta tentativa.\nDetalhe técnico: ${error?.message||'erro inesperado'}\nNenhum dado foi alterado.`;
+    return false;
+  }finally{
+    if(button){button.disabled=false;button.textContent='✦ Gerar resumo'}
   }
-  const alertLimit=Math.max(1,Number($('alarmMinDays')?.value||7));
-  const pending=[...TK.values()].filter(t=>!alarmIsClosed(t.status)).map(t=>{
-    const last=alarmDate(t.lastUpdate)||alarmDate(t.createdDate);
-    return {t,days:last?Math.max(0,Math.floor((Date.now()-last.getTime())/86400000)):null};
-  }).filter(x=>x.days!==null&&x.days>=alertLimit).sort((x,y)=>y.days-x.days);
-  if(pending.length){
-    const critical=pending[0];
-    lines.push('',`Atenção: ${pending.length} chamado(s) aberto(s) estão há pelo menos ${alertLimit} dia(s) sem atualização entre os dados disponíveis. O mais antigo é o #${critical.t.id}, do setor ${alarmTeamName(critical.t)}, há ${critical.days} dias.`);
-  }
-  if(d.withoutClosedDate)lines.push('',`Ressalva: ${d.withoutClosedDate} chamado(s) encerrado(s) não possuem data de fechamento confirmada na base e não puderam ser atribuídos ao dia.`);
-  if(!TK.size)lines.push('', 'ATENÇÃO: nenhum chamado foi carregado. Conecte e sincronize com o Movidesk antes de usar este relatório.');
-  else if(!a.opened&&!a.closed)lines.push('', `Nenhuma abertura ou fechamento foi identificado em ${f} dentre os ${TK.size} chamados carregados. Isso não comprova ausência de movimentação no Movidesk; verifique a cobertura e as datas da sincronização.`);
-  lines.push('',liveTicketSource());
-  lines.push('',`Observação: os indicadores consideram somente os ${TK.size} tickets disponíveis no sistema. A divisão por setor usa a equipe atual do chamado e a classificação segue categoria, serviço e assunto.`, '', 'Atenciosamente,', 'Equipe de Qualidade e Auditoria');
-  el.value=lines.join('\n');
-  $('managerReportNotice').textContent=`Resumo atualizado para ${f} · ${TK.size} tickets na base. ${lastSync?'Última consulta Movidesk: '+new Date(lastSync).toLocaleString('pt-BR'):'Sem consulta Movidesk confirmada nesta sessão'}. Revise antes de enviar.`;
 }
 async function copyManagerReport(){
  const el=$('managerReportText');if(!el)return;
