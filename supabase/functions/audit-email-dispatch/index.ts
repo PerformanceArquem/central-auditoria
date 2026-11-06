@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-manual-pilot-20261106-v7';
+const RELEASE_ID = 'email-manual-pilot-20261106-v8';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -193,23 +193,42 @@ async function isAdmin(req: Request) {
 async function adminAction(payload: R) {
   const action = String(payload.action);
   if (action === 'directory') {
-    // So administradores autenticados: a funcao consulta os dados internos com service role.
-    // Nao acessar esta tabela diretamente pelo navegador, sujeito a RLS.
-    const rows = await list('audit_direct_appointments', '?select=sector,collaborator_name');
+    // Consulta administrativa. A ultima data importada nao prova atividade nem ausencia de trabalho.
+    const [rows,checkpoint,incremental] = await Promise.all([
+      list('audit_direct_appointments', '?select=sector,collaborator_name,appointment_date,source_synced_at'),
+      state(),
+      db('audit_incremental_state?job_name=eq.movidesk_incremental&select=window_end,next_offset,last_success_at,last_error&limit=1')
+    ]);
     const groups = new Map<string, Set<string>>();
+    const coverage = new Map<string,{sector:string;collaborator:string;lastAppointment:string;lastImport:string;count:number}>();
     for (const row of rows) {
       const sector = String(row.sector || '').trim();
       const person = String(row.collaborator_name || '').trim();
       if (!sector) continue;
       if (!groups.has(sector)) groups.set(sector, new Set());
       if (person) groups.get(sector)!.add(person);
+      if (!person) continue;
+      const key = sector+'\u0000'+person;
+      const previous=coverage.get(key)||{sector,collaborator:person,lastAppointment:'',lastImport:'',count:0};
+      const date=String(row.appointment_date||'').slice(0,10);
+      const synced=String(row.source_synced_at||'');
+      if (date>previous.lastAppointment)previous.lastAppointment=date;
+      if (synced>previous.lastImport)previous.lastImport=synced;
+      previous.count++;
+      coverage.set(key,previous);
     }
     const sectors = [...groups].map(([sector,names]) => ({
       sector, collaborators:[...names].sort((a,b) => a.localeCompare(b,'pt-BR'))
     })).sort((a,b) => a.sector.localeCompare(b.sector,'pt-BR'));
+    const people=[...coverage.values()].sort((a,b)=>a.sector.localeCompare(b.sector,'pt-BR')||a.collaborator.localeCompare(b.collaborator,'pt-BR'));
     return json({ok:true,release:RELEASE_ID,source:'audit_direct_appointments',sectors,
       totalSectors:sectors.length,
-      totalCollaborators:new Set(sectors.flatMap(s=>s.collaborators)).size});
+      totalCollaborators:new Set(sectors.flatMap(s=>s.collaborators)).size,
+      coverage:people,
+      sync:{historyComplete:checkpoint.completed===true,historicalOffset:checkpoint.next_offset,
+        historicalUpdatedAt:checkpoint.updated_at,incrementalWindowEnd:incremental?.[0]?.window_end||null,
+        incrementalUpdatedAt:incremental?.[0]?.last_success_at||null,
+        incrementalError:incremental?.[0]?.last_error||null}});
   }
   if (action === 'status') {
     const s = await state();
