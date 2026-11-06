@@ -3842,7 +3842,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         try{const response=await result.error.context?.json?.();if(response?.error)detail=response.error;}catch{}
         throw Error(detail);
       }
-      if(!result.data?.ok){const x=result.data||{};throw Error((x.error||x.skipped||'O envio não foi confirmado.')+(x.from?' | Período: '+x.from+' a '+x.to:'')+(x.lastAvailableDate?' | Último apontamento desse setor: '+x.lastAvailableDate:''));}
+      if(!result.data?.ok){const x=result.data||{};throw Error((x.error||x.skipped||'O envio não foi confirmado.')+(x.from?' | Período: '+x.from+' a '+x.to:'')+(x.coverage?.offset!=null?' | Conciliação Movidesk: '+x.coverage.offset+' chamados verificados; ainda em processamento.':'')+(x.lastAvailableDate?' | Último apontamento desse setor: '+x.lastAvailableDate:''));}
       if(result.data?.skipped){
         status.textContent='Envio não repetido: '+result.data.skipped+'. Status anterior: '+(result.data.status||'indefinido');
       }else{
