@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-template-styled-20261106-v14';
+const RELEASE_ID = 'email-multisector-20261106-v15';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -121,7 +121,7 @@ function reportEmailHtml(rec:R,report:{text:string;metrics:{appointments:number;
  const minimum=Math.round(target*minPercent/100);
  const missing=m.appointments===0;
  const person=safe(rec.collaborator_name)||'Equipe';
- const sector=safe(rec.sector)||'Gestão';
+ const sector=(Array.isArray(rec.sectors)&&rec.sectors.length?rec.sectors.map(safe).join(' · '):safe(rec.sector))||'Gestão';
  const k=kind==='weekly'?'SEMANAL':'DIÁRIO';
  const badge=manual?'TESTE MANUAL':partial?'DADOS PARCIAIS':'RELATÓRIO DE APONTAMENTOS';
  const esc=emailEsc;
@@ -170,15 +170,20 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
   const scope = String(rec.scope || 'sector');
   if (!['sector', 'management'].includes(scope)) throw new Error('Escopo de destinatario nao reconhecido');
   const person = norm(rec.collaborator_name);
-  const sector = norm(rec.sector);
-  if (scope === 'sector' && !sector) throw new Error('Destinatario setorial sem setor');
+  // Compatibilidade: cadastros antigos usam sector, novos podem ter varios sectors.
+  const selectedSectors = Array.isArray(rec.sectors) && rec.sectors.length
+    ? [...new Set(rec.sectors.map((v:unknown)=>norm(v)).filter(Boolean))]
+    : [norm(rec.sector)].filter(Boolean);
+  if (scope === 'sector' && !selectedSectors.length) throw new Error('Destinatario setorial sem setor');
   if (scope === 'sector' && !person && !authorizedSingleManual && E('REPORT_ALLOW_SECTOR_EMAIL') !== 'true')
     throw new Error('Envio setorial coletivo exige REPORT_ALLOW_SECTOR_EMAIL=true e autorizacao da supervisao');
   // O Movidesk utiliza "Sucesso do Cliente", enquanto cadastros antigos usam "Sucesso".
   // Manter o alias restrito, sem misturar setores distintos.
-  const sameSector = (sourceSector: unknown) =>
-    norm(sourceSector) === sector ||
-    (sector === 'sucesso' && norm(sourceSector) === 'sucesso do cliente');
+  const sameSector = (sourceSector: unknown) => {
+    const value = norm(sourceSector);
+    return selectedSectors.some(sector =>
+      value === sector || (sector === 'sucesso' && value === 'sucesso do cliente'));
+  };
   const selected = appts.filter(a =>
     (scope === 'management' || sameSector(a.sector)) &&
     (!person || norm(a.collaborator_name) === person));
@@ -200,7 +205,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     bySector.set(s, (bySector.get(s) || 0) + Number(a.duration_minutes || 0));
   }
   const worked = new Set(selected.map(a => String(a.ticket_id))).size;
-  const title = `${kind === 'weekly' ? 'Relatorio semanal' : 'Relatorio diario'} - ${scope === 'management' ? 'Gestao' : safe(rec.sector)}${person ? ' / ' + safe(rec.collaborator_name) : ''}`;
+  const title = `${kind === 'weekly' ? 'Relatorio semanal' : 'Relatorio diario'} - ${scope === 'management' ? 'Gestao' : (Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors.map(safe).join(' + ') : safe(rec.sector))}${person ? ' / ' + safe(rec.collaborator_name) : ''}`;
   const details = person ? selected.slice(0, 100).map(a =>
     `- ${String(a.appointment_date)} | #${safe(a.ticket_id)} | ${duration(Number(a.duration_minutes || 0))} | ${safe(a.activity)}`)
     : [...byPerson.entries()].sort((a, b) => b[1] - a[1]).map(([n, m]) => `- ${safe(n)}: ${duration(m)}`);
