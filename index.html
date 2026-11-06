@@ -1039,14 +1039,14 @@
       </div>
     </div>
     <div class="card" id="emailOfficialManualPanel" style="margin-top:16px;border-left:4px solid #2457d6;background:#f8faff">
-      <h3>Enviar relatório oficial manualmente</h3>
-      <p class="subtle">Piloto autorizado somente para <strong>sucessocliente@arquem.com.br</strong>. A importação histórica ainda pode estar incompleta; o relatório será identificado como parcial. Não altera agendamentos.</p>
+      <h3>Enviar relatório manual de teste</h3>
+      <p class="subtle">Teste manual autorizado somente para <strong>sucessocliente@arquem.com.br</strong>. O e-mail será enviado mesmo com sincronização incompleta ou sem apontamentos no período, claramente identificado como TESTE. Não altera os envios automáticos.</p>
       <div class="row" style="align-items:flex-end">
         <div class="fg" style="flex:1;min-width:230px"><label for="emailOfficialRecipient">Destinatário autorizado</label>
           <select id="emailOfficialRecipient"><option value="">Carregando destinatário...</option></select></div>
         <div class="fg"><label for="emailOfficialKind">Relatório</label><select id="emailOfficialKind"><option value="daily">Diário — dia útil anterior</option><option value="weekly">Semanal — segunda até a data escolhida</option></select></div>
         <div class="fg"><label for="emailOfficialReferenceDate">Data de referência</label><input type="date" id="emailOfficialReferenceDate" required></div>
-        <button type="button" id="emailOfficialSend" class="b">Enviar relatório oficial agora</button>
+        <button type="button" id="emailOfficialSend" class="b">Enviar e-mail de teste agora</button>
       </div>
       <p id="emailOfficialStatus" role="status" class="subtle" style="margin:12px 0 0">O envio é realizado apenas após confirmação.</p>
     </div>
@@ -3832,7 +3832,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     if(!chosen||!chosen.active||String(chosen.email).toLowerCase()!=='sucessocliente@arquem.com.br'){
       status.textContent='Destinatário não autorizado.';return;
     }
-    if(!window.confirm('Enviar AGORA o relatório oficial '+(kind==='weekly'?'da semana até ':'do dia útil anterior à ')+referenceDate+' para '+chosen.email+'? O envio é real e os indicadores podem ser parciais.'))return;
+    if(!window.confirm('Enviar AGORA o e-mail de TESTE '+(kind==='weekly'?'da semana até ':'do dia útil anterior à ')+referenceDate+' para '+chosen.email+'? O e-mail será real, mesmo com dados parciais ou sem apontamentos.'))return;
     button.disabled=true;status.textContent='Solicitando envio ao Gmail...';
     try{
       await verify();
@@ -3846,7 +3846,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       if(result.data?.skipped){
         status.textContent='Envio não repetido: '+result.data.skipped+'. Status anterior: '+(result.data.status||'indefinido');
       }else{
-        status.textContent='Gmail aceitou o relatório para '+result.data.recipient+' · '+result.data.from+' a '+result.data.to+(result.data.partial?' · DADOS PARCIAIS':'')+'. Confira a caixa de entrada.';
+        status.textContent='Gmail aceitou o e-mail de TESTE para '+result.data.recipient+' · '+result.data.from+' a '+result.data.to+(result.data.partial?' · DADOS PARCIAIS':'')+(result.data.empty?' · SEM APONTAMENTOS':'')+'. Confira a caixa de entrada.';
       }
       await reload();
     }catch(e){status.textContent='Não foi possível enviar: '+(e?.message||String(e));}
