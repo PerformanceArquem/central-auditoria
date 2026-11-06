@@ -1027,6 +1027,17 @@
       <div class="row" style="margin:12px 0"><label><input id="emailDaily" type="checkbox" checked> Diário às 9h</label><label><input id="emailWeekly" type="checkbox" checked> Semanal às 9h</label><label><input id="emailActive" type="checkbox" checked> Ativo</label></div>
       <div class="row"><button type="submit" class="b">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button></div>
     </form>
+    <div class="card" id="emailOfficialManualPanel" style="margin-top:16px;border-left:4px solid #2457d6;background:#f8faff">
+      <h3>Enviar relatório oficial manualmente</h3>
+      <p class="subtle">Piloto autorizado somente para <strong>sucessocliente@arquem.com.br</strong>. A importação histórica ainda pode estar incompleta; o relatório será identificado como parcial. Não altera agendamentos.</p>
+      <div class="row" style="align-items:flex-end">
+        <div class="fg" style="flex:1;min-width:230px"><label for="emailOfficialRecipient">Destinatário autorizado</label>
+          <select id="emailOfficialRecipient"><option value="">Carregando destinatário...</option></select></div>
+        <div class="fg"><label for="emailOfficialKind">Relatório</label><select id="emailOfficialKind"><option value="daily">Diário — último dia útil</option><option value="weekly">Semanal — semana anterior</option></select></div>
+        <button type="button" id="emailOfficialSend" class="b">Enviar relatório oficial agora</button>
+      </div>
+      <p id="emailOfficialStatus" role="status" class="subtle" style="margin:12px 0 0">O envio é realizado apenas após confirmação.</p>
+    </div>
     <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Diário</th><th>Semanal</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="8">Abra o módulo para carregar.</td></tr></tbody></table></div>
     <h3 style="margin-top:22px">Histórico dos últimos envios</h3><div class="tw"><table><thead><tr><th>Data</th><th>Destinatário</th><th>Tipo</th><th>Período</th><th>Status</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
     <p class="subtle" style="margin-top:12px">O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
@@ -3663,6 +3674,14 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const r=await client.from('audit_email_recipients').select('*').order('name');
       if(r.error)throw r.error;
       records=r.data||[];
+      const manualSelect=$('emailOfficialRecipient');
+      if(manualSelect){
+        const old=manualSelect.value;
+        const pilot=records.filter(x=>x.active&&String(x.email||'').trim().toLowerCase()==='sucessocliente@arquem.com.br');
+        manualSelect.replaceChildren(new Option(pilot.length?'Selecione o destinatário':'Cadastre/ative sucessocliente@arquem.com.br',''));
+        pilot.forEach(x=>manualSelect.add(new Option(x.name+' — '+x.email+' ('+(x.scope==='management'?'Gestão':x.sector||'Setor')+')',String(x.id))));
+        if(pilot.some(x=>String(x.id)===old))manualSelect.value=old;
+      }
       $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
       const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
       $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
@@ -3678,6 +3697,35 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   $('emailScope').addEventListener('change',scope);
   $('emailNew').addEventListener('click',reset);
   $('emailReload').addEventListener('click',reload);
+  $('emailOfficialSend').addEventListener('click',async()=>{
+    const button=$('emailOfficialSend'),status=$('emailOfficialStatus');
+    const recipientId=$('emailOfficialRecipient').value;
+    const kind=$('emailOfficialKind').value;
+    if(!recipientId){status.textContent='Cadastre e ative sucessocliente@arquem.com.br antes de enviar.';return;}
+    const chosen=records.find(x=>String(x.id)===recipientId);
+    if(!chosen||!chosen.active||String(chosen.email).toLowerCase()!=='sucessocliente@arquem.com.br'){
+      status.textContent='Destinatário não autorizado.';return;
+    }
+    if(!window.confirm('Enviar AGORA o relatório oficial '+(kind==='weekly'?'semanal':'diário')+' para '+chosen.email+'? Os indicadores podem ser parciais e este envio é real.'))return;
+    button.disabled=true;status.textContent='Solicitando envio ao Gmail...';
+    try{
+      await verify();
+      const result=await client.functions.invoke('audit-email-dispatch',{body:{action:'manual_official',recipientId,kind}});
+      if(result.error){
+        let detail=result.error.message||'Falha na Edge Function';
+        try{const response=await result.error.context?.json?.();if(response?.error)detail=response.error;}catch{}
+        throw Error(detail);
+      }
+      if(!result.data?.ok)throw Error(result.data?.error||result.data?.skipped||'O envio não foi confirmado.');
+      if(result.data?.skipped){
+        status.textContent='Envio não repetido: '+result.data.skipped+'. Status anterior: '+(result.data.status||'indefinido');
+      }else{
+        status.textContent='Gmail aceitou o relatório para '+result.data.recipient+' · '+result.data.from+' a '+result.data.to+(result.data.partial?' · DADOS PARCIAIS':'')+'. Confira a caixa de entrada.';
+      }
+      await reload();
+    }catch(e){status.textContent='Não foi possível enviar: '+(e?.message||String(e));}
+    finally{button.disabled=false;}
+  });
   $('emailRecipients').addEventListener('click',e=>{
     const id=e.target.closest('[data-email-edit]')?.dataset.emailEdit;
     const x=records.find(r=>r.id===id);if(!x)return;
