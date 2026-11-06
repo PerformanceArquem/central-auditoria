@@ -1040,9 +1040,9 @@
     </div>
     <div class="card" id="emailOfficialManualPanel" style="margin-top:16px;border-left:4px solid #2457d6;background:#f8faff">
       <h3>Enviar relatório manual de teste</h3>
-      <p class="subtle">Teste manual autorizado somente para <strong>sucessocliente@arquem.com.br</strong>. O e-mail será enviado mesmo com sincronização incompleta ou sem apontamentos no período, claramente identificado como TESTE. Não altera os envios automáticos.</p>
+      <p class="subtle">Selecione um dos <strong>colaboradores individuais ativos cadastrados</strong> para testar o envio ao seu e-mail corporativo. Pode enviar mesmo com dados incompletos ou sem apontamentos. Cada teste exige confirmação e não altera os envios automáticos.</p>
       <div class="row" style="align-items:flex-end">
-        <div class="fg" style="flex:1;min-width:230px"><label for="emailOfficialRecipient">Destinatário autorizado</label>
+        <div class="fg" style="flex:1;min-width:230px"><label for="emailOfficialRecipient">Colaborador / destinatário para teste</label>
           <select id="emailOfficialRecipient"><option value="">Carregando destinatário...</option></select></div>
         <div class="fg"><label for="emailOfficialKind">Relatório</label><select id="emailOfficialKind"><option value="daily">Diário — dia útil anterior</option><option value="weekly">Semanal — segunda até a data escolhida</option></select></div>
         <div class="fg"><label for="emailOfficialReferenceDate">Data de referência</label><input type="date" id="emailOfficialReferenceDate" required></div>
@@ -3791,10 +3791,10 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const manualSelect=$('emailOfficialRecipient');
       if(manualSelect){
         const old=manualSelect.value;
-        const pilot=records.filter(x=>x.active&&String(x.email||'').trim().toLowerCase()==='sucessocliente@arquem.com.br');
-        manualSelect.replaceChildren(new Option(pilot.length?'Selecione o destinatário':'Cadastre/ative sucessocliente@arquem.com.br',''));
-        pilot.forEach(x=>manualSelect.add(new Option(x.name+' — '+x.email+' ('+(x.scope==='management'?'Gestão':x.sector||'Setor')+')',String(x.id))));
-        if(pilot.some(x=>String(x.id)===old))manualSelect.value=old;
+        const eligible=records.filter(x=>x.active&&x.scope==='sector'&&String(x.collaborator_name||'').trim()&&/^[^\s@]+@arquem\.com\.br$/i.test(String(x.email||'').trim()));
+        manualSelect.replaceChildren(new Option(eligible.length?'Selecione o colaborador e destinatário':'Cadastre um destinatário individual corporativo ativo',''));
+        eligible.forEach(x=>manualSelect.add(new Option((x.collaborator_name||x.name)+' — '+x.email+' ('+(x.sector||'Setor')+')',String(x.id))));
+        if(eligible.some(x=>String(x.id)===old))manualSelect.value=old;
       }
       $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
       const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
@@ -3827,12 +3827,12 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     const kind=$('emailOfficialKind').value;
     const referenceDate=$('emailOfficialReferenceDate').value;
     if(!referenceDate){status.textContent='Selecione uma data de referência.';return;}
-    if(!recipientId){status.textContent='Cadastre e ative sucessocliente@arquem.com.br antes de enviar.';return;}
+    if(!recipientId){status.textContent='Selecione um colaborador cadastrado e ativo para o teste.';return;}
     const chosen=records.find(x=>String(x.id)===recipientId);
-    if(!chosen||!chosen.active||String(chosen.email).toLowerCase()!=='sucessocliente@arquem.com.br'){
-      status.textContent='Destinatário não autorizado.';return;
+    if(!chosen||!chosen.active||chosen.scope!=='sector'||!String(chosen.collaborator_name||'').trim()||!/^[^\s@]+@arquem\.com\.br$/i.test(String(chosen.email||'').trim())){
+      status.textContent='Teste permitido somente para colaborador individual ativo e e-mail corporativo autorizado.';return;
     }
-    if(!window.confirm('Enviar AGORA o e-mail de TESTE '+(kind==='weekly'?'da semana até ':'do dia útil anterior à ')+referenceDate+' para '+chosen.email+'? O e-mail será real, mesmo com dados parciais ou sem apontamentos.'))return;
+    if(!window.confirm('Enviar AGORA o e-mail de TESTE individual de '+chosen.collaborator_name+' ('+chosen.sector+') '+(kind==='weekly'?'da semana até ':'do dia útil anterior à ')+referenceDate+' para '+chosen.email+'? O envio é real, mesmo com dados parciais ou sem apontamentos.'))return;
     button.disabled=true;status.textContent='Solicitando envio ao Gmail...';
     try{
       await verify();
