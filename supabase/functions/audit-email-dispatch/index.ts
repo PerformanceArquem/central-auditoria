@@ -109,13 +109,13 @@ function workdays(from: string, to: string, ignored: Set<string>) {
     if (![0, 6].includes(weekday(d)) && !ignored.has(d)) out.push(d);
   return out;
 }
-function buildReport(rec: R, appts: R[], from: string, to: string, kind: string, hol: Set<string>) {
+function buildReport(rec: R, appts: R[], from: string, to: string, kind: string, hol: Set<string>, authorizedSingleManual = false) {
   const scope = String(rec.scope || 'sector');
   if (!['sector', 'management'].includes(scope)) throw new Error('Escopo de destinatario nao reconhecido');
   const person = norm(rec.collaborator_name);
   const sector = norm(rec.sector);
   if (scope === 'sector' && !sector) throw new Error('Destinatario setorial sem setor');
-  if (scope === 'sector' && !person && E('REPORT_ALLOW_SECTOR_EMAIL') !== 'true')
+  if (scope === 'sector' && !person && !authorizedSingleManual && E('REPORT_ALLOW_SECTOR_EMAIL') !== 'true')
     throw new Error('Envio setorial coletivo exige REPORT_ALLOW_SECTOR_EMAIL=true e autorizacao da supervisao');
   const selected = appts.filter(a =>
     (scope === 'management' || norm(a.sector) === sector) &&
@@ -237,7 +237,9 @@ async function manualOfficial(payload: R) {
   const existing = await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}&select=status&limit=1`);
   if (existing.length) return json({ ok: true, skipped: 'Relatorio manual ja registrado para este destinatario e periodo', status: existing[0].status, from, to });
   const appts = await source(from, to);
-  const report = buildReport(rec, appts, from, to, kind, hol);
+  // Piloto manual autorizado: admin JWT + endereco fixo + confirmacao de UI.
+  // A permissao coletiva global permanece exigida pelo Cron automatico.
+  const report = buildReport(rec, appts, from, to, kind, hol, true);
   if (!report.metrics.appointments) return json({ ok: false, skipped: 'Sem apontamentos para o periodo; envio nao realizado', from, to });
   const partial = !checkpoint.completed;
   const subject = 'Central de Auditoria - Relatorio oficial '+(kind === 'weekly' ? 'semanal' : 'diario')+(partial?' [DADOS PARCIAIS]':'')+' - '+from;
