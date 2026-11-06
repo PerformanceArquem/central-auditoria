@@ -985,30 +985,15 @@
                     <h2 style="margin:0 0 5px">Conexão e carregamento de dados</h2>
                     <p style="margin:0;color:var(--muted)">Configure a API Movidesk, importe arquivos e acompanhe a sincronização automática.</p>
                 </div>
-
-                <section class="card" id="directSyncPanel" style="border-left:4px solid #2765dc" aria-label="Sincronização direta Movidesk Supabase">
-                  <h3>Sincronização direta · Movidesk → Supabase</h3>
-                  <p style="color:var(--muted);margin:0 0 12px">Utiliza sua sessão de administrador. Primeiro teste a leitura sem gravar. Depois importe até 5 chamados por lote. Não envia e-mails nem altera o cache do navegador.</p>
-                  <div class="row noprint" style="align-items:flex-end">
-                    <div class="fg"><label for="directSyncOffset">Posição inicial do lote</label><input id="directSyncOffset" type="number" min="0" max="50000" step="5" value="0" style="width:135px"></div>
-                    <button type="button" class="s" id="directProbeBtn">Testar conexão (sem gravar)</button>
-                    <button type="button" class="b" id="directSaveBtn" disabled>Importar até 5 chamados</button>
-                    <button type="button" class="s" id="directNextBtn">Próximo lote seguro</button>
-                    <button type="button" class="s" id="directProgressBtn">Ver progresso</button>
-                  </div>
-                  <p id="directSyncStatus" role="status" aria-live="polite" class="coverage-note">Aguardando teste de leitura. O agendamento de e-mails continua desativado.</p>
-                  <div id="directSyncDetails" style="color:#40526b;font-size:12px"></div>
-                  <p style="color:var(--muted);font-size:12px">O próximo lote usa a posição registrada no Supabase e não avança em caso de falha. Não ativa envios nem cron automaticamente.</p>
-                </section>
                 <div class="card" id="cloudCard" style="border:1px solid #b8c9e8;background:#f7faff">
                     <h3>Dados compartilhados</h3>
                     <p id="cloudMsg" role="status" style="margin:0">Conectando automaticamente ao banco de dados...</p>
                 </div>
                 
 <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
-  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail <small style="font-size:11px;color:#65748b">(envio Gmail integrado)</small></h3><p class="subtle">Cadastre setores, colaboradores e Gestão. Para um colaborador preenchido, o e-mail será um resumo individual com horas realizadas, mínimo e máximo; os demais escopos mantêm o relatório consolidado. Os disparos continuam desativados até validação.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
+  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Cadastre setores, colaboradores e Gestão. Envio programado às 9h do próximo dia útil; segunda inclui resumo semanal.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
   <div id="emailAdminPanel" class="hide">
-    <p id="emailAdminStatus" role="status" aria-live="polite" class="coverage-note">Clique em Gerenciar destinatários para verificar a conexão.</p>
+    <p id="emailAdminStatus" role="status" class="coverage-note">Aguardando abertura.</p>
     <form id="emailAdminForm"><input id="emailRecordId" type="hidden">
       <div class="email-admin-grid">
         <div class="fg"><label for="emailName">Nome / destinatário</label><input id="emailName" required placeholder="Letícia / Diretoria"></div>
@@ -1016,37 +1001,13 @@
         <div class="fg"><label for="emailScope">Escopo</label><select id="emailScope"><option value="sector">Setorial</option><option value="management">Gestão — todos os setores</option></select></div>
         <div class="fg" id="emailSectorBox"><label for="emailSector">Setor (como no Movidesk)</label><input id="emailSector" list="emailSectors" placeholder="Implantação"><datalist id="emailSectors"></datalist></div>
         <div class="fg" id="emailCollabBox"><label for="emailCollaborator">Colaborador (opcional)</label><input id="emailCollaborator" list="emailCollaborators" placeholder="Vazio: todos do setor"><datalist id="emailCollaborators"></datalist></div>
-        <div class="fg" id="emailTargetBox"><label for="emailDailyTarget">Jornada diária (HH:MM)</label><input id="emailDailyTarget" type="time" step="60" value="08:00" title="Jornada de referência do colaborador"></div>
-        <div class="fg" id="emailMinimumBox"><label for="emailMinimumPercent">Mínimo da jornada (%)</label><input id="emailMinimumPercent" type="number" min="0" max="100" step="1" value="80"></div>
       </div>
       <div class="row" style="margin:12px 0"><label><input id="emailDaily" type="checkbox" checked> Diário às 9h</label><label><input id="emailWeekly" type="checkbox" checked> Semanal às 9h</label><label><input id="emailActive" type="checkbox" checked> Ativo</label></div>
-      <div class="row"><button type="submit" class="b" id="emailSaveBtn">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button></div>
+      <div class="row"><button type="submit" class="b">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button></div>
     </form>
-    <div class="card" id="emailGmailTools" style="margin:18px 0 8px;background:#f7faff;border:1px solid #d5e2fb">
-      <h3>✉ Gmail — Teste e diagnóstico</h3>
-      <p class="subtle">Verifique a função de envio antes de ativar a programação. Um teste envia uma mensagem apenas para um endereço já cadastrado e autorizado; não dispara relatórios para toda a equipe.</p>
-      <div class="row" style="gap:10px;align-items:end">
-        <button type="button" class="s" id="emailCheckIntegration">Verificar integração</button>
-        <div class="fg" style="min-width:260px;flex:1"><label for="emailTestRecipient">Destinatário do e-mail de teste</label><select id="emailTestRecipient"><option value="">Selecione um cadastro ativo</option></select></div>
-        <button type="button" class="b" id="emailTestSend">Enviar e-mail de teste</button>
-      </div>
-      <p id="emailIntegrationStatus" class="coverage-note" role="status" aria-live="polite">Integração não verificada. O cadastro de destinatários não ativa o envio automático.</p>
-      <div style="border-top:1px solid #d5e2fb;margin-top:14px;padding-top:14px">
-        <h3>Prévia das métricas reais por destinatário</h3>
-        <p class="subtle">Usa os mesmos tickets e lançamentos carregados nos cards. Não envia e-mails nem altera os dados. Confira os resultados antes de ativar o agendamento.</p>
-        <div class="row" style="gap:10px;align-items:end">
-          <div class="fg"><label for="reportPreviewPeriod">Período</label><select id="reportPreviewPeriod"><option value="daily">Último dia útil</option><option value="weekly">Semana anterior (seg–dom)</option></select></div>
-          <button type="button" class="s" id="reportPreviewBuild">Gerar prévia do relatório</button>
-          <button type="button" class="s" id="reportPreviewCopy">Copiar prévia</button>
-        </div>
-        <p id="reportPreviewStatus" class="coverage-note" role="status">Nenhuma prévia gerada.</p>
-        <textarea id="reportPreviewText" rows="13" readonly style="width:100%;line-height:1.55;resize:vertical" aria-label="Prévia do relatório por destinatário"></textarea>
-      </div>
-
-    </div>
     <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Diário</th><th>Semanal</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="8">Abra o módulo para carregar.</td></tr></tbody></table></div>
     <h3 style="margin-top:22px">Histórico dos últimos envios</h3><div class="tw"><table><thead><tr><th>Data</th><th>Destinatário</th><th>Tipo</th><th>Período</th><th>Status</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
-    <p class="subtle" style="margin-top:12px">Se surgir erro de tabela ou de permissão, será necessário instalar as configurações do Supabase fornecidas no pacote. O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
+    <p class="subtle" style="margin-top:12px">O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
   </div>
 </div>
 <div id="t-load">
@@ -1538,6 +1499,8 @@
                     <div class="card">
                         <div class="alert-heading"><div><div class="eyebrow">EVOLUÇÃO HISTÓRICA</div><h3>Comparativos mensais e anuais</h3><p class="subtle">Acompanhe a evolução de horas apontadas, chamados trabalhados ou lançamentos, comparando períodos equivalentes.</p></div></div>
                         <div class="row noprint">
+                            <div class="fg"><label for="cmpSource">Fonte dos gráficos</label><select id="cmpSource" onchange="comparisonSourceChanged()"><option value="direct" selected>Supabase · sincronização direta</option><option value="local">Painel anterior / cache</option></select></div>
+                            <button class="s" type="button" id="cmpRefreshDirect" onclick="refreshDirectComparisons(true)">↻ Atualizar Supabase</button>
                             <div class="fg"><label for="cmpMetric">Indicador</label><select id="cmpMetric" onchange="renderComparisons()"><option value="hours">Horas apontadas</option><option value="opened">Chamados abertos</option><option value="tickets">Chamados trabalhados</option><option value="entries">Lançamentos</option></select></div>
                             <div class="fg"><label for="cmpYear">Ano de comparação</label><select id="cmpYear" onchange="renderComparisons()"></select></div>
                             <div class="fg"><label for="cmpScope">Filtrar setores / clientes</label><select id="cmpScope" onchange="renderComparisons()"><option value="all">Toda a base carregada</option><option value="dimensions">Respeitar filtros de equipe e cliente</option></select></div>
@@ -2485,7 +2448,7 @@ function showTab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-cfg').classList.toggle('hide',t!=='cfg');
   ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons()}
+  if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag');
   if(raw.length&&!['load','cfg','diag','alerts'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
@@ -2781,6 +2744,80 @@ function renderCharts(c){
 }
 
 
+/* ---------- COMPARATIVOS DIRETOS DO SUPABASE (SOMENTE LEITURA) ---------- */
+let directComparisonData=null, directComparisonTime=0, directComparisonBusy=false, directComparisonError='';
+function comparisonSourceChanged(){
+  const direct=$('cmpSource').value==='direct';
+  $('cmpRefreshDirect').disabled=!direct;
+  $('cmpScope').disabled=direct;
+  if(direct){renderDirectComparisons();refreshDirectComparisons(false)}else{renderComparisons()}
+}
+async function refreshDirectComparisons(force=false){
+  if($('cmpSource').value!=='direct'||directComparisonBusy)return;
+  if(!force&&directComparisonData&&Date.now()-directComparisonTime<240000){renderDirectComparisons();return}
+  directComparisonBusy=true;
+  $('cmpRefreshDirect').disabled=true;
+  $('cmpCoverage').textContent='Consultando dados sincronizados no Supabase (somente leitura)...';
+  try{
+    const session=await window.tmAuth.getSession();
+    if(!session?.access_token)throw new Error('Sua sessão expirou; entre novamente.');
+    const response=await fetch('/api/audit-direct-comparisons',{
+      method:'GET',cache:'no-store',credentials:'same-origin',
+      headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'}
+    });
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data.error||'Erro HTTP '+response.status);
+    if(!Array.isArray(data.monthly)||!Array.isArray(data.annual))throw new Error('Formato inválido do relatório.');
+    directComparisonData=data;directComparisonTime=Date.now();directComparisonError='';
+  }catch(e){directComparisonError=String(e?.message||e);}
+  finally{directComparisonBusy=false;$('cmpRefreshDirect').disabled=false;renderDirectComparisons()}
+}
+function renderDirectComparisons(){
+  if(!$('cmpYear')||!window.Chart)return;
+  if(!directComparisonData){
+    $('cmpCoverage').textContent=directComparisonError?'Fonte direta indisponível: '+directComparisonError+' · O painel anterior permanece acessível pelo seletor de fonte.':'Carregando comparativos diretamente do Supabase...';
+    if(!directComparisonError&&!directComparisonBusy)refreshDirectComparisons(false);
+    return;
+  }
+  const data=directComparisonData, metric=$('cmpMetric').value;
+  const currentYear=new Date().getFullYear();
+  const years=[...new Set([...(data.annual||[]).map(x=>Number(x.year)),currentYear])].filter(Number.isFinite).sort((a,b)=>b-a);
+  const selector=$('cmpYear'),previousSelection=Number(selector.value)||currentYear,signature=years.join(',');
+  if(selector.dataset.years!==signature||selector.dataset.source!=='direct'){
+    selector.innerHTML=years.map(y=>`<option value="${y}">${y}</option>`).join('');
+    selector.dataset.years=signature;selector.dataset.source='direct';
+    selector.value=String(years.includes(previousSelection)?previousSelection:currentYear);
+  }
+  const selected=Number(selector.value)||currentYear,prior=selected-1;
+  const months=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const field={hours:'minutes',entries:'entries',tickets:'tickets',opened:'opened'}[metric]||'minutes';
+  const extract=x=>field==='minutes'?Number(x?.minutes||0)/60:Number(x?.[field]||0);
+  const findMonth=(y,m)=>data.monthly.find(x=>Number(x.year)===y&&Number(x.month)===m);
+  const a=months.map((_,i)=>extract(findMonth(selected,i+1))),b=months.map((_,i)=>extract(findMonth(prior,i+1)));
+  const annual=[...data.annual].sort((a,b)=>Number(a.year)-Number(b.year));
+  const title={hours:'Horas apontadas',entries:'Lançamentos',tickets:'Chamados distintos trabalhados',opened:'Chamados abertos'}[metric];
+  $('cmpMonthlyTitle').textContent=`Comparativo mensal · ${selected} × ${prior} · Supabase`;
+  $('cmpAnnualTitle').textContent='Comparativo anual · Supabase';
+  const incomplete=!data.sync?.completed;
+  $('cmpCoverage').textContent=`Fonte: audit_direct_appointments${metric==='opened'?' e audit_direct_tickets':''} · ${title}. `+
+    `Checkpoint: ${data.sync?.processed_tickets??'não informado'} chamados · ${data.totals?.appointments??'—'} apontamentos. `+
+    (incomplete?'IMPORTAÇÃO HISTÓRICA INCOMPLETA — números parciais. ':'')+
+    (data.truncated?'LIMITE DE LEITURA ATINGIDO — totais incompletos. ':'')+
+    `Atualizado: ${new Date(directComparisonTime).toLocaleString('pt-BR')}. `+
+    (directComparisonError?'Última tentativa falhou: '+directComparisonError+'. ':'')+
+    'As datas são as dos apontamentos; chamados abertos usam a data de criação. O filtro de setor/cliente aplica-se somente à fonte anterior.';
+  mkc('chMonthly',{type:'bar',data:{labels:months,datasets:[
+    {label:String(prior),data:b,backgroundColor:'#9bb7dc',borderRadius:5,maxBarThickness:32},
+    {label:String(selected),data:a,backgroundColor:'#275dd7',borderRadius:5,maxBarThickness:32}
+  ]},options:{maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,title:{display:true,text:metric==='hours'?'Horas':title}}}}});
+  mkc('chAnnual',{type:'bar',data:{labels:annual.map(x=>String(x.year)),datasets:[
+    {label:title,data:annual.map(extract),backgroundColor:annual.map(x=>Number(x.year)===selected?'#275dd7':'#72b4a6'),borderRadius:6,maxBarThickness:52}
+  ]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:metric==='hours'?'Horas':title}}}}});
+}
+setInterval(()=>{
+  if(document.visibilityState==='visible'&&document.body.dataset.t==='charts'&&$('cmpSource')?.value==='direct')refreshDirectComparisons(false);
+},300000);
+
 /* ---------- COMPARATIVOS MENSAL × ANTERIOR E ANUAL ---------- */
 function comparisonBase(){
   const base=$('cmpMetric').value==='opened'?[...TK.values()].map(t=>{
@@ -2799,10 +2836,12 @@ function loadHistoricalHours(){
   sync(false);
 }
 function renderComparisons(){
+  if($('cmpSource')?.value==='direct'){renderDirectComparisons();return;}
   if(!$('cmpYear')||!window.Chart)return;
   const list=comparisonBase(),years=[...new Set(list.map(r=>Number(r.date.slice(0,4))))].sort((a,b)=>a-b);
   const currentYear=new Date().getFullYear(),latest=years.length?years[years.length-1]:currentYear;
   const yearSelect=$('cmpYear'),wanted=Number(yearSelect.value)||latest;
+  if(yearSelect.dataset.source==='direct'){yearSelect.dataset.years='';yearSelect.dataset.source='local';}
   const available=[...new Set([...years,currentYear])].sort((a,b)=>b-a);
   const signature=available.join(',');
   if(yearSelect.dataset.years!==signature){
@@ -3365,85 +3404,6 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   sync(true); // sincroniza o Movidesk com a sessão autenticada
 })();
 
-
-/* Prévia local: fonte idêntica aos cards (TK e raw), sem envio automático. */
-function reportPreviewDay(d){
-  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d);
-  const p=Object.fromEntries(parts.filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return `${p.year}-${p.month}-${p.day}`;
-}
-function reportPreviewShift(iso,n){const d=new Date(iso+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)}
-function reportPreviewRange(mode){
-  const today=reportPreviewDay(new Date());const dow=new Date(today+'T12:00:00Z').getUTCDay();
-  if(mode==='weekly'){
-    const monday=reportPreviewShift(today,-((dow+6)%7)-7);return [monday,reportPreviewShift(monday,6)];
-  }
-  let previous=reportPreviewShift(today,-1);
-  while([0,6].includes(new Date(previous+'T12:00:00Z').getUTCDay()))previous=reportPreviewShift(previous,-1);
-  return [previous,previous];
-}
-function reportPreviewBuild(){
-  const msg=document.getElementById('reportPreviewStatus'),out=document.getElementById('reportPreviewText');
-  const select=document.getElementById('emailTestRecipient');
-  const option=select?.selectedOptions?.[0];
-  if(!select?.value){msg.textContent='Selecione um destinatário cadastrado no campo acima.';return}
-  if(!TK.size && !raw.length){msg.textContent='Ainda não há tickets ou apontamentos carregados neste navegador. Sincronize o painel antes da prévia.';return}
-  const emailRecords=Array.isArray(window.auditEmailRecipientsCache)?window.auditEmailRecipientsCache:[];
-  const rec=emailRecords.find(x=>String(x.id)===select.value);
-  if(!rec){msg.textContent='Atualize a lista de destinatários e selecione novamente.';return}
-  const all=rec.scope==='management';const normName=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
-  const sector=normName(rec.sector),worker=normName(rec.collaborator_name),scope=t=>all||normName(alarmTeamName(t))===sector;
-  const [from,to]=reportPreviewRange(document.getElementById('reportPreviewPeriod').value);
-  const tickets=[...TK.values()].filter(t=>scope(t));
-  const ticketById=new Map(tickets.map(t=>[String(t.id),t]));
-  const opened=tickets.filter(t=>{const d=liveDay(liveCreatedDate(t));return d>=from&&d<=to});
-  const closed=tickets.filter(t=>{const d=liveClosedDay(t);return !!d&&d>=from&&d<=to});
-  const filtered=raw.filter(a=>{
-    if(!a.date||a.date<from||a.date>to)return false;
-    if(worker&&normName(a.owner_name)!==worker)return false;
-    if(all)return true;
-    return normName(a.sector)===sector || (ticketById.has(String(a.ticket_id))&&normName(a.sector)==='');
-  });
-  const totals=new Map();let minutes=0;
-  for(const a of filtered){const m=Math.round(Number(a.hours||0)*60);if(!Number.isFinite(m)||m<=0)continue;minutes+=m;const key=a.owner_name||'Não informado';const old=totals.get(key)||{minutes:0,entries:0,tickets:new Set()};old.minutes+=m;old.entries++;old.tickets.add(String(a.ticket_id));totals.set(key,old)}
-  const typ={Melhoria:0,Incidente:0,Venda:0,Outros:0};for(const t of opened)typ[liveType(t)]++;
-  const fmtMin=m=>{const sec=Math.round(m*60);return `${String(Math.floor(sec/3600)).padStart(2,'0')}:${String(Math.floor(sec/60)%60).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`};
-  const last=to+'T12:00:00Z';const pending=tickets.filter(t=>!alarmIsClosed(t.status)).map(t=>({t,d:liveDay(t.lastUpdate||t.last_update_source||t.createdDate)})).map(x=>({...x,days:x.d?Math.max(0,Math.floor((new Date(last)-new Date(x.d+'T12:00:00Z'))/86400000)):null})).filter(x=>x.days!==null&&x.days>=7).sort((a,b)=>b.days-a.days).slice(0,6);
-  const withoutDate=tickets.filter(t=>alarmIsClosed(t.status)&&!liveClosedDay(t)).length;
-  const lines=[
-   `CENTRAL DE AUDITORIA — ${all?'GESTÃO GERAL':rec.sector||'SETOR NÃO INFORMADO'}`,
-   `Destinatário: ${rec.name||''} · Período: ${from} a ${to}`,
-   `Fonte: ${TK.size} tickets e ${raw.length} lançamentos carregados no painel.`,
-   '',`Chamados abertos no período: ${opened.length}`,
-   `Chamados com fechamento confirmado no período: ${closed.length}`,
-   `Classificação dos abertos: Melhoria ${typ.Melhoria} · Incidente ${typ.Incidente} · Venda ${typ.Venda} · Outros ${typ.Outros}`,
-   `Apontamentos no período: ${filtered.length}`,
-   `Horas apontadas: ${fmtMin(minutes)}`,
-   `Chamados distintos com horas: ${new Set(filtered.map(a=>String(a.ticket_id))).size}`,
-   '', 'COLABORADORES — HORAS NO PERÍODO',
-   ...([...totals].sort((a,b)=>b[1].minutes-a[1].minutes).slice(0,20).map(([n,r])=>`${n}: ${fmtMin(r.minutes)} | ${r.entries} apontamentos | ${r.tickets.size} chamados`)),
-   '', 'CHAMADOS PARADOS HÁ 7 DIAS OU MAIS',
-   ...(pending.map(x=>`#${x.t.id} | ${x.days} dias | ${String(x.t.subject||'').slice(0,90)}`)),
-   '',`Limitações: ${withoutDate} ticket(s) encerrado(s) sem data de fechamento confirmada no escopo. O setor do ticket representa a equipe atual; a equipe histórica pode diferir.`,
-   'Os resultados dependem da cobertura dos dados carregados e não comprovam sincronização concluída no servidor.',
-   'PRÉVIA LOCAL — NÃO ENVIADA POR E-MAIL.'
-  ];
-  if(!totals.size)lines.splice(lines.indexOf('COLABORADORES — HORAS NO PERÍODO')+1,0,'Nenhum apontamento identificado no período.');
-  if(!pending.length)lines.splice(lines.indexOf('CHAMADOS PARADOS HÁ 7 DIAS OU MAIS')+1,0,'Nenhuma pendência identificada nesse critério.');
-  out.value=lines.join('\n');
-  msg.textContent=`Prévia gerada com ${tickets.length} tickets do escopo e ${filtered.length} lançamentos no período. NÃO é envio automático. ${!cloudReady?'Supabase não confirmado nesta sessão.':''}`;
-}
-function reportPreviewInit(){
- const btn=document.getElementById('reportPreviewBuild');if(!btn||btn.dataset.ready)return;
- btn.dataset.ready='1';btn.addEventListener('click',reportPreviewBuild);
- document.getElementById('reportPreviewCopy').addEventListener('click',async()=>{
-   const value=document.getElementById('reportPreviewText').value;
-   if(!value){document.getElementById('reportPreviewStatus').textContent='Gere a prévia antes de copiar.';return}
-   try{await navigator.clipboard.writeText(value);document.getElementById('reportPreviewStatus').textContent='Prévia copiada para a área de transferência.'}
-   catch{document.getElementById('reportPreviewText').select();document.getElementById('reportPreviewStatus').textContent='Use Ctrl+C para copiar a prévia selecionada.'}
- });
-}
-reportPreviewInit();
-
         </script>
         <script>
         (() => {
@@ -3550,11 +3510,10 @@ reportPreviewInit();
 (()=>{'use strict';
   const $=id=>document.getElementById(id);
   let client=null, records=[], loaded=false, loading=false;
-  const say=(t,isError=false)=>{const el=$('emailAdminStatus');if(el){el.textContent=t;el.style.color=isError?'#991b1b':'#304562';el.style.background=isError?'#fff0f0':'#f2f5fb';} };
-  const readableError=e=>{const msg=String(e?.message||e||'Erro não identificado');if(/audit_email_recipients|audit_email_sector_dispatches|PGRST205|42P01|does not exist|schema cache/i.test(msg))return 'Tabelas de e-mail não instaladas no Supabase. Execute o SQL 01_tabelas.sql do pacote. Detalhe: '+msg;if(/audit_is_email_admin|PGRST202|42883|function.*does not exist/i.test(msg))return 'Permissões administrativas não instaladas. Execute 03_permissoes_admin.sql. Detalhe: '+msg;if(/permission denied|row.level.security|42501|403|Unauthorized|not allowed/i.test(msg))return 'Sem permissão para salvar. Confira sua conta em audit_users, com role admin e is_active=true, e aplique o SQL de permissões. Detalhe: '+msg;if(/Failed to fetch|NetworkError|fetch failed/i.test(msg))return 'Sem conexão com o Supabase. Verifique a internet e a configuração /api/public-config. Detalhe: '+msg;return msg};
+  const say=t=>{if($('emailAdminStatus'))$('emailAdminStatus').textContent=t};
   const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailTargetBox').classList.toggle('hide',isManagement);$('emailMinimumBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaborator').value=''}};
-  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;$('emailDailyTarget').value='08:00';$('emailMinimumPercent').value='80';scope() }
+  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaborator').value=''}};
+  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope() }
   function populateSuggestions(){
     try{
       const tickets=Array.from(window.TK?.values?.()||[]);
@@ -3566,7 +3525,7 @@ reportPreviewInit();
   }
   async function verify(){
     client=window.tmEmailAdminClient;
-    if(!client)throw Error('Aguardando a autenticação da Central de Auditoria. Recarregue a página e entre novamente.');
+    if(!client)throw Error('Aguardando a autenticação da Central de Auditoria.');
     const {data:{user},error}=await client.auth.getUser();
     if(error||!user)throw Error('Faça login na Central de Auditoria.');
     const r=await client.rpc('audit_is_email_admin');
@@ -3579,50 +3538,14 @@ reportPreviewInit();
       await verify();say('Carregando destinatários e histórico...');
       const r=await client.from('audit_email_recipients').select('*').order('name');
       if(r.error)throw r.error;
-      records=r.data||[];window.auditEmailRecipientsCache=records;
-      $('emailTestRecipient').innerHTML='<option value="">Selecione um cadastro ativo</option>'+records.filter(x=>x.active).map(x=>`<option value="${esc(x.id)}">${esc(x.name)} — ${esc(x.email)}</option>`).join('');
-      $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><div style="display:flex;gap:6px;white-space:nowrap"><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button><button type="button" class="s" style="color:#b42318;border-color:#f2b5b5" data-email-delete="${esc(x.id)}" aria-label="Excluir destinatário ${esc(x.name)}">Excluir</button></div></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
+      records=r.data||[];
+      $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
       const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
       $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
       loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
       populateSuggestions();
-    }catch(e){say('Não foi possível carregar: '+readableError(e),true)}finally{loading=false}
+    }catch(e){say('Não foi possível carregar: '+e.message)}finally{loading=false}
   }
-  async function backendAction(action,recipientId){
-    await verify();
-    const sessionResult=await client.auth.getSession();
-    const accessToken=sessionResult.data?.session?.access_token;
-    if(!accessToken)throw Error('Sua sessão expirou; faça login novamente.');
-    const {data,error}=await client.functions.invoke('audit-email-dispatch',{
-      body: {action, ...(recipientId?{recipientId}:{})},
-      headers:{Authorization:'Bearer '+accessToken}
-    });
-    if(error){const context=error.context;let details='';try{details=JSON.stringify(await context?.json?.())}catch(_e){}throw Error((error.message||'Falha na Edge Function')+(details?' — '+details:''));}
-    if(!data||data.ok===false||data.error)throw Error(data?.error||'O servidor não confirmou a operação.');
-    return data;
-  }
-  function integrationMessage(message,isError){const el=$('emailIntegrationStatus');el.textContent=message;el.style.color=isError?'#991b1b':'#304562';el.style.background=isError?'#fff0f0':'#edf3ff';}
-  $('emailCheckIntegration').addEventListener('click',async()=>{
-    const btn=$('emailCheckIntegration');btn.disabled=true;integrationMessage('Verificando Gmail, permissões e fonte dos dados…');
-    try{
-      const d=await backendAction('status');
-      const source=d.dataSources||{};
-      const sourcesOk=source.tickets===true&&source.appointments===true;
-      integrationMessage('Gmail: '+(d.gmailConfigured?'Secrets configurados':'Secrets incompletos')+' · Chamados: '+(source.tickets===true?'tabela disponível':'fonte não localizada')+' · Apontamentos: '+(source.appointments===true?'tabela disponível':'fonte não localizada')+' · Agendamento: verificar no Supabase (não é ativado por este botão).',!d.gmailConfigured||!sourcesOk);
-    }catch(e){integrationMessage('Não foi possível verificar: '+readableError(e)+'. Confirme a publicação da Edge Function audit-email-dispatch e a sessão administrativa.',true)}
-    finally{btn.disabled=false}
-  });
-  $('emailTestSend').addEventListener('click',async()=>{
-    const id=$('emailTestRecipient').value;
-    if(!id){integrationMessage('Selecione primeiro um destinatário cadastrado.',true);return}
-    const rec=records.find(r=>r.id===id);
-    if(!rec||!rec.active){integrationMessage('Selecione um destinatário ativo.',true);return}
-    if(!confirm('Enviar uma mensagem de teste para '+rec.email+'?'))return;
-    const btn=$('emailTestSend');btn.disabled=true;integrationMessage('Solicitando envio de teste pelo Gmail para '+rec.email+'…');
-    try{const d=await backendAction('test',id);integrationMessage('Google Apps Script confirmou a aceitação da mensagem de teste para '+rec.email+'. Verifique a caixa de entrada e spam. Isso não garante entrega nem ativa envios automáticos.',false)}
-    catch(e){integrationMessage('Teste não enviado: '+readableError(e),true)}
-    finally{btn.disabled=false}
-  });
   $('emailAdminOpen').addEventListener('click',()=>{
     const panel=$('emailAdminPanel'),show=panel.classList.contains('hide');panel.classList.toggle('hide',!show);
     $('emailAdminOpen').textContent=show?'Fechar destinatários':'Gerenciar destinatários';
@@ -3631,66 +3554,27 @@ reportPreviewInit();
   $('emailScope').addEventListener('change',scope);
   $('emailNew').addEventListener('click',reset);
   $('emailReload').addEventListener('click',reload);
-  let deletingRecipient=false;
-  async function deleteRecipient(id,btn){
-    if(deletingRecipient)return;
-    const rec=records.find(x=>x.id===id);if(!rec)return;
-    if(!confirm(`Excluir o destinatário "${rec.name}" (${rec.email})?\n\nIsso remove o cadastro de envio. O histórico de e-mails já enviados será preservado.`))return;
-    deletingRecipient=true;
-    if(btn){btn.disabled=true;btn.textContent='Excluindo…'}
-    try{
-      await verify();
-      say('Excluindo destinatário no Supabase…');
-      const result=await client.from('audit_email_recipients').delete().eq('id',id).select('id');
-      if(result.error){
-        // A tabela de histórico possui chave estrangeira ON DELETE RESTRICT.
-        // Não apagar histórico para forçar a exclusão.
-        if(result.error.code==='23503'||/foreign key|violates foreign key|referenced|referência/i.test(result.error.message||'')){
-          const deactivate=confirm('Este destinatário possui histórico de disparos. Para preservar os registros, não é possível excluí-lo definitivamente.\n\nDeseja DESATIVAR o destinatário, impedindo novos e-mails?');
-          if(!deactivate){say('Exclusão cancelada. Cadastro e histórico preservados.');return}
-          const r=await client.from('audit_email_recipients').update({active:false,updated_at:new Date().toISOString()}).eq('id',id).select('id').single();
-          if(r.error)throw r.error;
-          await reload();say('Destinatário desativado. Não receberá novos relatórios; histórico preservado.');return;
-        }
-        throw result.error;
-      }
-      if(!result.data?.some(x=>x.id===id))throw Error('O Supabase não confirmou a exclusão. Verifique as permissões.');
-      if($('emailRecordId').value===id)reset();
-      await reload();say('Destinatário excluído do Supabase com sucesso.');
-    }catch(err){console.error('Falha ao excluir destinatário',err);say('Não foi possível excluir: '+readableError(err),true)}
-    finally{deletingRecipient=false;if(btn&&btn.isConnected){btn.disabled=false;btn.textContent='Excluir'}}
-  }
   $('emailRecipients').addEventListener('click',e=>{
-    const del=e.target.closest('[data-email-delete]');
-    if(del){deleteRecipient(del.dataset.emailDelete,del);return}
     const id=e.target.closest('[data-email-edit]')?.dataset.emailEdit;
     const x=records.find(r=>r.id===id);if(!x)return;
     $('emailRecordId').value=x.id;$('emailName').value=x.name;$('emailAddress').value=x.email;
     $('emailScope').value=x.scope||'sector';scope();$('emailSector').value=x.sector||'';
     $('emailCollaborator').value=x.collaborator_name||'';$('emailDaily').checked=x.daily_enabled;
-    $('emailWeekly').checked=x.weekly_enabled;$('emailActive').checked=x.active;$('emailDailyTarget').value=String(Math.floor(Number(x.daily_target_minutes??480)/60)).padStart(2,'0')+':'+String(Number(x.daily_target_minutes??480)%60).padStart(2,'0');$('emailMinimumPercent').value=String(x.minimum_percent??80);
+    $('emailWeekly').checked=x.weekly_enabled;$('emailActive').checked=x.active;
     $('emailAdminCard').scrollIntoView({behavior:'smooth',block:'start'});
   });
   $('emailAdminForm').addEventListener('submit',async e=>{
     e.preventDefault();
-    const btn=$('emailSaveBtn');if(btn.disabled)return;
-    btn.disabled=true;btn.textContent='Verificando e salvando…';
     try{
-      say('Validando autenticação e permissão administrativa…');
       await verify();
-      const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:$('emailSector').value.trim(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaborator').value.trim()||null),daily_target_minutes:(()=>{const p=$('emailDailyTarget').value.split(':').map(Number);return p[0]*60+p[1]})(),minimum_percent:Number($('emailMinimumPercent').value),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
-      if(!data.name||!data.email)throw Error('Informe o nome e o e-mail do destinatário.');
+      const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:$('emailSector').value.trim(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaborator').value.trim()||null),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
       if(!data.daily_enabled&&!data.weekly_enabled)throw Error('Marque ao menos uma frequência.');
       if(data.scope==='sector'&&!data.sector)throw Error('Informe o setor.');
-      say('Gravando cadastro no Supabase…');
-      const id=$('emailRecordId').value;
-      const r=id?await client.from('audit_email_recipients').update(data).eq('id',id).select('id').single():await client.from('audit_email_recipients').insert(data).select('id').single();
+      say('Salvando cadastro...');const id=$('emailRecordId').value;
+      const r=id?await client.from('audit_email_recipients').update(data).eq('id',id):await client.from('audit_email_recipients').insert(data);
       if(r.error)throw r.error;
-      if(!r.data?.id)throw Error('O Supabase não confirmou a gravação. Verifique a política RLS.');
-      reset();await reload();
-      say('Destinatário salvo e confirmado no Supabase. O agendamento de envio precisa estar habilitado separadamente.');
-    }catch(err){console.error('Falha ao salvar destinatário',err);say('Não foi possível salvar: '+readableError(err),true)}
-    finally{btn.disabled=false;btn.textContent='Salvar destinatário'}
+      reset();await reload();say('Destinatário salvo com sucesso.');
+    }catch(e){say('Não foi possível salvar: '+e.message)}
   });
 })();
 </script>
@@ -3773,87 +3657,6 @@ reportPreviewInit();
     });
     const main=document.querySelector('main');if(main)observer.observe(main,{childList:true,subtree:true});
   }
-})();
-</script>
-
-<script id="directMovideskSyncControls">
-(()=>{
- 'use strict';
- const $=id=>document.getElementById(id);
- const next=$('directNextBtn'),progress=$('directProgressBtn');
- const probe=$('directProbeBtn'),save=$('directSaveBtn'),status=$('directSyncStatus'),details=$('directSyncDetails'),offsetEl=$('directSyncOffset');
- if(!probe||!save||!status||!details||!offsetEl)return;
- let authorizedOffset=null,hasMore=false,working=false,probeCount=0;
- const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const report=(msg,bad=false)=>{status.textContent=msg;status.style.background=bad?'#fff0f0':'#edf3ff';status.style.color=bad?'#991b1b':'#304562'};
- function position(){const n=Number(offsetEl.value);if(!Number.isInteger(n)||n<0||n>50000)throw Error('A posição deve ser um número inteiro de 0 a 50000.');return n}
- function invalidate(){authorizedOffset=null;probeCount=0;save.disabled=true;details.textContent='';}
- offsetEl.addEventListener('input',invalidate);
- async function invoke(action,offset){
-   const client=window.tmEmailAdminClient;
-   if(!client||!window.tmAuth?.getSession)throw Error('Entre na Central de Auditoria com sua conta administradora antes de testar.');
-   const session=await window.tmAuth.getSession();
-   if(!session?.access_token)throw Error('Sessão expirada. Faça login novamente.');
-   const {data:canAdmin,error:adminErr}=await client.rpc('audit_is_email_admin');
-   if(adminErr||canAdmin!==true)throw Error('Sua sessão não tem autorização administrativa para sincronizar.');
-   const {data,error}=await client.functions.invoke('movidesk-direct-sync',{
-     body:{action,offset},headers:{Authorization:'Bearer '+session.access_token}
-   });
-   if(error){
-     let extra='';try{const r=error.context;if(r&&typeof r.clone==='function'){const j=await r.clone().json();extra=j.error||j.message||''}}catch(_){}
-     throw Error([extra,error.message].filter(Boolean).join(' — ')||'Falha ao executar a função');
-   }
-   if(!data||data.ok!==true)throw Error(data?.error||'Resposta da função não confirmou sucesso.');
-   return data;
- }
- async function execute(action){
-   if(working)return;
-   const offset=position();
-   if(action==='sync'){
-     if(authorizedOffset!==offset)throw Error('Execute o teste de leitura para esta posição antes de importar.');
-     if(!confirm('Importar até 5 chamados do Movidesk para as tabelas audit_direct_* do Supabase? Não envia e-mails.'))return;
-   }
-   working=true;probe.disabled=true;save.disabled=true;
-   report(action==='probe'?'Consultando até 5 chamados sem gravar…':'Importando lote de até 5 chamados…');
-   try{
-     const d=await invoke(action,offset);
-     hasMore=d.hasMore===true;
-     if(action==='probe'){
-       authorizedOffset=offset;probeCount=Number(d.records)||0;
-       report(`Leitura concluída: ${d.records??0} chamado(s) encontrados. Nenhum dado gravado.`);
-       details.textContent='IDs de exemplo: '+(Array.isArray(d.sampleIds)?d.sampleIds.join(', '):'não informados')+'.';
-       save.disabled=!(Number(d.records)>0);
-     }else{
-       invalidate();
-       report(`Importação: ${d.saved??0} chamado(s), ${d.appointments??0} apontamento(s) gravado(s). Lidos: ${d.read??0}.`);
-       const warnings=Array.isArray(d.warnings)?d.warnings:[];
-       details.textContent=(warnings.length?'Avisos: '+warnings.join(' | ')+'. ':'')+(hasMore?'Há mais registros. Para o próximo lote, digite a posição '+(d.nextOffset??offset+5)+' e teste novamente.':'Nenhum próximo lote confirmado.');
-     }
-   }catch(e){invalidate();report('Não foi possível '+(action==='probe'?'testar':'importar')+': '+String(e?.message||e),true)}
-   finally{working=false;probe.disabled=false;if(action==='probe'&&authorizedOffset===offset&&probeCount>0)save.disabled=false;}
- }
- probe.addEventListener('click',()=>execute('probe'));
- save.addEventListener('click',()=>execute('sync'));
- async function runCheckpoint(action){
-   if(working)return;
-   if(action==='sync_next'&&!confirm('Processar o próximo lote de até 5 chamados? Isso grava apenas no Supabase e não dispara e-mails.'))return;
-   working=true;probe.disabled=true;save.disabled=true;next.disabled=true;progress.disabled=true;
-   report(action==='status'?'Consultando progresso do banco…':'Processando próximo lote com checkpoint…');
-   try{
-     const d=await invoke(action,0);
-     if(action==='status'){
-       const st=d.state||{};
-       report(`Progresso: ${st.processed_tickets??0} ticket(s) processado(s). Próximo offset: ${st.next_offset??0}. ${st.completed?'Importação inicial encerrada.':'Ainda existem lotes a processar.'}`);
-       details.textContent=st.last_error?'Último erro: '+String(st.last_error):'Última execução: '+(st.last_success_at||'ainda não executada');
-     }else{
-       report(`Lote ${d.offset??'-'}: ${d.saved??0} chamado(s), ${d.appointments??0} apontamento(s). Próximo offset: ${d.nextOffset??'-'}. ${d.completed?'Importação inicial encerrada.':'Continue pelos próximos lotes.'}`);
-       details.textContent=(Array.isArray(d.warnings)&&d.warnings.length)?'Avisos: '+d.warnings.join(' | '):'Checkpoint atualizado no banco. Sem envio de e-mails.';
-     }
-   }catch(e){report('Falha no checkpoint: '+String(e?.message||e),true)}
-   finally{working=false;probe.disabled=false;next.disabled=false;progress.disabled=false;}
- }
- next.addEventListener('click',()=>runCheckpoint('sync_next'));
- progress.addEventListener('click',()=>runCheckpoint('status'));
 })();
 </script>
 </body>
