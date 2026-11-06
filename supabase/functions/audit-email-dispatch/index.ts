@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-manual-pilot-20261106-v11';
+const RELEASE_ID = 'email-manual-multirecipient-20261106-v12';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -274,9 +274,13 @@ async function manualOfficial(payload: R) {
   const recipients = await db(`audit_email_recipients?id=eq.${encodeURIComponent(id)}&active=eq.true&select=*&limit=1`);
   if (!recipients.length) return json({ error: 'Destinatario nao cadastrado ou inativo' }, 404);
   const rec = recipients[0] as R;
-  // Primeiro piloto autorizado pelo usuario: impede disparo para outros enderecos.
-  if (String(rec.email || '').trim().toLowerCase() !== 'sucessocliente@arquem.com.br')
-    return json({ error: 'Piloto permitido apenas para sucessocliente@arquem.com.br' }, 403);
+  // Testes manuais somente para destinatarios ativos cadastrados e dominios corporativos.
+  // Selecao individual explicita por admin; nao ha disparo em massa.
+  const target = String(rec.email || '').trim().toLowerCase();
+  if (!/^[^\s@]+@arquem\.com\.br$/.test(target))
+    return json({ error: 'Teste manual permitido somente para e-mails corporativos @arquem.com.br' }, 403);
+  if (rec.scope !== 'sector' || !String(rec.collaborator_name || '').trim())
+    return json({ error: 'Teste manual exige um colaborador individual vinculado ao cadastro' }, 403);
   const today = dateBR();
   const referenceDate = String(payload.referenceDate || today);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(referenceDate) ||
