@@ -1033,7 +1033,8 @@
       <div class="row" style="align-items:flex-end">
         <div class="fg" style="flex:1;min-width:230px"><label for="emailOfficialRecipient">Destinatário autorizado</label>
           <select id="emailOfficialRecipient"><option value="">Carregando destinatário...</option></select></div>
-        <div class="fg"><label for="emailOfficialKind">Relatório</label><select id="emailOfficialKind"><option value="daily">Diário — último dia útil</option><option value="weekly">Semanal — semana anterior</option></select></div>
+        <div class="fg"><label for="emailOfficialKind">Relatório</label><select id="emailOfficialKind"><option value="daily">Diário — dia útil anterior</option><option value="weekly">Semanal — segunda até a data escolhida</option></select></div>
+        <div class="fg"><label for="emailOfficialReferenceDate">Data de referência</label><input type="date" id="emailOfficialReferenceDate" required></div>
         <button type="button" id="emailOfficialSend" class="b">Enviar relatório oficial agora</button>
       </div>
       <p id="emailOfficialStatus" role="status" class="subtle" style="margin:12px 0 0">O envio é realizado apenas após confirmação.</p>
@@ -3697,20 +3698,29 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   $('emailScope').addEventListener('change',scope);
   $('emailNew').addEventListener('click',reset);
   $('emailReload').addEventListener('click',reload);
+  const officialDate=$('emailOfficialReferenceDate');
+  if(officialDate){
+    const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+    const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));
+    officialDate.value=p.year+'-'+p.month+'-'+p.day;
+    officialDate.max=officialDate.value;
+  }
   $('emailOfficialSend').addEventListener('click',async()=>{
     const button=$('emailOfficialSend'),status=$('emailOfficialStatus');
     const recipientId=$('emailOfficialRecipient').value;
     const kind=$('emailOfficialKind').value;
+    const referenceDate=$('emailOfficialReferenceDate').value;
+    if(!referenceDate){status.textContent='Selecione uma data de referência.';return;}
     if(!recipientId){status.textContent='Cadastre e ative sucessocliente@arquem.com.br antes de enviar.';return;}
     const chosen=records.find(x=>String(x.id)===recipientId);
     if(!chosen||!chosen.active||String(chosen.email).toLowerCase()!=='sucessocliente@arquem.com.br'){
       status.textContent='Destinatário não autorizado.';return;
     }
-    if(!window.confirm('Enviar AGORA o relatório oficial '+(kind==='weekly'?'semanal':'diário')+' para '+chosen.email+'? Os indicadores podem ser parciais e este envio é real.'))return;
+    if(!window.confirm('Enviar AGORA o relatório oficial '+(kind==='weekly'?'da semana até ':'do dia útil anterior à ')+referenceDate+' para '+chosen.email+'? O envio é real e os indicadores podem ser parciais.'))return;
     button.disabled=true;status.textContent='Solicitando envio ao Gmail...';
     try{
       await verify();
-      const result=await client.functions.invoke('audit-email-dispatch',{body:{action:'manual_official',recipientId,kind}});
+      const result=await client.functions.invoke('audit-email-dispatch',{body:{action:'manual_official',recipientId,kind,referenceDate}});
       if(result.error){
         let detail=result.error.message||'Falha na Edge Function';
         try{const response=await result.error.context?.json?.();if(response?.error)detail=response.error;}catch{}
