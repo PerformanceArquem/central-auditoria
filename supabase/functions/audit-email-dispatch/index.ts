@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-manual-pilot-20261106-v3';
+const RELEASE_ID = 'email-manual-pilot-20261106-v4';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -223,12 +223,18 @@ async function manualOfficial(payload: R) {
   if (String(rec.email || '').trim().toLowerCase() !== 'sucessocliente@arquem.com.br')
     return json({ error: 'Piloto permitido apenas para sucessocliente@arquem.com.br' }, 403);
   const today = dateBR();
+  const referenceDate = String(payload.referenceDate || today);
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(referenceDate) ||
+      dateBR(new Date(referenceDate + 'T12:00:00Z')) !== referenceDate ||
+      referenceDate > today || referenceDate < shift(today,-370))
+    return json({ error: 'Data de referencia invalida, futura ou anterior a 370 dias' }, 400);
   const hol = await holidays();
-  const day = weekday(today);
-  let from = shift(today, -1), to = from;
+  const day = weekday(referenceDate);
+  let from = shift(referenceDate, -1), to = from;
   if (kind === 'weekly') {
-    from = shift(today, -((day + 6) % 7) - 7);
-    to = shift(from, 6);
+    // Semana da data de referencia: segunda ate a data escolhida (inclusive).
+    from = shift(referenceDate, -((day + 6) % 7));
+    to = referenceDate;
   } else {
     while ([0, 6].includes(weekday(from)) || hol.has(from)) from = shift(from, -1);
     to = from;
