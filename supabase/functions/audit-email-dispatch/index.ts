@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-manual-multirecipient-20261106-v12';
+const RELEASE_ID = 'email-template-styled-20261106-v13';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -110,6 +110,62 @@ function workdays(from: string, to: string, ignored: Set<string>) {
     if (![0, 6].includes(weekday(d)) && !ignored.has(d)) out.push(d);
   return out;
 }
+
+const emailEsc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]||ch));
+const displayDate=(d:string)=>/^\d{4}-\d{2}-\d{2}$/.test(d)?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):d;
+function reportEmailHtml(rec:R,report:{text:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:string,partial:boolean,manual:boolean){
+ const m=report.metrics;
+ const targetPerDay=Number(rec.daily_target_minutes??480);
+ const minPercent=Number(rec.minimum_percent??80);
+ const target=Math.round(targetPerDay*m.days);
+ const minimum=Math.round(target*minPercent/100);
+ const missing=m.appointments===0;
+ const person=safe(rec.collaborator_name)||'Equipe';
+ const sector=safe(rec.sector)||'Gestão';
+ const k=kind==='weekly'?'SEMANAL':'DIÁRIO';
+ const badge=manual?'TESTE MANUAL':partial?'DADOS PARCIAIS':'RELATÓRIO DE APONTAMENTOS';
+ const esc=emailEsc;
+ const tile=(label:string,value:string)=>'<td width="50%" valign="top" style="padding:8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f6fc;border:1px solid #e0e7f2;border-radius:10px"><tr><td style="padding:15px 16px"><div style="color:#65748b;font-size:12px;font-weight:600">'+esc(label)+'</div><div style="color:#102b51;font-size:23px;font-weight:750;margin-top:6px">'+esc(value)+'</div></td></tr></table></td>';
+ const detail=report.text.split('\n').filter(x=>x.startsWith('- ')).slice(0,30);
+ const lines=detail.length?detail.map((s,i)=>'<tr><td style="padding:10px 12px;background:'+(i%2?'#f5f8fc':'#ffffff')+';border-bottom:1px solid #e7edf6;color:#293b54;font-size:12px">'+esc(s.slice(2))+'</td></tr>').join(''):
+   '<tr><td style="padding:15px 12px;color:#65748b;font-size:13px">Não há apontamentos importados para este período.</td></tr>';
+ const completeness=partial?'A sincronização dos registros do Movidesk ainda está em andamento. Os números podem mudar.':
+    'Indicadores baseados nos registros importados do Movidesk para o período informado.';
+ const note=missing?'SEM REGISTROS IMPORTADOS: não é possível concluir ausência de trabalho nem avaliar cumprimento de jornada.':
+   'O tempo apresentado é tempo apontado no Movidesk; não representa controle de ponto ou avaliação definitiva de produtividade.';
+ const missingMetrics=missing?'<div style="color:#66768d;font-size:13px;margin-top:12px">Metas de referência não avaliadas por ausência de apontamentos importados.</div>':
+   '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px"><tr>'+
+     tile('Meta mínima de referência',duration(minimum))+tile('Jornada de referência',duration(target))+'</tr><tr>'+
+     tile('Diferença para a mínima',duration(Math.max(0,minimum-m.minutes)))+
+     tile('Diferença para a jornada',duration(Math.max(0,target-m.minutes)))+'</tr></table>';
+ const test=manual?'<div style="background:#eaf3ff;color:#174c99;border:1px solid #c8ddff;padding:14px 16px;border-radius:8px;margin:0 0 18px;font-size:13px"><strong>ENVIO DE TESTE</strong> — Mensagem para verificar o recebimento. Não substitui um relatório definitivo.</div>':'';
+ const warning=(partial||missing)?'<div style="background:#fff8e9;color:#86520f;border-left:4px solid #e4ad38;padding:14px 16px;border-radius:7px;font-size:13px;margin:18px 0">'+esc(completeness)+'<div style="margin-top:7px">'+esc(note)+'</div></div>':
+   '<p style="color:#65748b;font-size:12px;line-height:1.5">'+esc(note)+'</p>';
+ return '<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'+
+ '<body style="margin:0;padding:0;background:#edf2f9;font-family:Arial,Helvetica,sans-serif;color:#1e304a">'+
+ '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#edf2f9"><tr><td align="center" style="padding:32px 12px">'+
+ '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:650px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #dbe5f2">'+
+ '<tr><td style="background:#102c4f;padding:28px 30px;color:#fff">'+
+ '<div style="font-size:13px;letter-spacing:2px;font-weight:750;color:#8fd5e7">ARQUEM SISTEMAS</div>'+
+ '<div style="font-size:26px;font-weight:750;margin-top:12px">Central de Auditoria</div>'+
+ '<div style="font-size:13px;color:#bed1e8;margin-top:8px">Relatório '+esc(k.toLowerCase())+' de apontamentos</div>'+
+ '</td></tr><tr><td style="padding:26px 26px 12px">'+test+
+ '<div style="font-size:11px;color:#3873ae;letter-spacing:1px;font-weight:700">'+esc(badge)+'</div>'+
+ '<h1 style="font-size:23px;line-height:1.2;margin:10px 0 8px;color:#102b51">'+esc(person)+'</h1>'+
+ '<div style="color:#5e718b;font-size:14px">'+esc(sector)+' &nbsp;·&nbsp; '+esc(displayDate(from))+' a '+esc(displayDate(to))+'</div>'+
+ '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:23px -8px 5px"><tr>'+
+ tile('Horas apontadas',duration(m.minutes))+tile('Apontamentos',String(m.appointments))+'</tr><tr>'+
+ tile('Chamados com horas',String(m.tickets))+tile('Dias úteis de referência',String(m.days))+'</tr></table>'+
+ warning+
+ '<div style="font-size:15px;color:#18385e;font-weight:700;margin:23px 0 6px">Referências de jornada</div>'+
+ missingMetrics+
+ '<div style="font-size:15px;color:#18385e;font-weight:700;margin:24px 0 12px">Atividades e lançamentos</div>'+
+ '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5edf7;border-radius:8px;overflow:hidden">'+lines+'</table>'+
+ '<p style="font-size:11px;line-height:1.6;color:#64748b;margin:22px 0">Fonte: API Movidesk / Central de Auditoria. Registros importados; não substitui o ponto eletrônico e não comprova produtividade ou presença.</p>'+
+ '</td></tr><tr><td style="background:#f4f7fb;border-top:1px solid #dce5f0;padding:20px 26px;color:#718096;font-size:11px">'+
+ 'ARQUEM SISTEMAS &nbsp;|&nbsp; Central de Auditoria &nbsp;|&nbsp; Mensagem automática, não responda</td></tr>'+
+ '</table></td></tr></table></body></html>';
+}
 function buildReport(rec: R, appts: R[], from: string, to: string, kind: string, hol: Set<string>, authorizedSingleManual = false) {
   const scope = String(rec.scope || 'sector');
   if (!['sector', 'management'].includes(scope)) throw new Error('Escopo de destinatario nao reconhecido');
@@ -164,12 +220,12 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
   if (scope === 'management') lines.push('', 'Horas por setor:', ...[...bySector].map(([s, m]) => `- ${safe(s)}: ${duration(m)}`));
   return { text: lines.join('\n'), metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
 }
-async function sendMail(email: string, subject: string, text: string) {
+async function sendMail(email: string, subject: string, text: string, html?: string) {
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
   if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
   const res = await fetch(validUrl(), {
     method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ token: E('GMAIL_MAIL_SECRET'), email, assunto: subject, texto: text }),
+    body: JSON.stringify({ token: E('GMAIL_MAIL_SECRET'), email, assunto: subject, texto: text, html: html || undefined }),
     signal: AbortSignal.timeout(25000)
   });
   if (!res.ok) throw new Error(`Apps Script HTTP ${res.status}`);
@@ -323,7 +379,7 @@ async function manualOfficial(payload: R) {
   });
   if (!inserted?.length) return json({ ok: true, skipped: 'Relatorio ja reservado para envio' });
   try {
-    await sendMail(String(rec.email),subject,body);
+    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true));
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -383,7 +439,7 @@ async function dispatch() {
       });
       if (!inserted?.length) continue;
       try {
-        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text);
+        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text,reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false));
         await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH', body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString(), provider_id: 'gmail-apps-script' }) });
         results.push({ recipientId: id, kind: t.kind, status: 'sent', ...report.metrics });
