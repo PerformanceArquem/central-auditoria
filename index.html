@@ -993,9 +993,12 @@
                     <div class="fg"><label for="directSyncOffset">Posição inicial do lote</label><input id="directSyncOffset" type="number" min="0" max="50000" step="5" value="0" style="width:135px"></div>
                     <button type="button" class="s" id="directProbeBtn">Testar conexão (sem gravar)</button>
                     <button type="button" class="b" id="directSaveBtn" disabled>Importar até 5 chamados</button>
+                    <button type="button" class="s" id="directNextBtn">Próximo lote seguro</button>
+                    <button type="button" class="s" id="directProgressBtn">Ver progresso</button>
                   </div>
                   <p id="directSyncStatus" role="status" aria-live="polite" class="coverage-note">Aguardando teste de leitura. O agendamento de e-mails continua desativado.</p>
                   <div id="directSyncDetails" style="color:#40526b;font-size:12px"></div>
+                  <p style="color:var(--muted);font-size:12px">O próximo lote usa a posição registrada no Supabase e não avança em caso de falha. Não ativa envios nem cron automaticamente.</p>
                 </section>
                 <div class="card" id="cloudCard" style="border:1px solid #b8c9e8;background:#f7faff">
                     <h3>Dados compartilhados</h3>
@@ -1003,7 +1006,7 @@
                 </div>
                 
 <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
-  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail <small style="font-size:11px;color:#65748b">(envio Gmail integrado)</small></h3><p class="subtle">Cadastre setores, colaboradores e Gestão. Envio programado às 9h do próximo dia útil; segunda inclui resumo semanal.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
+  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail <small style="font-size:11px;color:#65748b">(envio Gmail integrado)</small></h3><p class="subtle">Cadastre setores, colaboradores e Gestão. Para um colaborador preenchido, o e-mail será um resumo individual com horas realizadas, mínimo e máximo; os demais escopos mantêm o relatório consolidado. Os disparos continuam desativados até validação.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
   <div id="emailAdminPanel" class="hide">
     <p id="emailAdminStatus" role="status" aria-live="polite" class="coverage-note">Clique em Gerenciar destinatários para verificar a conexão.</p>
     <form id="emailAdminForm"><input id="emailRecordId" type="hidden">
@@ -1013,6 +1016,8 @@
         <div class="fg"><label for="emailScope">Escopo</label><select id="emailScope"><option value="sector">Setorial</option><option value="management">Gestão — todos os setores</option></select></div>
         <div class="fg" id="emailSectorBox"><label for="emailSector">Setor (como no Movidesk)</label><input id="emailSector" list="emailSectors" placeholder="Implantação"><datalist id="emailSectors"></datalist></div>
         <div class="fg" id="emailCollabBox"><label for="emailCollaborator">Colaborador (opcional)</label><input id="emailCollaborator" list="emailCollaborators" placeholder="Vazio: todos do setor"><datalist id="emailCollaborators"></datalist></div>
+        <div class="fg" id="emailTargetBox"><label for="emailDailyTarget">Jornada diária (HH:MM)</label><input id="emailDailyTarget" type="time" step="60" value="08:00" title="Jornada de referência do colaborador"></div>
+        <div class="fg" id="emailMinimumBox"><label for="emailMinimumPercent">Mínimo da jornada (%)</label><input id="emailMinimumPercent" type="number" min="0" max="100" step="1" value="80"></div>
       </div>
       <div class="row" style="margin:12px 0"><label><input id="emailDaily" type="checkbox" checked> Diário às 9h</label><label><input id="emailWeekly" type="checkbox" checked> Semanal às 9h</label><label><input id="emailActive" type="checkbox" checked> Ativo</label></div>
       <div class="row"><button type="submit" class="b" id="emailSaveBtn">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button></div>
@@ -3548,8 +3553,8 @@ reportPreviewInit();
   const say=(t,isError=false)=>{const el=$('emailAdminStatus');if(el){el.textContent=t;el.style.color=isError?'#991b1b':'#304562';el.style.background=isError?'#fff0f0':'#f2f5fb';} };
   const readableError=e=>{const msg=String(e?.message||e||'Erro não identificado');if(/audit_email_recipients|audit_email_sector_dispatches|PGRST205|42P01|does not exist|schema cache/i.test(msg))return 'Tabelas de e-mail não instaladas no Supabase. Execute o SQL 01_tabelas.sql do pacote. Detalhe: '+msg;if(/audit_is_email_admin|PGRST202|42883|function.*does not exist/i.test(msg))return 'Permissões administrativas não instaladas. Execute 03_permissoes_admin.sql. Detalhe: '+msg;if(/permission denied|row.level.security|42501|403|Unauthorized|not allowed/i.test(msg))return 'Sem permissão para salvar. Confira sua conta em audit_users, com role admin e is_active=true, e aplique o SQL de permissões. Detalhe: '+msg;if(/Failed to fetch|NetworkError|fetch failed/i.test(msg))return 'Sem conexão com o Supabase. Verifique a internet e a configuração /api/public-config. Detalhe: '+msg;return msg};
   const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaborator').value=''}};
-  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope() }
+  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailTargetBox').classList.toggle('hide',isManagement);$('emailMinimumBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaborator').value=''}};
+  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;$('emailDailyTarget').value='08:00';$('emailMinimumPercent').value='80';scope() }
   function populateSuggestions(){
     try{
       const tickets=Array.from(window.TK?.values?.()||[]);
@@ -3632,7 +3637,7 @@ reportPreviewInit();
     $('emailRecordId').value=x.id;$('emailName').value=x.name;$('emailAddress').value=x.email;
     $('emailScope').value=x.scope||'sector';scope();$('emailSector').value=x.sector||'';
     $('emailCollaborator').value=x.collaborator_name||'';$('emailDaily').checked=x.daily_enabled;
-    $('emailWeekly').checked=x.weekly_enabled;$('emailActive').checked=x.active;
+    $('emailWeekly').checked=x.weekly_enabled;$('emailActive').checked=x.active;$('emailDailyTarget').value=String(Math.floor(Number(x.daily_target_minutes??480)/60)).padStart(2,'0')+':'+String(Number(x.daily_target_minutes??480)%60).padStart(2,'0');$('emailMinimumPercent').value=String(x.minimum_percent??80);
     $('emailAdminCard').scrollIntoView({behavior:'smooth',block:'start'});
   });
   $('emailAdminForm').addEventListener('submit',async e=>{
@@ -3642,7 +3647,7 @@ reportPreviewInit();
     try{
       say('Validando autenticação e permissão administrativa…');
       await verify();
-      const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:$('emailSector').value.trim(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaborator').value.trim()||null),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
+      const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:$('emailSector').value.trim(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaborator').value.trim()||null),daily_target_minutes:(()=>{const p=$('emailDailyTarget').value.split(':').map(Number);return p[0]*60+p[1]})(),minimum_percent:Number($('emailMinimumPercent').value),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
       if(!data.name||!data.email)throw Error('Informe o nome e o e-mail do destinatário.');
       if(!data.daily_enabled&&!data.weekly_enabled)throw Error('Marque ao menos uma frequência.');
       if(data.scope==='sector'&&!data.sector)throw Error('Informe o setor.');
@@ -3744,6 +3749,7 @@ reportPreviewInit();
 (()=>{
  'use strict';
  const $=id=>document.getElementById(id);
+ const next=$('directNextBtn'),progress=$('directProgressBtn');
  const probe=$('directProbeBtn'),save=$('directSaveBtn'),status=$('directSyncStatus'),details=$('directSyncDetails'),offsetEl=$('directSyncOffset');
  if(!probe||!save||!status||!details||!offsetEl)return;
  let authorizedOffset=null,hasMore=false,working=false,probeCount=0;
@@ -3797,6 +3803,26 @@ reportPreviewInit();
  }
  probe.addEventListener('click',()=>execute('probe'));
  save.addEventListener('click',()=>execute('sync'));
+ async function runCheckpoint(action){
+   if(working)return;
+   if(action==='sync_next'&&!confirm('Processar o próximo lote de até 5 chamados? Isso grava apenas no Supabase e não dispara e-mails.'))return;
+   working=true;probe.disabled=true;save.disabled=true;next.disabled=true;progress.disabled=true;
+   report(action==='status'?'Consultando progresso do banco…':'Processando próximo lote com checkpoint…');
+   try{
+     const d=await invoke(action,0);
+     if(action==='status'){
+       const st=d.state||{};
+       report(`Progresso: ${st.processed_tickets??0} ticket(s) processado(s). Próximo offset: ${st.next_offset??0}. ${st.completed?'Importação inicial encerrada.':'Ainda existem lotes a processar.'}`);
+       details.textContent=st.last_error?'Último erro: '+String(st.last_error):'Última execução: '+(st.last_success_at||'ainda não executada');
+     }else{
+       report(`Lote ${d.offset??'-'}: ${d.saved??0} chamado(s), ${d.appointments??0} apontamento(s). Próximo offset: ${d.nextOffset??'-'}. ${d.completed?'Importação inicial encerrada.':'Continue pelos próximos lotes.'}`);
+       details.textContent=(Array.isArray(d.warnings)&&d.warnings.length)?'Avisos: '+d.warnings.join(' | '):'Checkpoint atualizado no banco. Sem envio de e-mails.';
+     }
+   }catch(e){report('Falha no checkpoint: '+String(e?.message||e),true)}
+   finally{working=false;probe.disabled=false;next.disabled=false;progress.disabled=false;}
+ }
+ next.addEventListener('click',()=>runCheckpoint('sync_next'));
+ progress.addEventListener('click',()=>runCheckpoint('status'));
 })();
 </script>
 </body>
