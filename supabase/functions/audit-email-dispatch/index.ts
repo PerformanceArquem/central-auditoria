@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-multisector-20261106-v15';
+const RELEASE_ID = 'email-management-multisector-20261106-v16';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -121,7 +121,7 @@ function reportEmailHtml(rec:R,report:{text:string;metrics:{appointments:number;
  const minimum=Math.round(target*minPercent/100);
  const missing=m.appointments===0;
  const person=safe(rec.collaborator_name)||'Equipe';
- const sector=(Array.isArray(rec.sectors)&&rec.sectors.length?rec.sectors.map(safe).join(' · '):safe(rec.sector))||'Gestão';
+ const sector=(Array.isArray(rec.sectors)&&rec.sectors.length?rec.sectors.map(safe).join(' · '):(rec.scope==='management'?'Todos os setores':safe(rec.sector)))||'Gestão';
  const k=kind==='weekly'?'SEMANAL':'DIÁRIO';
  const badge=manual?'TESTE MANUAL':partial?'DADOS PARCIAIS':'RELATÓRIO DE APONTAMENTOS';
  const esc=emailEsc;
@@ -185,7 +185,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
       value === sector || (sector === 'sucesso' && value === 'sucesso do cliente'));
   };
   const selected = appts.filter(a =>
-    (scope === 'management' || sameSector(a.sector)) &&
+    ((scope === 'management' && !selectedSectors.length) || sameSector(a.sector)) &&
     (!person || norm(a.collaborator_name) === person));
   const minutes = selected.reduce((s, a) => s + Number(a.duration_minutes || 0), 0);
   const days = workdays(from, to, hol);
@@ -205,7 +205,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     bySector.set(s, (bySector.get(s) || 0) + Number(a.duration_minutes || 0));
   }
   const worked = new Set(selected.map(a => String(a.ticket_id))).size;
-  const title = `${kind === 'weekly' ? 'Relatorio semanal' : 'Relatorio diario'} - ${scope === 'management' ? 'Gestao' : (Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors.map(safe).join(' + ') : safe(rec.sector))}${person ? ' / ' + safe(rec.collaborator_name) : ''}`;
+  const title = `${kind === 'weekly' ? 'Relatorio semanal' : 'Relatorio diario'} - ${scope === 'management' ? (selectedSectors.length ? 'Gestao / ' + rec.sectors.map(safe).join(' + ') : 'Gestao / Todos os setores') : (Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors.map(safe).join(' + ') : safe(rec.sector))}${person ? ' / ' + safe(rec.collaborator_name) : ''}`;
   const details = person ? selected.slice(0, 100).map(a =>
     `- ${String(a.appointment_date)} | #${safe(a.ticket_id)} | ${duration(Number(a.duration_minutes || 0))} | ${safe(a.activity)}`)
     : [...byPerson.entries()].sort((a, b) => b[1] - a[1]).map(([n, m]) => `- ${safe(n)}: ${duration(m)}`);
