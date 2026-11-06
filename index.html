@@ -866,7 +866,7 @@
             <div class="chip" id="chip">
                 <span class="dot"></span>
                 <span id="status">Aguardando dados</span>
-                <span id="auto"></span>
+                <span id="auto"></span><span id="directSyncStatus" style="margin-left:8px;color:#dbeafe" role="status"> · Supabase: verificando...</span>
             </div>
             </div>
         </header>
@@ -877,6 +877,7 @@
             <button data-t="live">◉ &nbsp;Tempo real</button>
             <div class="nav-section">INDICADORES</div>
             <button data-t="charts">▥ &nbsp;Gráficos comparativos</button>
+            <button data-t="report-preview">✉ &nbsp;Prévia de relatórios</button>
             <button data-t="vip">★ &nbsp;Clientes VIP</button>
             <button data-t="occ">♙ &nbsp;Colaboradores</button>
             <button data-t="proj">▤ &nbsp;Projetos e prazos</button>
@@ -888,6 +889,27 @@
             <button data-t="diag">◈ &nbsp;Diagnóstico</button>
         </nav>
         <main>
+
+            <div id="t-report-preview" class="hide">
+              <div class="mh"><div><div class="eyebrow">RELATÓRIOS · SOMENTE LEITURA</div><h2>Pré-visualização dos colaboradores</h2><p>Resumo diário e semanal dos apontamentos sincronizados pelo Movidesk.</p></div></div>
+              <div class="card" style="border-left:4px solid #d69a38;background:#fffaf0" id="previewCoverage" role="status">Os dados ainda podem estar incompletos. Nenhum e-mail será enviado.</div>
+              <div class="card">
+                <div class="row noprint" style="align-items:flex-end">
+                  <div class="fg"><label for="previewPeriod">Tipo de relatório</label><select id="previewPeriod"><option value="day">Diário</option><option value="week">Semanal</option></select></div>
+                  <div class="fg"><label for="previewDate">Data de referência</label><input id="previewDate" type="date"></div>
+                  <div class="fg" style="min-width:220px;flex:1"><label for="previewCollaborator">Colaborador</label><select id="previewCollaborator"><option value="">Todos os colaboradores</option></select></div>
+                  <button class="b" type="button" id="previewLoad">Consultar dados</button>
+                  <button class="s" type="button" id="previewCopy">Copiar relatório</button>
+                </div>
+                <p class="subtle" id="previewStatus" role="status" style="margin-top:12px">Selecione o período e consulte os dados.</p>
+                <div class="kpis" id="previewKpis"></div>
+                <h3 id="previewHeading">Apontamentos por colaborador</h3>
+                <div class="tw"><table><thead><tr><th>Colaborador</th><th>Setores</th><th>Chamados</th><th>Apontamentos</th><th>Horas apontadas</th><th>Ref. mínima*</th><th>Ref. jornada*</th><th>Falta mínima*</th><th>Falta jornada*</th><th>Excedente*</th></tr></thead><tbody id="previewRows"><tr><td colspan="10">Consulte para visualizar.</td></tr></tbody></table></div>
+                <p class="subtle" style="margin-top:12px">* Referências provisórias: 06:24:00 e 08:00:00 por dia com apontamentos. Não consideram dias sem registro, escalas, feriados, férias ou afastamentos. Não utilizar para avaliação individual ou cobrança.</p>
+                <h3 style="margin-top:18px">Mensagem para conferência (não enviada)</h3>
+                <textarea id="previewText" rows="9" style="width:100%;line-height:1.6" readonly placeholder="O resumo será exibido aqui após a consulta."></textarea>
+              </div>
+            </div>
             <div id="t-live" class="hide">
                 <div class="card">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
@@ -2447,10 +2469,10 @@ function showTab(t){
   ACT=t;document.body.dataset.t=t;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-cfg').classList.toggle('hide',t!=='cfg');
-  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
-  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag');
-  if(raw.length&&!['load','cfg','diag','alerts'].includes(t)&&qn(t)!==lastQ) applyFilters();
+  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  if(t==='report-preview' && window.previewInit)window.previewInit(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
+  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='report-preview');
+  if(raw.length&&!['load','cfg','diag','alerts','report-preview'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
 $('tabs').addEventListener('click',e=>{const btn=e.target.closest('button');if(btn&&btn.dataset.t)showTab(btn.dataset.t)});
 
@@ -2769,7 +2791,8 @@ async function refreshDirectComparisons(force=false){
     if(!response.ok)throw new Error(data.error||'Erro HTTP '+response.status);
     if(!Array.isArray(data.monthly)||!Array.isArray(data.annual))throw new Error('Formato inválido do relatório.');
     directComparisonData=data;directComparisonTime=Date.now();directComparisonError='';
-  }catch(e){directComparisonError=String(e?.message||e);}
+    const ss=$('directSyncStatus');if(ss){const n=data.sync?.processed_tickets??data.sync?.next_offset??'—';ss.textContent=' · Supabase: '+n+' chamados'+(data.sync?.completed?' · histórico concluído':' · histórico parcial')+' · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});}
+  }catch(e){directComparisonError=String(e?.message||e);const ss=$('directSyncStatus');if(ss)ss.textContent=' · Supabase: falha ao atualizar (dados anteriores mantidos)';}
   finally{directComparisonBusy=false;$('cmpRefreshDirect').disabled=false;renderDirectComparisons()}
 }
 function renderDirectComparisons(){
@@ -2815,7 +2838,7 @@ function renderDirectComparisons(){
   ]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:metric==='hours'?'Horas':title}}}}});
 }
 setInterval(()=>{
-  if(document.visibilityState==='visible'&&document.body.dataset.t==='charts'&&$('cmpSource')?.value==='direct')refreshDirectComparisons(false);
+  if(document.visibilityState==='visible'&&$('cmpSource')?.value==='direct')refreshDirectComparisons(false);
 },300000);
 
 /* ---------- COMPARATIVOS MENSAL × ANTERIOR E ANUAL ---------- */
@@ -3401,7 +3424,10 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     if(cloudOK)await cloudSaveTickets(list);
     log(cloudOK?'Dados carregados do Supabase. Buscando alterações do Movidesk...':'Dados locais disponíveis; o servidor compartilhado ainda não está acessível.','okc');
   }
-  sync(true); // sincroniza o Movidesk com a sessão autenticada
+  // O cron no Supabase importa novos lotes mesmo com o navegador fechado.
+  // A interface consulta automaticamente os dados já importados.
+  refreshDirectComparisons(false);
+  sync(true); // mantém sincronização legada do painel, sem alterar o cron direto
 })();
 
         </script>
@@ -3506,6 +3532,64 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
           })();
         })();
         </script>
+<script id="reportPreviewScript">
+(()=>{'use strict';
+ const el=id=>document.getElementById(id); let loaded=false,latest=null,started=false;
+ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const fmt=m=>{m=Math.max(0,Math.floor(Number(m)||0));return `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}:00`};
+ const zoneDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const say=x=>el('previewStatus').textContent=x;
+ window.previewInit=()=>{
+   if(started)return;started=true;
+   el('previewDate').value=zoneDate();
+   el('previewLoad').addEventListener('click',load);
+   el('previewCopy').addEventListener('click',async()=>{
+     const value=el('previewText').value;
+     if(!value)return;
+     try{await navigator.clipboard.writeText(value);say('Resumo copiado; nenhum e-mail foi enviado.')}
+     catch{el('previewText').select();say('Selecione e copie o texto exibido.')} });
+   el('previewPeriod').addEventListener('change',load);
+   el('previewDate').addEventListener('change',load);
+   el('previewCollaborator').addEventListener('change',render);
+   load();
+ };
+ async function load(){
+   if(loaded)return;loaded=true;el('previewLoad').disabled=true;say('Consultando o Supabase...');
+   try{
+     const session=await window.tmAuth.getSession();
+     if(!session?.access_token)throw new Error('Faça login novamente.');
+     const url=new URL('/api/audit-direct-report-preview',location.origin);
+     url.searchParams.set('period',el('previewPeriod').value);
+     url.searchParams.set('date',el('previewDate').value);
+     const response=await fetch(url,{headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
+     const json=await response.json().catch(()=>({}));
+     if(!response.ok)throw new Error(json.error||`HTTP ${response.status}`);
+     latest=json;
+     const previous=el('previewCollaborator').value;
+     el('previewCollaborator').innerHTML='<option value="">Todos os colaboradores</option>'+json.rows.map(r=>`<option value="${esc(r.collaborator)}">${esc(r.collaborator)}</option>`).join('');
+     if(json.rows.some(r=>r.collaborator===previous))el('previewCollaborator').value=previous;
+     render();
+   }catch(e){latest=null;el('previewRows').innerHTML='<tr><td colspan="10">Não foi possível carregar o relatório.</td></tr>';el('previewCoverage').textContent='Consulta indisponível; nenhum e-mail foi enviado.';say('Erro: '+(e?.message||e));}
+   finally{loaded=false;el('previewLoad').disabled=false}
+ }
+ function render(){if(!latest)return;
+   const rows=latest.rows.filter(r=>!el('previewCollaborator').value||r.collaborator===el('previewCollaborator').value);
+   const min=r=>Math.max(0,r.daysWithEntries*384-r.minutes);
+   const jornada=r=>Math.max(0,r.daysWithEntries*480-r.minutes);
+   const extra=r=>Math.max(0,r.minutes-r.daysWithEntries*480);
+   const totalM=rows.reduce((a,r)=>a+r.minutes,0),entries=rows.reduce((a,r)=>a+r.entries,0);
+   const ticketIds=new Set(rows.flatMap(r=>r.ticketIds));
+   el('previewCoverage').textContent=latest.coverageMessage;
+   el('previewHeading').textContent=(latest.period==='week'?'Resumo semanal':'Resumo diário')+' · '+latest.start+' a '+latest.end;
+   el('previewKpis').innerHTML=[['Colaboradores com registros',rows.length],['Apontamentos',entries],['Chamados distintos',ticketIds.size],['Horas apontadas',fmt(totalM)]].map(([n,v])=>`<div class="card"><small>${esc(n)}</small><div><b>${esc(v)}</b></div></div>`).join('');
+   el('previewRows').innerHTML=rows.length?rows.map(r=>`<tr><td>${esc(r.collaborator)}</td><td>${esc(r.sectors.join(', '))}</td><td>${r.ticketIds.length}</td><td>${r.entries}</td><td><b>${fmt(r.minutes)}</b></td><td>${fmt(r.daysWithEntries*384)}</td><td>${fmt(r.daysWithEntries*480)}</td><td>${fmt(min(r))}</td><td>${fmt(jornada(r))}</td><td>${fmt(extra(r))}</td></tr>`).join(''):'<tr><td colspan="10">Nenhum apontamento encontrado neste período.</td></tr>';
+   const lines=[`PRÉVIA ${latest.period==='week'?'SEMANAL':'DIÁRIA'} — ${latest.start} a ${latest.end}`,'DADOS PARCIAIS · NÃO ENVIAR COMO AVALIAÇÃO DEFINITIVA',''];
+   for(const r of rows){lines.push(`${r.collaborator} | ${r.sectors.join(', ')}`,`Chamados: ${r.ticketIds.length} | Apontamentos: ${r.entries} | Horas: ${fmt(r.minutes)}`,`Referência mínima: ${fmt(r.daysWithEntries*384)} | Falta: ${fmt(min(r))}`,`Referência de jornada: ${fmt(r.daysWithEntries*480)} | Falta: ${fmt(jornada(r))} | Excedente: ${fmt(extra(r))}`,'')}
+   lines.push('Referências calculadas somente sobre dias com apontamentos; sem escala, feriados e ausências.','Importação histórica: '+(latest.sync?.completed?'concluída':'incompleta')+'. Nenhum e-mail enviado.');
+   el('previewText').value=lines.join('\n');say(`Prévia carregada: ${rows.length} colaborador(es), ${entries} apontamento(s). Nenhum e-mail enviado.`);
+ }
+})();
+</script>
     <script id="emailAdminIntegratedScript">
 (()=>{'use strict';
   const $=id=>document.getElementById(id);
