@@ -3409,7 +3409,23 @@ async function cloudPoll(){
   if(!cloudReady||cloudPullBusy||document.hidden||!navigator.onLine)return;cloudPullBusy=true;
   try{
     const j=await cloudApi('changes','GET',null,{since:cloudLastPull});const changed=Array.isArray(j.tickets)?j.tickets:[];
-    if(changed.length){changed.forEach(t=>{const id=String(t.id);TK.set(id,t);cloudTicketSig.set(id,cloudSig(t))});await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});const keep=!$('app').classList.contains('hide');build([...TK.values()]);start(`Supabase (${TK.size} tickets)`,keep);}
+    if(changed.length){
+      // Movidesk e a fonte prioritaria. Nao sobrescrever um ticket mais recente
+      // obtido pela API com uma copia mais antiga do Supabase.
+      let applied=0;
+      changed.forEach(t=>{
+        const id=String(t.id),current=TK.get(id);
+        const incomingTime=Date.parse(t?.lastUpdate||t?.createdDate||'')||0;
+        const currentTime=Date.parse(current?.lastUpdate||current?.createdDate||'')||0;
+        if(current && incomingTime<=currentTime)return;
+        TK.set(id,t);cloudTicketSig.set(id,cloudSig(t));applied++;
+      });
+      if(applied){
+        await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});
+        const keep=!$('app').classList.contains('hide');
+        build([...TK.values()]);start(`Movidesk prioritário · Supabase complementar (${TK.size} tickets)`,keep);
+      }
+    }
     cloudLastPull=new Date().toISOString();
     const st=await cloudApi('loadState');if(st.updated_at&&st.updated_at!==cloudStateUpdated){const active=document.activeElement;const editing=active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);if(!editing){cloudHydrating=true;try{Object.entries(st.state||{}).forEach(([k,v])=>{if(k.startsWith('md_')&&!CLOUD_EXCLUDE.has(k)&&typeof v==='string')localStorage.setItem(k,v)})}finally{cloudHydrating=false}cloudStateUpdated=st.updated_at;applyCloudSettings();}}
   }catch(e){cloudMessage('Supabase temporariamente indisponível: '+e.message,'err')}finally{cloudPullBusy=false}
@@ -3453,7 +3469,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     build(list);start(`${cloudOK?'Supabase':'Dados locais'} (${TK.size} tickets)`);cacheLabel(Date.now());autoLabel();
     await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:list});
     if(cloudOK)await cloudSaveTickets(list);
-    log(cloudOK?'Dados carregados do Supabase. Buscando alterações do Movidesk...':'Dados locais disponíveis; o servidor compartilhado ainda não está acessível.','okc');
+    log(cloudOK?'Exibindo cache do Supabase até a consulta prioritária da API Movidesk finalizar.':'Dados locais disponíveis; tentando consultar a API Movidesk.','okc');
   }
   // O cron no Supabase importa novos lotes mesmo com o navegador fechado.
   // A interface consulta automaticamente os dados já importados.
