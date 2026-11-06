@@ -1021,7 +1021,7 @@
         <div class="fg"><label for="emailName">Nome / destinatário</label><input id="emailName" required placeholder="Letícia / Diretoria"></div>
         <div class="fg"><label for="emailAddress">E-mail corporativo autorizado</label><input id="emailAddress" type="email" required placeholder="destinatario@empresa.com.br"></div>
         <div class="fg"><label for="emailScope">Escopo</label><select id="emailScope"><option value="sector">Setorial</option><option value="management">Gestão — todos os setores</option></select></div>
-        <div class="fg" id="emailSectorBox"><label for="emailSector">Setor do Movidesk</label><select id="emailSector" required><option value="">Carregando setores...</option></select></div>
+        <div class="fg" id="emailSectorBox"><label>Setores do Movidesk (selecione um ou mais)</label><details id="emailSectorPicker" style="border:1px solid #ccd7e8;border-radius:9px;padding:9px 12px"><summary id="emailSectorSummary" style="cursor:pointer;font-size:13px">Carregando setores...</summary><div id="emailSectorChoices" style="max-height:230px;overflow-y:auto;padding:10px 0;display:grid;gap:7px"></div></details><small class="subtle">Marque os setores que farão parte deste relatório.</small></div>
         <div class="fg" id="emailCollabBox"><label for="emailCollaboratorSelect">Colaborador do Movidesk (opcional)</label><select id="emailCollaboratorSelect"><option value="">Selecione um setor primeiro</option></select><small id="emailMovideskDirectoryHint" class="subtle">Buscando nomes e setores no Movidesk...</small></div>
       </div>
       <div class="row" style="margin:12px 0"><label><input id="emailDaily" type="checkbox" checked> Diário às 9h</label><label><input id="emailWeekly" type="checkbox" checked> Semanal às 9h</label><label><input id="emailActive" type="checkbox" checked> Ativo</label></div>
@@ -3684,8 +3684,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   let client=null, records=[], loaded=false, loading=false;
   const say=t=>{if($('emailAdminStatus'))$('emailAdminStatus').textContent=t};
   const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaboratorSelect').value=''}};
-  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailCollaboratorSelect').value='';refreshSectorOptions('');$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope() }
+  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);if(isManagement){selectedEmailSectors.clear();$('emailCollaboratorSelect').value='';updateEmailSectorSummary()}};
+  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailCollaboratorSelect').value='';selectedEmailSectors.clear();refreshSectorOptions([]);$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope() }
   // Diretorio de setores e colaboradores: somente via Edge Function autenticada.
   // O navegador nao le a tabela de apontamentos diretamente (RLS).
   let movideskGroups=new Map(),movideskDirectoryLoaded=false;
@@ -3697,25 +3697,36 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       || (candidate==='sucesso'?sectors.find(s=>normName(s)==='sucesso do cliente'):null)
       || '';
   };
-  function refreshSectorOptions(preferred=''){
-    const input=$('emailSector');if(!input)return;
-    const old=preferred||input.value;
+  const selectedEmailSectors=new Set();
+  const emailSelectedSectors=()=>[...selectedEmailSectors];
+  function updateEmailSectorSummary(){
+    const list=emailSelectedSectors();
+    $('emailSectorSummary').textContent=!list.length?'Selecione um ou mais setores':list.length===1?list[0]:list.length+' setores selecionados';
+  }
+  function refreshSectorOptions(preferred=null){
+    const previous=Array.isArray(preferred)?preferred:(preferred?[preferred]:emailSelectedSectors());
+    selectedEmailSectors.clear();
+    for(const sector of previous){const found=matchingSector(sector);if(found)selectedEmailSectors.add(found)}
     const sectors=[...movideskGroups.keys()].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-    input.replaceChildren(new Option('Selecione um setor do Movidesk',''),
-      ...sectors.map(s=>new Option(s,s)));
-    const found=matchingSector(old);if(found)input.value=found;
-    input.disabled=!sectors.length;
-    refreshCollaboratorOptions();
+    const box=$('emailSectorChoices');box.replaceChildren();
+    for(const sector of sectors){
+      const label=document.createElement('label');
+      label.style.cssText='display:flex;gap:8px;align-items:center;cursor:pointer;font-size:13px';
+      const check=document.createElement('input');check.type='checkbox';check.value=sector;check.checked=selectedEmailSectors.has(sector);
+      check.addEventListener('change',()=>{if(check.checked)selectedEmailSectors.add(sector);else selectedEmailSectors.delete(sector);updateEmailSectorSummary();refreshCollaboratorOptions()});
+      const name=document.createElement('span');name.textContent=sector;label.append(check,name);box.append(label);
+    }
+    $('emailSectorPicker').open=false;updateEmailSectorSummary();refreshCollaboratorOptions();
   }
   function refreshCollaboratorOptions(preferred=''){
     const select=$('emailCollaboratorSelect');if(!select)return;
-    const sector=$('emailSector')?.value||'';
-    const names=[...(movideskGroups.get(sector)||[])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const sectors=emailSelectedSectors();
+    const names=[...new Set(sectors.flatMap(s=>movideskGroups.get(s)||[]))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     const old=preferred||select.value;
-    select.replaceChildren(new Option('Todos os colaboradores do setor',''),
+    select.replaceChildren(new Option(sectors.length?'Todos os colaboradores dos setores':'Selecione os setores primeiro',''),
       ...names.map(n=>new Option(n,n)));
     if(names.includes(old))select.value=old;
-    select.disabled=!sector;
+    select.disabled=!sectors.length;
   }
   function renderEmailCoverage(data){
     const rows=Array.isArray(data.coverage)?data.coverage:[];
@@ -3796,7 +3807,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         eligible.forEach(x=>manualSelect.add(new Option((x.collaborator_name||x.name)+' — '+x.email+' ('+(x.sector||'Setor')+')',String(x.id))));
         if(eligible.some(x=>String(x.id)===old))manualSelect.value=old;
       }
-      $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
+      $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(Array.isArray(x.sectors)&&x.sectors.length?x.sectors.join(', '):x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
       const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
       $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
       loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
@@ -3809,7 +3820,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     if(show&&!loaded)reload();
   });
   $('emailScope').addEventListener('change',scope);
-  $('emailSector').addEventListener('change',()=>refreshCollaboratorOptions());
+  // Os setores são selecionados pelas caixas de marcação.
   $('emailRefreshDirectory').addEventListener('click',()=>loadMovideskDirectory(true).catch(err=>say('Falha no diretório: '+(err?.message||err))));
   $('emailCoverageRefresh').addEventListener('click',()=>loadMovideskDirectory(true).catch(err=>{$('emailCoverageSummary').textContent='Erro ao consultar cobertura: '+(err?.message||err)}));
   $('emailNew').addEventListener('click',reset);
@@ -3856,7 +3867,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     const id=e.target.closest('[data-email-edit]')?.dataset.emailEdit;
     const x=records.find(r=>r.id===id);if(!x)return;
     $('emailRecordId').value=x.id;$('emailName').value=x.name;$('emailAddress').value=x.email;
-    $('emailScope').value=x.scope||'sector';scope();refreshSectorOptions(x.sector||'');
+    $('emailScope').value=x.scope||'sector';scope();refreshSectorOptions(Array.isArray(x.sectors)&&x.sectors.length?x.sectors:(x.sector?[x.sector]:[]));
     refreshCollaboratorOptions(x.collaborator_name||'');$('emailDaily').checked=x.daily_enabled;
     $('emailWeekly').checked=x.weekly_enabled;$('emailActive').checked=x.active;
     $('emailAdminCard').scrollIntoView({behavior:'smooth',block:'start'});
@@ -3865,10 +3876,10 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     e.preventDefault();
     try{
       await verify();
-      const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:$('emailSector').value.trim(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaboratorSelect').value.trim()||null),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
+      const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:(emailSelectedSectors()[0]||null),sectors:$('emailScope').value==='management'?[]:emailSelectedSectors(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaboratorSelect').value.trim()||null),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
       if(!data.daily_enabled&&!data.weekly_enabled)throw Error('Marque ao menos uma frequência.');
-      if(data.scope==='sector'&&!data.sector)throw Error('Informe o setor.');
-      if(data.scope==='sector'&&!movideskGroups.has(data.sector))throw Error('Selecione um setor válido da lista Movidesk.');
+      if(data.scope==='sector'&&!data.sectors.length)throw Error('Selecione pelo menos um setor.');
+      if(data.scope==='sector'&&!data.sectors.every(s=>movideskGroups.has(s)))throw Error('Selecione apenas setores válidos do Movidesk.');
       say('Salvando cadastro...');const id=$('emailRecordId').value;
       const r=id?await client.from('audit_email_recipients').update(data).eq('id',id):await client.from('audit_email_recipients').insert(data);
       if(r.error)throw r.error;
