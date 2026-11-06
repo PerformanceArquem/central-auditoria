@@ -3396,7 +3396,8 @@ async function cloudBootstrap(){
     TK=merged;cloudReady=true;cloudHydrating=false;cloudLastPull=new Date(Date.now()-3000).toISOString();
     if(TK.size){await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:[...TK.values()]});}
     cloudMessage(`Supabase conectado · ${remote.length} chamado(s) recuperado(s)${cache?.tickets?.length?` · ${cache.tickets.length} do cache local conferidos`:''}.`,'okc');
-    if(TK.size)await cloudSaveTickets([...TK.values()]);
+    // Nao reenviar tickets restaurados do cache durante a abertura.
+    // Apenas uma sincronizacao bem-sucedida da API Movidesk autoriza gravar novas versoes.
     await cloudSaveState();
     return true;
   }catch(e){cloudReady=false;cloudHydrating=false;cloudMessage('Não foi possível conectar ao Supabase: '+e.message,'err');return false}
