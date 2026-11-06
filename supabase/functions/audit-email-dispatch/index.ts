@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-manual-pilot-20261106-v10';
+const RELEASE_ID = 'email-manual-pilot-20261106-v11';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -294,34 +294,24 @@ async function manualOfficial(payload: R) {
     while ([0, 6].includes(weekday(from)) || hol.has(from)) from = shift(from, -1);
     to = from;
   }
+  // Teste manual autorizado: nao depende da conclusao da conciliacao historica/recente.
+  // Chave exclusiva por tentativa para permitir repetir testes no mesmo periodo.
   const checkpoint = await state();
   const coverage = await recentCoverage(from,to);
-  if (!coverage.ready) return json({ok:false,skipped:'Conciliação recente do Movidesk em andamento; relatório oficial bloqueado para não apresentar horas incompletas',
-    from,to,coverage},200);
-  const key = `manual-official:${id}:${kind}:${from}:${to}`;
-  const existing = await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}&select=status&limit=1`);
-  if (existing.length) return json({ ok: true, skipped: 'Relatorio manual ja registrado para este destinatario e periodo', status: existing[0].status, from, to });
+  const key = `manual-test:${id}:${kind}:${from}:${to}:${crypto.randomUUID()}`;
   const appts = await source(from, to);
   // Piloto manual autorizado: admin JWT + endereco fixo + confirmacao de UI.
   // A permissao coletiva global permanece exigida pelo Cron automatico.
   const report = buildReport(rec, appts, from, to, kind, hol, true);
-  if (!report.metrics.appointments) {
-    // Diagnostico baseado em dados importados, sem enviar e-mail vazio.
-    const recent = await db(`audit_direct_appointments?select=appointment_date,sector,collaborator_name&appointment_date=gte.${shift(referenceDate,-120)}&appointment_date=lte.${referenceDate}&order=appointment_date.desc&limit=1000`);
-    const sameSector = (s: unknown) => {
-      const a = norm(s), b = norm(rec.sector);
-      return String(rec.scope) === 'management' || a === b || (b === 'sucesso' && a === 'sucesso do cliente');
-    };
-    const matching = (recent as R[]).find(a => sameSector(a.sector) &&
-      (!rec.collaborator_name || norm(a.collaborator_name) === norm(rec.collaborator_name)));
-    return json({ ok: false, skipped: 'Nenhum apontamento importado no periodo selecionado; envio nao realizado',
-      from, to, sector: String(rec.sector || ''), collaborator: String(rec.collaborator_name || ''),
-      lastAvailableDate: matching ? String(matching.appointment_date) : null });
-  }
-  const partial = !checkpoint.completed;
-  const subject = 'Central de Auditoria - Relatorio oficial '+(kind === 'weekly' ? 'semanal' : 'diario')+(partial?' [DADOS PARCIAIS]':'')+' - '+from;
-  const body = 'ARQUEM | CENTRAL DE AUDITORIA\nRELATORIO OFICIAL - '+(kind === 'weekly' ? 'SEMANAL' : 'DIARIO')+'\n'+
-    (partial?'ATENCAO: IMPORTACAO HISTORICA INCOMPLETA. INDICADORES PARCIAIS.\n':'')+
+  // Mesmo com zero apontamentos, o teste manual verifica o envio e informa a ausencia no corpo.
+  const partial = !checkpoint.completed || !coverage.ready;
+  const empty = !report.metrics.appointments;
+  const subject = '[TESTE MANUAL] Central de Auditoria - Relatorio '+(kind === 'weekly' ? 'semanal' : 'diario')+
+    (partial?' [DADOS PARCIAIS]':'')+(empty?' [SEM APONTAMENTOS]':'')+' - '+from;
+  const body = 'ARQUEM | CENTRAL DE AUDITORIA\nTESTE MANUAL DE ENVIO - '+(kind === 'weekly' ? 'SEMANAL' : 'DIARIO')+'\n'+
+    'ATENCAO: ESTE E UM TESTE MANUAL, NAO UMA VALIDACAO DEFINITIVA DOS APONTAMENTOS.\n'+
+    (partial?'COBERTURA DA SINCRONIZACAO INCOMPLETA. INDICADORES PARCIAIS.\n':'')+
+    (empty?'NAO HA APONTAMENTOS IMPORTADOS PARA ESTE COLABORADOR NO PERIODO.\n':'')+
     'Destinatario: '+safe(rec.email)+'\n\n'+report.text;
   const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
     method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
@@ -333,7 +323,7 @@ async function manualOfficial(payload: R) {
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
-    return json({ok:true,status:'sent',release: RELEASE_ID,recipient:String(rec.email),kind,from,to,partial,metrics:report.metrics,
+    return json({ok:true,status:'sent',manualTest:true,release: RELEASE_ID,recipient:String(rec.email),kind,from,to,partial,empty,metrics:report.metrics,
       message:'Apps Script aceitou a mensagem; confira a entrega na caixa de entrada.'});
   } catch(ex) {
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
