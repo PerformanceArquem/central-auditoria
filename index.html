@@ -2142,7 +2142,9 @@ function autoChanged(){localStorage.setItem('md_auto',$('autoMin').value);autoLa
 function tick(){
   autoLabel();
   const m=+$('autoMin').value;
-  if(!m||!apiOn||syncing||document.hidden||navigator.onLine===false) return;
+  // Permitir a primeira sincronização automática mesmo com o cache vazio:
+  // apiOn só é ativado após uma sincronização, portanto não pode bloquear o início.
+  if(!m||syncing||document.hidden||navigator.onLine===false) return;
   if(Date.now()-lastTry<nextDelay()) return;
   const a=document.activeElement; // não atualiza enquanto a pessoa digita numa tabela/lista
   if(a&&a.closest&&a.closest('table,textarea')) return;
@@ -3402,6 +3404,12 @@ async function cloudPoll(){
   }catch(e){cloudMessage('Supabase temporariamente indisponível: '+e.message,'err')}finally{cloudPullBusy=false}
 }
 setInterval(cloudPoll,60000);
+// Atualização periódica dos comparativos com os dados da sincronização direta.
+// Respeita o cache do painel e não inicia chamadas adicionais de escrita.
+setInterval(()=>{
+  if(document.hidden||navigator.onLine===false)return;
+  if($('cmpSource')?.value==='direct')refreshDirectComparisons(false);
+},300000);
 
 /* ---------- inicialização ---------- */
 $('domain').value=localStorage.getItem('md_domain')||'';
@@ -3412,7 +3420,7 @@ $('endDate').value=`${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-${pad(hoje.g
 $('cfId').value=localStorage.getItem('md_cf')||'';
 $('vipList').value=localStorage.getItem('md_vip')??['Dr Oculos','Ferri','Instituto','Paulo e Condah','Atacadão do Oculos','IMV','Paschoal LAB','Cardeal','Sr dos Oculos','Lux'].join('\n');
 try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{if(sv[i]!=null)$(i).value=sv[i]})}catch(e){}
-$('autoMin').value=localStorage.getItem('md_auto')??'1';
+$('autoMin').value=localStorage.getItem('md_auto')??'5';
 $('iaMode').value=localStorage.getItem('md_iamode')||'off';$('iaKey').value=localStorage.getItem('md_iakey')||'';
 lastToday=$('endDate').value;
 showTab('cfg');
