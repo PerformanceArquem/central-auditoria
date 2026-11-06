@@ -1,1 +1,102 @@
+/**
+ * GET /api/audit-direct-report-preview?period=day|week&date=YYYY-MM-DD
+ * Admin-only, read-only productivity preview. No emails, no writes.
+ * Requires SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (server environment only).
+ */
+const PAGE_SIZE = 1000;
+const MAX_ROWS = 20000;
+function json(res, code, body) { res.setHeader('Cache-Control', 'private, no-store'); return res.status(code).json(body); }
+function parseDate(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date||'')) return null;
+  const d = new Date(date+'T12:00:00Z');
+  return !Number.isNaN(d.valueOf()) && d.toISOString().slice(0,10)===date ? d : null;
+}
+function dayString(d) { return d.toISOString().slice(0,10); }
+export default async function handler(req,res) {
+  if(req.method!=='GET') return json(res,405,{error:'Método não permitido.'});
+  const urlBase=(process.env.SUPABASE_URL||'').replace(/\/$/,'');
+  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if(!/^https:\/\//.test(urlBase)||!key) return json(res,503,{error:'Credenciais de servidor Supabase ausentes.'});
+  const match=/^Bearer\s+(.+)$/i.exec(req.headers.authorization||'');
+  if(!match) return json(res,401,{error:'Faça login para consultar o relatório.'});
+  const period=req.query.period==='week'?'week':req.query.period==='day'?'day':null;
+  const d=parseDate(req.query.date);
+  if(!period||!d) return json(res,400,{error:'Informe um período (day ou week) e uma data válida.'});
+  const start=new Date(d.getTime());
+  if(period==='week') { const weekday=(start.getUTCDay()+6)%7;start.setUTCDate(start.getUTCDate()-weekday); }
+  const end=new Date(start.getTime());
+  if(period==='week')end.setUTCDate(end.getUTCDate()+6);
+  const from=dayString(start), to=dayString(end);
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),45000);
+  const adminHeaders={apikey:key, Authorization:'Bearer '+key};
+  try {
+    const userResponse=await fetch(urlBase+'/auth/v1/user',{
+      headers:{apikey:key,Authorization:'Bearer '+match[1]},signal:controller.signal
+    });
+    if(!userResponse.ok)return json(res,401,{error:'Sessão inválida ou expirada.'});
+    const user=await userResponse.json();
+    if(!user?.id)return json(res,401,{error:'Usuário não autenticado.'});
+    const aclUrl=new URL(urlBase+'/rest/v1/audit_users');
+    aclUrl.searchParams.set('select','role,is_active');
+    aclUrl.searchParams.set('user_id','eq.'+user.id);
+    aclUrl.searchParams.set('limit','1');
+    const aclRes=await fetch(aclUrl,{headers:adminHeaders,signal:controller.signal});
+    if(!aclRes.ok)throw new Error('Falha ao verificar permissões administrativas.');
+    const users=await aclRes.json();
+    if(!Array.isArray(users)||!users.some(u=>String(u.role).toLowerCase()==='admin' && u.is_active!==false))
+      return json(res,403,{error:'Prévia consolidada permitida somente para administradores autorizados.'});
+    const rows=[];
+    let truncated=false;
+    for(let offset=0;offset<MAX_ROWS;offset+=PAGE_SIZE){
+      const url=new URL(urlBase+'/rest/v1/audit_direct_appointments');
+      url.searchParams.set('select','appointment_key,appointment_date,collaborator_name,sector,ticket_id,duration_minutes');
+      url.searchParams.set('appointment_date','gte.'+from);
+      url.searchParams.append('appointment_date','lte.'+to);
+      url.searchParams.set('order','appointment_key.asc');
+      url.searchParams.set('limit',String(PAGE_SIZE));
+      url.searchParams.set('offset',String(offset));
+      const r=await fetch(url,{headers:adminHeaders,signal:controller.signal});
+      if(!r.ok)throw new Error('Erro consultando apontamentos (HTTP '+r.status+').');
+      const batch=await r.json();
+      if(!Array.isArray(batch))throw new Error('Resposta de apontamentos inválida.');
+      rows.push(...batch);
+      if(batch.length<PAGE_SIZE)break;
+      if(offset+PAGE_SIZE>=MAX_ROWS)truncated=true;
+    }
+    // Do not return incomplete totals when the maximum page count was hit.
+    if(truncated)return json(res,413,{error:'O período excedeu o limite seguro de registros. Divida a consulta ou implemente agregação no banco.'});
+    const groups=new Map();
+    for(const item of rows){
+      const collaborator=String(item.collaborator_name||'').trim();
+      if(!collaborator)continue;
+      if(!groups.has(collaborator))groups.set(collaborator,{collaborator,entries:0,minutes:0,sectors:new Set(),ticketIds:new Set(),days:new Set(),invalidMinutes:0});
+      const g=groups.get(collaborator);
+      const mins=Number(item.duration_minutes);
+      g.entries++;
+      if(Number.isInteger(mins) && mins>=0)g.minutes+=mins;else g.invalidMinutes++;
+      const sector=String(item.sector||'').trim();if(sector)g.sectors.add(sector);
+      const ticket=String(item.ticket_id||'').trim();if(ticket)g.ticketIds.add(ticket);
+      if(item.appointment_date)g.days.add(item.appointment_date);
+    }
+    const result=[...groups.values()].map(g=>({
+      collaborator:g.collaborator,entries:g.entries,minutes:g.minutes,
+      invalidMinutes:g.invalidMinutes,sectors:[...g.sectors].sort(),
+      ticketIds:[...g.ticketIds],daysWithEntries:g.days.size
+    })).sort((a,b)=>a.collaborator.localeCompare(b.collaborator,'pt-BR'));
+    const syncUrl=new URL(urlBase+'/rest/v1/audit_direct_sync_state');
+    syncUrl.searchParams.set('select','next_offset,completed,last_error,updated_at');
+    syncUrl.searchParams.set('job_name','eq.movidesk_backfill');
+    syncUrl.searchParams.set('limit','1');
+    const syncRes=await fetch(syncUrl,{headers:adminHeaders,signal:controller.signal});
+    const syncArr=syncRes.ok?await syncRes.json():[];
+    const sync=Array.isArray(syncArr)?syncArr[0]||null:null;
+    const coverageMessage=(sync?.completed?'Importação histórica marcada como concluída. Ainda é necessário validar atualizações incrementais.':'Importação histórica incompleta. ') +
+      'Os totais representam somente os apontamentos sincronizados para esta consulta. ' +
+      'As referências de metas usam apenas dias com apontamentos, sem escala ou feriados. Nenhum e-mail foi enviado.';
+    return json(res,200,{ok:true,period,start:from,end:to,rows:result,sync,coverageMessage,generatedAt:new Date().toISOString()});
+  } catch(e){
+    return json(res,502,{error:e?.name==='AbortError'?'Consulta excedeu o limite de tempo.': 'Falha ao gerar a prévia: '+String(e.message||e)});
+  }finally{clearTimeout(timer);}
+}
 
