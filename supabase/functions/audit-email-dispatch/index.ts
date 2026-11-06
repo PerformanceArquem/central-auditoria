@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-management-multisector-20261106-v16';
+const RELEASE_ID = 'email-tickets-audit-20261106-v17';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -96,6 +96,127 @@ async function source(from: string, to: string) {
   if (appts.some(a => !Number.isFinite(Number(a.duration_minutes)) || Number(a.duration_minutes) < 0))
     throw new Error('Duracao negativa ou invalida encontrada: validar base antes do envio');
   return appts;
+}
+
+// Snapshot atual de chamados importados do Movidesk. Não confundir com horas do período.
+async function ticketSource() {
+  return list('audit_direct_tickets',
+    '?select=ticket_id,payload,created_at_source,last_update_source,closed_at_source');
+}
+type TicketAlert = {
+  id:string;subject:string;status:string;owner:string;sector:string;
+  sla:string|null;lastAction:string|null;ageDays:number;url:string;
+};
+function ticketAlerts(rec:R,records:R[]) {
+  const scope=String(rec.scope||'sector');
+  const person=norm(rec.collaborator_name);
+  const sectorNames=Array.isArray(rec.sectors)&&rec.sectors.length
+    ?rec.sectors.map((s:unknown)=>norm(s)).filter(Boolean)
+    :[norm(rec.sector)].filter(Boolean);
+  const matchesSector=(v:unknown)=>{
+    const s=norm(v);
+    return sectorNames.some(n=>n===s||(n==='sucesso'&&s==='sucesso do cliente'));
+  };
+  // O "atraso" é atraso de SLA válido, não antiguidade do ticket.
+  // Exclui fechado/resolvido/cancelado/concluído. Status do ticket é o estado atual.
+  const closedStatuses=new Set(['fechado','resolvido','cancelado','concluido','concluido (sem confirmacao)']);
+  const now=dateBR();
+  const todayMs=Date.parse(now+'T12:00:00Z');
+  const active:TicketAlert[]=[];
+  const overdue:TicketAlert[]=[];
+  const stalled:TicketAlert[]=[];
+  let withoutSla=0;
+  for (const r of records) {
+    const t=(r.payload&&typeof r.payload==='object'?r.payload:{}) as R;
+    const status=String(t.status||'Não informado');
+    if(closedStatuses.has(norm(status))||r.closed_at_source||t.canceledIn||t.closedIn||t.isDeleted===true)continue;
+    const owner=String(t.owner?.businessName||t.owner?.name||'Sem responsável');
+    const sector=String(t.ownerTeam||'Sem setor');
+    if(scope==='management'){
+      if(sectorNames.length&&!matchesSector(sector))continue;
+    }else{
+      if(!matchesSector(sector))continue;
+      // Relatório individual: somente tickets atualmente atribuídos à pessoa,
+      // não todos os tickets nos quais ela já apontou horas.
+      if(person&&norm(owner)!==person)continue;
+    }
+    const id=String(r.ticket_id||t.id||'');
+    if(!/^\d+$/.test(id))continue;
+    const sla=typeof t.slaSolutionDate==='string'&&/^\d{4}-\d{2}-\d{2}/.test(t.slaSolutionDate)?t.slaSolutionDate.slice(0,10):null;
+    const lastRaw=String(t.lastActionDate||t.createdDate||r.created_at_source||'');
+    const lastDate=/^\d{4}-\d{2}-\d{2}/.test(lastRaw)?lastRaw.slice(0,10):null;
+    const ageDays=lastDate?Math.max(0,Math.floor((todayMs-Date.parse(lastDate+'T12:00:00Z'))/86400000)):0;
+    const alert:TicketAlert={id,subject:safe(t.subject)||'Sem assunto',
+      owner,sector,status,sla,lastAction:lastDate,ageDays,
+      url:'https://arquem.movidesk.com/Ticket/Edit/'+id};
+    active.push(alert);
+    const paused=t.slaSolutionDateIsPaused===true||String(t.slaSolutionDateIsPaused).toLowerCase()==='true';
+    if(sla&&!paused&&sla<now)overdue.push(alert);
+    if(!sla)withoutSla++;
+    // Ausência de ação há >= 7 dias, não equivale necessariamente a falta de trabalho.
+    if(ageDays>=7)stalled.push(alert);
+  }
+  overdue.sort((a,b)=>(a.sla||'').localeCompare(b.sla||'')||b.ageDays-a.ageDays);
+  stalled.sort((a,b)=>b.ageDays-a.ageDays);
+  const ticketLine=(a:TicketAlert,mode:'sla'|'idle')=>'#'+a.id+' | '+
+    (mode==='sla'?'SLA: '+(a.sla?displayDate(a.sla):'—'):'Sem ação há '+a.ageDays+' dias')+
+    ' | '+a.status+' | '+a.owner+' | '+a.sector+' | '+a.subject+
+    '\n'+a.url;
+  const limited=20;
+  const lines=['','━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    'PANORAMA DE CHAMADOS EM ABERTO (SITUAÇÃO ATUAL)',
+    'Base: chamados já importados do Movidesk. Dados podem estar incompletos.',
+    'Chamados em aberto no escopo: '+active.length,
+    'Com SLA vencido: '+overdue.length,
+    'Sem ação há 7 dias ou mais: '+stalled.length,
+    'Sem data de SLA informada: '+withoutSla,
+    '',
+    'CHAMADOS COM SLA VENCIDO ('+overdue.length+')',
+    ...(overdue.slice(0,limited).map(a=>ticketLine(a,'sla'))||[]),
+    ...(overdue.length?[]:['Nenhum nos dados importados.']),
+    ...(overdue.length>limited?['Outros '+(overdue.length-limited)+' não listados.']:[]),
+    '',
+    'CHAMADOS SEM AÇÃO HÁ 7+ DIAS ('+stalled.length+')',
+    ...stalled.slice(0,limited).map(a=>ticketLine(a,'idle')),
+    ...(stalled.length?[]:['Nenhum nos dados importados.']),
+    ...(stalled.length>limited?['Outros '+(stalled.length-limited)+' não listados.']:[]),
+    '',
+    'CRITÉRIOS: SLA vencido exige data de solução anterior à data de hoje e SLA não pausado.',
+    'Sem andamento = última ação registrada há pelo menos 7 dias; requer análise humana.',
+    'Um mesmo chamado pode aparecer nas duas categorias. A lista mostra os 20 primeiros de cada.',
+    'Os alertas refletem a situação atual, mesmo se o relatório de horas for de uma data passada.'];
+  const htmlRow=(a:TicketAlert,mode:'sla'|'idle')=>
+    '<tr><td style="padding:10px 8px;border-bottom:1px solid #e8edf5;font-size:12px;vertical-align:top">'+
+    '<a style="color:#1c5dcc;font-weight:bold;text-decoration:underline" href="'+emailEsc(a.url)+'">#'+emailEsc(a.id)+'</a>'+
+    '</td><td style="padding:10px 8px;border-bottom:1px solid #e8edf5;font-size:12px">'+
+    '<strong>'+emailEsc(a.subject)+'</strong><div style="color:#66758c;margin-top:4px">'+
+    emailEsc(a.status)+' · '+emailEsc(a.owner)+' · '+emailEsc(a.sector)+'</div></td>'+
+    '<td style="padding:10px 8px;border-bottom:1px solid #e8edf5;font-size:12px;white-space:nowrap">'+
+    emailEsc(mode==='sla'?(a.sla?displayDate(a.sla):'—'):String(a.ageDays)+' dias')+'</td></tr>';
+  const section=(title:string,items:TicketAlert[],mode:'sla'|'idle')=>
+    '<h3 style="font-size:15px;color:#17345d;margin:25px 0 10px">'+emailEsc(title)+' ('+items.length+')</h3>'+
+    (items.length?'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dee7f3;border-radius:8px">'+
+    '<tr style="background:#f1f5fb"><th align="left" style="padding:9px 8px;font-size:11px">Ticket</th>'+
+    '<th align="left" style="padding:9px 8px;font-size:11px">Assunto, status e responsável</th>'+
+    '<th align="left" style="padding:9px 8px;font-size:11px">'+(mode==='sla'?'Prazo':'Sem ação')+'</th></tr>'+
+    items.slice(0,limited).map(a=>htmlRow(a,mode)).join('')+'</table>'+
+    (items.length>limited?'<p style="font-size:12px;color:#65748b">Mais '+(items.length-limited)+' chamados não exibidos.</p>':''):
+    '<p style="font-size:12px;color:#60718a">Nenhum encontrado nos registros importados.</p>');
+  const html='<div style="border-top:2px solid #dce6f4;margin-top:28px;padding-top:10px">'+
+    '<h2 style="color:#102c4f;font-size:20px;margin:12px 0">Pendências e chamados em aberto</h2>'+
+    '<p style="font-size:12px;color:#66758c">Fotografia atual dos tickets sincronizados com o Movidesk (pode estar incompleta).</p>'+
+    '<table role="presentation" width="100%" cellpadding="6" cellspacing="0" style="background:#edf3fb;border-radius:8px">'+
+    '<tr><td style="font-size:12px">Em aberto<br><strong style="font-size:20px">'+active.length+'</strong></td>'+
+    '<td style="font-size:12px">SLA vencido<br><strong style="font-size:20px;color:#b63333">'+overdue.length+'</strong></td>'+
+    '<td style="font-size:12px">Sem ação 7+ dias<br><strong style="font-size:20px;color:#ad6513">'+stalled.length+'</strong></td>'+
+    '<td style="font-size:12px">Sem SLA<br><strong style="font-size:20px">'+withoutSla+'</strong></td></tr></table>'+
+    section('Prazo de SLA vencido',overdue,'sla')+
+    section('Sem ação registrada há 7 dias ou mais',stalled,'idle')+
+    '<p style="font-size:11px;line-height:1.5;color:#64748b;margin-top:20px">SLA vencido: data anterior a hoje, excluindo SLA pausado. '+
+    'Sem ação: última ação registrada há 7 dias ou mais. Um ticket pode estar nas duas listas. '+
+    'Os alertas refletem a situação atual e somente os tickets já importados.</p></div>';
+  return {text:lines.join('\n'),html,metrics:{
+    open:active.length,overdue:overdue.length,stalled:stalled.length,withoutSla}};
 }
 async function recipientList() {
   return (await list('audit_email_recipients', '?select=*')).filter(r => r.active === true);
@@ -395,6 +516,7 @@ async function manualOfficial(payload: R) {
   // Piloto manual autorizado: admin JWT + endereco fixo + confirmacao de UI.
   // A permissao coletiva global permanece exigida pelo Cron automatico.
   const report = buildReport(rec, appts, from, to, kind, hol, true);
+  const tickets = ticketAlerts(rec, await ticketSource());
   // Mesmo com zero apontamentos, o teste manual verifica o envio e informa a ausencia no corpo.
   const partial = !checkpoint.completed || !coverage.ready;
   const empty = !report.metrics.appointments;
@@ -404,14 +526,14 @@ async function manualOfficial(payload: R) {
     '\nEste e-mail verifica o recebimento e não é um relatório definitivo.'+
     (partial?'\nATENÇÃO: sincronização incompleta; indicadores parciais.':'')+
     (empty?'\nSEM APONTAMENTOS IMPORTADOS: não é possível concluir ausência de trabalho.':'')+
-    '\nDestinatário: '+safe(rec.email)+'\n\n'+report.text;
+    '\nDestinatário: '+safe(rec.email)+'\n\n'+report.text+'\n\n'+tickets.text;
   const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
     method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
     body: JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:kind,period_from:from,period_to:to,status:'processing'})
   });
   if (!inserted?.length) return json({ ok: true, skipped: 'Relatorio ja reservado para envio' });
   try {
-    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true));
+    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true).replace('</td></tr><tr><td style="background:#f4f7fb"',tickets.html+'</td></tr><tr><td style="background:#f4f7fb"'));
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -455,6 +577,7 @@ async function dispatch() {
   const coverage = await recentCoverage(from,to);
   if (!coverage.ready) return json({ok:true,skipped:'Conciliação dos apontamentos Movidesk ainda não concluída; envio automático bloqueado',from,to,coverage});
   const appts = await source(from, to);
+  const allTickets = await ticketSource();
   const results: R[] = [];
   for (const t of tasks) {
     const id = String(t.r.id);
@@ -463,6 +586,7 @@ async function dispatch() {
       const exists = await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}&select=dispatch_key,status&limit=1`);
       if (exists.length) { results.push({ recipientId: id, kind: t.kind, skipped: 'Ja registrado; revisar status antes de retentar' }); continue; }
       const report = buildReport(t.r, appts, t.from, t.to, t.kind, hol);
+      const tickets = ticketAlerts(t.r, allTickets);
       if (!report.metrics.appointments) { results.push({ recipientId: id, kind: t.kind, skipped: 'Sem apontamentos; envio suspenso' }); continue; }
       const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
         method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
@@ -471,7 +595,7 @@ async function dispatch() {
       });
       if (!inserted?.length) continue;
       try {
-        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text,reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false));
+        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text+'\n\n'+tickets.text,reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false).replace('</td></tr><tr><td style="background:#f4f7fb"',tickets.html+'</td></tr><tr><td style="background:#f4f7fb"'));
         await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH', body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString(), provider_id: 'gmail-apps-script' }) });
         results.push({ recipientId: id, kind: t.kind, status: 'sent', ...report.metrics });
