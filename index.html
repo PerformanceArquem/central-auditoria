@@ -3581,7 +3581,7 @@ reportPreviewInit();
       if(r.error)throw r.error;
       records=r.data||[];window.auditEmailRecipientsCache=records;
       $('emailTestRecipient').innerHTML='<option value="">Selecione um cadastro ativo</option>'+records.filter(x=>x.active).map(x=>`<option value="${esc(x.id)}">${esc(x.name)} — ${esc(x.email)}</option>`).join('');
-      $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
+      $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><div style="display:flex;gap:6px;white-space:nowrap"><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button><button type="button" class="s" style="color:#b42318;border-color:#f2b5b5" data-email-delete="${esc(x.id)}" aria-label="Excluir destinatário ${esc(x.name)}">Excluir</button></div></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
       const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
       $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
       loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
@@ -3631,7 +3631,38 @@ reportPreviewInit();
   $('emailScope').addEventListener('change',scope);
   $('emailNew').addEventListener('click',reset);
   $('emailReload').addEventListener('click',reload);
+  let deletingRecipient=false;
+  async function deleteRecipient(id,btn){
+    if(deletingRecipient)return;
+    const rec=records.find(x=>x.id===id);if(!rec)return;
+    if(!confirm(`Excluir o destinatário "${rec.name}" (${rec.email})?\n\nIsso remove o cadastro de envio. O histórico de e-mails já enviados será preservado.`))return;
+    deletingRecipient=true;
+    if(btn){btn.disabled=true;btn.textContent='Excluindo…'}
+    try{
+      await verify();
+      say('Excluindo destinatário no Supabase…');
+      const result=await client.from('audit_email_recipients').delete().eq('id',id).select('id');
+      if(result.error){
+        // A tabela de histórico possui chave estrangeira ON DELETE RESTRICT.
+        // Não apagar histórico para forçar a exclusão.
+        if(result.error.code==='23503'||/foreign key|violates foreign key|referenced|referência/i.test(result.error.message||'')){
+          const deactivate=confirm('Este destinatário possui histórico de disparos. Para preservar os registros, não é possível excluí-lo definitivamente.\n\nDeseja DESATIVAR o destinatário, impedindo novos e-mails?');
+          if(!deactivate){say('Exclusão cancelada. Cadastro e histórico preservados.');return}
+          const r=await client.from('audit_email_recipients').update({active:false,updated_at:new Date().toISOString()}).eq('id',id).select('id').single();
+          if(r.error)throw r.error;
+          await reload();say('Destinatário desativado. Não receberá novos relatórios; histórico preservado.');return;
+        }
+        throw result.error;
+      }
+      if(!result.data?.some(x=>x.id===id))throw Error('O Supabase não confirmou a exclusão. Verifique as permissões.');
+      if($('emailRecordId').value===id)reset();
+      await reload();say('Destinatário excluído do Supabase com sucesso.');
+    }catch(err){console.error('Falha ao excluir destinatário',err);say('Não foi possível excluir: '+readableError(err),true)}
+    finally{deletingRecipient=false;if(btn&&btn.isConnected){btn.disabled=false;btn.textContent='Excluir'}}
+  }
   $('emailRecipients').addEventListener('click',e=>{
+    const del=e.target.closest('[data-email-delete]');
+    if(del){deleteRecipient(del.dataset.emailDelete,del);return}
     const id=e.target.closest('[data-email-edit]')?.dataset.emailEdit;
     const x=records.find(r=>r.id===id);if(!x)return;
     $('emailRecordId').value=x.id;$('emailName').value=x.name;$('emailAddress').value=x.email;
