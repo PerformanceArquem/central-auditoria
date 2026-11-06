@@ -103,4 +103,3 @@ export default async function handler(req, res) {
     return fail(res, 502, error?.name === 'AbortError' ? 'Consulta demorou demais. Tente novamente.' : 'Falha ao obter os comparativos: '+error.message);
   } finally {clearTimeout(timeout);}
 }
-
