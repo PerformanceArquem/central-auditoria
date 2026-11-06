@@ -897,7 +897,7 @@
                 <div class="row noprint" style="align-items:flex-end">
                   <div class="fg"><label for="previewPeriod">Tipo de relatório</label><select id="previewPeriod"><option value="day">Diário</option><option value="week">Semanal</option></select></div>
                   <div class="fg"><label for="previewDate">Data de referência</label><input id="previewDate" type="date"></div>
-                  <div class="fg" style="min-width:220px;flex:1"><label for="previewCollaborator">Colaborador</label><select id="previewCollaborator"><option value="">Todos os colaboradores</option></select></div>
+                  <div class="fg" style="min-width:220px;flex:1"><label for="previewCollaborator">Colaborador</label><select id="previewCollaborator"><option value="">Todos os colaboradores</option></select><small id="previewCollaboratorHint" style="color:var(--muted)">Carregando opções do Supabase...</small></div>
                   <button class="b" type="button" id="previewLoad">Consultar dados</button>
                   <button class="s" type="button" id="previewCopy">Copiar relatório</button>
                 </div>
@@ -3534,7 +3534,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         </script>
 <script id="reportPreviewScript">
 (()=>{'use strict';
- const el=id=>document.getElementById(id); let loaded=false,latest=null,started=false;
+ const el=id=>document.getElementById(id); let loaded=false,latest=null,started=false,collaboratorNames=[];
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const fmt=m=>{m=Math.max(0,Math.floor(Number(m)||0));return `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}:00`};
  const zoneDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -3552,7 +3552,45 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    el('previewDate').addEventListener('change',load);
    el('previewCollaborator').addEventListener('change',render);
    load();
+   loadCollaborators();
  };
+ function renderCollaboratorOptions(reportRows=[]){
+   const select=el('previewCollaborator');
+   const previous=select.value;
+   const names=[...new Set([...collaboratorNames,...reportRows.map(r=>r.collaborator)].filter(Boolean))]
+     .sort((a,b)=>a.localeCompare(b,'pt-BR'));
+   select.replaceChildren(new Option('Todos os colaboradores',''));
+   names.forEach(name=>select.add(new Option(name,name)));
+   if(names.includes(previous))select.value=previous;
+ }
+ async function loadCollaborators(){
+   const client=window.tmEmailAdminClient;
+   if(!client)return;
+   try{
+     const {data:session,error:authError}=await client.auth.getUser();
+     if(authError||!session?.user)throw Error('Sessão Supabase não autenticada');
+     const names=new Set();
+     for(let start=0;start<30000;start+=1000){
+       const {data,error}=await client.from('audit_direct_appointments')
+         .select('collaborator_name').order('appointment_key')
+         .range(start,start+999);
+       if(error)throw error;
+       for(const row of data||[]){
+         const name=String(row.collaborator_name||'').trim();
+         if(name)names.add(name);
+       }
+       if(!data||data.length<1000)break;
+     }
+     collaboratorNames=[...names];
+     renderCollaboratorOptions(latest?.rows||[]);
+     const status=el('previewCollaboratorHint');
+     if(status)status.textContent=collaboratorNames.length+' colaborador(es) encontrado(s) nos apontamentos do Supabase.';
+   }catch(error){
+     console.error('Falha ao listar colaboradores:',error);
+     const status=el('previewCollaboratorHint');
+     if(status)status.textContent='Falha ao carregar colaboradores: '+(error?.message||String(error));
+   }
+ }
  async function load(){
    if(loaded)return;loaded=true;el('previewLoad').disabled=true;say('Consultando o Supabase...');
    try{
@@ -3563,11 +3601,13 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
      url.searchParams.set('date',el('previewDate').value);
      const response=await fetch(url,{headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
      const json=await response.json().catch(()=>({}));
-     if(!response.ok)throw new Error(json.error||`HTTP ${response.status}`);
+     if(!response.ok){
+       const detail=typeof json.error==='string'?json.error:(json.error?.message||json.message||JSON.stringify(json.error||{}));
+       throw new Error((detail&&detail!=='{}'?detail:'Falha no serviço de relatórios')+' (HTTP '+response.status+')');
+     }
+     if(!Array.isArray(json.rows))throw new Error('Resposta do relatório sem lista de colaboradores.');
      latest=json;
-     const previous=el('previewCollaborator').value;
-     el('previewCollaborator').innerHTML='<option value="">Todos os colaboradores</option>'+json.rows.map(r=>`<option value="${esc(r.collaborator)}">${esc(r.collaborator)}</option>`).join('');
-     if(json.rows.some(r=>r.collaborator===previous))el('previewCollaborator').value=previous;
+     renderCollaboratorOptions(json.rows);
      render();
    }catch(e){latest=null;el('previewRows').innerHTML='<tr><td colspan="10">Não foi possível carregar o relatório.</td></tr>';el('previewCoverage').textContent='Consulta indisponível; nenhum e-mail foi enviado.';say('Erro: '+(e?.message||e));}
    finally{loaded=false;el('previewLoad').disabled=false}
