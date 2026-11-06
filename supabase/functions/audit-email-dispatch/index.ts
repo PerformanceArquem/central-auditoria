@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-template-styled-20261106-v13';
+const RELEASE_ID = 'email-template-styled-20261106-v14';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -204,18 +204,45 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
   const details = person ? selected.slice(0, 100).map(a =>
     `- ${String(a.appointment_date)} | #${safe(a.ticket_id)} | ${duration(Number(a.duration_minutes || 0))} | ${safe(a.activity)}`)
     : [...byPerson.entries()].sort((a, b) => b[1] - a[1]).map(([n, m]) => `- ${safe(n)}: ${duration(m)}`);
+  // Texto legível no Gmail mesmo se o Apps Script ainda não usar htmlBody.
+  // Ausência de lançamentos importados não equivale a ausência de trabalho.
   const lines = [
-    title, `Periodo: ${from} a ${to}`, 'ATENCAO: numeros representam apenas apontamentos importados do Movidesk.',
-    `Dias uteis de referencia: ${days.length} (sem escala individual/afastamentos)`,
-    `Chamados com apontamentos: ${worked}`, `Quantidade de apontamentos: ${selected.length}`,
-    `Horas apontadas: ${duration(minutes)}`, `Meta minima: ${duration(minimum)}`,
-    `Jornada de referencia: ${duration(target)}`,
-    `Faltam para a minima: ${duration(Math.max(0, minimum - minutes))}`,
-    `Faltam para a jornada: ${duration(Math.max(0, target - minutes))}`,
-    `Excedente acima da jornada: ${duration(Math.max(0, minutes - target))}`,
-    '', person ? 'Atividades registradas (primeiras 100):' : 'Horas registradas por colaborador:',
-    ...(details.length ? details : ['Nenhum apontamento encontrado neste periodo.']),
-    '', 'Este resumo mede tempo APONTADO, nao ponto eletronico, presenca ou produtividade individual definitiva.'
+    'ARQUEM SISTEMAS  |  CENTRAL DE AUDITORIA',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    title.toUpperCase(),
+    `PERÍODO: ${displayDate(from)} a ${displayDate(to)}`,
+    '',
+    'RESUMO DOS APONTAMENTOS',
+    '────────────────────────────────────────',
+    `Horas apontadas ............ ${duration(minutes)}`,
+    `Apontamentos importados .... ${selected.length}`,
+    `Chamados com horas ......... ${worked}`,
+    `Dias úteis de referência ... ${days.length}`,
+    '',
+    'REFERÊNCIAS DE JORNADA',
+    '────────────────────────────────────────',
+    ...(selected.length ? [
+      `Meta mínima de referência . ${duration(minimum)}`,
+      `Jornada de referência ..... ${duration(target)}`,
+      `Diferença para a mínima ... ${duration(Math.max(0, minimum-minutes))}`,
+      `Diferença para a jornada .. ${duration(Math.max(0, target-minutes))}`,
+      `Tempo acima da jornada .... ${duration(Math.max(0, minutes-target))}`
+    ] : [
+      'Metas não avaliadas: nenhum apontamento importado neste período.',
+      'Isso NÃO comprova ausência de trabalho.'
+    ]),
+    '',
+    person ? 'ATIVIDADES REGISTRADAS (ATÉ 100)' : 'HORAS POR COLABORADOR',
+    '────────────────────────────────────────',
+    ...(details.length ? details : ['Nenhum registro importado para o período.']),
+    '',
+    'INFORMAÇÃO IMPORTANTE',
+    '────────────────────────────────────────',
+    'Este relatório considera somente apontamentos importados do Movidesk.',
+    'A sincronização pode estar incompleta. Não é controle de ponto',
+    'nem comprovação definitiva de presença ou produtividade.',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    'ARQUEM | Relatório emitido pela Central de Auditoria'
   ];
   if (scope === 'management') lines.push('', 'Horas por setor:', ...[...bySector].map(([s, m]) => `- ${safe(s)}: ${duration(m)}`));
   return { text: lines.join('\n'), metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
@@ -368,11 +395,11 @@ async function manualOfficial(payload: R) {
   const empty = !report.metrics.appointments;
   const subject = '[TESTE MANUAL] Central de Auditoria - Relatorio '+(kind === 'weekly' ? 'semanal' : 'diario')+
     (partial?' [DADOS PARCIAIS]':'')+(empty?' [SEM APONTAMENTOS]':'')+' - '+from;
-  const body = 'ARQUEM | CENTRAL DE AUDITORIA\nTESTE MANUAL DE ENVIO - '+(kind === 'weekly' ? 'SEMANAL' : 'DIARIO')+'\n'+
-    'ATENCAO: ESTE E UM TESTE MANUAL, NAO UMA VALIDACAO DEFINITIVA DOS APONTAMENTOS.\n'+
-    (partial?'COBERTURA DA SINCRONIZACAO INCOMPLETA. INDICADORES PARCIAIS.\n':'')+
-    (empty?'NAO HA APONTAMENTOS IMPORTADOS PARA ESTE COLABORADOR NO PERIODO.\n':'')+
-    'Destinatario: '+safe(rec.email)+'\n\n'+report.text;
+  const body = '[TESTE MANUAL DE ENVIO]'+
+    '\nEste e-mail verifica o recebimento e não é um relatório definitivo.'+
+    (partial?'\nATENÇÃO: sincronização incompleta; indicadores parciais.':'')+
+    (empty?'\nSEM APONTAMENTOS IMPORTADOS: não é possível concluir ausência de trabalho.':'')+
+    '\nDestinatário: '+safe(rec.email)+'\n\n'+report.text;
   const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
     method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
     body: JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:kind,period_from:from,period_to:to,status:'processing'})
