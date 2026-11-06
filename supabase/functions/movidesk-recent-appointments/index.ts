@@ -67,7 +67,7 @@ function extract(t:Record<string,unknown>){
 async function list(start:string,end:string,offset:number){
  // Documentação Movidesk: OData actions/any + timeAppointments/any.
  const f='actions/any(a: a/timeAppointments/any(p: p/date ge '+start+'T00:00:00.00z and p/date lt '+end+'T00:00:00.00z))';
- const items=await movidesk({'$select':'id,lastUpdate','$filter':f,'$orderby':'id asc','$top':'5','$skip':String(offset)});
+ const items=await movidesk({'$select':'id,lastUpdate','$filter':f,'$orderby':'id asc','$top':'10','$skip':String(offset)});
  if(!Array.isArray(items))throw Error('Resposta inesperada da pesquisa Movidesk');
  return items as Record<string,unknown>[];
 }
@@ -109,7 +109,7 @@ Deno.serve(async(req:Request)=>{
     const full=await movidesk({id});if(!full||String(full.id??'')!==id)throw Error('Detalhe invalido '+id);
     appts+=await save(full);
    }
-   const complete=rows.length<5;
+   const complete=rows.length<10;
    const finished=await rpc('audit_recent_finish',{p_token:c.claimed_token,p_count:rows.length,p_complete:complete,p_error:null});
    if(finished!==true)throw Error('Checkpoint nao confirmado');
    return reply(req,{ok:true,mode:'recent_time_appointments',saved:rows.length,appointments:appts,
