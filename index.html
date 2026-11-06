@@ -3726,7 +3726,17 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     const partial=data.sync?.historyComplete!==true;
     const stale=rows.filter(x=>ageDays(x.lastAppointment)>7).length;
     const summary=$('emailCoverageSummary');
-    if(summary)summary.textContent=rows.length+' vínculos colaborador/setor · '+stale+' sem apontamento importado nos últimos 7 dias · Histórico '+(partial?'AINDA INCOMPLETO':'concluído')+' · Importação histórica até o offset '+(data.sync?.historicalOffset??'—')+'. A ausência de registro NÃO comprova falta de apontamento no Movidesk.';
+    const recent=data.sync?.recent||null;
+    const recentText=recent
+      ? ' · Conciliação recente '+(recent.completed?'CONCLUÍDA':'EM ANDAMENTO')+
+        ' ('+recent.period_start+' a '+recent.period_end+', '+(recent.next_offset??0)+' chamados verificados)'+
+        (recent.last_error?' · ERRO: '+recent.last_error:'')
+      : ' · Conciliação recente não verificada';
+    if(summary)summary.textContent=rows.length+' vínculos colaborador/setor · '+stale+
+      ' sem apontamento importado nos últimos 7 dias · Histórico '+
+      (partial?'AINDA INCOMPLETO':'concluído')+' · Importação histórica até o offset '+
+      (data.sync?.historicalOffset??'—')+recentText+
+      '. A ausência de registro NÃO comprova falta de apontamento no Movidesk.';
     const tbody=$('emailCoverageRows');
     if(tbody)tbody.innerHTML=rows.map(x=>{
       const age=ageDays(x.lastAppointment);
