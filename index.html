@@ -1022,11 +1022,22 @@
         <div class="fg"><label for="emailAddress">E-mail corporativo autorizado</label><input id="emailAddress" type="email" required placeholder="destinatario@empresa.com.br"></div>
         <div class="fg"><label for="emailScope">Escopo</label><select id="emailScope"><option value="sector">Setorial</option><option value="management">Gestão — todos os setores</option></select></div>
         <div class="fg" id="emailSectorBox"><label for="emailSector">Setor (como no Movidesk)</label><input id="emailSector" list="emailSectors" placeholder="Implantação"><datalist id="emailSectors"></datalist></div>
-        <div class="fg" id="emailCollabBox"><label for="emailCollaborator">Colaborador (opcional)</label><input id="emailCollaborator" list="emailCollaborators" placeholder="Vazio: todos do setor"><datalist id="emailCollaborators"></datalist></div>
+        <div class="fg" id="emailCollabBox"><label for="emailCollaborator">Colaborador (opcional)</label><input id="emailCollaborator" list="emailCollaborators" placeholder="Nome do colaborador"><datalist id="emailCollaborators"></datalist><label style="font-weight:normal;margin-top:7px"><input type="checkbox" id="emailTeamManager"> Gestor do setor — receber relatório de toda a equipe</label></div>
       </div>
       <div class="row" style="margin:12px 0"><label><input id="emailDaily" type="checkbox" checked> Diário às 9h</label><label><input id="emailWeekly" type="checkbox" checked> Semanal às 9h</label><label><input id="emailActive" type="checkbox" checked> Ativo</label></div>
       <div class="row"><button type="submit" class="b">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button></div>
     </form>
+    <h3 style="margin-top:22px">Central de e-mails por setor</h3>
+    <p class="subtle">Gestor setorial recebe o consolidado de todos os colaboradores do setor; gestão geral recebe todos os setores. As permissões efetivas de envio são aplicadas pelo serviço Supabase.</p>
+    <div class="row" style="margin:12px 0">
+       <div class="fg"><label for="emailFilterSector">Exibir setor</label><select id="emailFilterSector"><option value="">Todos os setores</option></select></div>
+       <div class="fg"><label for="emailFilterState">Situação</label><select id="emailFilterState"><option value="active">Ativos</option><option value="all">Todos</option><option value="inactive">Inativos</option></select></div>
+       <button type="button" class="s" id="emailShowSchedule">Atualizar programação</button>
+    </div>
+    <div id="emailSectorSummary" class="email-admin-grid" aria-label="Resumo por setor"></div>
+    <h3 style="margin-top:20px">Envios programados (prévia)</h3>
+    <p class="subtle">Calculado a partir dos destinatários ativos e do Cron de 9h em dias úteis. Não representa mensagens já enfileiradas ou confirmação de entrega.</p>
+    <div class="tw"><table><thead><tr><th>Quando (Brasília)</th><th>Destinatário</th><th>E-mail</th><th>Setor / equipe</th><th>Relatório previsto</th></tr></thead><tbody id="emailScheduled"><tr><td colspan="5">Carregue os destinatários.</td></tr></tbody></table></div>
     <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Diário</th><th>Semanal</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="8">Abra o módulo para carregar.</td></tr></tbody></table></div>
     <h3 style="margin-top:22px">Histórico dos últimos envios</h3><div class="tw"><table><thead><tr><th>Data</th><th>Destinatário</th><th>Tipo</th><th>Período</th><th>Status</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
     <p class="subtle" style="margin-top:12px">O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
@@ -3596,8 +3607,30 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   let client=null, records=[], loaded=false, loading=false;
   const say=t=>{if($('emailAdminStatus'))$('emailAdminStatus').textContent=t};
   const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaborator').value=''}};
-  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope() }
+  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaborator').value='';$('emailTeamManager').checked=false} teamMode() };
+  const teamMode=()=>{const team=$('emailTeamManager').checked;$('emailCollaborator').disabled=team;if(team)$('emailCollaborator').value='';};
+  const sectorLabel=x=>x.scope==='management'?'Gestão geral':(x.sector||'Setor não informado');
+  const roleLabel=x=>x.scope==='management'?'Diretoria · todos os setores':x.collaborator_name?'Individual · '+x.collaborator_name:'Gestor/equipe · setor inteiro';
+  const nextDate=(weekly=false)=>{
+    const today=new Date(),dt=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),today.getUTCDate(),12));
+    if(dt<=today)dt.setUTCDate(dt.getUTCDate()+1);
+    while(weekly?dt.getUTCDay()!==1:[0,6].includes(dt.getUTCDay()))dt.setUTCDate(dt.getUTCDate()+1);
+    return new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(dt);
+  };
+  function renderCentral(){
+    const filter=$('emailFilterSector').value, status=$('emailFilterState').value;
+    const allSectors=[...new Set(records.map(sectorLabel))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const selection=$('emailFilterSector');
+    selection.innerHTML='<option value="">Todos os setores</option>'+allSectors.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');
+    selection.value=allSectors.includes(filter)?filter:'';
+    const visible=records.filter(x=>(!selection.value||sectorLabel(x)===selection.value)&&(status==='all'||(status==='active'?x.active:!x.active)));
+    $('emailRecipients').innerHTML=visible.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${esc(sectorLabel(x))}</td><td>${esc(roleLabel(x))}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button> <button type="button" class="s" data-email-toggle="${esc(x.id)}">${x.active?'Desativar':'Reativar'}</button> <button type="button" class="s" data-email-delete="${esc(x.id)}" style="color:#b42318">Excluir</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário neste filtro.</td></tr>';
+    const sectors=[...new Set(records.filter(x=>x.active).map(sectorLabel))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    $('emailSectorSummary').innerHTML=sectors.map(s=>{const rows=records.filter(x=>x.active&&sectorLabel(x)===s);return '<div class="card" style="margin:0;padding:12px"><strong>'+esc(s)+'</strong><div>'+rows.length+' destinatário(s) ativo(s)</div><small>'+rows.filter(x=>!x.collaborator_name).length+' consolidado(s) de equipe/gestão</small></div>'}).join('')||'<p>Não há destinatários ativos.</p>';
+    const scheduled=visible.filter(x=>x.active).flatMap(x=>[...(x.daily_enabled?[{x,when:nextDate(false),kind:'Diário'}]:[]),...(x.weekly_enabled?[{x,when:nextDate(true),kind:'Semanal'}]:[])]);
+    $('emailScheduled').innerHTML=scheduled.map(t=>`<tr><td>${esc(t.when)}</td><td>${esc(t.x.name)}</td><td>${esc(t.x.email)}</td><td>${esc(sectorLabel(t.x))} · ${esc(roleLabel(t.x))}</td><td>${t.kind}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio previsto para este filtro.</td></tr>';
+  }
+  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope();$('emailTeamManager').checked=false;teamMode() }
   function populateSuggestions(){
     try{
       const tickets=Array.from(window.TK?.values?.()||[]);
@@ -3623,7 +3656,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const r=await client.from('audit_email_recipients').select('*').order('name');
       if(r.error)throw r.error;
       records=r.data||[];
-      $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?'Gestão · Todos':esc(x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
+      renderCentral();
       const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
       $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
       loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
@@ -3636,14 +3669,39 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     if(show&&!loaded)reload();
   });
   $('emailScope').addEventListener('change',scope);
+  $('emailTeamManager').addEventListener('change',teamMode);
+  $('emailFilterSector').addEventListener('change',renderCentral);
+  $('emailFilterState').addEventListener('change',renderCentral);
+  $('emailShowSchedule').addEventListener('click',renderCentral);
   $('emailNew').addEventListener('click',reset);
   $('emailReload').addEventListener('click',reload);
-  $('emailRecipients').addEventListener('click',e=>{
+  $('emailRecipients').addEventListener('click',async e=>{
+    const deleteId=e.target.closest('[data-email-delete]')?.dataset.emailDelete;
+    const toggleId=e.target.closest('[data-email-toggle]')?.dataset.emailToggle;
+    if(deleteId){
+      const person=records.find(r=>r.id===deleteId);if(!person)return;
+      if(!confirm('Excluir definitivamente '+person.name+' ('+person.email+')? O histórico de envios será preservado quando permitido pelo banco.'))return;
+      try{await verify();say('Excluindo destinatário...');
+        const r=await client.from('audit_email_recipients').delete().eq('id',deleteId).select('id');
+        if(r.error)throw r.error;
+        if(!r.data?.length)throw Error('Exclusão não autorizada pela política de segurança do Supabase.');
+        await reload();say('Destinatário excluído.');
+      }catch(err){say('Não foi possível excluir: '+err.message+' Use Desativar para interromper os envios enquanto revisamos as permissões.')}
+      return;
+    }
+    if(toggleId){
+      const person=records.find(r=>r.id===toggleId);if(!person)return;
+      try{await verify();const r=await client.from('audit_email_recipients').update({active:!person.active,updated_at:new Date().toISOString()}).eq('id',toggleId).select('id');
+        if(r.error)throw r.error;if(!r.data?.length)throw Error('Alteração não autorizada.');
+        await reload();say(person.active?'Destinatário desativado.':'Destinatário reativado.');
+      }catch(err){say('Falha ao alterar status: '+err.message)}
+      return;
+    }
     const id=e.target.closest('[data-email-edit]')?.dataset.emailEdit;
     const x=records.find(r=>r.id===id);if(!x)return;
     $('emailRecordId').value=x.id;$('emailName').value=x.name;$('emailAddress').value=x.email;
     $('emailScope').value=x.scope||'sector';scope();$('emailSector').value=x.sector||'';
-    $('emailCollaborator').value=x.collaborator_name||'';$('emailDaily').checked=x.daily_enabled;
+    $('emailCollaborator').value=x.collaborator_name||'';$('emailTeamManager').checked=x.scope==='sector'&&!x.collaborator_name;teamMode();$('emailDaily').checked=x.daily_enabled;
     $('emailWeekly').checked=x.weekly_enabled;$('emailActive').checked=x.active;
     $('emailAdminCard').scrollIntoView({behavior:'smooth',block:'start'});
   });
@@ -3652,6 +3710,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     try{
       await verify();
       const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:$('emailSector').value.trim(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaborator').value.trim()||null),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
+      if($('emailTeamManager').checked&&data.scope==='sector')data.collaborator_name=null;
       if(!data.daily_enabled&&!data.weekly_enabled)throw Error('Marque ao menos uma frequência.');
       if(data.scope==='sector'&&!data.sector)throw Error('Informe o setor.');
       say('Salvando cadastro...');const id=$('emailRecordId').value;
