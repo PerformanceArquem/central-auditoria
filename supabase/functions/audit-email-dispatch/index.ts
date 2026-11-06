@@ -130,7 +130,8 @@ function ticketAlerts(rec:R,records:R[]) {
     const t=(r.payload&&typeof r.payload==='object'?r.payload:{}) as R;
     const status=String(t.status||'Não informado');
     if(closedStatuses.has(norm(status))||r.closed_at_source||t.canceledIn||t.closedIn||t.isDeleted===true)continue;
-    const owner=String(t.owner?.businessName||t.owner?.name||'Sem responsável');
+    const ownerData=(t.owner && typeof t.owner==='object')?t.owner as R:{} as R;
+    const owner=String(ownerData.businessName||ownerData.name||'Sem responsável');
     const sector=String(t.ownerTeam||'Sem setor');
     if(scope==='management'){
       if(sectorNames.length&&!matchesSector(sector))continue;
