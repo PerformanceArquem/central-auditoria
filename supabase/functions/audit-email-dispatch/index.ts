@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-manual-pilot-20261106-v8';
+const RELEASE_ID = 'email-manual-pilot-20261106-v9';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -254,6 +254,16 @@ async function adminAction(payload: R) {
 }
 // Envio manual isolado: um destinatario existente e ativo, autorizado pelo administrador.
 // Nao executa a rotina automatica, nao percorre todos os destinatarios e nao altera o Cron.
+// Não declarar completos resultados recentes enquanto a conciliação pela data do apontamento estiver em andamento.
+async function recentCoverage(from:string,to:string) {
+  const rows = await db('audit_recent_reconcile_state?job_name=eq.movidesk_recent_reconcile&select=period_start,period_end,completed,next_offset,last_success_at,last_error&limit=1');
+  if (!rows?.length) throw new Error('Checkpoint da conciliacao diaria ausente');
+  const s=rows[0] as R;
+  const overlap=from<String(s.period_end) && to>=String(s.period_start);
+  const ready=!overlap || s.completed===true;
+  return {ready,overlap,from:s.period_start,to:s.period_end,offset:s.next_offset,
+    completed:s.completed,lastSuccess:s.last_success_at,lastError:s.last_error};
+}
 async function manualOfficial(payload: R) {
   const id = String(payload.recipientId || '');
   const kind = String(payload.kind || 'daily');
@@ -283,6 +293,9 @@ async function manualOfficial(payload: R) {
     to = from;
   }
   const checkpoint = await state();
+  const coverage = await recentCoverage(from,to);
+  if (!coverage.ready) return json({ok:false,skipped:'Conciliação recente do Movidesk em andamento; relatório oficial bloqueado para não apresentar horas incompletas',
+    from,to,coverage},200);
   const key = `manual-official:${id}:${kind}:${from}:${to}`;
   const existing = await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}&select=status&limit=1`);
   if (existing.length) return json({ ok: true, skipped: 'Relatorio manual ja registrado para este destinatario e periodo', status: existing[0].status, from, to });
@@ -355,6 +368,8 @@ async function dispatch() {
   // Leitura de periodo: somente datas necessarias. Sem fonte antiga Vercel.
   const from = tasks.reduce((s, t) => t.from < s ? t.from : s, tasks[0].from);
   const to = tasks.reduce((s, t) => t.to > s ? t.to : s, tasks[0].to);
+  const coverage = await recentCoverage(from,to);
+  if (!coverage.ready) return json({ok:true,skipped:'Conciliação dos apontamentos Movidesk ainda não concluída; envio automático bloqueado',from,to,coverage});
   const appts = await source(from, to);
   const results: R[] = [];
   for (const t of tasks) {
