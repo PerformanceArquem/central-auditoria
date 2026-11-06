@@ -4,6 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
+const RELEASE_ID = 'email-manual-pilot-20261106-v3';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -194,7 +195,7 @@ async function adminAction(payload: R) {
     ]);
     return json({ ok: true, gmailConfigured: !!(E('GMAIL_WEBAPP_URL') && E('GMAIL_MAIL_SECRET')),
       dataSources: { tickets: tickets.length > 0, appointments: appts.length > 0 },
-      source: 'Supabase direto', checkpoint: s.next_offset, completed: s.completed,
+      source: 'Supabase direto', release: RELEASE_ID, checkpoint: s.next_offset, completed: s.completed,
       incrementalReady: E('REPORT_INCREMENTAL_READY') === 'true',
       sendEnabled: E('REPORT_EMAIL_SEND_ENABLED') === 'true', activeRecipients: recipients.length });
   }
@@ -256,7 +257,7 @@ async function manualOfficial(payload: R) {
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
-    return json({ok:true,status:'sent',recipient:String(rec.email),kind,from,to,partial,metrics:report.metrics,
+    return json({ok:true,status:'sent',release: RELEASE_ID,recipient:String(rec.email),kind,from,to,partial,metrics:report.metrics,
       message:'Apps Script aceitou a mensagem; confira a entrega na caixa de entrada.'});
   } catch(ex) {
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
@@ -330,7 +331,7 @@ async function handleRequest(req: Request): Promise<Response> {
     const expected = E('REPORT_CRON_SECRET');
     if (!expected || req.headers.get('x-report-secret') !== expected) return json({ error: 'Cron nao autorizado' }, 401);
     return await dispatch();
-  } catch (ex) { console.error('audit-email-dispatch:', err(ex)); return json({ ok: false, error: err(ex) }, 500); }
+  } catch (ex) { console.error('audit-email-dispatch:', err(ex)); return json({ ok: false, error: err(ex), release: RELEASE_ID }, 500); }
 }
 
 Deno.serve(async (req: Request) => {
