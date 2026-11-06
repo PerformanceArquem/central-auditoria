@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-manual-pilot-20261106-v6';
+const RELEASE_ID = 'email-manual-pilot-20261106-v7';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -192,6 +192,25 @@ async function isAdmin(req: Request) {
 }
 async function adminAction(payload: R) {
   const action = String(payload.action);
+  if (action === 'directory') {
+    // So administradores autenticados: a funcao consulta os dados internos com service role.
+    // Nao acessar esta tabela diretamente pelo navegador, sujeito a RLS.
+    const rows = await list('audit_direct_appointments', '?select=sector,collaborator_name');
+    const groups = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const sector = String(row.sector || '').trim();
+      const person = String(row.collaborator_name || '').trim();
+      if (!sector) continue;
+      if (!groups.has(sector)) groups.set(sector, new Set());
+      if (person) groups.get(sector)!.add(person);
+    }
+    const sectors = [...groups].map(([sector,names]) => ({
+      sector, collaborators:[...names].sort((a,b) => a.localeCompare(b,'pt-BR'))
+    })).sort((a,b) => a.sector.localeCompare(b.sector,'pt-BR'));
+    return json({ok:true,release:RELEASE_ID,source:'audit_direct_appointments',sectors,
+      totalSectors:sectors.length,
+      totalCollaborators:new Set(sectors.flatMap(s=>s.collaborators)).size});
+  }
   if (action === 'status') {
     const s = await state();
     const [tickets, appts, recipients] = await Promise.all([
@@ -353,7 +372,7 @@ async function handleRequest(req: Request): Promise<Response> {
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if (action === 'status' || action === 'test' || action === 'manual_official') {
+    if (action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
       return action === 'manual_official' ? await manualOfficial(payload) : await adminAction(payload);
     }
