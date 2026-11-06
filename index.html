@@ -985,6 +985,18 @@
                     <h2 style="margin:0 0 5px">Conexão e carregamento de dados</h2>
                     <p style="margin:0;color:var(--muted)">Configure a API Movidesk, importe arquivos e acompanhe a sincronização automática.</p>
                 </div>
+
+                <section class="card" id="directSyncPanel" style="border-left:4px solid #2765dc" aria-label="Sincronização direta Movidesk Supabase">
+                  <h3>Sincronização direta · Movidesk → Supabase</h3>
+                  <p style="color:var(--muted);margin:0 0 12px">Utiliza sua sessão de administrador. Primeiro teste a leitura sem gravar. Depois importe até 5 chamados por lote. Não envia e-mails nem altera o cache do navegador.</p>
+                  <div class="row noprint" style="align-items:flex-end">
+                    <div class="fg"><label for="directSyncOffset">Posição inicial do lote</label><input id="directSyncOffset" type="number" min="0" max="50000" step="5" value="0" style="width:135px"></div>
+                    <button type="button" class="s" id="directProbeBtn">Testar conexão (sem gravar)</button>
+                    <button type="button" class="b" id="directSaveBtn" disabled>Importar até 5 chamados</button>
+                  </div>
+                  <p id="directSyncStatus" role="status" aria-live="polite" class="coverage-note">Aguardando teste de leitura. O agendamento de e-mails continua desativado.</p>
+                  <div id="directSyncDetails" style="color:#40526b;font-size:12px"></div>
+                </section>
                 <div class="card" id="cloudCard" style="border:1px solid #b8c9e8;background:#f7faff">
                     <h3>Dados compartilhados</h3>
                     <p id="cloudMsg" role="status" style="margin:0">Conectando automaticamente ao banco de dados...</p>
@@ -3725,6 +3737,66 @@ reportPreviewInit();
     });
     const main=document.querySelector('main');if(main)observer.observe(main,{childList:true,subtree:true});
   }
+})();
+</script>
+
+<script id="directMovideskSyncControls">
+(()=>{
+ 'use strict';
+ const $=id=>document.getElementById(id);
+ const probe=$('directProbeBtn'),save=$('directSaveBtn'),status=$('directSyncStatus'),details=$('directSyncDetails'),offsetEl=$('directSyncOffset');
+ if(!probe||!save||!status||!details||!offsetEl)return;
+ let authorizedOffset=null,hasMore=false,working=false,probeCount=0;
+ const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const report=(msg,bad=false)=>{status.textContent=msg;status.style.background=bad?'#fff0f0':'#edf3ff';status.style.color=bad?'#991b1b':'#304562'};
+ function position(){const n=Number(offsetEl.value);if(!Number.isInteger(n)||n<0||n>50000)throw Error('A posição deve ser um número inteiro de 0 a 50000.');return n}
+ function invalidate(){authorizedOffset=null;probeCount=0;save.disabled=true;details.textContent='';}
+ offsetEl.addEventListener('input',invalidate);
+ async function invoke(action,offset){
+   const client=window.tmEmailAdminClient;
+   if(!client||!window.tmAuth?.getSession)throw Error('Entre na Central de Auditoria com sua conta administradora antes de testar.');
+   const session=await window.tmAuth.getSession();
+   if(!session?.access_token)throw Error('Sessão expirada. Faça login novamente.');
+   const {data:canAdmin,error:adminErr}=await client.rpc('audit_is_email_admin');
+   if(adminErr||canAdmin!==true)throw Error('Sua sessão não tem autorização administrativa para sincronizar.');
+   const {data,error}=await client.functions.invoke('movidesk-direct-sync',{
+     body:{action,offset},headers:{Authorization:'Bearer '+session.access_token}
+   });
+   if(error){
+     let extra='';try{const r=error.context;if(r&&typeof r.clone==='function'){const j=await r.clone().json();extra=j.error||j.message||''}}catch(_){}
+     throw Error([extra,error.message].filter(Boolean).join(' — ')||'Falha ao executar a função');
+   }
+   if(!data||data.ok!==true)throw Error(data?.error||'Resposta da função não confirmou sucesso.');
+   return data;
+ }
+ async function execute(action){
+   if(working)return;
+   const offset=position();
+   if(action==='sync'){
+     if(authorizedOffset!==offset)throw Error('Execute o teste de leitura para esta posição antes de importar.');
+     if(!confirm('Importar até 5 chamados do Movidesk para as tabelas audit_direct_* do Supabase? Não envia e-mails.'))return;
+   }
+   working=true;probe.disabled=true;save.disabled=true;
+   report(action==='probe'?'Consultando até 5 chamados sem gravar…':'Importando lote de até 5 chamados…');
+   try{
+     const d=await invoke(action,offset);
+     hasMore=d.hasMore===true;
+     if(action==='probe'){
+       authorizedOffset=offset;probeCount=Number(d.records)||0;
+       report(`Leitura concluída: ${d.records??0} chamado(s) encontrados. Nenhum dado gravado.`);
+       details.textContent='IDs de exemplo: '+(Array.isArray(d.sampleIds)?d.sampleIds.join(', '):'não informados')+'.';
+       save.disabled=!(Number(d.records)>0);
+     }else{
+       invalidate();
+       report(`Importação: ${d.saved??0} chamado(s), ${d.appointments??0} apontamento(s) gravado(s). Lidos: ${d.read??0}.`);
+       const warnings=Array.isArray(d.warnings)?d.warnings:[];
+       details.textContent=(warnings.length?'Avisos: '+warnings.join(' | ')+'. ':'')+(hasMore?'Há mais registros. Para o próximo lote, digite a posição '+(d.nextOffset??offset+5)+' e teste novamente.':'Nenhum próximo lote confirmado.');
+     }
+   }catch(e){invalidate();report('Não foi possível '+(action==='probe'?'testar':'importar')+': '+String(e?.message||e),true)}
+   finally{working=false;probe.disabled=false;if(action==='probe'&&authorizedOffset===offset&&probeCount>0)save.disabled=false;}
+ }
+ probe.addEventListener('click',()=>execute('probe'));
+ save.addEventListener('click',()=>execute('sync'));
 })();
 </script>
 </body>
