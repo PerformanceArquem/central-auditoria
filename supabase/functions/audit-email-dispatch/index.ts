@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-manual-pilot-20261106-v9';
+const RELEASE_ID = 'email-manual-pilot-20261106-v10';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -194,10 +194,11 @@ async function adminAction(payload: R) {
   const action = String(payload.action);
   if (action === 'directory') {
     // Consulta administrativa. A ultima data importada nao prova atividade nem ausencia de trabalho.
-    const [rows,checkpoint,incremental] = await Promise.all([
+    const [rows,checkpoint,incremental,recent] = await Promise.all([
       list('audit_direct_appointments', '?select=sector,collaborator_name,appointment_date,source_synced_at'),
       state(),
-      db('audit_incremental_state?job_name=eq.movidesk_incremental&select=window_end,next_offset,last_success_at,last_error&limit=1')
+      db('audit_incremental_state?job_name=eq.movidesk_incremental&select=window_end,next_offset,last_success_at,last_error&limit=1'),
+      db('audit_recent_reconcile_state?job_name=eq.movidesk_recent_reconcile&select=period_start,period_end,next_offset,completed,last_success_at,last_error&limit=1')
     ]);
     const groups = new Map<string, Set<string>>();
     const coverage = new Map<string,{sector:string;collaborator:string;lastAppointment:string;lastImport:string;count:number}>();
@@ -228,7 +229,8 @@ async function adminAction(payload: R) {
       sync:{historyComplete:checkpoint.completed===true,historicalOffset:checkpoint.next_offset,
         historicalUpdatedAt:checkpoint.updated_at,incrementalWindowEnd:incremental?.[0]?.window_end||null,
         incrementalUpdatedAt:incremental?.[0]?.last_success_at||null,
-        incrementalError:incremental?.[0]?.last_error||null}});
+        incrementalError:incremental?.[0]?.last_error||null,
+        recent:recent?.[0]||null}});
   }
   if (action === 'status') {
     const s = await state();
