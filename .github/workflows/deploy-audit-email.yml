@@ -43,4 +43,4 @@ jobs:
           version: latest
 
       - name: Publicar apenas a funcao de e-mail
-        run: supabase functions deploy audit-email-dispatch --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+        run: supabase functions deploy audit-email-dispatch --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt --yes
