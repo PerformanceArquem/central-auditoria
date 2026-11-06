@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-manual-pilot-20261106-v4';
+const RELEASE_ID = 'email-manual-pilot-20261106-v5';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -224,7 +224,7 @@ async function manualOfficial(payload: R) {
     return json({ error: 'Piloto permitido apenas para sucessocliente@arquem.com.br' }, 403);
   const today = dateBR();
   const referenceDate = String(payload.referenceDate || today);
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(referenceDate) ||
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(referenceDate) ||
       dateBR(new Date(referenceDate + 'T12:00:00Z')) !== referenceDate ||
       referenceDate > today || referenceDate < shift(today,-370))
     return json({ error: 'Data de referencia invalida, futura ou anterior a 370 dias' }, 400);
@@ -282,12 +282,19 @@ async function dispatch() {
   if (hol.has(today)) return json({ ok: true, skipped: 'Feriado' });
   let prev = shift(today, -1);
   while ([0, 6].includes(weekday(prev)) || hol.has(prev)) prev = shift(prev, -1);
-  const prevMonday = shift(today, -((dow + 6) % 7) - 7);
-  const prevSunday = shift(prevMonday, 6);
+  // A semana anterior e enviada no primeiro dia util da semana atual.
+  // Se segunda for feriado, adia para o proximo dia util cadastrado.
+  const thisMonday = shift(today, -((dow + 6) % 7));
+  const prevMonday = shift(thisMonday, -7);
+  const prevSunday = shift(thisMonday, -1);
+  let firstBusinessDay = thisMonday;
+  while ([0, 6].includes(weekday(firstBusinessDay)) || hol.has(firstBusinessDay))
+    firstBusinessDay = shift(firstBusinessDay, 1);
+  const weeklyDue = today === firstBusinessDay;
   const tasks: { r: R; kind: 'daily' | 'weekly'; from: string; to: string }[] = [];
   for (const r of await recipientList()) {
     if (r.daily_enabled === true) tasks.push({ r, kind: 'daily', from: prev, to: prev });
-    if (dow === 1 && r.weekly_enabled === true) tasks.push({ r, kind: 'weekly', from: prevMonday, to: prevSunday });
+    if (weeklyDue && r.weekly_enabled === true) tasks.push({ r, kind: 'weekly', from: prevMonday, to: prevSunday });
   }
   if (!tasks.length) return json({ ok: true, skipped: 'Sem relatorios programados' });
   // Leitura de periodo: somente datas necessarias. Sem fonte antiga Vercel.
