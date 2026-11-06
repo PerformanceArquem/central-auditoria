@@ -1021,11 +1021,11 @@
         <div class="fg"><label for="emailName">Nome / destinatário</label><input id="emailName" required placeholder="Letícia / Diretoria"></div>
         <div class="fg"><label for="emailAddress">E-mail corporativo autorizado</label><input id="emailAddress" type="email" required placeholder="destinatario@empresa.com.br"></div>
         <div class="fg"><label for="emailScope">Escopo</label><select id="emailScope"><option value="sector">Setorial</option><option value="management">Gestão — todos os setores</option></select></div>
-        <div class="fg" id="emailSectorBox"><label for="emailSector">Setor (como no Movidesk)</label><input id="emailSector" list="emailSectors" placeholder="Implantação"><datalist id="emailSectors"></datalist></div>
-        <div class="fg" id="emailCollabBox"><label for="emailCollaboratorSelect">Colaborador do Movidesk (opcional)</label><select id="emailCollaboratorSelect"><option value="">Todos os colaboradores do setor</option></select><input type="hidden" id="emailCollaborator"><datalist id="emailCollaborators"></datalist><small id="emailMovideskDirectoryHint" class="subtle">Carregando nomes do Movidesk...</small></div>
+        <div class="fg" id="emailSectorBox"><label for="emailSector">Setor do Movidesk</label><select id="emailSector" required><option value="">Carregando setores...</option></select></div>
+        <div class="fg" id="emailCollabBox"><label for="emailCollaboratorSelect">Colaborador do Movidesk (opcional)</label><select id="emailCollaboratorSelect"><option value="">Selecione um setor primeiro</option></select><small id="emailMovideskDirectoryHint" class="subtle">Buscando nomes e setores no Movidesk...</small></div>
       </div>
       <div class="row" style="margin:12px 0"><label><input id="emailDaily" type="checkbox" checked> Diário às 9h</label><label><input id="emailWeekly" type="checkbox" checked> Semanal às 9h</label><label><input id="emailActive" type="checkbox" checked> Ativo</label></div>
-      <div class="row"><button type="submit" class="b">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button></div>
+      <div class="row"><button type="submit" class="b">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button><button type="button" class="s" id="emailRefreshDirectory">↻ Buscar setores e colaboradores</button></div>
     </form>
     <div class="card" id="emailOfficialManualPanel" style="margin-top:16px;border-left:4px solid #2457d6;background:#f8faff">
       <h3>Enviar relatório oficial manualmente</h3>
@@ -3648,62 +3648,65 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   let client=null, records=[], loaded=false, loading=false;
   const say=t=>{if($('emailAdminStatus'))$('emailAdminStatus').textContent=t};
   const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaborator').value=''}};
-  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailCollaboratorSelect').value='';$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope() }
-  function populateSuggestions(){
+  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.toggle('hide',isManagement);$('emailCollabBox').classList.toggle('hide',isManagement);$('emailSector').required=!isManagement;if(isManagement){$('emailSector').value='';$('emailCollaboratorSelect').value=''}};
+  function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailCollaboratorSelect').value='';refreshSectorOptions('');$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope() }
+  // Diretorio de setores e colaboradores: somente via Edge Function autenticada.
+  // O navegador nao le a tabela de apontamentos diretamente (RLS).
+  let movideskGroups=new Map(),movideskDirectoryLoaded=false;
+  const normName=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+  const matchingSector=v=>{
+    const candidate=normName(v);
+    const sectors=[...movideskGroups.keys()];
+    return sectors.find(s=>normName(s)===candidate)
+      || (candidate==='sucesso'?sectors.find(s=>normName(s)==='sucesso do cliente'):null)
+      || '';
+  };
+  function refreshSectorOptions(preferred=''){
+    const input=$('emailSector');if(!input)return;
+    const old=preferred||input.value;
+    const sectors=[...movideskGroups.keys()].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    input.replaceChildren(new Option('Selecione um setor do Movidesk',''),
+      ...sectors.map(s=>new Option(s,s)));
+    const found=matchingSector(old);if(found)input.value=found;
+    input.disabled=!sectors.length;
+    refreshCollaboratorOptions();
+  }
+  function refreshCollaboratorOptions(preferred=''){
+    const select=$('emailCollaboratorSelect');if(!select)return;
+    const sector=$('emailSector')?.value||'';
+    const names=[...(movideskGroups.get(sector)||[])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const old=preferred||select.value;
+    select.replaceChildren(new Option('Todos os colaboradores do setor',''),
+      ...names.map(n=>new Option(n,n)));
+    if(names.includes(old))select.value=old;
+    select.disabled=!sector;
+  }
+  async function loadMovideskDirectory(force=false){
+    if(movideskDirectoryLoaded&&!force){refreshSectorOptions();return;}
+    const btn=$('emailRefreshDirectory'),hint=$('emailMovideskDirectoryHint');
+    if(btn)btn.disabled=true;
+    if(hint)hint.textContent='Consultando setores e colaboradores importados do Movidesk...';
     try{
-      const tickets=Array.from(window.TK?.values?.()||[]);
-      const sectors=[...new Set(tickets.map(t=>t.sector||t.ownerTeam||t.owner_team||t.team||t.service_name).filter(Boolean))].sort();
-      $('emailSectors').innerHTML=sectors.map(x=>`<option value="${esc(x)}"></option>`).join('');
-      const people=[...new Set(tickets.map(t=>t.owner_name||t.ownerName).filter(Boolean))].sort();
-      $('emailCollaborators').innerHTML=people.map(x=>`<option value="${esc(x)}"></option>`).join('');
-    }catch(e){console.warn('Sugestões de setor indisponíveis',e)}
-  }
-  // Colaboradores e setores reais dos apontamentos importados do Movidesk.
-  async function loadMovideskDirectory(){
-    const namesBySector = new Map();
-    const sectors = new Set();
-    const people = new Set();
-    for(let offset=0;offset<30000;offset+=1000){
-      const {data,error}=await client.from('audit_direct_appointments')
-        .select('collaborator_name,sector').order('appointment_key').range(offset,offset+999);
+      await verify();
+      const {data,error}=await client.functions.invoke('audit-email-dispatch',{body:{action:'directory'}});
       if(error)throw error;
-      for(const row of data||[]){
-        const sector=String(row.sector||'').trim();
-        const name=String(row.collaborator_name||'').trim();
-        if(sector)sectors.add(sector);
-        if(name)people.add(name);
-        if(name&&sector){
-          if(!namesBySector.has(sector))namesBySector.set(sector,new Set());
-          namesBySector.get(sector).add(name);
-        }
+      if(!data?.ok||!Array.isArray(data.sectors))throw Error(data?.error||'O servidor não retornou os setores.');
+      const groups=new Map();
+      for(const item of data.sectors){
+        const sector=String(item.sector||'').trim();
+        if(!sector)continue;
+        groups.set(sector,[...new Set((item.collaborators||[]).map(n=>String(n||'').trim()).filter(Boolean))]);
       }
-      if(!data||data.length<1000)break;
-    }
-    window.emailMovideskPeopleBySector=namesBySector;
-    const sectorOptions=[...sectors].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-    const names=[...people].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-    $('emailSectors').replaceChildren(...sectorOptions.map(s=>new Option(s,s)));
-    $('emailCollaborators').replaceChildren(...names.map(n=>new Option(n,n)));
-    const selector=$('emailCollaboratorSelect');
-    if(selector){
-      const old=selector.value;
-      selector.replaceChildren(new Option('Todos os colaboradores do setor',''),...names.map(n=>new Option(n,n)));
-      if(names.includes(old))selector.value=old;
-    }
-    const hint=$('emailMovideskDirectoryHint');
-    if(hint)hint.textContent=names.length+' colaboradores e '+sectors.size+' setores encontrados nos apontamentos importados do Movidesk.';
-  }
-  function updateEmailCollaboratorOptions(){
-    const sector=String($('emailSector').value||'').trim();
-    const opts=window.emailMovideskPeopleBySector;
-    const names=opts && [...(opts.get(sector)||[])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-    const selector=$('emailCollaboratorSelect');
-    if(!selector)return;
-    const old=$('emailCollaborator').value||selector.value;
-    selector.replaceChildren(new Option('Todos os colaboradores do setor',''),...(names||[]).map(n=>new Option(n,n)));
-    if(names?.includes(old))selector.value=old;
-    $('emailCollaborator').value=selector.value;
+      movideskGroups=groups;
+      movideskDirectoryLoaded=true;
+      refreshSectorOptions();
+      if(hint)hint.textContent=(data.totalSectors??groups.size)+' setores e '+(data.totalCollaborators??0)+' colaboradores importados. Selecione o setor para filtrar nomes.';
+      if(!groups.size)throw Error('Nenhum setor importado. Confira a sincronização do Movidesk.');
+    }catch(e){
+      movideskDirectoryLoaded=false;
+      if(hint)hint.textContent='Não foi possível carregar o diretório: '+(e?.message||String(e));
+      throw e;
+    }finally{if(btn)btn.disabled=false;}
   }
   async function verify(){
     client=window.tmEmailAdminClient;
@@ -3733,7 +3736,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
       $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
       loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
-      try{await loadMovideskDirectory();updateEmailCollaboratorOptions()}catch(err){const hint=$('emailMovideskDirectoryHint');if(hint)hint.textContent='Não foi possível listar colaboradores: '+(err?.message||err);}
+      try{await loadMovideskDirectory(true)}catch(err){console.warn('Diretório do Movidesk indisponível:',err)}
     }catch(e){say('Não foi possível carregar: '+e.message)}finally{loading=false}
   }
   $('emailAdminOpen').addEventListener('click',()=>{
@@ -3742,8 +3745,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     if(show&&!loaded)reload();
   });
   $('emailScope').addEventListener('change',scope);
-  $('emailSector').addEventListener('change',updateEmailCollaboratorOptions);
-  $('emailCollaboratorSelect').addEventListener('change',()=>{$('emailCollaborator').value=$('emailCollaboratorSelect').value;});
+  $('emailSector').addEventListener('change',()=>refreshCollaboratorOptions());
+  $('emailRefreshDirectory').addEventListener('click',()=>loadMovideskDirectory(true).catch(err=>say('Falha no diretório: '+(err?.message||err))));
   $('emailNew').addEventListener('click',reset);
   $('emailReload').addEventListener('click',reload);
   const officialDate=$('emailOfficialReferenceDate');
@@ -3788,8 +3791,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     const id=e.target.closest('[data-email-edit]')?.dataset.emailEdit;
     const x=records.find(r=>r.id===id);if(!x)return;
     $('emailRecordId').value=x.id;$('emailName').value=x.name;$('emailAddress').value=x.email;
-    $('emailScope').value=x.scope||'sector';scope();$('emailSector').value=x.sector||'';
-    $('emailCollaborator').value=x.collaborator_name||'';updateEmailCollaboratorOptions();$('emailDaily').checked=x.daily_enabled;
+    $('emailScope').value=x.scope||'sector';scope();refreshSectorOptions(x.sector||'');
+    refreshCollaboratorOptions(x.collaborator_name||'');$('emailDaily').checked=x.daily_enabled;
     $('emailWeekly').checked=x.weekly_enabled;$('emailActive').checked=x.active;
     $('emailAdminCard').scrollIntoView({behavior:'smooth',block:'start'});
   });
@@ -3800,6 +3803,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:$('emailSector').value.trim(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaboratorSelect').value.trim()||null),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
       if(!data.daily_enabled&&!data.weekly_enabled)throw Error('Marque ao menos uma frequência.');
       if(data.scope==='sector'&&!data.sector)throw Error('Informe o setor.');
+      if(data.scope==='sector'&&!movideskGroups.has(data.sector))throw Error('Selecione um setor válido da lista Movidesk.');
       say('Salvando cadastro...');const id=$('emailRecordId').value;
       const r=id?await client.from('audit_email_recipients').update(data).eq('id',id):await client.from('audit_email_recipients').insert(data);
       if(r.error)throw r.error;
