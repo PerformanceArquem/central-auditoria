@@ -1027,6 +1027,17 @@
       <div class="row" style="margin:12px 0"><label><input id="emailDaily" type="checkbox" checked> Diário às 9h</label><label><input id="emailWeekly" type="checkbox" checked> Semanal às 9h</label><label><input id="emailActive" type="checkbox" checked> Ativo</label></div>
       <div class="row"><button type="submit" class="b">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button><button type="button" class="s" id="emailRefreshDirectory">↻ Buscar setores e colaboradores</button></div>
     </form>
+    <div class="card" id="emailSyncCoverageCard" style="margin-top:16px;border-left:4px solid var(--blue)">
+      <div class="row" style="align-items:center;justify-content:space-between;gap:12px">
+        <div><h3>Cobertura dos apontamentos do Movidesk</h3><p class="subtle">Último apontamento importado por colaborador. Data antiga NÃO significa ausência de trabalho: a importação pode estar incompleta.</p></div>
+        <button type="button" class="s" id="emailCoverageRefresh">↻ Atualizar diagnóstico</button>
+      </div>
+      <p id="emailCoverageSummary" class="coverage-note" role="status">Carregando cobertura dos colaboradores...</p>
+      <div class="tw" style="max-height:350px;overflow:auto">
+        <table><thead><tr><th>Setor</th><th>Colaborador</th><th>Último apontamento importado</th><th>Apontamentos</th><th>Observação</th></tr></thead>
+          <tbody id="emailCoverageRows"><tr><td colspan="5">Consultando Supabase...</td></tr></tbody></table>
+      </div>
+    </div>
     <div class="card" id="emailOfficialManualPanel" style="margin-top:16px;border-left:4px solid #2457d6;background:#f8faff">
       <h3>Enviar relatório oficial manualmente</h3>
       <p class="subtle">Piloto autorizado somente para <strong>sucessocliente@arquem.com.br</strong>. A importação histórica ainda pode estar incompleta; o relatório será identificado como parcial. Não altera agendamentos.</p>
@@ -3689,6 +3700,23 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     if(names.includes(old))select.value=old;
     select.disabled=!sector;
   }
+  function renderEmailCoverage(data){
+    const rows=Array.isArray(data.coverage)?data.coverage:[];
+    const todayParts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+    const p=Object.fromEntries(todayParts.map(x=>[x.type,x.value]));
+    const today=p.year+'-'+p.month+'-'+p.day;
+    const ageDays=day=>day?Math.round((Date.parse(today+'T12:00:00Z')-Date.parse(day+'T12:00:00Z'))/86400000):null;
+    const partial=data.sync?.historyComplete!==true;
+    const stale=rows.filter(x=>ageDays(x.lastAppointment)>7).length;
+    const summary=$('emailCoverageSummary');
+    if(summary)summary.textContent=rows.length+' vínculos colaborador/setor · '+stale+' sem apontamento importado nos últimos 7 dias · Histórico '+(partial?'AINDA INCOMPLETO':'concluído')+' · Importação histórica até o offset '+(data.sync?.historicalOffset??'—')+'. A ausência de registro NÃO comprova falta de apontamento no Movidesk.';
+    const tbody=$('emailCoverageRows');
+    if(tbody)tbody.innerHTML=rows.map(x=>{
+      const age=ageDays(x.lastAppointment);
+      const warn=age==null?'Sem data importada':age>7?'Cobertura não confirmada':'Registro recente importado';
+      return '<tr><td>'+esc(x.sector)+'</td><td>'+esc(x.collaborator)+'</td><td>'+esc(x.lastAppointment||'—')+'</td><td>'+Number(x.count||0)+'</td><td>'+esc(warn)+'</td></tr>';
+    }).join('')||'<tr><td colspan="5">Nenhum apontamento importado até o momento.</td></tr>';
+  }
   async function loadMovideskDirectory(force=false){
     if(movideskDirectoryLoaded&&!force){refreshSectorOptions();return;}
     const btn=$('emailRefreshDirectory'),hint=$('emailMovideskDirectoryHint');
@@ -3706,6 +3734,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         groups.set(sector,[...new Set((item.collaborators||[]).map(n=>String(n||'').trim()).filter(Boolean))]);
       }
       movideskGroups=groups;
+      renderEmailCoverage(data);
       movideskDirectoryLoaded=true;
       refreshSectorOptions();
       if(hint)hint.textContent=(data.totalSectors??groups.size)+' setores e '+(data.totalCollaborators??0)+' colaboradores importados. Selecione o setor para filtrar nomes.';
@@ -3755,6 +3784,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   $('emailScope').addEventListener('change',scope);
   $('emailSector').addEventListener('change',()=>refreshCollaboratorOptions());
   $('emailRefreshDirectory').addEventListener('click',()=>loadMovideskDirectory(true).catch(err=>say('Falha no diretório: '+(err?.message||err))));
+  $('emailCoverageRefresh').addEventListener('click',()=>loadMovideskDirectory(true).catch(err=>{$('emailCoverageSummary').textContent='Erro ao consultar cobertura: '+(err?.message||err)}));
   $('emailNew').addEventListener('click',reset);
   $('emailReload').addEventListener('click',reload);
   const officialDate=$('emailOfficialReferenceDate');
