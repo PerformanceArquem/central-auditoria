@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-manual-pilot-20261106-v5';
+const RELEASE_ID = 'email-manual-pilot-20261106-v6';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -118,8 +118,13 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
   if (scope === 'sector' && !sector) throw new Error('Destinatario setorial sem setor');
   if (scope === 'sector' && !person && !authorizedSingleManual && E('REPORT_ALLOW_SECTOR_EMAIL') !== 'true')
     throw new Error('Envio setorial coletivo exige REPORT_ALLOW_SECTOR_EMAIL=true e autorizacao da supervisao');
+  // O Movidesk utiliza "Sucesso do Cliente", enquanto cadastros antigos usam "Sucesso".
+  // Manter o alias restrito, sem misturar setores distintos.
+  const sameSector = (sourceSector: unknown) =>
+    norm(sourceSector) === sector ||
+    (sector === 'sucesso' && norm(sourceSector) === 'sucesso do cliente');
   const selected = appts.filter(a =>
-    (scope === 'management' || norm(a.sector) === sector) &&
+    (scope === 'management' || sameSector(a.sector)) &&
     (!person || norm(a.collaborator_name) === person));
   const minutes = selected.reduce((s, a) => s + Number(a.duration_minutes || 0), 0);
   const days = workdays(from, to, hol);
@@ -247,7 +252,19 @@ async function manualOfficial(payload: R) {
   // Piloto manual autorizado: admin JWT + endereco fixo + confirmacao de UI.
   // A permissao coletiva global permanece exigida pelo Cron automatico.
   const report = buildReport(rec, appts, from, to, kind, hol, true);
-  if (!report.metrics.appointments) return json({ ok: false, skipped: 'Sem apontamentos para o periodo; envio nao realizado', from, to });
+  if (!report.metrics.appointments) {
+    // Diagnostico baseado em dados importados, sem enviar e-mail vazio.
+    const recent = await db(`audit_direct_appointments?select=appointment_date,sector,collaborator_name&appointment_date=gte.${shift(referenceDate,-120)}&appointment_date=lte.${referenceDate}&order=appointment_date.desc&limit=1000`);
+    const sameSector = (s: unknown) => {
+      const a = norm(s), b = norm(rec.sector);
+      return String(rec.scope) === 'management' || a === b || (b === 'sucesso' && a === 'sucesso do cliente');
+    };
+    const matching = (recent as R[]).find(a => sameSector(a.sector) &&
+      (!rec.collaborator_name || norm(a.collaborator_name) === norm(rec.collaborator_name)));
+    return json({ ok: false, skipped: 'Nenhum apontamento importado no periodo selecionado; envio nao realizado',
+      from, to, sector: String(rec.sector || ''), collaborator: String(rec.collaborator_name || ''),
+      lastAvailableDate: matching ? String(matching.appointment_date) : null });
+  }
   const partial = !checkpoint.completed;
   const subject = 'Central de Auditoria - Relatorio oficial '+(kind === 'weekly' ? 'semanal' : 'diario')+(partial?' [DADOS PARCIAIS]':'')+' - '+from;
   const body = 'ARQUEM | CENTRAL DE AUDITORIA\nRELATORIO OFICIAL - '+(kind === 'weekly' ? 'SEMANAL' : 'DIARIO')+'\n'+
