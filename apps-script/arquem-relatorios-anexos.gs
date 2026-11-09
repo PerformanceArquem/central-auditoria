@@ -78,7 +78,7 @@ function arquemH_(minutes) {
 function arquemAddHeading_(body, str, style) {
   const p = body.appendParagraph(String(str));
   p.setHeading(style || DocumentApp.ParagraphHeading.HEADING2);
-  p.setForegroundColor('#173b65');
+  p.editAsText().setForegroundColor('#173b65');
   return p;
 }
 function arquemPdf_(p, keep) {
@@ -90,8 +90,9 @@ function arquemPdf_(p, keep) {
   const doc=DocumentApp.openById(file.getId()), body=doc.getBody();
   if(!prop){
     const logo=body.appendParagraph('ARQUEM SISTEMAS');
-    logo.setHeading(DocumentApp.ParagraphHeading.TITLE).setForegroundColor('#173b65');
-    body.appendParagraph('CENTRAL DE AUDITORIA  |  RELATÓRIO GERENCIAL').setForegroundColor('#218c89');
+    logo.setHeading(DocumentApp.ParagraphHeading.TITLE);
+    logo.editAsText().setForegroundColor('#173b65');
+    body.appendParagraph('CENTRAL DE AUDITORIA  |  RELATÓRIO GERENCIAL').editAsText().setForegroundColor('#218c89');
     body.appendHorizontalRule();
   }
   arquemAddHeading_(body,p.title,DocumentApp.ParagraphHeading.HEADING1);
@@ -103,7 +104,7 @@ function arquemPdf_(p, keep) {
     (m.appointments||0)+'  |  Chamados trabalhados: '+(m.tickets||0));
   if(p.historicalIncomplete){
     const warning=body.appendParagraph('ATENÇÃO: histórico do Movidesk em importação. Comparativos anuais são preliminares.');
-    warning.setForegroundColor('#a36618').setBold(true);
+    warning.editAsText().setForegroundColor('#a36618').setBold(true);
   }
   if ((p.collaborators||[]).length) {
     arquemAddHeading_(body,'Colaboradores · horas e jornada');
@@ -128,7 +129,7 @@ function arquemPdf_(p, keep) {
     body.appendParagraph('Clique nos números na versão HTML do e-mail para abrir os chamados no Movidesk.');
   }
   arquemAddHeading_(body,'Observações metodológicas');
-  body.appendParagraph('Dados da Central de Auditoria/M فرovidesk sincronizados. Horas apontadas não são controle de ponto. '+
+  body.appendParagraph('Dados da Central de Auditoria/Movidesk sincronizados. Horas apontadas não são controle de ponto. '+
     'A ausência de registros não comprova ausência de trabalho. Categorias de risco podem se sobrepor.');
   doc.saveAndClose();
   return DriveApp.getFileById(file.getId()).getAs(MimeType.PDF);
