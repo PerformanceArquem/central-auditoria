@@ -262,8 +262,16 @@ function arquemXlsx_(p, keep) {
     ['Chamado','Cliente','Responsável','Status','Idade (dias)','Link Movidesk'],
     (p.tickets||[]).map(x=>['#'+String(x.id||''),x.client,x.owner,x.status,x.ageDays,x.url]));
   if ((p.tickets||[]).length) {
-    const range=ticketSheet.getRange(2,6,Math.min((p.tickets||[]).length,500),1);
-    range.setFontColor('#2467a8');
+    const rows=(p.tickets||[]).slice(0,500);
+    // Número do chamado clicável, com destino Movidesk validado por ID numérico.
+    const linked=rows.map(x=>{
+      const id=String(x.id||'');
+      const cell=SpreadsheetApp.newRichTextValue().setText('#'+id);
+      if(/^[0-9]+$/.test(id))cell.setLinkUrl('https://arquem.movidesk.com/Ticket/Edit/'+id);
+      return [cell.build()];
+    });
+    ticketSheet.getRange(2,1,linked.length,1).setRichTextValues(linked).setFontColor('#2467a8');
+    ticketSheet.getRange(2,6,rows.length,1).setFontColor('#2467a8');
   }
   const cust=arquemCreateSheet_(ss,'Empresas',
     ['Empresa','Horas','Chamados','Apontamentos'],
