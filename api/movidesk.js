@@ -145,14 +145,33 @@ export default async function handler(req, res) {
 
     const url = `${MOVIDESK_URL}?${params.toString()}`;
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json'
-      },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(25000)
-    });
+    // Consulta somente leitura: uma nova tentativa apenas para falhas transitórias.
+    // Nunca registrar o endereço completo, pois contém o token da API.
+    let response;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        response = await fetch(url, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+          signal: AbortSignal.timeout(attempt === 0 ? 12000 : 10000)
+        });
+        if (![429, 502, 503, 504].includes(response.status) || attempt === 1) break;
+      } catch (error) {
+        const timeout = error?.name === 'TimeoutError' || error?.name === 'AbortError';
+        if (!timeout || attempt === 1) {
+          if (timeout) {
+            console.error('Movidesk: consulta excedeu tempo de resposta');
+            return respond(res, 504, {
+              error: 'Tempo de resposta do Movidesk excedido. Tente novamente.',
+              source: 'movidesk',
+              retryable: true
+            });
+          }
+          throw error;
+        }
+      }
+    }
 
     if (!response.ok) {
       console.error(
@@ -170,7 +189,8 @@ export default async function handler(req, res) {
       if (response.status === 429) {
         return respond(res, 429, {
           error: 'Limite de requisições do Movidesk atingido',
-          source: 'movidesk'
+          source: 'movidesk',
+          retryable: true
         });
       }
 
@@ -180,11 +200,21 @@ export default async function handler(req, res) {
       });
     }
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      return respond(res, 502, {
+        error: 'Movidesk retornou JSON inválido ou incompleto',
+        source: 'movidesk',
+        retryable: true
+      });
+    }
 
     if (!Array.isArray(data)) {
       return respond(res, 502, {
-        error: 'Resposta inesperada da API Movidesk'
+        error: 'Resposta inesperada da API Movidesk',
+        source: 'movidesk'
       });
     }
 
