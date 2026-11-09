@@ -948,8 +948,8 @@
     <p class="subtle">Aferição observada somente para tickets com tempos válidos de chat. Os dados de voz são metas estimadas, sem medição automática.</p>
   </div>
   <div class="card"><h3>Qualidade das avaliações</h3>
-    <p class="subtle">Notas de <b>1 a 7: Ruim</b> · notas de <b>8 a 10: Excelente</b>. Sem avaliações, o percentual aparecerá como não disponível.</p>
-    <div class="tw"><table id="sqRatingSummary"><thead><tr><th>Canal</th><th>Avaliações</th><th>Ruim (1–7)</th><th>Excelente (8–10)</th><th>% Excelente</th></tr></thead><tbody></tbody></table></div>
+    <p class="subtle">Classificação: notas <b>1 a 7 = Ruim</b> · <b>8 a 10 = Excelente</b>. <b>CSAT = (notas 9 e 10 ÷ total de avaliações válidas) × 100</b>. A nota 8 é Excelente na escala de qualidade, mas não conta no CSAT, pois não está acima de 8. Sem notas, o CSAT ficará indisponível.</p><div id="sqCsatOverall" class="card" style="margin:10px 0" role="status">CSAT: aguardando avaliações reais.</div>
+    <div class="tw"><table id="sqRatingSummary"><thead><tr><th>Canal</th><th>Avaliações</th><th>Ruim (1–7)</th><th>Excelente (8–10)</th><th>Notas acima de 8 (9–10)</th><th>CSAT (%)</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card"><h3>Registrar avaliação de atendimento</h3>
     <p class="subtle">Apenas administradores autenticados podem salvar. Notas ficam no Supabase e são compartilhadas entre dispositivos.</p>
@@ -4251,7 +4251,9 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     '<tr><td>Chat</td><td>'+escape(cfg.chat?.tmaMinutes)+' min (estimado)</td><td>'+escape(cfg.chat?.tmeMinutes)+' min (estimado)</td><td>'+sec(mc.tmaSeconds)+' ('+escape(mc.tmaSamples||0)+' tickets)</td><td>'+sec(mc.tmeSeconds)+' ('+escape(mc.tmeSamples||0)+' tickets)</td></tr>',
     '<tr><td>Voz</td><td>'+escape(cfg.voz?.tmaMinutes)+' min (estimado)</td><td>'+escape(cfg.voz?.tmeMinutes)+' min (estimado)</td><td>Não disponível</td><td>Não disponível</td></tr>'
    ]);
-   table('sqRatingSummary',q.map(r=>'<tr><td>'+escape(r.channel==='voz'?'Voz':'Chat')+'</td><td>'+escape(r.total)+'</td><td>'+escape(r.ruim)+'</td><td>'+escape(r.excelente)+'</td><td>'+(r.excellencePercent==null?'—':escape(r.excellencePercent)+'%')+'</td></tr>'));
+   const csat=d.csat||{};
+   el('sqCsatOverall').innerHTML='<strong>CSAT geral do Suporte: '+(csat.percent==null?'Sem avaliações':escape(csat.percent)+'%')+'</strong><p class="subtle" style="margin:6px 0 0">'+escape(csat.positive||0)+' notas 9–10 de '+escape(csat.total||0)+' avaliações válidas. Somente notas estritamente acima de 8 entram no CSAT.</p>';
+   table('sqRatingSummary',q.map(r=>'<tr><td>'+escape(r.channel==='voz'?'Voz':'Chat')+'</td><td>'+escape(r.total)+'</td><td>'+escape(r.ruim)+'</td><td>'+escape(r.excelente)+'</td><td>'+escape(r.csatPositive||0)+'</td><td>'+(r.csatPercent==null?'—':escape(r.csatPercent)+'%')+'</td></tr>'));
    const people=d.collaborators||[];
    table('sqPeopleTable',people.map(p=>'<tr><td>'+escape(p.person)+'</td><td>'+hhmm(p.minutes)+'</td><td>'+escape(p.appointments)+'</td><td>'+escape(p.tickets)+'</td><td>'+escape(p.ratings)+'</td><td>'+escape(p.excellent)+'</td></tr>'));
    el('sqPeople').innerHTML=people.map(p=>'<option value="'+escape(p.person)+'"></option>').join('');
