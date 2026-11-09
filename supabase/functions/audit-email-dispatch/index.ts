@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-scheduled-reconciliation-20261109-v19';
+const RELEASE_ID = 'email-authorized-preliminary-weekly-20261109-v20';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -561,6 +561,62 @@ async function manualOfficial(payload: R) {
     return json({ok:false,error:err(ex),status:'failed',recipient:String(rec.email)},502);
   }
 }
+
+// Disparo avulso explicitamente autorizado: balancete semanal PRELIMINAR.
+// Não substitui nem marca como enviado o relatório oficial agendado.
+async function dispatchWeeklyPreliminary() {
+  const today=dateBR();
+  // Restrito à semana de 02/11 a 08/11/2026: nunca se repete automaticamente.
+  if(today !== '2026-11-09') return json({ok:false,error:'A autorização avulsa vale somente para 09/11/2026'},409);
+  const from='2026-11-02',to='2026-11-08';
+  const hol=await holidays();
+  if(!hol.has('2026-11-02')) return json({ok:false,error:'Feriado de Finados não cadastrado: corrigir antes do envio'},409);
+  const coverage=await recentCoverage(from,to);
+  const recipients=(await recipientList()).filter(r=>r.weekly_enabled===true);
+  if(!recipients.length) return json({ok:false,error:'Sem destinatários semanais ativos'},409);
+  const appts=await source(from,to);
+  const allTickets=await ticketSource();
+  const results:R[]=[];
+  for(const r of recipients){
+    const id=String(r.id);
+    const key='preliminary-authorized-20261109:'+id+':weekly:'+from+':'+to;
+    try{
+      const exists=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=dispatch_key,status&limit=1');
+      if(exists.length){results.push({recipientId:id,status:'skipped',reason:'Envio preliminar já registrado'});continue;}
+      const report=buildReport(r,appts,from,to,'weekly',hol);
+      const alerts=ticketAlerts(r,allTickets);
+      const empty=!report.metrics.appointments;
+      const subject='[BALANCETE PRELIMINAR - DADOS PARCIAIS] Central de Auditoria - Semana 02 a 08/11/2026'+(empty?' [SEM APONTAMENTOS]':'');
+      const disclaimer='BALANCETE SEMANAL PRELIMINAR — 02 A 08/11/2026\n'+
+        'SINCRONIZAÇÃO DO MOVIDESK AINDA EM ANDAMENTO. NÃO É FECHAMENTO DEFINITIVO.\n'+
+        '02/11: FINADOS (FERIADO). DIAS ÚTEIS: 03, 04, 05 E 06/11.\n'+
+        'HORAS E DIFERENÇAS PARA METAS PODEM MUDAR APÓS A CONCILIAÇÃO.\n'+
+        'NÃO USAR ESTE DOCUMENTO PARA AVALIAÇÃO DEFINITIVA DE JORNADA OU PRODUTIVIDADE.\n\n';
+      const html=reportEmailHtml(r,report,from,to,'weekly',true,true,alerts.html);
+      const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
+        method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
+        body:JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:'weekly',
+          period_from:from,period_to:to,status:'processing'})
+      });
+      if(!inserted?.length){results.push({recipientId:id,status:'skipped',reason:'Outra execução reservou o envio'});continue;}
+      try{
+        await sendMail(String(r.email),subject,disclaimer+report.text+'\n\n'+alerts.text,html);
+        await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+          method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
+        });
+        results.push({recipientId:id,status:'sent',email:String(r.email),appointments:report.metrics.appointments,
+          minutes:report.metrics.minutes,tickets:alerts.metrics});
+      }catch(ex){
+        await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+          method:'PATCH',body:JSON.stringify({status:'failed',error_message:err(ex).slice(0,300)})
+        }).catch(()=>{});
+        results.push({recipientId:id,status:'failed',error:err(ex)});
+      }
+    }catch(ex){results.push({recipientId:id,status:'failed',error:err(ex)});}
+  }
+  return json({ok:!results.some(x=>x.status==='failed'),preliminary:true,period:{from,to},
+    coverageComplete:coverage.ready,results});
+}
 async function dispatch() {
   if (E('REPORT_EMAIL_SEND_ENABLED') !== 'true') return json({ ok: true, skipped: 'Envio automatico desativado' });
   // Envio oficial: exigir conciliação completa das datas do relatório.
@@ -637,10 +693,10 @@ async function handleRequest(req: Request): Promise<Response> {
         : action === 'preview_audit' ? await manualOfficial({...payload,previewOnly:true})
         : await adminAction(payload);
     }
-    if (action !== 'dispatch') return json({ error: 'Acao desconhecida' }, 400);
+    if (action !== 'dispatch' && action !== 'dispatch_weekly_preliminary') return json({ error: 'Acao desconhecida' }, 400);
     const expected = E('REPORT_CRON_SECRET');
     if (!expected || req.headers.get('x-report-secret') !== expected) return json({ error: 'Cron nao autorizado' }, 401);
-    return await dispatch();
+    return action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch();
   } catch (ex) { console.error('audit-email-dispatch:', err(ex)); return json({ ok: false, error: err(ex), release: RELEASE_ID }, 500); }
 }
 
