@@ -880,6 +880,7 @@
             <button data-t="report-preview">✉ &nbsp;Prévia de relatórios</button>
             <button data-t="support-quality">🎧 &nbsp;Qualidade do Suporte</button>
             <button data-t="production-audit">🏭 &nbsp;Auditoria da Produção</button>
+            <button data-t="client-impact">📊 &nbsp;Clientes e Impacto</button>
             <button data-t="vip">★ &nbsp;Clientes VIP</button>
             <button data-t="occ">♙ &nbsp;Colaboradores</button>
             <button data-t="proj">▤ &nbsp;Projetos e prazos</button>
@@ -932,6 +933,72 @@
             </div>
             </div>
             
+
+<div id="t-client-impact" class="hide">
+ <div class="mh"><div><div class="eyebrow">DIREÇÃO · GESTÃO · CLIENTES</div><h2>Clientes, impacto operacional e comparativos</h2>
+  <p>Horas consumidas, tickets antigos, clientes VIP, tendências, capacidade de referência e distribuição por atividades.</p></div></div>
+ <div class="card">
+  <div class="row noprint" style="align-items:flex-end">
+   <div class="fg"><label for="imFrom">De</label><input id="imFrom" type="date"></div>
+   <div class="fg"><label for="imTo">Até</label><input id="imTo" type="date"></div>
+   <div class="fg"><label for="imScope">Escopo do relatório</label>
+    <select id="imScope">
+     <option value="all">Direção · todos os setores</option>
+     <option value="prod">Gestão Produção / CPO</option>
+     <option value="support">Suporte</option>
+     <option value="keila">Gestão · Implantação / Sucesso / Treinamento / QA</option>
+     <option value="intelligence">Inteligência</option>
+     <option value="custom">Setor específico</option>
+    </select></div>
+   <div class="fg" id="imCustomWrap" style="display:none"><label for="imCustomSector">Setor</label>
+    <select id="imCustomSector"></select></div>
+   <button type="button" class="b" id="imLoad">↻ Gerar relatório</button>
+   <button type="button" class="s" id="imExcel" disabled>Exportar Excel</button>
+  </div>
+  <p class="subtle" role="status" id="imStatus">Escolha período e escopo. Somente consulta; nenhum e-mail será enviado.</p>
+  <p class="subtle">A classificação de impacto é operacional: <b>consumo de horas e pendências atuais</b>, não prejuízo financeiro ou criticidade contratual comprovada.</p>
+ </div>
+ <div id="imBody" class="hide">
+  <div id="imMetrics" class="kpis"></div>
+  <div class="card"><h3>Clientes com maior consumo de horas</h3><div id="imClientBars" style="display:grid;gap:9px"></div>
+    <div class="tw" style="margin-top:14px"><table id="imClients"><thead><tr><th>Cliente</th><th>Horas</th><th>Chamados</th><th>Apontamentos</th><th>VIP</th></tr></thead><tbody></tbody></table></div></div>
+  <div class="card"><h3>Clientes com maior exposição em chamados atuais</h3>
+   <p class="subtle">Ordem: SLA vencido, tickets abertos há 90+ dias, sem ação há 7+ dias e total em aberto. A lista depende da cobertura do snapshot de tickets sincronizados.</p>
+   <div class="tw"><table id="imRisk"><thead><tr><th>Cliente</th><th>Abertos</th><th>SLA vencido</th><th>Antigos ≥ 90 dias</th><th>Sem ação ≥ 7 dias</th><th>VIP</th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="card"><h3>Clientes VIP — consumo e pendências</h3>
+   <p class="subtle">Somente clientes confirmados na lista corporativa compartilhada entram como VIP. Ausência na lista não significa que o cliente não seja importante.</p>
+   <div class="tw"><table id="imVip"><thead><tr><th>Cliente</th><th>Horas apontadas</th><th>Chamados trabalhados</th><th>Abertos</th><th>SLA vencido</th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="card"><h3>2025 × 2026 — comparativo anual</h3>
+   <div id="imYears" style="display:grid;gap:10px"></div>
+   <p class="subtle">Comparação acumulada de 1º de janeiro até o mesmo dia/mês da data de referência em cada ano. Indicadores históricos sujeitos à cobertura da sincronização.</p>
+   <div class="tw"><table id="imMonthly"><thead><tr><th>Mês</th><th>2025</th><th>2026</th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="card"><h3>Horas apontadas versus capacidade de referência</h3><div id="imCapacity"></div>
+   <p class="subtle">Capacidade é uma <b>simulação</b> de 8h × dias úteis × colaboradores com apontamentos no período. Não desconta férias, ausências, pausas, escalas ou dedicação a atividades não registradas.</p>
+  </div>
+  <div class="card"><h3>Distribuição por atividade</h3><div id="imActivityBars" style="display:grid;gap:9px"></div></div>
+  <div class="card"><h3>Horas por equipe</h3><div id="imSectorBars" style="display:grid;gap:9px"></div></div>
+  <div class="card"><h3>Horas por semana e equipe (últimos 90 dias)</h3>
+   <div class="tw"><table id="imWeekly"><thead><tr><th>Semana de</th><th>Setor</th><th>Horas</th></tr></thead><tbody></tbody></table></div></div>
+  <div class="card"><h3>Progresso acumulado no período</h3>
+   <div class="tw"><table id="imProgress"><thead><tr><th>Data</th><th>Horas no dia</th><th>Horas acumuladas</th></tr></thead><tbody></tbody></table></div>
+  </div>
+ </div>
+ <div class="card">
+  <h3>Clientes VIP — lista corporativa compartilhada</h3>
+  <p class="subtle">A lista anterior de VIPs era salva somente no navegador. Salve aqui os nomes <b>confirmados</b> para que apareçam em relatórios e e-mails gerenciais de todos os computadores. Use uma identificação por linha.</p>
+  <textarea id="imVipEdit" rows="6" style="width:100%;min-height:120px" placeholder="Um cliente VIP confirmado por linha"></textarea>
+  <div class="row noprint" style="margin-top:10px">
+   <button type="button" class="s" id="imVipReload">Consultar lista compartilhada</button>
+   <button type="button" class="s" id="imVipImport">Importar lista deste navegador</button>
+   <button type="button" class="b" id="imVipSave">Salvar lista corporativa</button>
+  </div>
+  <p id="imVipStatus" class="subtle" role="status">Nenhum VIP será marcado automaticamente sem cadastro.</p>
+ </div>
+</div>
+
 <div id="t-production-audit" class="hide">
  <div class="mh"><div><div class="eyebrow">PRODUÇÃO - CPO · ANÁLISE GERENCIAL</div><h2>Auditoria da Produção</h2>
    <p>Horas, apontamentos, chamados vencidos, falta de andamento, projetos e comparativo por colaborador.</p></div></div>
@@ -2645,10 +2712,10 @@ function showTab(t){
   ACT=t;document.body.dataset.t=t;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-cfg').classList.toggle('hide',t!=='cfg');
-  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','support-quality','production-audit'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
-  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='report-preview'||t==='support-quality'||t==='production-audit');
-  if(raw.length&&!['load','cfg','diag','alerts','report-preview','support-quality','production-audit'].includes(t)&&qn(t)!==lastQ) applyFilters();
+  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','support-quality','production-audit','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
+  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='client-impact');
+  if(raw.length&&!['load','cfg','diag','alerts','report-preview','support-quality','production-audit','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
 $('tabs').addEventListener('click',e=>{const btn=e.target.closest('button');if(btn&&btn.dataset.t)showTab(btn.dataset.t)});
 
@@ -4401,6 +4468,118 @@ async function load(){
 window.productionAuditInit=()=>{
  if(!started){started=true;el('pdDate').value=dateBR();el('pdDate').max=dateBR();
  el('pdRefresh').addEventListener('click',load);el('pdPeriod').addEventListener('change',load);}
+ load();
+};
+})();
+</script>
+
+
+<script id="clientImpactScript">
+(()=>{'use strict';
+const el=id=>document.getElementById(id),
+ esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','&#39;'}[c]));
+const hr=v=>{const m=Math.round(Number(v)||0);return Math.floor(m/60)+'h'+String(m%60).padStart(2,'0')};
+const now=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const num=v=>(Number(v)||0).toLocaleString('pt-BR');
+let init=false,report=null,busy=false;
+const status=s=>el('imStatus').textContent=s;
+const vipStatus=s=>el('imVipStatus').textContent=s;
+const link=(v)=>'<a target="_blank" rel="noopener noreferrer" href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(String(v))+'">#'+esc(v)+'</a>';
+async function call(body){
+ const client=window.tmEmailAdminClient;if(!client)throw Error('Faça login como administrador da Central de Auditoria.');
+ const {data,error}=await client.functions.invoke('audit-email-dispatch',{body});
+ if(error)throw Error(data?.error||error.message||'Erro de consulta');
+ if(!data?.ok)throw Error(data?.error||'Consulta não autorizada');
+ return data;
+}
+const scope=()=>{
+ const s=el('imScope').value;
+ return s==='prod'?['Produção','Produção - CPO']:
+  s==='support'?['Suporte']:s==='keila'?['Treinamento','Testes (QA)','Sucesso do Cliente','Implantação']:
+  s==='intelligence'?['Inteligência']:s==='custom'?[el('imCustomSector').value].filter(Boolean):[];
+};
+function table(id,rows){el(id).querySelector('tbody').innerHTML=rows.join('')||'<tr><td colspan="9">Sem registros para os filtros selecionados.</td></tr>'}
+function bars(id,rows,label,value){
+ const max=Math.max(1,...rows.map(x=>Number(x[value])||0));
+ el(id).innerHTML=rows.slice(0,15).map(r=>'<div style="display:grid;grid-template-columns:minmax(110px,1fr) 2fr 90px;gap:10px;align-items:center;font-size:13px">'+
+  '<span title="'+esc(r[label])+'">'+esc(r[label])+'</span><div style="height:15px;background:#edf2fa;border-radius:8px;overflow:hidden"><div style="height:100%;width:'+Math.max(1,Math.round((Number(r[value])||0)/max*100))+'%;background:#3678ba"></div></div><b style="text-align:right">'+hr(r[value])+'</b></div>').join('')||'<p class="subtle">Nenhum registro disponível.</p>';
+}
+function render(){
+ const d=report;if(!d)return;el('imBody').classList.remove('hide');
+ const metrics=[['Horas apontadas',hr(d.minutes)],['Apontamentos',num(d.appointments)],['Colaboradores',num(d.people)],
+  ['Dias úteis',num(d.days)],['Clientes no ranking',num((d.customersByHours||[]).length)],
+  ['Tickets ativos cobertos',num(d.openTicketCoverage)],['VIPs cadastrados',num(d.vipConfigured)]];
+ el('imMetrics').innerHTML=metrics.map(([k,v])=>'<div class="card"><small>'+esc(k)+'</small><h3 style="margin:7px 0">'+esc(v)+'</h3></div>').join('');
+ bars('imClientBars',d.customersByHours||[],'name','minutes');
+ table('imClients',(d.customersByHours||[]).map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+hr(x.minutes)+'</td><td>'+num(x.tickets)+'</td><td>'+num(x.appointments)+'</td><td>'+(x.vip?'★ VIP':'—')+'</td></tr>'));
+ table('imRisk',(d.customersByRisk||[]).map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+num(x.open)+'</td><td>'+num(x.overdue)+'</td><td>'+num(x.old90)+'</td><td>'+num(x.stalled)+'</td><td>'+(x.vip?'★':'—')+'</td></tr>'));
+ table('imVip',(d.vipClients||[]).map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+hr(x.minutes)+'</td><td>'+num(x.tickets)+'</td><td>'+num(x.open)+'</td><td>'+num(x.overdue)+'</td></tr>'));
+ const y=d.years||{},max=Math.max(1,Number(y.y2025)||0,Number(y.y2026)||0);
+ el('imYears').innerHTML=[['2025',y.y2025],['2026',y.y2026]].map(([year,mins])=>'<div style="display:grid;grid-template-columns:50px 1fr 100px;gap:9px;align-items:center">'+
+  '<b>'+year+'</b><div style="background:#edf2fa;border-radius:9px;overflow:hidden;height:18px"><div style="height:100%;width:'+Math.max(1,Math.round(Number(mins||0)/max*100))+'%;background:'+(year==='2026'?'#2767be':'#7999bc')+'"></div></div><b>'+hr(mins)+'</b></div>').join('');
+ const byMonth=new Map((d.monthly||[]).map(r=>[r.month,r.minutes]));
+ table('imMonthly',Array.from({length:12},(_,i)=>{const m=String(i+1).padStart(2,'0');return '<tr><td>'+m+'/'+String(d.to).slice(0,4)+'</td><td>'+hr(byMonth.get('2025-'+m))+'</td><td>'+hr(byMonth.get('2026-'+m))+'</td></tr>'}));
+ const capacity=d.capacity||0,minutes=d.minutes||0;
+ el('imCapacity').innerHTML='<div class="row" style="gap:20px"><div><small>Horas apontadas</small><h2>'+hr(minutes)+'</h2></div><div><small>Referência teórica</small><h2>'+hr(capacity)+'</h2></div><div><small>Relação</small><h2>'+(d.utilization==null?'—':num(d.utilization)+'%')+'</h2></div></div>';
+ bars('imActivityBars',d.activities||[],'name','minutes');
+ bars('imSectorBars',d.sectorsByHours||[],'sector','minutes');
+ table('imWeekly',(d.weeklyBySector||[]).slice().sort((a,b)=>b.week.localeCompare(a.week)||b.minutes-a.minutes).slice(0,90).map(x=>'<tr><td>'+esc(x.week)+'</td><td>'+esc(x.sector)+'</td><td>'+hr(x.minutes)+'</td></tr>'));
+ table('imProgress',(d.progress||[]).map(x=>'<tr><td>'+esc(x.date)+'</td><td>'+hr(x.minutes)+'</td><td>'+hr(x.cumulative)+'</td></tr>'));
+ status('Consulta concluída. Os indicadores refletem dados sincronizados, sujeitos à conciliação; nenhum e-mail enviado.');
+ el('imExcel').disabled=false;
+}
+async function load(){
+ if(busy)return;busy=true;el('imLoad').disabled=true;status('Carregando histórico, clientes e pendências...');
+ try{const data=await call({action:'impact_preview',from:el('imFrom').value,to:el('imTo').value,sectors:scope()});report=data.impact;render()}
+ catch(e){status('Falha na consulta de impacto: '+e.message)}
+ finally{busy=false;el('imLoad').disabled=false}
+}
+async function vips(){
+ vipStatus('Consultando a lista corporativa...');
+ try{const data=await call({action:'vip_config',mode:'list'});el('imVipEdit').value=(data.names||[]).join('\n');vipStatus((data.names||[]).length+' VIP(s) ativos cadastrados no Supabase.')}
+ catch(e){vipStatus('Não foi possível carregar: '+e.message)}
+}
+async function saveVip(){
+ const btn=el('imVipSave');btn.disabled=true;vipStatus('Salvando cadastro corporativo...');
+ try{const names=el('imVipEdit').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+   const data=await call({action:'vip_config',mode:'save',names});
+   vipStatus(data.count+' cliente(s) VIP salvo(s). Gere novamente o relatório para atualizar os destaques.')}
+ catch(e){vipStatus('Falha ao salvar VIPs: '+e.message)}
+ finally{btn.disabled=false}
+}
+function exportExcel(){
+ if(!report||!window.XLSX){status('Biblioteca Excel indisponível.');return;}
+ const d=report,wb=XLSX.utils.book_new(),safe=s=>typeof s==='string'&&/^[=+\-@]/.test(s)?"'"+s:s;
+ const add=(name,heads,rows)=>{
+  const data=[heads,...rows.map(r=>r.map(safe))];
+  const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:ws['!ref']};ws['!cols']=heads.map(x=>({wch:23}));
+  XLSX.utils.book_append_sheet(wb,ws,name);
+ };
+ add('Resumo',['Indicador','Valor'],[['De',d.from],['Até',d.to],['Horas (min)',d.minutes],['Apontamentos',d.appointments],['Capacidade teórica (min)',d.capacity],['Relação (%)',d.utilization]]);
+ add('Clientes Horas',['Cliente','VIP','Minutos','Chamados','Apontamentos'],(d.customersByHours||[]).map(x=>[x.name,x.vip||'',x.minutes,x.tickets,x.appointments]));
+ add('Clientes Riscos',['Cliente','VIP','Abertos','SLA vencido','90+ dias','Sem ação 7+'],(d.customersByRisk||[]).map(x=>[x.name,x.vip||'',x.open,x.overdue,x.old90,x.stalled]));
+ add('Clientes VIP',['Cliente','Minutos','Trabalhados','Abertos','SLA vencido'],(d.vipClients||[]).map(x=>[x.name,x.minutes,x.tickets,x.open,x.overdue]));
+ add('Atividades',['Atividade','Minutos'],(d.activities||[]).map(x=>[x.name,x.minutes]));
+ add('Setores',['Setor','Minutos','Pessoas'],(d.sectorsByHours||[]).map(x=>[x.sector,x.minutes,x.people]));
+ add('Semanas',['Semana','Setor','Minutos'],(d.weeklyBySector||[]).map(x=>[x.week,x.sector,x.minutes]));
+ add('Meses',['Mês','Minutos'],(d.monthly||[]).map(x=>[x.month,x.minutes]));
+ add('Progresso',['Data','Minutos','Acumulado'],(d.progress||[]).map(x=>[x.date,x.minutes,x.cumulative]));
+ XLSX.writeFile(wb,'Impacto_Clientes_'+d.from+'_'+d.to+'.xlsx',{compression:true});
+ status('Planilha Excel exportada. Nenhum e-mail enviado.');
+}
+window.clientImpactInit=()=>{
+ if(!init){
+  init=true;const today=now();el('imTo').value=today;el('imTo').max=today;el('imFrom').value=today.slice(0,7)+'-01';
+  const sectorNames=['Administradores','Comercial','Comite','Diretor','Diretor - CEO','Financeiro','Financeiro - CFO','Implantação','Inteligência','Marketing','Operação - COO','Produção','Produção - CPO','Qualidade','Sucesso do Cliente','Suporte','Testes (QA)','Treinamento'];
+  el('imCustomSector').innerHTML=sectorNames.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');
+  el('imScope').addEventListener('change',()=>el('imCustomWrap').style.display=el('imScope').value==='custom'?'':'none');
+  el('imLoad').addEventListener('click',load);el('imExcel').addEventListener('click',exportExcel);
+  el('imVipReload').addEventListener('click',vips);el('imVipSave').addEventListener('click',saveVip);
+  el('imVipImport').addEventListener('click',()=>{const local=localStorage.getItem('md_vip')||'';
+    if(local){el('imVipEdit').value=local;vipStatus('Lista local importada para revisão. Clique Salvar para torná-la corporativa.')}
+    else vipStatus('Não há lista VIP salva neste navegador.')});
+  vips();
+ }
  load();
 };
 })();
