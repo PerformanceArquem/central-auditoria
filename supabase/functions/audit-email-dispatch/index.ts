@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-tickets-audit-preview-20261109-v18';
+const RELEASE_ID = 'email-scheduled-reconciliation-20261109-v19';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -475,9 +475,11 @@ async function recentCoverage(from:string,to:string) {
   const rows = await db('audit_recent_reconcile_state?job_name=eq.movidesk_recent_reconcile&select=period_start,period_end,completed,next_offset,last_success_at,last_error&limit=1');
   if (!rows?.length) throw new Error('Checkpoint da conciliacao diaria ausente');
   const s=rows[0] as R;
-  const overlap=from<String(s.period_end) && to>=String(s.period_start);
-  const ready=!overlap || s.completed===true;
-  return {ready,overlap,from:s.period_start,to:s.period_end,offset:s.next_offset,
+  // Não considerar pronto um período fora da janela: é justamente o erro
+  // que deixava passar dados antigos sem conciliação.
+  const covered=from>=String(s.period_start) && to<String(s.period_end);
+  const ready=covered && s.completed===true && !s.last_error && !!s.last_success_at;
+  return {ready,covered,from:s.period_start,to:s.period_end,offset:s.next_offset,
     completed:s.completed,lastSuccess:s.last_success_at,lastError:s.last_error};
 }
 async function manualOfficial(payload: R) {
@@ -561,7 +563,9 @@ async function manualOfficial(payload: R) {
 }
 async function dispatch() {
   if (E('REPORT_EMAIL_SEND_ENABLED') !== 'true') return json({ ok: true, skipped: 'Envio automatico desativado' });
-  await requireProductionReady();
+  // Envio oficial: exigir conciliação completa das datas do relatório.
+  // O histórico total de chamados pode continuar em backfill sem impedir
+  // resultados do período conciliado diretamente pela API Movidesk.
   const today = dateBR();
   const dow = weekday(today);
   if ([0, 6].includes(dow)) return json({ ok: true, skipped: 'Fim de semana' });
@@ -588,7 +592,7 @@ async function dispatch() {
   const from = tasks.reduce((s, t) => t.from < s ? t.from : s, tasks[0].from);
   const to = tasks.reduce((s, t) => t.to > s ? t.to : s, tasks[0].to);
   const coverage = await recentCoverage(from,to);
-  if (!coverage.ready) return json({ok:true,skipped:'Conciliação dos apontamentos Movidesk ainda não concluída; envio automático bloqueado',from,to,coverage});
+  if (!coverage.ready) return json({ok:true,skipped:'Conciliação das datas necessárias ao relatório ainda não concluída; próximo agendamento fará nova tentativa',from,to,coverage});
   const appts = await source(from, to);
   const allTickets = await ticketSource();
   const results: R[] = [];
