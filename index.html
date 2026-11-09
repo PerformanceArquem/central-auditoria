@@ -966,7 +966,10 @@
    <p class="subtle">Ordem: SLA vencido, tickets abertos há 90+ dias, sem ação há 7+ dias e total em aberto. A lista depende da cobertura do snapshot de tickets sincronizados.</p>
    <div class="tw"><table id="imRisk"><thead><tr><th>Cliente</th><th>Abertos</th><th>SLA vencido</th><th>Antigos ≥ 90 dias</th><th>Sem ação ≥ 7 dias</th><th>VIP</th></tr></thead><tbody></tbody></table></div>
   </div>
-  <div class="card"><h3>Clientes VIP — consumo e pendências</h3>
+  <div class="card"><h3>Chamados antigos que continuam abertos</h3>
+  <p class="subtle">Chamados abertos há pelo menos 30 dias, ordenados pela idade. O status é atual e o link abre o ticket no Movidesk. Chamados internos são separados do ranking de clientes externos.</p>
+  <div class="tw"><table id="imOldTickets"><thead><tr><th>Chamado</th><th>Cliente</th><th>Assunto</th><th>Status</th><th>Dias em aberto</th><th>Dias sem ação</th><th>VIP</th></tr></thead><tbody></tbody></table></div></div>
+ <div class="card"><h3>Clientes VIP — consumo e pendências</h3>
    <p class="subtle">Somente clientes confirmados na lista corporativa compartilhada entram como VIP. Ausência na lista não significa que o cliente não seja importante.</p>
    <div class="tw"><table id="imVip"><thead><tr><th>Cliente</th><th>Horas apontadas</th><th>Chamados trabalhados</th><th>Abertos</th><th>SLA vencido</th></tr></thead><tbody></tbody></table></div>
   </div>
@@ -3964,6 +3967,16 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    const issueHeaders=['Chamado','Setor','Responsável','Status','Assunto','SLA','Última ação','Dias sem ação','Link Movidesk'];
    add('SLA Vencido',issueHeaders,issueRows(report.alerts?.overdue));
    add('Sem Andamento',issueHeaders,issueRows(report.alerts?.stalled));
+   const impact=report.impact||{};
+   add('Clientes por Horas',['Cliente','VIP','Horas (min)','Chamados','Apontamentos'],(impact.customersByHours||[]).map(x=>[x.name,x.vip||'',x.minutes,x.tickets,x.appointments]));
+   add('Impacto Pendencias',['Cliente','Em aberto','SLA vencido','90+ dias','Sem ação 7+'],(impact.customersByRisk||[]).map(x=>[x.name,x.open,x.overdue,x.old90,x.stalled]));
+   add('Clientes VIP',['Cliente','Horas (min)','Abertos','SLA vencido'],(impact.vipClients||[]).map(x=>[x.name,x.minutes,x.open,x.overdue]));
+   add('Chamados Antigos',['Chamado','Cliente','Dias aberto','Sem ação','Status'],(impact.oldestTickets||[]).map(x=>[x.ticket,x.client,x.ageDays,x.daysWithoutAction,x.status]));
+   add('Atividades',['Atividade','Horas (min)'],(impact.activities||[]).map(x=>[x.name,x.minutes]));
+   add('Horas por Semana',['Semana','Equipe','Horas (min)'],(impact.weeklyBySector||[]).map(x=>[x.week,x.sector,x.minutes]));
+   add('Meses e Anos',['Mes','Horas (min)'],(impact.monthly||[]).map(x=>[x.month,x.minutes]));
+   add('Progresso',['Data','Minutos no Dia','Acumulado'],(impact.progress||[]).map(x=>[x.date,x.minutes,x.cumulative]));
+
    const name='Relatorio_Executivo_Arquem_'+report.start+'_'+report.end+'.xlsx';
    XLSX.writeFile(wb,name,{compression:true});
    const limits=(report.alerts?.overdueTruncated||report.alerts?.stalledTruncated);
@@ -4513,6 +4526,7 @@ function render(){
  bars('imClientBars',d.customersByHours||[],'name','minutes');
  table('imClients',(d.customersByHours||[]).map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+hr(x.minutes)+'</td><td>'+num(x.tickets)+'</td><td>'+num(x.appointments)+'</td><td>'+(x.vip?'★ VIP':'—')+'</td></tr>'));
  table('imRisk',(d.customersByRisk||[]).map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+num(x.open)+'</td><td>'+num(x.overdue)+'</td><td>'+num(x.old90)+'</td><td>'+num(x.stalled)+'</td><td>'+(x.vip?'★':'—')+'</td></tr>'));
+ table('imOldTickets',(d.oldestTickets||[]).map(x=>'<tr><td>'+link(x.ticket)+'</td><td>'+esc(x.client)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.status)+'</td><td>'+num(x.ageDays)+'</td><td>'+num(x.daysWithoutAction)+'</td><td>'+(x.vip?'★ VIP':'—')+'</td></tr>'));
  table('imVip',(d.vipClients||[]).map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+hr(x.minutes)+'</td><td>'+num(x.tickets)+'</td><td>'+num(x.open)+'</td><td>'+num(x.overdue)+'</td></tr>'));
  const y=d.years||{},max=Math.max(1,Number(y.y2025)||0,Number(y.y2026)||0);
  el('imYears').innerHTML=[['2025',y.y2025],['2026',y.y2026]].map(([year,mins])=>'<div style="display:grid;grid-template-columns:50px 1fr 100px;gap:9px;align-items:center">'+
@@ -4559,6 +4573,7 @@ function exportExcel(){
  add('Clientes Horas',['Cliente','VIP','Minutos','Chamados','Apontamentos'],(d.customersByHours||[]).map(x=>[x.name,x.vip||'',x.minutes,x.tickets,x.appointments]));
  add('Clientes Riscos',['Cliente','VIP','Abertos','SLA vencido','90+ dias','Sem ação 7+'],(d.customersByRisk||[]).map(x=>[x.name,x.vip||'',x.open,x.overdue,x.old90,x.stalled]));
  add('Clientes VIP',['Cliente','Minutos','Trabalhados','Abertos','SLA vencido'],(d.vipClients||[]).map(x=>[x.name,x.minutes,x.tickets,x.open,x.overdue]));
+ add('Chamados Antigos',['Chamado','Cliente','Assunto','Status','Dias em aberto','Dias sem ação','VIP'],(d.oldestTickets||[]).map(x=>[x.ticket,x.client,x.subject,x.status,x.ageDays,x.daysWithoutAction,x.vip||'']));
  add('Atividades',['Atividade','Minutos'],(d.activities||[]).map(x=>[x.name,x.minutes]));
  add('Setores',['Setor','Minutos','Pessoas'],(d.sectorsByHours||[]).map(x=>[x.sector,x.minutes,x.people]));
  add('Semanas',['Semana','Setor','Minutos'],(d.weeklyBySector||[]).map(x=>[x.week,x.sector,x.minutes]));
