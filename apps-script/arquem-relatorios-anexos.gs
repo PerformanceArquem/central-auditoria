@@ -37,6 +37,67 @@
  * criados na conta executora são enviados à lixeira no finally.
  */
 
+/**
+ * Teste local do Apps Script — não envia e-mail e não usa dados reais.
+ * No editor do Apps Script, selecione arquemTesteAnexosSemEnvio e clique Executar.
+ * O teste cria/exporta arquivos temporários e os envia à lixeira.
+ * Exige permissões Drive, Docs, Sheets e UrlFetch.
+ *
+ * Só anuncie o recurso "capabilities" depois deste teste passar e depois
+ * de validar a opção attachments no fluxo real de envio com um teste autorizado.
+ */
+function arquemTesteAnexosSemEnvio() {
+  const packet={
+    schema:'arquem-mail-v1',title:'Relatório de validação — Produção',
+    from:'2026-11-02',to:'2026-11-08',partial:true,historicalIncomplete:true,
+    metrics:{minutes:5962,appointments:171,tickets:40},
+    collaborators:[{name:'Colaborador demonstrativo',sector:'Produção - CPO',
+      minutes:480,minimumMinutes:384,targetMinutes:480,minimumGap:0,targetGap:0,
+      ruleSource:'Referência padrão'}],
+    daily:[{date:'2026-11-06',person:'Colaborador demonstrativo',sector:'Produção - CPO',
+      minutes:480,referenceMinutes:480,minimumMinutes:384,status:'Meta atingida'}],
+    tickets:[{id:'100769',client:'Empresa demonstrativa',owner:'Responsável demonstrativo',
+      status:'Fila',ageDays:45,url:'https://arquem.movidesk.com/Ticket/Edit/100769'}],
+    customers:[{name:'Empresa demonstrativa',minutes:5962,tickets:9,appointments:171},
+      {name:'Outra empresa demonstrativa',minutes:1820,tickets:3,appointments:22}],
+    activities:[{name:'Correção',minutes:3200},{name:'Melhoria',minutes:2762}]
+  };
+  const files=arquemCreateReportAttachments_(packet);
+  if(files.length!==2)throw new Error('Esperados 2 anexos');
+  const pdf=files.find(b=>b.getContentType()==='application/pdf');
+  const xlsx=files.find(b=>b.getName().endsWith('.xlsx'));
+  if(!pdf||!xlsx||pdf.getBytes().length<2000||xlsx.getBytes().length<1500)
+    throw new Error('Arquivo inválido ou vazio: confira permissões e exportações');
+  const result={ok:true,sent:false,files:files.map(b=>({
+    name:b.getName(),type:b.getContentType(),bytes:b.getBytes().length
+  }))};
+  console.log(JSON.stringify(result));
+  return result;
+}
+
+/**
+ * Integração no doPost existente: depois de validar o segredo atual,
+ * faça a checagem de capacidade antes da rotina que envia e-mails.
+ * NÃO ative o anúncio de capacidades se o teste local não passou.
+ *
+ * const data=JSON.parse(e.postData.contents);
+ * if(!validarTokenDoProjeto_(data.token)) return respostaDeErroExistente_();
+ * if(data.action==='capabilities') return ContentService.createTextOutput(
+ *   JSON.stringify({sucesso:true,attachmentsVersion:'arquem-1',formats:['pdf','xlsx']})
+ * ).setMimeType(ContentService.MimeType.JSON);
+ *
+ * // Depois, no bloco de envio já autorizado:
+ * const anexos=data.reportData?arquemCreateReportAttachments_(data.reportData):[];
+ * GmailApp.sendEmail(data.email,data.assunto,data.texto,{
+ *   htmlBody:data.html||undefined,attachments:anexos
+ * });
+ * return ContentService.createTextOutput(JSON.stringify({
+ *   sucesso:true,anexos:anexos.length
+ * })).setMimeType(ContentService.MimeType.JSON);
+ *
+ * Reutilize a validação de token e o tratamento de erros do seu doPost atual.
+ * Não copie funções de autenticação fictícias deste comentário.
+ */
 function arquemCreateReportAttachments_(packet) {
   if (!packet || packet.schema !== 'arquem-mail-v1') throw new Error('Pacote de relatório inválido');
   const title = String(packet.title || 'Relatório gerencial').slice(0,120);
@@ -49,6 +110,8 @@ function arquemCreateReportAttachments_(packet) {
   ];
   if (rows.some(arr => !Array.isArray(arr) || arr.length > 500))
     throw new Error('Limite de dados excedido para anexos');
+  if (rows.reduce((sum,arr)=>sum+arr.length,0)>950)
+    throw new Error('Quantidade total de linhas excede o limite seguro dos anexos');
   const keep = [];
   try {
     const pdf = arquemPdf_(packet, keep);
