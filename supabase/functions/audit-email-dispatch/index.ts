@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-tickets-audit-20261106-v17';
+const RELEASE_ID = 'email-tickets-audit-preview-20261109-v18';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -216,8 +216,11 @@ function ticketAlerts(rec:R,records:R[]) {
     '<p style="font-size:11px;line-height:1.5;color:#64748b;margin-top:20px">SLA vencido: data anterior a hoje, excluindo SLA pausado. '+
     'Sem ação: última ação registrada há 7 dias ou mais. Um ticket pode estar nas duas listas. '+
     'Os alertas refletem a situação atual e somente os tickets já importados.</p></div>';
-  return {text:lines.join('\n'),html,metrics:{
-    open:active.length,overdue:overdue.length,stalled:stalled.length,withoutSla}};
+  return {text:lines.join('\n'),html,
+    metrics:{open:active.length,overdue:overdue.length,stalled:stalled.length,withoutSla},
+    preview:{overdue:overdue.slice(0,5).map(a=>({id:a.id,subject:a.subject,owner:a.owner,sector:a.sector,sla:a.sla,url:a.url})),
+      stalled:stalled.slice(0,5).map(a=>({id:a.id,subject:a.subject,owner:a.owner,sector:a.sector,days:a.ageDays,url:a.url}))}
+  };
 }
 async function recipientList() {
   return (await list('audit_email_recipients', '?select=*')).filter(r => r.active === true);
@@ -235,7 +238,7 @@ function workdays(from: string, to: string, ignored: Set<string>) {
 
 const emailEsc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]||ch));
 const displayDate=(d:string)=>/^\d{4}-\d{2}-\d{2}$/.test(d)?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):d;
-function reportEmailHtml(rec:R,report:{text:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:string,partial:boolean,manual:boolean){
+function reportEmailHtml(rec:R,report:{text:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:string,partial:boolean,manual:boolean,alertsHtml=''){
  const m=report.metrics;
  const targetPerDay=Number(rec.daily_target_minutes??480);
  const minPercent=Number(rec.minimum_percent??80);
@@ -283,6 +286,7 @@ function reportEmailHtml(rec:R,report:{text:string;metrics:{appointments:number;
  missingMetrics+
  '<div style="font-size:15px;color:#18385e;font-weight:700;margin:24px 0 12px">Atividades e lançamentos</div>'+
  '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5edf7;border-radius:8px;overflow:hidden">'+lines+'</table>'+
+ alertsHtml+
  '<p style="font-size:11px;line-height:1.6;color:#64748b;margin:22px 0">Fonte: API Movidesk / Central de Auditoria. Registros importados; não substitui o ponto eletrônico e não comprova produtividade ou presença.</p>'+
  '</td></tr><tr><td style="background:#f4f7fb;border-top:1px solid #dce5f0;padding:20px 26px;color:#718096;font-size:11px">'+
  'ARQUEM SISTEMAS &nbsp;|&nbsp; Central de Auditoria &nbsp;|&nbsp; Mensagem automática, não responda</td></tr>'+
@@ -479,6 +483,7 @@ async function recentCoverage(from:string,to:string) {
 async function manualOfficial(payload: R) {
   const id = String(payload.recipientId || '');
   const kind = String(payload.kind || 'daily');
+  const previewOnly = payload.previewOnly === true;
   if (!/^[a-f0-9-]{36}$/i.test(id)) return json({ error: 'recipientId invalido' }, 400);
   if (kind !== 'daily' && kind !== 'weekly') return json({ error: 'Tipo de relatorio invalido' }, 400);
   const recipients = await db(`audit_email_recipients?id=eq.${encodeURIComponent(id)}&active=eq.true&select=*&limit=1`);
@@ -489,7 +494,7 @@ async function manualOfficial(payload: R) {
   const target = String(rec.email || '').trim().toLowerCase();
   if (!/^[^\s@]+@arquem\.com\.br$/.test(target))
     return json({ error: 'Teste manual permitido somente para e-mails corporativos @arquem.com.br' }, 403);
-  if (rec.scope !== 'sector' || !String(rec.collaborator_name || '').trim())
+  if (!previewOnly && (rec.scope !== 'sector' || !String(rec.collaborator_name || '').trim()))
     return json({ error: 'Teste manual exige um colaborador individual vinculado ao cadastro' }, 403);
   const today = dateBR();
   const referenceDate = String(payload.referenceDate || today);
@@ -521,6 +526,13 @@ async function manualOfficial(payload: R) {
   // Mesmo com zero apontamentos, o teste manual verifica o envio e informa a ausencia no corpo.
   const partial = !checkpoint.completed || !coverage.ready;
   const empty = !report.metrics.appointments;
+  // Prévia de auditoria não cria disparos, não acessa o Gmail e não muda agendamentos.
+  if (previewOnly) return json({ok:true,preview:true,release:RELEASE_ID,
+    recipient:target,kind,from,to,partial,empty,
+    metrics:report.metrics,ticketMetrics:tickets.metrics,
+    // Até cinco exemplos por categoria para conferência sem expor todos os dados.
+    ticketPreview:tickets.preview
+  });
   const subject = '[TESTE MANUAL] Central de Auditoria - Relatorio '+(kind === 'weekly' ? 'semanal' : 'diario')+
     (partial?' [DADOS PARCIAIS]':'')+(empty?' [SEM APONTAMENTOS]':'')+' - '+from;
   const body = '[TESTE MANUAL DE ENVIO]'+
@@ -534,7 +546,7 @@ async function manualOfficial(payload: R) {
   });
   if (!inserted?.length) return json({ ok: true, skipped: 'Relatorio ja reservado para envio' });
   try {
-    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true).replace('</td></tr><tr><td style="background:#f4f7fb"',tickets.html+'</td></tr><tr><td style="background:#f4f7fb"'));
+    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html));
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -596,7 +608,7 @@ async function dispatch() {
       });
       if (!inserted?.length) continue;
       try {
-        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text+'\n\n'+tickets.text,reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false).replace('</td></tr><tr><td style="background:#f4f7fb"',tickets.html+'</td></tr><tr><td style="background:#f4f7fb"'));
+        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text+'\n\n'+tickets.text,reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html));
         await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH', body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString(), provider_id: 'gmail-apps-script' }) });
         results.push({ recipientId: id, kind: t.kind, status: 'sent', ...report.metrics });
@@ -615,9 +627,11 @@ async function handleRequest(req: Request): Promise<Response> {
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if (action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official') {
+    if (action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
-      return action === 'manual_official' ? await manualOfficial(payload) : await adminAction(payload);
+      return action === 'manual_official' ? await manualOfficial(payload)
+        : action === 'preview_audit' ? await manualOfficial({...payload,previewOnly:true})
+        : await adminAction(payload);
     }
     if (action !== 'dispatch') return json({ error: 'Acao desconhecida' }, 400);
     const expected = E('REPORT_CRON_SECRET');
