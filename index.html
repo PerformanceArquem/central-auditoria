@@ -2769,7 +2769,7 @@ const H=v=>{
   const hh=Math.floor(totalSeconds/3600);
   const mm=Math.floor(totalSeconds%3600/60);
   const ss=totalSeconds%60;
-  return sign+String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0');
+  return sign+hh+'h'+String(mm).padStart(2,'0')+(ss?String(ss).padStart(2,'0')+'s':'');
 };
 const dEq=(h,c)=>{const n=Math.abs(h)/c.jor;return n>=0.5?` (≈ ${nf(n,1)} ${n===1?'dia':'dias'} de ${c.jor} h)`:''};
 // diferença escrita por extenso: "Faltam 2,00 h (≈ 0,3 dia de 8 h)" ou "Passou 3,00 h"
@@ -3805,7 +3805,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
 (()=>{'use strict';
  const el=id=>document.getElementById(id); let loaded=false,latest=null,started=false,collaboratorNames=[];
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const fmt=m=>{m=Math.max(0,Math.floor(Number(m)||0));return `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}:00`};
+ const fmt=m=>{m=Math.max(0,Math.round(Number(m)||0));return `${Math.floor(m/60)}h${String(m%60).padStart(2,'0')}`};
  const zoneDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  const say=x=>el('previewStatus').textContent=x;
  window.previewInit=()=>{
