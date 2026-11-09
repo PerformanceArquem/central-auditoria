@@ -6,8 +6,11 @@
  *
  * 1) Em seu doPost(e), DEPOIS de validar o token atual, acrescente:
  *    if (dados.action === 'capabilities') {
+ *      const templateId=PropertiesService.getScriptProperties()
+ *        .getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID');
  *      return ContentService.createTextOutput(JSON.stringify({
- *        sucesso: true, attachmentsVersion: 'arquem-1', formats: ['pdf','xlsx']
+ *        sucesso: true, attachmentsVersion: 'arquem-1', formats: ['pdf','xlsx'],
+ *        paperTemplateConfigured: Boolean(templateId)
  *      })).setMimeType(ContentService.MimeType.JSON);
  *    }
  *
@@ -83,7 +86,8 @@ function arquemTesteAnexosSemEnvio() {
  * const data=JSON.parse(e.postData.contents);
  * if(!validarTokenDoProjeto_(data.token)) return respostaDeErroExistente_();
  * if(data.action==='capabilities') return ContentService.createTextOutput(
- *   JSON.stringify({sucesso:true,attachmentsVersion:'arquem-1',formats:['pdf','xlsx']})
+ *   JSON.stringify({sucesso:true,attachmentsVersion:'arquem-1',formats:['pdf','xlsx'],
+ *     paperTemplateConfigured:Boolean(PropertiesService.getScriptProperties().getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID'))})
  * ).setMimeType(ContentService.MimeType.JSON);
  *
  * // Depois, no bloco de envio já autorizado:
@@ -119,6 +123,8 @@ function arquemCreateReportAttachments_(packet) {
     const base = 'ARQUEM_' + arquemFilename_(title) + '_' + from + '_a_' + to;
     pdf.setName(base + '.pdf');
     xlsx.setName(base + '.xlsx');
+    const bytes=pdf.getBytes().length+xlsx.getBytes().length;
+    if(bytes>18*1024*1024)throw new Error('Arquivos maiores que 18 MB: reduzir período do relatório');
     return [pdf, xlsx];
   } finally {
     keep.forEach(id => { try { DriveApp.getFileById(id).setTrashed(true); } catch (_) {} });
