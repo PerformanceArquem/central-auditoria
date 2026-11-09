@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-closed-week-catchup-20261109-v24';
+const RELEASE_ID = 'email-support-details-20261109-v25';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -99,6 +99,9 @@ async function source(from: string, to: string) {
 }
 
 // Snapshot atual de chamados importados do Movidesk. Não confundir com horas do período.
+async function clientSource() {
+ return list('audit_ticket_client_summary','?select=ticket_id,client_name');
+}
 async function ticketSource() {
   // Usar a mesma base já sincronizada do painel, mas só tickets abertos
   // e campos necessários. Evita carregar megabytes de actions/histories.
@@ -240,7 +243,7 @@ function workdays(from: string, to: string, ignored: Set<string>) {
 
 const emailEsc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]||ch));
 const displayDate=(d:string)=>/^\d{4}-\d{2}-\d{2}$/.test(d)?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):d;
-function reportEmailHtml(rec:R,report:{text:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:string,partial:boolean,manual:boolean,alertsHtml=''){
+function reportEmailHtml(rec:R,report:{text:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:string,partial:boolean,manual:boolean,alertsHtml='',detailsHtml=''){
  const m=report.metrics;
  const targetPerDay=Number(rec.daily_target_minutes??480);
  const minPercent=Number(rec.minimum_percent??80);
@@ -288,13 +291,13 @@ function reportEmailHtml(rec:R,report:{text:string;metrics:{appointments:number;
  missingMetrics+
  '<div style="font-size:15px;color:#18385e;font-weight:700;margin:24px 0 12px">Atividades e lançamentos</div>'+
  '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5edf7;border-radius:8px;overflow:hidden">'+lines+'</table>'+
- alertsHtml+
+ detailsHtml+alertsHtml+
  '<p style="font-size:11px;line-height:1.6;color:#64748b;margin:22px 0">Fonte: API Movidesk / Central de Auditoria. Registros importados; não substitui o ponto eletrônico e não comprova produtividade ou presença.</p>'+
  '</td></tr><tr><td style="background:#f4f7fb;border-top:1px solid #dce5f0;padding:20px 26px;color:#718096;font-size:11px">'+
  'ARQUEM SISTEMAS &nbsp;|&nbsp; Central de Auditoria &nbsp;|&nbsp; Mensagem automática, não responda</td></tr>'+
  '</table></td></tr></table></body></html>';
 }
-function buildReport(rec: R, appts: R[], from: string, to: string, kind: string, hol: Set<string>, authorizedSingleManual = false) {
+function buildReport(rec: R, appts: R[], from: string, to: string, kind: string, hol: Set<string>, authorizedSingleManual = false, clients: R[] = []) {
   const scope = String(rec.scope || 'sector');
   if (!['sector', 'management'].includes(scope)) throw new Error('Escopo de destinatario nao reconhecido');
   const person = norm(rec.collaborator_name);
@@ -333,6 +336,36 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     bySector.set(s, (bySector.get(s) || 0) + Number(a.duration_minutes || 0));
   }
   const worked = new Set(selected.map(a => String(a.ticket_id))).size;
+  const dayMap=new Map<string,number>();
+  const clientsById=new Map(clients.map(x=>[String(x.ticket_id),String(x.client_name||'').trim()]));
+  const companyMap=new Map<string,{minutes:number;tickets:Set<string>}>();
+  for(const a of selected){
+    const who=String(a.collaborator_name||'Não informado');
+    const day=String(a.appointment_date||'').slice(0,10);
+    const mins=Number(a.duration_minutes||0);
+    const k=who+'|'+day;dayMap.set(k,(dayMap.get(k)||0)+mins);
+    const id=String(a.ticket_id||''),company=clientsById.get(id)||'Empresa não identificada';
+    if(!companyMap.has(company))companyMap.set(company,{minutes:0,tickets:new Set()});
+    const row=companyMap.get(company)!;row.minutes+=mins;if(id)row.tickets.add(id);
+  }
+  const daily=[...dayMap].map(([key,minutes])=>{const i=key.lastIndexOf('|');return {name:key.slice(0,i),day:key.slice(i+1),minutes};})
+    .sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')||a.day.localeCompare(b.day));
+  const companies=[...companyMap].map(([name,x])=>({name,minutes:x.minutes,tickets:x.tickets.size}))
+    .sort((a,b)=>b.minutes-a.minutes).slice(0,10);
+  const cell='padding:9px 8px;border-bottom:1px solid #e5edf7;text-align:left';
+  const detailTable=(cols:string[],rows:string[][])=>
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;border-collapse:collapse">'+
+    '<tr style="background:#f1f5fb">'+cols.map(c=>'<th style="'+cell+'">'+emailEsc(c)+'</th>').join('')+'</tr>'+
+    rows.map(row=>'<tr>'+row.map(c=>'<td style="'+cell+'">'+emailEsc(c)+'</td>').join('')+'</tr>').join('')+'</table>';
+  const detailsHtml='<div style="margin-top:24px;border-top:2px solid #dce6f4;padding-top:12px">'+
+    '<h3 style="color:#17345d;font-size:15px">Horas por colaborador, dia a dia</h3>'+
+    (daily.length?detailTable(['Colaborador','Data','Horas'],daily.slice(0,90).map(x=>[x.name,displayDate(x.day),duration(x.minutes)])):
+      '<p style="font-size:12px">Sem apontamentos importados.</p>')+
+    (daily.length>90?'<p style="font-size:12px">Exibindo 90 de '+daily.length+' linhas.</p>':'')+
+    '<h3 style="color:#17345d;font-size:15px;margin-top:24px">Empresas com maior consumo de horas</h3>'+
+    (companies.length?detailTable(['Empresa','Tempo','Chamados'],companies.map(x=>[x.name,duration(x.minutes),String(x.tickets)])):
+      '<p style="font-size:12px">Sem empresas identificadas.</p>')+
+    '<p style="font-size:11px;color:#64748b">Somente horas importadas do Movidesk; ausência de lançamento não comprova falta de trabalho.</p></div>';
   const title = `${kind === 'weekly' ? 'Relatorio semanal' : 'Relatorio diario'} - ${scope === 'management' ? (selectedSectors.length ? 'Gestao / ' + rec.sectors.map(safe).join(' + ') : 'Gestao / Todos os setores') : (Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors.map(safe).join(' + ') : safe(rec.sector))}${person ? ' / ' + safe(rec.collaborator_name) : ''}`;
   const details = person ? selected.slice(0, 100).map(a =>
     `- ${String(a.appointment_date)} | #${safe(a.ticket_id)} | ${duration(Number(a.duration_minutes || 0))} | ${safe(a.activity)}`)
@@ -369,6 +402,14 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     '────────────────────────────────────────',
     ...(details.length ? details : ['Nenhum registro importado para o período.']),
     '',
+    'HORAS POR COLABORADOR E DIA',
+    '────────────────────────────────────────',
+    ...daily.slice(0,90).map(x=>'- '+safe(x.name)+' | '+displayDate(x.day)+' | '+duration(x.minutes)),
+    '',
+    'EMPRESAS QUE MAIS CONSUMIRAM TEMPO',
+    '────────────────────────────────────────',
+    ...companies.map(x=>'- '+safe(x.name)+' | '+duration(x.minutes)+' | '+x.tickets+' chamados'),
+    '',
     'INFORMAÇÃO IMPORTANTE',
     '────────────────────────────────────────',
     'Este relatório considera somente apontamentos importados do Movidesk.',
@@ -378,7 +419,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     'ARQUEM | Relatório emitido pela Central de Auditoria'
   ];
   if (scope === 'management') lines.push('', 'Horas por setor:', ...[...bySector].map(([s, m]) => `- ${safe(s)}: ${duration(m)}`));
-  return { text: lines.join('\n'), metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
+  return { text: lines.join('\n'), detailsHtml, metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
 }
 async function sendMail(email: string, subject: string, text: string, html?: string) {
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
@@ -601,10 +642,10 @@ async function manualOfficial(payload: R) {
   const checkpoint = await state();
   const coverage = await recentCoverage(from,to);
   const key = `manual-test:${id}:${kind}:${from}:${to}:${crypto.randomUUID()}`;
-  const appts = await source(from, to);
+  const [appts,clients] = await Promise.all([source(from,to),clientSource()]);
   // Piloto manual autorizado: admin JWT + endereco fixo + confirmacao de UI.
   // A permissao coletiva global permanece exigida pelo Cron automatico.
-  const report = buildReport(rec, appts, from, to, kind, hol, true);
+  const report = buildReport(rec, appts, from, to, kind, hol, true, clients);
   const tickets = ticketAlerts(rec, await ticketSource());
   // Mesmo com zero apontamentos, o teste manual verifica o envio e informa a ausencia no corpo.
   const partial = !checkpoint.completed || !coverage.ready;
@@ -629,7 +670,7 @@ async function manualOfficial(payload: R) {
   });
   if (!inserted?.length) return json({ ok: true, skipped: 'Relatorio ja reservado para envio' });
   try {
-    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html));
+    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html,report.detailsHtml));
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -655,8 +696,7 @@ async function dispatchWeeklyPreliminary() {
   const coverage=await recentCoverage(from,to);
   const recipients=(await recipientList()).filter(r=>r.weekly_enabled===true);
   if(!recipients.length) return json({ok:false,error:'Sem destinatários semanais ativos'},409);
-  const appts=await source(from,to);
-  const allTickets=await ticketSource();
+  const [appts,allTickets,clients]=await Promise.all([source(from,to),ticketSource(),clientSource()]);
   const results:R[]=[];
   for(const r of recipients){
     const id=String(r.id);
@@ -664,7 +704,7 @@ async function dispatchWeeklyPreliminary() {
     try{
       const exists=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=dispatch_key,status&limit=1');
       if(exists.length){results.push({recipientId:id,status:'skipped',reason:'Envio preliminar já registrado'});continue;}
-      const report=buildReport(r,appts,from,to,'weekly',hol);
+      const report=buildReport(r,appts,from,to,'weekly',hol,false,clients);
       const alerts=ticketAlerts(r,allTickets);
       const empty=!report.metrics.appointments;
       const subject='[BALANCETE PRELIMINAR - DADOS PARCIAIS] Central de Auditoria - Semana 02 a 08/11/2026'+(empty?' [SEM APONTAMENTOS]':'');
@@ -673,7 +713,7 @@ async function dispatchWeeklyPreliminary() {
         '02/11: FINADOS (FERIADO). DIAS ÚTEIS: 03, 04, 05 E 06/11.\n'+
         'HORAS E DIFERENÇAS PARA METAS PODEM MUDAR APÓS A CONCILIAÇÃO.\n'+
         'NÃO USAR ESTE DOCUMENTO PARA AVALIAÇÃO DEFINITIVA DE JORNADA OU PRODUTIVIDADE.\n\n';
-      const html=reportEmailHtml(r,report,from,to,'weekly',true,true,alerts.html);
+      const html=reportEmailHtml(r,report,from,to,'weekly',true,true,alerts.html,report.detailsHtml);
       const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
         method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
         body:JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:'weekly',
@@ -733,8 +773,7 @@ async function dispatch() {
   const to = tasks.reduce((s, t) => t.to > s ? t.to : s, tasks[0].to);
   const coverage = await recentCoverage(from,to);
   if (!coverage.ready) return json({ok:true,skipped:'Conciliação incompleta ou desatualizada para o período; próximo agendamento fará nova tentativa',from,to,coverage});
-  const appts = await source(from, to);
-  const allTickets = await ticketSource();
+  const [appts,allTickets,clients]=await Promise.all([source(from,to),ticketSource(),clientSource()]);
   const results: R[] = [];
   for (const t of tasks) {
     const id = String(t.r.id);
@@ -742,7 +781,7 @@ async function dispatch() {
     try {
       const exists = await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}&select=dispatch_key,status&limit=1`);
       if (exists.length) { results.push({ recipientId: id, kind: t.kind, skipped: 'Ja registrado; revisar status antes de retentar' }); continue; }
-      const report = buildReport(t.r, appts, t.from, t.to, t.kind, hol);
+      const report = buildReport(t.r, appts, t.from, t.to, t.kind, hol, false, clients);
       const tickets = ticketAlerts(t.r, allTickets);
       if (!report.metrics.appointments) { results.push({ recipientId: id, kind: t.kind, skipped: 'Sem apontamentos; envio suspenso' }); continue; }
       const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
