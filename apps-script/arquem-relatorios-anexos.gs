@@ -183,6 +183,16 @@ function arquemPdf_(p, keep) {
       arquemH_(x.targetMinutes),arquemH_(x.minimumGap),arquemH_(x.targetGap)]));
     body.appendTable(lines);
   }
+  if ((p.daily||[]).length) {
+    arquemAddHeading_(body,'Horas por colaborador · dia a dia');
+    const rows=[['Data','Colaborador','Setor','Horas','Jornada ref.','Meta mínima ref.']];
+    p.daily.slice(0,90).forEach(x=>rows.push([
+      String(x.date||''),String(x.person||''),String(x.sector||''),
+      arquemH_(x.minutes),arquemH_(x.referenceMinutes),arquemH_(x.minimumMinutes)
+    ]));
+    body.appendTable(rows);
+    if(p.daily.length>90)body.appendParagraph('Exibindo os primeiros 90 de '+p.daily.length+' registros diários agrupados.');
+  }
   if ((p.customers||[]).length){
     arquemAddHeading_(body,'Empresas que mais consomem tempo');
     body.appendTable([['Empresa','Horas','Chamados']].concat(
@@ -190,12 +200,21 @@ function arquemPdf_(p, keep) {
   }
   if ((p.tickets||[]).length){
     arquemAddHeading_(body,'Chamados que exigem atenção');
-    body.appendTable([['Chamado','Cliente','Responsável','Status','Tempo']].concat(
-      p.tickets.slice(0,65).map(x=>[
+    const ticketRows=p.tickets.slice(0,65);
+    const ticketTable=body.appendTable([['Chamado','Cliente','Responsável','Status','Tempo']].concat(
+      ticketRows.map(x=>[
         '#'+String(x.id||''),String(x.client||''),String(x.owner||''),
         String(x.status||''),String(x.ageDays==null?'—':x.ageDays+' dias')
       ])));
-    body.appendParagraph('Clique nos números na versão HTML do e-mail para abrir os chamados no Movidesk.');
+    ticketRows.forEach((x,i)=>{
+      const id=String(x.id||'');
+      if(/^\d+$/.test(id)){
+        ticketTable.getCell(i+1,0).editAsText()
+          .setLinkUrl('https://arquem.movidesk.com/Ticket/Edit/'+id)
+          .setForegroundColor('#2467a8');
+      }
+    });
+    body.appendParagraph('Clique no número do chamado no PDF para abrir o Movidesk.');
   }
   arquemAddHeading_(body,'Observações metodológicas');
   body.appendParagraph('Dados da Central de Auditoria/Movidesk sincronizados. Horas apontadas não são controle de ponto. '+
