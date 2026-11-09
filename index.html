@@ -897,6 +897,7 @@
                 <div class="row noprint" style="align-items:flex-end">
                   <div class="fg"><label for="previewPeriod">Tipo de relatório</label><select id="previewPeriod"><option value="day">Diário</option><option value="week">Semanal</option></select></div>
                   <div class="fg"><label for="previewDate">Data de referência</label><input id="previewDate" type="date"></div>
+                  <div class="fg" style="min-width:240px"><label for="previewManager">Relatório de Gestão</label><select id="previewManager"><option value="">Consolidado geral (administrador)</option></select></div>
                   <div class="fg" style="min-width:220px;flex:1"><label for="previewCollaborator">Colaborador</label><select id="previewCollaborator"><option value="">Todos os colaboradores</option></select><small id="previewCollaboratorHint" style="color:var(--muted)">Carregando colaboradores do sistema...</small></div>
                   <button class="b" type="button" id="previewLoad">Consultar dados</button>
                   <button class="s" type="button" id="previewCopy">Copiar relatório</button>
@@ -3600,9 +3601,11 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
      catch{el('previewText').select();say('Selecione e copie o texto exibido.')} });
    el('previewPeriod').addEventListener('change',load);
    el('previewDate').addEventListener('change',load);
+   el('previewManager').addEventListener('change',load);
    el('previewCollaborator').addEventListener('change',render);
    load();
    loadCollaborators();
+   loadManagementRecipients();
  };
  function renderCollaboratorOptions(reportRows=[]){
    const select=el('previewCollaborator');
@@ -3612,6 +3615,23 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    select.replaceChildren(new Option('Todos os colaboradores',''));
    names.forEach(name=>select.add(new Option(name,name)));
    if(names.includes(previous))select.value=previous;
+ }
+ async function loadManagementRecipients(){
+   const client=window.tmEmailAdminClient;
+   const select=el('previewManager');
+   if(!client||!select)return;
+   try{
+     const {data,error}=await client.from('audit_email_recipients')
+       .select('id,name,email,sectors').eq('scope','management').eq('active',true).order('name');
+     if(error)throw error;
+     const old=select.value;
+     select.replaceChildren(new Option('Consolidado geral (administrador)',''));
+     for(const item of data||[]){
+       if(!Array.isArray(item.sectors)||!item.sectors.length)continue;
+       select.add(new Option((item.name||item.email)+' — '+item.sectors.join(', '),item.id));
+     }
+     if([...select.options].some(option=>option.value===old))select.value=old;
+   }catch(error){console.error('Destinatarios de gestao indisponiveis:',error);}
  }
  async function loadCollaborators(){
    const client=window.tmEmailAdminClient;
@@ -3649,7 +3669,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
      const supabaseHost=window.tmEmailAdminClient;
      if(!supabaseHost)throw new Error('Cliente autenticado da Central de Auditoria indisponível.');
      const {data:unified,error:unifiedError}=await supabaseHost.functions.invoke('audit-email-dispatch',{
-       body:{action:'dashboard_report',period:el('previewPeriod').value,date:el('previewDate').value}
+       body:{action:'dashboard_report',period:el('previewPeriod').value,date:el('previewDate').value,recipientId:el('previewManager').value}
      });
      if(unifiedError)throw unifiedError;
      const response={ok:unified?.ok===true,status:unified?.ok===true?200:500};
@@ -3673,8 +3693,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    const extra=r=>Math.max(0,Number(r.extra)||0);
    const totalM=rows.reduce((a,r)=>a+r.minutes,0),entries=rows.reduce((a,r)=>a+r.entries,0);
    const ticketIds=new Set(rows.flatMap(r=>r.ticketIds));
-   el('previewCoverage').textContent=latest.coverageMessage;
-   el('previewHeading').textContent=(latest.period==='week'?'Resumo semanal':'Resumo diário')+' · '+latest.start+' a '+latest.end;
+   el('previewCoverage').textContent=latest.coverageMessage+' · Escopo: '+(latest.recipientLabel||'Consolidado geral')+(latest.sectors?.length?' · '+latest.sectors.join(', '):'');
+   el('previewHeading').textContent=(latest.period==='week'?'Resumo semanal':'Resumo diário')+' · '+latest.start+' a '+latest.end+' · '+(latest.recipientLabel||'Consolidado geral');
    el('previewKpis').innerHTML=[['Colaboradores com registros',rows.length],['Apontamentos',entries],['Chamados distintos',ticketIds.size],['Horas apontadas',fmt(totalM)]].map(([n,v])=>`<div class="card"><small>${esc(n)}</small><div><b>${esc(v)}</b></div></div>`).join('');
    el('previewRows').innerHTML=rows.length?rows.map(r=>`<tr><td>${esc(r.collaborator)}</td><td>${esc(r.sectors.join(', '))}</td><td>${r.ticketIds.length}</td><td>${r.entries}</td><td><b>${fmt(r.minutes)}</b></td><td>${fmt(r.minimum)}</td><td>${fmt(r.target)}</td><td>${fmt(min(r))}</td><td>${fmt(jornada(r))}</td><td>${fmt(extra(r))}</td></tr>`).join(''):'<tr><td colspan="10">Nenhum apontamento encontrado neste período.</td></tr>';
    const lines=[`PRÉVIA ${latest.period==='week'?'SEMANAL':'DIÁRIA'} — ${latest.start} a ${latest.end}`,latest.partial?'DADOS PARCIAIS · CONCILIAÇÃO EM ANDAMENTO':'PERÍODO CONCILIADO',''];
