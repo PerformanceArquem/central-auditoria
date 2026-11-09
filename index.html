@@ -963,6 +963,22 @@
       <button type="submit" id="sqSave" class="b">Salvar avaliação</button>
     </form>
   </div>
+  <div class="card">
+    <h3>🏆 Quem acumulou mais tempo de atendimento — semana e mês</h3>
+    <p class="subtle">O ranking de <b>chat</b> soma a duração informada no Movidesk dos tickets vinculados ao colaborador. O de <b>ligação</b> soma apenas <b>horas apontadas em chamados originados de telefonia</b> — não representa a duração real da chamada. Tickets sem vínculo seguro não entram no ranking.</p>
+    <div class="row" style="align-items:flex-end;gap:12px">
+      <div class="fg"><label for="sqRankingPeriod">Visualização</label>
+        <select id="sqRankingPeriod"><option value="week">Semana selecionada</option><option value="month">Mês selecionado</option></select></div>
+      <button type="button" id="sqRankPrint" class="s noprint">Imprimir rankings</button>
+    </div>
+    <p id="sqRankingDates" class="subtle"></p>
+    <div class="tw"><table id="sqChatRanking"><thead><tr><th>Posição</th><th>Colaborador</th><th>Chat: tempo acumulado</th><th>Chamados</th></tr></thead><tbody></tbody></table></div>
+    <h4 style="margin-top:18px">Ligações — apontamentos associados (indicador aproximado)</h4>
+    <div class="tw"><table id="sqPhoneRanking"><thead><tr><th>Posição</th><th>Colaborador</th><th>Tempo apontado</th><th>Chamados de ligação</th></tr></thead><tbody></tbody></table></div>
+    <h4 style="margin-top:18px">Maiores atendimentos individuais</h4>
+    <div class="tw"><table id="sqLongestChat"><thead><tr><th>Canal</th><th>Colaborador</th><th>Chamado</th><th>Tempo</th></tr></thead><tbody></tbody></table></div>
+    <p class="subtle">Os números são atualizados com o Movidesk. A classificação é por tempo, não por qualidade ou produtividade; escalas, feriados e eventuais transferências precisam ser considerados na interpretação.</p>
+  </div>
   <div class="card"><h3>Resumo da equipe por colaborador</h3>
     <div class="tw"><table id="sqPeopleTable"><thead><tr><th>Colaborador</th><th>Horas apontadas</th><th>Apontamentos</th><th>Chamados</th><th>Avaliações</th><th>Excelentes</th></tr></thead><tbody></tbody></table></div>
   </div>
@@ -4139,7 +4155,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
  const hhmm=minutes=>{const n=Math.round(Number(minutes)||0);return Math.floor(n/60)+'h'+String(n%60).padStart(2,'0')};
  const sec=seconds=>seconds==null?'—':(Math.floor(seconds/60)+'min '+String(Math.round(seconds%60)).padStart(2,'0')+'s');
  const localeDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
- let initialized=false,loading=false;
+ let initialized=false,loading=false,latest=null;
  function msg(t){el('sqStatus').textContent=t;}
  async function api(body){
    const client=window.tmEmailAdminClient;
@@ -4150,6 +4166,20 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    return data;
  }
  const table=(id,rows)=>{el(id).querySelector('tbody').innerHTML=rows.join('')||'<tr><td colspan="8">Nenhum registro para o período.</td></tr>'};
+
+ function paintRanking(){
+   const p=el('sqRankingPeriod').value, r=latest?.leaderboards?.[p];
+   if(!r)return;
+   const when=s=>{const [y,m,d]=String(s).split('-');return d+'/'+m+'/'+y};
+   el('sqRankingDates').textContent='Período: '+when(r.from)+' a '+when(r.to)+' · Chat: tempo medido no ticket; ligação: apontamentos (estimativa indireta).';
+   table('sqChatRanking',(r.chat||[]).map((x,i)=>
+      '<tr><td>'+(i+1)+'º</td><td>'+escape(x.person)+'</td><td>'+sec(x.chatSeconds)+'</td><td>'+escape(x.chatTickets)+'</td></tr>'));
+   table('sqPhoneRanking',(r.phoneProxy||[]).map((x,i)=>
+      '<tr><td>'+(i+1)+'º</td><td>'+escape(x.person)+'</td><td>'+hhmm(x.phoneAppointmentMinutes)+'</td><td>'+escape(x.phoneTickets)+'</td></tr>'));
+   const a=[...(r.longestChat||[]).map(x=>({label:'Chat',person:x.person,ticket:x.ticket,amount:sec(x.seconds)})),
+     ...(r.longestPhoneAppointments||[]).map(x=>({label:'Ligação (apontamento)',person:x.person,ticket:x.ticket,amount:hhmm(x.minutes)}))];
+   table('sqLongestChat',a.map(x=>'<tr><td>'+escape(x.label)+'</td><td>'+escape(x.person)+'</td><td><a href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(x.ticket)+'" target="_blank" rel="noopener noreferrer">#'+escape(x.ticket)+'</a></td><td>'+escape(x.amount)+'</td></tr>'));
+ }
  function paint(d){
    const m=d.metrics||{},mc=d.measuredChat||{},q=d.quality||[],cfg=d.estimated||{};
    const cards=[['Horas apontadas',hhmm(m.minutes)],['Apontamentos',m.appointments||0],['Chamados distintos',m.tickets||0],['Dias úteis (referência)',d.businessDays],['Colaboradores',m.collaborators||0],['Avaliações',q.reduce((s,x)=>s+x.total,0)]];
@@ -4163,6 +4193,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    table('sqPeopleTable',people.map(p=>'<tr><td>'+escape(p.person)+'</td><td>'+hhmm(p.minutes)+'</td><td>'+escape(p.appointments)+'</td><td>'+escape(p.tickets)+'</td><td>'+escape(p.ratings)+'</td><td>'+escape(p.excellent)+'</td></tr>'));
    el('sqPeople').innerHTML=people.map(p=>'<option value="'+escape(p.person)+'"></option>').join('');
    table('sqRatingsTable',(d.ratings||[]).slice(0,100).map(r=>'<tr><td>'+escape(r.service_date)+'</td><td>'+escape(r.channel)+'</td><td>'+escape(r.collaborator_name)+'</td><td>'+escape(r.ticket_id||'—')+'</td><td>'+escape(r.score)+'</td><td>'+(Number(r.score)>=8?'Excelente':'Ruim')+'</td><td>'+escape(r.notes||'')+'</td></tr>'));
+   latest=d;paintRanking();
    msg('Dados do Movidesk e avaliações salvas no Supabase. Dados recentes sujeitos à reconciliação; não usar horas como controle de ponto.');
  }
  async function load(){
@@ -4184,6 +4215,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
      initialized=true;const today=localeDate();
      el('sqFrom').value=today.slice(0,7)+'-01';el('sqTo').value=today;el('sqDate').value=today;
      el('sqLoad').addEventListener('click',load);
+     el('sqRankingPeriod').addEventListener('change',paintRanking);
+     el('sqRankPrint').addEventListener('click',()=>window.print());
      el('sqForm').addEventListener('submit',save);
    }
    load();
