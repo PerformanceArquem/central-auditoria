@@ -975,8 +975,9 @@
     <div class="tw"><table id="sqChatRanking"><thead><tr><th>Posição</th><th>Colaborador</th><th>Chat: tempo acumulado</th><th>Chamados</th></tr></thead><tbody></tbody></table></div>
     <h4 style="margin-top:18px">Ligações — apontamentos associados (indicador aproximado)</h4>
     <div class="tw"><table id="sqPhoneRanking"><thead><tr><th>Posição</th><th>Colaborador</th><th>Tempo apontado</th><th>Chamados de ligação</th></tr></thead><tbody></tbody></table></div>
-    <h4 style="margin-top:18px">Maiores atendimentos individuais</h4>
-    <div class="tw"><table id="sqLongestChat"><thead><tr><th>Canal</th><th>Colaborador</th><th>Chamado</th><th>Tempo</th></tr></thead><tbody></tbody></table></div>
+    <h4 style="margin-top:18px">Detalhamento dos atendimentos mais demorados</h4>
+    <p class="subtle">Até 20 chamados de chat e 20 de voz no período selecionado. A data indica o dia do apontamento; o status é o status atual do ticket. Para voz, o tempo corresponde à soma dos apontamentos associados ao ticket, não ao áudio da ligação.</p>
+    <div class="tw"><table id="sqLongestChat"><thead><tr><th>Canal</th><th>Data do apontamento</th><th>Colaborador</th><th>Nº chamado</th><th>Assunto</th><th>Status atual</th><th>Tempo</th></tr></thead><tbody></tbody></table></div>
     <p class="subtle">Os números são atualizados com o Movidesk. A classificação é por tempo, não por qualidade ou produtividade; escalas, feriados e eventuais transferências precisam ser considerados na interpretação.</p>
   </div>
   <div class="card"><h3>Resumo da equipe por colaborador</h3>
@@ -4176,9 +4177,9 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       '<tr><td>'+(i+1)+'º</td><td>'+escape(x.person)+'</td><td>'+sec(x.chatSeconds)+'</td><td>'+escape(x.chatTickets)+'</td></tr>'));
    table('sqPhoneRanking',(r.phoneProxy||[]).map((x,i)=>
       '<tr><td>'+(i+1)+'º</td><td>'+escape(x.person)+'</td><td>'+hhmm(x.phoneAppointmentMinutes)+'</td><td>'+escape(x.phoneTickets)+'</td></tr>'));
-   const a=[...(r.longestChat||[]).map(x=>({label:'Chat',person:x.person,ticket:x.ticket,amount:sec(x.seconds)})),
-     ...(r.longestPhoneAppointments||[]).map(x=>({label:'Ligação (apontamento)',person:x.person,ticket:x.ticket,amount:hhmm(x.minutes)}))];
-   table('sqLongestChat',a.map(x=>'<tr><td>'+escape(x.label)+'</td><td>'+escape(x.person)+'</td><td><a href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(x.ticket)+'" target="_blank" rel="noopener noreferrer">#'+escape(x.ticket)+'</a></td><td>'+escape(x.amount)+'</td></tr>'));
+   const a=[...(r.longestChat||[]).map(x=>({label:'Chat',person:x.person,ticket:x.ticket,date:x.date,subject:x.subject,status:x.status,amount:sec(x.seconds)})),
+     ...(r.longestPhoneAppointments||[]).map(x=>({label:'Voz (apontamento)',person:x.person,ticket:x.ticket,date:x.date,subject:x.subject,status:x.status,amount:hhmm(x.minutes)}))];
+   table('sqLongestChat',a.map(x=>'<tr><td>'+escape(x.label)+'</td><td>'+escape(x.date||'—')+'</td><td>'+escape(x.person)+'</td><td><a href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(x.ticket)+'" target="_blank" rel="noopener noreferrer">#'+escape(x.ticket)+'</a></td><td title="'+escape(x.subject)+'">'+escape(x.subject||'Não informado')+'</td><td>'+escape(x.status||'Não informado')+'</td><td><b>'+escape(x.amount)+'</b></td></tr>'));
  }
  function paint(d){
    const m=d.metrics||{},mc=d.measuredChat||{},q=d.quality||[],cfg=d.estimated||{};
