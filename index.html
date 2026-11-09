@@ -980,7 +980,30 @@
     <div class="tw"><table id="sqLongestChat"><thead><tr><th>Canal</th><th>Data do apontamento</th><th>Colaborador</th><th>Nº chamado</th><th>Assunto</th><th>Status atual</th><th>Tempo</th></tr></thead><tbody></tbody></table></div>
     <p class="subtle">Os números são atualizados com o Movidesk. A classificação é por tempo, não por qualidade ou produtividade; escalas, feriados e eventuais transferências precisam ser considerados na interpretação.</p>
   </div>
-  <div class="card"><h3>Resumo da equipe por colaborador</h3>
+  
+<div class="card" id="sqPeakSection">
+  <div class="alert-heading"><div><div class="eyebrow">COMPORTAMENTO OPERACIONAL</div><h3>Picos por horário, dia da semana e intervalos sem apontamento</h3>
+    <p class="subtle">Comparativos dos horários de INÍCIO dos apontamentos do Suporte. Não representam o volume de ligações/chats recebidos.</p></div></div>
+  <div class="row noprint" style="align-items:flex-end">
+    <div class="fg"><label for="sqPeakDate">Data de referência</label><input type="date" id="sqPeakDate"></div>
+    <div class="fg"><label for="sqPeakPeriod">Período</label><select id="sqPeakPeriod"><option value="week">Semana</option><option value="month">Mês</option></select></div>
+    <button class="s" type="button" id="sqPeakRefresh">↻ Atualizar comparativos</button>
+  </div>
+  <p class="subtle" id="sqPeakStatus" role="status">Carregue o comparativo para visualizar os dados.</p>
+  <div id="sqPeakKpis" class="kpis"></div>
+  <h4 style="margin:18px 0 10px">Picos de início por horário</h4>
+  <div id="sqHourlyBars" style="display:grid;gap:8px"></div>
+  <p class="subtle">O gráfico apresenta os horários em que os colaboradores iniciaram mais apontamentos, e não horários de entrada dos contatos.</p>
+  <h4 style="margin-top:18px">Comparativo por dia da semana</h4>
+  <div class="tw"><table id="sqWeekdayTable"><thead><tr><th>Dia</th><th>Apontamentos no período</th><th>Dias úteis da referência</th><th>Média por dia</th><th>Minutos apontados</th></tr></thead><tbody></tbody></table></div>
+  <h4 style="margin-top:18px">Lacunas entre apontamentos por colaborador</h4>
+  <p class="subtle"><b>Lacuna não é ociosidade comprovada.</b> A contagem abrange somente intervalos internos, entre o fim de um apontamento e o início do próximo, no mesmo dia. Almoço, pausas e atividades sem ticket podem estar incluídos. Períodos antes do primeiro e depois do último apontamento não entram na soma.</p>
+  <div class="tw"><table id="sqGapsPeople"><thead><tr><th>Colaborador</th><th>Dias com registros</th><th>Apontamentos</th><th>Tempo coberto (intervalos)</th><th>Tempo entre registros</th><th>Lacunas ≥ 10 min</th><th>Maior lacuna</th></tr></thead><tbody></tbody></table></div>
+  <h4 style="margin-top:18px">Maiores intervalos sem registro</h4>
+  <div class="tw"><table id="sqGapsDetails"><thead><tr><th>Colaborador</th><th>Dia</th><th>De</th><th>Até</th><th>Intervalo sem apontamento</th></tr></thead><tbody></tbody></table></div>
+  <p class="subtle" style="margin-top:12px">Sábados, domingos e feriados são excluídos dos indicadores operacionais padrão. Valores de hoje podem estar parciais. Use escalas e intervalos contratados antes de avaliar pessoas.</p>
+</div>
+<div class="card"><h3>Resumo da equipe por colaborador</h3>
     <div class="tw"><table id="sqPeopleTable"><thead><tr><th>Colaborador</th><th>Horas apontadas</th><th>Apontamentos</th><th>Chamados</th><th>Avaliações</th><th>Excelentes</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card"><h3>Últimas avaliações</h3><div class="tw"><table id="sqRatingsTable"><thead><tr><th>Data</th><th>Canal</th><th>Colaborador</th><th>Chamado</th><th>Nota</th><th>Classificação</th><th>Observação</th></tr></thead><tbody></tbody></table></div></div>
@@ -4181,6 +4204,45 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
      ...(r.longestPhoneAppointments||[]).map(x=>({label:'Voz (apontamento)',person:x.person,ticket:x.ticket,date:x.date,subject:x.subject,status:x.status,amount:hhmm(x.minutes)}))];
    table('sqLongestChat',a.map(x=>'<tr><td>'+escape(x.label)+'</td><td>'+escape(x.date||'—')+'</td><td>'+escape(x.person)+'</td><td><a href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(x.ticket)+'" target="_blank" rel="noopener noreferrer">#'+escape(x.ticket)+'</a></td><td title="'+escape(x.subject)+'">'+escape(x.subject||'Não informado')+'</td><td>'+escape(x.status||'Não informado')+'</td><td><b>'+escape(x.amount)+'</b></td></tr>'));
  }
+
+ let peaks=null;
+ const peakMsg=msg=>{el('sqPeakStatus').textContent=msg};
+ const peakNumber=n=>Number(n||0).toLocaleString('pt-BR');
+ function renderPeaks(){
+   const choice=el('sqPeakPeriod').value;
+   const d=peaks?.[choice];
+   if(!d)return;
+   const displayDate=v=>String(v||'').split('-').reverse().join('/');
+   const cards=[
+     ['Período',displayDate(d.from)+' a '+displayDate(d.to)],
+     ['Dia com maior média',d.peakWeekday?.day||'—'],
+     ['Horário com mais inícios',d.peakHour?.hour||'—'],
+     ['Apontamentos com horário',peakNumber(d.appointments)],
+     ['Dias úteis no período',peakNumber(d.referenceDays)]
+   ];
+   el('sqPeakKpis').innerHTML=cards.map(([label,value])=>'<div class="card"><div class="subtle">'+escape(label)+'</div><h3 style="margin:6px 0">'+escape(value)+'</h3></div>').join('');
+   const hours=d.hourly.filter(h=>h.starts>0);
+   const peak=Math.max(1,...hours.map(h=>Number(h.starts)||0));
+   el('sqHourlyBars').innerHTML=hours.map(h=>
+     '<div style="display:grid;grid-template-columns:58px minmax(50px,1fr) 105px;align-items:center;gap:12px;font-size:13px">'+
+     '<strong>'+escape(h.hour)+'</strong><div style="background:#e8edf5;border-radius:7px;height:14px;overflow:hidden">'+
+     '<div style="height:100%;width:'+Math.max(1,Math.round(Number(h.starts)/peak*100))+'%;background:#3277c5"></div></div>'+
+     '<span>'+peakNumber(h.starts)+' início(s)</span></div>').join('')||'<p class="subtle">Sem registros com horário neste período.</p>';
+   table('sqWeekdayTable',(d.weekdays||[]).map(x=>'<tr><td>'+escape(x.day)+'</td><td>'+peakNumber(x.starts)+'</td><td>'+peakNumber(x.workdays)+'</td><td>'+peakNumber(x.averageStarts)+'</td><td>'+hhmm(x.minutes)+'</td></tr>'));
+   table('sqGapsPeople',(d.collaborators||[]).map(p=>
+     '<tr><td>'+escape(p.person)+'</td><td>'+peakNumber(p.days)+'</td><td>'+peakNumber(p.appointments)+'</td><td>'+hhmm(p.coveredMinutes)+'</td>'+
+     '<td>'+hhmm(p.gapMinutes)+'</td><td>'+peakNumber(p.gapsOver10m)+'</td><td>'+hhmm(p.longestGapMinutes)+'</td></tr>'));
+   table('sqGapsDetails',(d.gaps||[]).map(p=>'<tr><td>'+escape(p.person)+'</td><td>'+displayDate(p.date)+'</td><td>'+
+     escape(p.from)+'</td><td>'+escape(p.to)+'</td><td>'+hhmm(p.minutes)+'</td></tr>'));
+   peakMsg('Dados: '+displayDate(d.from)+' a '+displayDate(d.to)+'. '+peakNumber(d.daysWithRecords)+' dia(s) com registros. Semana e mês usam os apontamentos do Movidesk, excluindo fins de semana e feriados.');
+ }
+ async function loadPeaks(){
+   el('sqPeakRefresh').disabled=true;peakMsg('Consultando horários e intervalos sincronizados...');
+   try{peaks=await api({action:'support_peak_activity',date:el('sqPeakDate').value});renderPeaks()}
+   catch(e){peakMsg('Não foi possível carregar os comparativos: '+e.message)}
+   finally{el('sqPeakRefresh').disabled=false}
+ }
+
  function paint(d){
    const m=d.metrics||{},mc=d.measuredChat||{},q=d.quality||[],cfg=d.estimated||{};
    const cards=[['Horas apontadas',hhmm(m.minutes)],['Apontamentos',m.appointments||0],['Chamados distintos',m.tickets||0],['Dias úteis (referência)',d.businessDays],['Colaboradores',m.collaborators||0],['Avaliações',q.reduce((s,x)=>s+x.total,0)]];
@@ -4219,8 +4281,12 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
      el('sqRankingPeriod').addEventListener('change',paintRanking);
      el('sqRankPrint').addEventListener('click',()=>window.print());
      el('sqForm').addEventListener('submit',save);
+     el('sqPeakDate').value=today;
+     el('sqPeakDate').max=today;
+     el('sqPeakRefresh').addEventListener('click',loadPeaks);
+     el('sqPeakPeriod').addEventListener('change',renderPeaks);
    }
-   load();
+   load();loadPeaks();
  };
 })();
 </script>
