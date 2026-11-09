@@ -993,7 +993,7 @@
  <div class="card">
   <h3>Monitor de envios e integridade da sincronização</h3>
   <p class="subtle">Consulta administrativa. Exibe mensagens confirmadas pelo provedor, falhas e tentativas pendentes, sem realizar novos envios.</p>
-  <div class="row noprint" style="align-items:center"><button type="button" class="s" id="imDispatchRefresh">↻ Consultar envios</button></div>
+  <div class="row noprint" style="align-items:center"><button type="button" class="s" id="imDispatchRefresh">↻ Consultar envios</button> <button type="button" class="s" id="imAttachmentsCheck">Verificar PDF e Excel (sem envio)</button></div>
   <p id="imDispatchStatus" class="subtle" role="status">Clique para verificar o histórico recente de disparos.</p>
   <p id="imAttachmentsStatus" class="subtle" role="status">Anexos PDF/XLSX: aguardando validação da integração Gmail.</p>
   <p class="subtle" style="margin:7px 0 14px">
@@ -4659,6 +4659,18 @@ function exportExcel(){
  status('Planilha Excel exportada. Nenhum e-mail enviado.');
 }
 
+async function checkAttachments(){
+ const button=el('imAttachmentsCheck'),status=el('imAttachmentsStatus');
+ button.disabled=true;
+ status.textContent='Verificando recursos do Gmail sem enviar mensagens...';
+ try{
+   const result=await call({action:'attachment_health'});
+   status.textContent='Anexos PDF/XLSX: '+(result.ready?'gerador informado como pronto':'pendentes')+
+     '. '+result.status+' · Ativação automática: '+(result.enabled?'ligada':'desligada')+
+     '. Esta verificação não gera arquivos e não confirma a marca-d’água visual.';
+ }catch(e){status.textContent='Não foi possível verificar anexos: '+e.message}
+ finally{button.disabled=false}
+}
 async function monitorDispatch(){
  el('imDispatchRefresh').disabled=true;
  el('imDispatchStatus').textContent='Conferindo envios e sincronização...';
@@ -4728,6 +4740,7 @@ window.clientImpactInit=()=>{
   el('imScope').addEventListener('change',()=>el('imCustomWrap').style.display=el('imScope').value==='custom'?'':'none');
   el('imLoad').addEventListener('click',load);el('imExcel').addEventListener('click',exportExcel);
   el('imDispatchRefresh').addEventListener('click',monitorDispatch);
+   el('imAttachmentsCheck').addEventListener('click',checkAttachments);
   el('imGoalRefresh').addEventListener('click',loadGoals);el('imGoalSave').addEventListener('click',saveGoal);
   el('imGoalFrom').value=today;el('imGoalFrom').min=today;
   el('imVipReload').addEventListener('click',vips);el('imVipSave').addEventListener('click',saveVip);
