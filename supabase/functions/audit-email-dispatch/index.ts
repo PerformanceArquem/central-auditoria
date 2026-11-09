@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-support-details-20261109-v25';
+const RELEASE_ID = 'email-attachments-packet-20261109-v26';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -222,6 +222,8 @@ function ticketAlerts(rec:R,records:R[]) {
     'Sem ação: última ação registrada há 7 dias ou mais. Um ticket pode estar nas duas listas. '+
     'Os alertas refletem a situação atual e somente os tickets já importados.</p></div>';
   return {text:lines.join('\n'),html,
+    attachmentTickets:[...new Map([...overdue.slice(0,30),...stalled.slice(0,30)]
+      .map(a=>[a.id,{id:a.id,client:'',owner:a.owner,status:a.status,ageDays:a.ageDays,url:a.url}])).values()].slice(0,60),
     metrics:{open:active.length,overdue:overdue.length,stalled:stalled.length,withoutSla},
     preview:{overdue:overdue.slice(0,5).map(a=>({id:a.id,subject:a.subject,owner:a.owner,sector:a.sector,sla:a.sla,url:a.url})),
       stalled:stalled.slice(0,5).map(a=>({id:a.id,subject:a.subject,owner:a.owner,sector:a.sector,days:a.ageDays,url:a.url}))}
@@ -419,20 +421,67 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     'ARQUEM | Relatório emitido pela Central de Auditoria'
   ];
   if (scope === 'management') lines.push('', 'Horas por setor:', ...[...bySector].map(([s, m]) => `- ${safe(s)}: ${duration(m)}`));
-  return { text: lines.join('\n'), detailsHtml, metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
+  const daySet=new Set(days);
+  const exportData={
+    collaborators:[...byPerson.entries()].sort((a,b)=>b[1]-a[1]).slice(0,70)
+      .map(([name,minutes])=>({name,sector:scope==='management'?'Setores selecionados':String(rec.sector||rec.sectors?.[0]||''),
+        minutes,minimumMinutes:days.length*targetPerDay*minimumPercent/100,
+        targetMinutes:days.length*targetPerDay,minimumGap:Math.max(0,days.length*targetPerDay*minimumPercent/100-minutes),
+        targetGap:Math.max(0,days.length*targetPerDay-minutes),ruleSource:'Referência padrão; não é controle de ponto'})),
+    daily:daily.slice(0,90).map(x=>({date:x.day,person:x.name,sector:scope==='management'?'Setores selecionados':String(rec.sector||rec.sectors?.[0]||''),
+      minutes:x.minutes,referenceMinutes:daySet.has(x.day)?targetPerDay:0,
+      minimumMinutes:daySet.has(x.day)?Math.round(targetPerDay*minimumPercent/100):0,status:'Apontamento importado'})),
+    customers:companies.map(x=>({name:x.name,minutes:x.minutes,tickets:x.tickets,appointments:0}))
+  };
+  return { text: lines.join('\n'), detailsHtml, exportData,
+    metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
 }
-async function sendMail(email: string, subject: string, text: string, html?: string) {
+function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:string,partial:boolean,historicalIncomplete:boolean):R {
+ const data=report.exportData as R;
+ return {
+   schema:'arquem-mail-v1',
+   title:'Relatório '+(kind==='weekly'?'semanal':'diário')+' - '+safe(rec.name||rec.sector||'Gestão'),
+   from,to,partial,historicalIncomplete,
+   metrics:report.metrics,
+   collaborators:data.collaborators||[],daily:data.daily||[],
+   customers:data.customers||[],
+   tickets:tickets.attachmentTickets||[],activities:[]
+ };
+}
+async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R) {
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
   if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
-  const res = await fetch(validUrl(), {
+  const withAttachments=E('REPORT_ATTACHMENTS_ENABLED')==='true' && !!reportData;
+  const endpoint=validUrl();
+  if(withAttachments) {
+    // Exigir gerador validado e modelo timbrado antes de tentar um envio com anexos.
+    const cap=await fetch(endpoint,{
+      method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({token:E('GMAIL_MAIL_SECRET'),action:'capabilities'}),
+      signal:AbortSignal.timeout(12000)
+    });
+    if(!cap.ok)throw new Error('Verificação de anexos indisponível (HTTP '+cap.status+')');
+    const capabilities=await cap.json().catch(()=>null) as R|null;
+    if(capabilities?.sucesso!==true || !Array.isArray(capabilities.formats) ||
+       !capabilities.formats.includes('pdf') || !capabilities.formats.includes('xlsx') ||
+       capabilities.paperTemplateConfigured!==true)
+      throw new Error('PDF/XLSX ainda não validados no Apps Script com papel timbrado');
+  }
+  const res = await fetch(endpoint, {
     method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ token: E('GMAIL_MAIL_SECRET'), email, assunto: subject, texto: text, html: html || undefined }),
-    signal: AbortSignal.timeout(25000)
+    body: JSON.stringify({ token: E('GMAIL_MAIL_SECRET'), email, assunto: subject,
+      texto: text, html: html || undefined,
+      ...(withAttachments?{reportData}:{}) }),
+    signal: AbortSignal.timeout(60000)
   });
   if (!res.ok) throw new Error(`Apps Script HTTP ${res.status}`);
   let result: R;
   try { result = await res.json(); } catch { throw new Error('Apps Script nao retornou JSON'); }
   if (result.sucesso !== true) throw new Error('Apps Script recusou mensagem: ' + safe(result.erro));
+  // Caso o provedor aceite a mensagem mas não retorne anexos, registrar a
+  // divergência para auditoria. Não tentar reenviar automaticamente.
+  if(withAttachments && Number(result.anexos)!==2)
+    throw new Error('Entrega de PDF/XLSX não confirmada pelo Apps Script. Verificar Gmail antes de qualquer reenvio.');
 }
 async function isAdmin(req: Request) {
   const token = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') || '')?.[1];
@@ -670,7 +719,8 @@ async function manualOfficial(payload: R) {
   });
   if (!inserted?.length) return json({ ok: true, skipped: 'Relatorio ja reservado para envio' });
   try {
-    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html,report.detailsHtml));
+    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html,report.detailsHtml),
+      reportPacket(rec,report,tickets,from,to,kind,partial,checkpoint.completed!==true));
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -721,7 +771,8 @@ async function dispatchWeeklyPreliminary() {
       });
       if(!inserted?.length){results.push({recipientId:id,status:'skipped',reason:'Outra execução reservou o envio'});continue;}
       try{
-        await sendMail(String(r.email),subject,disclaimer+report.text+'\n\n'+alerts.text,html);
+        await sendMail(String(r.email),subject,disclaimer+report.text+'\n\n'+alerts.text,html,
+          reportPacket(r,report,alerts,from,to,'weekly',true,true));
         await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
           method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
         });
@@ -791,7 +842,9 @@ async function dispatch() {
       });
       if (!inserted?.length) continue;
       try {
-        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text+'\n\n'+tickets.text,reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml));
+        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text+'\n\n'+tickets.text,
+          reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml),
+          reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false));
         await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH', body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString(), provider_id: 'gmail-apps-script' }) });
         results.push({ recipientId: id, kind: t.kind, status: 'sent', ...report.metrics });
