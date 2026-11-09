@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-authorized-preliminary-weekly-20261109-v20';
+const RELEASE_ID = 'email-lightweight-ticket-snapshot-20261109-v21';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -100,7 +100,9 @@ async function source(from: string, to: string) {
 
 // Snapshot atual de chamados importados do Movidesk. Não confundir com horas do período.
 async function ticketSource() {
-  return list('audit_direct_tickets',
+  // Usar a mesma base já sincronizada do painel, mas só tickets abertos
+  // e campos necessários. Evita carregar megabytes de actions/histories.
+  return list('audit_email_open_ticket_snapshot',
     '?select=ticket_id,payload,created_at_source,last_update_source,closed_at_source');
 }
 type TicketAlert = {
