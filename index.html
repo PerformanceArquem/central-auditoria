@@ -1002,6 +1002,32 @@
   <p class="subtle">Ação de reenvio não é automática: uma falha registrada pode ter ocorrido depois da aceitação da mensagem pelo provedor. O administrador deve conferir a entrega antes de autorizar nova tentativa.</p>
  </div>
  <div class="card">
+  <h3>Jornadas individuais — configuração por colaborador</h3>
+  <p class="subtle">Referência de jornada por pessoa e setor, com início de vigência. Sem configuração individual, permanece o padrão de <b>8h00 por dia e mínimo de 80% (6h24)</b>. O registro não altera horas trabalhadas nem controle de ponto.</p>
+  <div class="row noprint" style="align-items:flex-end;flex-wrap:wrap">
+   <div class="fg"><label for="imGoalSector">Setor</label><input id="imGoalSector" placeholder="Produção - CPO" maxlength="100"></div>
+   <div class="fg"><label for="imGoalPerson">Colaborador</label><input id="imGoalPerson" placeholder="Nome igual ao Movidesk" maxlength="150"></div>
+   <div class="fg"><label for="imGoalMinutes">Jornada (minutos)</label><input id="imGoalMinutes" type="number" min="60" max="960" step="1" value="480"></div>
+   <div class="fg"><label for="imGoalPercent">Mínimo (%)</label><input id="imGoalPercent" type="number" min="1" max="100" step="1" value="80"></div>
+   <div class="fg"><label for="imGoalFrom">Vigência a partir de</label><input id="imGoalFrom" type="date"></div>
+  </div>
+  <div class="row noprint" id="imGoalWeekdays" style="gap:12px;flex-wrap:wrap;margin:12px 0">
+   <label><input type="checkbox" data-day="1" checked> Segunda</label>
+   <label><input type="checkbox" data-day="2" checked> Terça</label>
+   <label><input type="checkbox" data-day="3" checked> Quarta</label>
+   <label><input type="checkbox" data-day="4" checked> Quinta</label>
+   <label><input type="checkbox" data-day="5" checked> Sexta</label>
+   <label><input type="checkbox" data-day="6"> Sábado</label>
+   <label><input type="checkbox" data-day="0"> Domingo</label>
+  </div>
+  <div class="row noprint">
+   <button type="button" class="b" id="imGoalSave">Salvar referência individual</button>
+   <button type="button" class="s" id="imGoalRefresh">Consultar referências</button>
+  </div>
+  <p class="subtle" id="imGoalStatus" role="status">Informe os dados somente após validação da jornada pelo gestor.</p>
+  <div class="tw"><table id="imGoalTable"><thead><tr><th>Setor</th><th>Colaborador</th><th>Jornada</th><th>Mínimo</th><th>Dias de trabalho</th><th>Vigência</th><th>Situação</th></tr></thead><tbody></tbody></table></div>
+ </div>
+ <div class="card">
   <h3>Clientes VIP — lista corporativa compartilhada</h3>
   <p class="subtle">A lista anterior de VIPs era salva somente no navegador. Salve aqui os nomes <b>confirmados</b> para que apareçam em relatórios e e-mails gerenciais de todos os computadores. Use uma identificação por linha.</p>
   <textarea id="imVipEdit" rows="6" style="width:100%;min-height:120px" placeholder="Um cliente VIP confirmado por linha"></textarea>
@@ -4653,6 +4679,37 @@ async function monitorDispatch(){
  }catch(e){el('imDispatchStatus').textContent='Falha ao consultar envios: '+e.message}
  finally{el('imDispatchRefresh').disabled=false}
 }
+
+const dayName=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+async function loadGoals(){
+ el('imGoalRefresh').disabled=true;
+ el('imGoalStatus').textContent='Consultando jornadas aprovadas...';
+ try{
+  const d=await call({action:'journey_config',mode:'list'});
+  table('imGoalTable',(d.rules||[]).map(x=>'<tr><td>'+esc(x.sector)+'</td><td>'+esc(x.collaborator_name)+'</td>'+
+   '<td>'+hr(x.daily_minutes)+'</td><td>'+num(x.minimum_percent)+'%</td>'+
+   '<td>'+esc((x.working_days||[]).map(day=>dayName[Number(day)]||'?').join(', '))+'</td>'+
+   '<td>'+esc(x.effective_from)+'</td><td>'+(x.active?'Ativa':'Inativa')+'</td></tr>'));
+  el('imGoalStatus').textContent=(d.rules||[]).length+' referência(s) cadastrada(s). Campos individuais afetam somente o período a partir da vigência.';
+ }catch(e){el('imGoalStatus').textContent='Erro ao consultar jornadas: '+e.message}
+ finally{el('imGoalRefresh').disabled=false}
+}
+async function saveGoal(){
+ const name=el('imGoalPerson').value.trim(),sector=el('imGoalSector').value.trim();
+ const days=[...el('imGoalWeekdays').querySelectorAll('input[data-day]:checked')].map(x=>Number(x.dataset.day));
+ const args={action:'journey_config',mode:'save',sector,collaborator:name,
+   dailyMinutes:Number(el('imGoalMinutes').value),minimumPercent:Number(el('imGoalPercent').value),
+   workingDays:days,effectiveFrom:el('imGoalFrom').value,active:true};
+ if(!sector||!name||!days.length){el('imGoalStatus').textContent='Informe setor, colaborador e ao menos um dia útil.';return}
+ if(!window.confirm('Confirma a jornada de '+name+' em '+sector+'? O novo valor só valerá a partir de '+args.effectiveFrom+'.'))return;
+ el('imGoalSave').disabled=true;
+ try{
+  await call(args);
+  el('imGoalStatus').textContent='Referência registrada com sucesso.';
+  await loadGoals();
+ }catch(e){el('imGoalStatus').textContent='Não foi possível salvar: '+e.message}
+ finally{el('imGoalSave').disabled=false}
+}
 window.clientImpactInit=()=>{
  if(!init){
   init=true;const today=now();el('imTo').value=today;el('imTo').max=today;el('imFrom').value=today.slice(0,7)+'-01';
@@ -4661,12 +4718,15 @@ window.clientImpactInit=()=>{
   el('imScope').addEventListener('change',()=>el('imCustomWrap').style.display=el('imScope').value==='custom'?'':'none');
   el('imLoad').addEventListener('click',load);el('imExcel').addEventListener('click',exportExcel);
   el('imDispatchRefresh').addEventListener('click',monitorDispatch);
+  el('imGoalRefresh').addEventListener('click',loadGoals);el('imGoalSave').addEventListener('click',saveGoal);
+  el('imGoalFrom').value=today;el('imGoalFrom').min=today;
   el('imVipReload').addEventListener('click',vips);el('imVipSave').addEventListener('click',saveVip);
   el('imVipImport').addEventListener('click',()=>{const local=localStorage.getItem('md_vip')||'';
     if(local){el('imVipEdit').value=local;vipStatus('Lista local importada para revisão. Clique Salvar para torná-la corporativa.')}
     else vipStatus('Não há lista VIP salva neste navegador.')});
   vips();
   monitorDispatch();
+  loadGoals();
  }
  load();
 };
