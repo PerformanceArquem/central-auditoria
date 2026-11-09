@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-freshness-guard-20261109-v22';
+const RELEASE_ID = 'email-dispatch-health-20261109-v23';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -408,6 +408,77 @@ async function isAdmin(req: Request) {
 }
 async function adminAction(payload: R) {
   const action = String(payload.action);
+  if (action === 'dispatch_health') {
+    // Monitor administrativo de leitura: nenhuma reserva de envio ou disparo.
+    const [history, incremental, recentSync, logs, recipients] = await Promise.all([
+      state(),
+      db('audit_incremental_state?job_name=eq.movidesk_incremental&select=last_success_at,last_error,window_end&limit=1'),
+      db('audit_recent_reconcile_state?job_name=eq.movidesk_recent_reconcile&select=completed,last_success_at,last_error,period_start,period_end,next_offset&limit=1'),
+      db('audit_email_sector_dispatches?select=recipient_id,report_kind,period_from,period_to,status,created_at,sent_at,error_message&order=created_at.desc&limit=100'),
+      db('audit_email_recipients?select=id,name&limit=200')
+    ]);
+    const now = Date.now();
+    const ageMinutes = (value: unknown): number | null => {
+      const parsed = Date.parse(String(value || ''));
+      return Number.isFinite(parsed) ? Math.max(0, Math.round((now - parsed) / 60000)) : null;
+    };
+    const names = new Map<string,string>((recipients as R[]).map(x => [String(x.id), safe(x.name)]));
+    const records = (logs as R[]).map(x => {
+      const elapsed = ageMinutes(x.created_at);
+      return {
+        recipient: names.get(String(x.recipient_id)) || 'Destinatário não identificado',
+        from: String(x.period_from || ''),
+        to: String(x.period_to || ''),
+        kind: String(x.report_kind || ''),
+        status: String(x.status || ''),
+        sentAt: x.sent_at || null,
+        stalled: x.status === 'processing' && elapsed !== null && elapsed > 30,
+        error: safe(x.error_message || '')
+      };
+    });
+    const incr = (incremental as R[])[0] || {};
+    const rec = (recentSync as R[])[0] || {};
+    const incrementalAge = ageMinutes(incr.last_success_at);
+    const recentAge = ageMinutes(rec.last_success_at);
+    return json({
+      ok: true, release: RELEASE_ID, checkedAt: new Date(now).toISOString(),
+      summary: {
+        sent: records.filter(x => x.status === 'sent').length,
+        failed: records.filter(x => x.status === 'failed').length,
+        processing: records.filter(x => x.status === 'processing').length,
+        staleProcessing: records.filter(x => x.stalled).length
+      },
+      recent: records,
+      historical: {
+        completed: history.completed === true,
+        nextOffset: history.next_offset,
+        updatedAt: history.updated_at,
+        error: safe(history.last_error || '')
+      },
+      sync: {
+        incremental: {
+          lastSuccess: incr.last_success_at || null,
+          ageMinutes: incrementalAge,
+          fresh: incrementalAge !== null && incrementalAge <= 30 && !incr.last_error,
+          error: safe(incr.last_error || '')
+        },
+        reconciliation: {
+          completed: rec.completed === true,
+          lastSuccess: rec.last_success_at || null,
+          ageMinutes: recentAge,
+          fresh: rec.completed === true && recentAge !== null && recentAge <= 720 && !rec.last_error,
+          periodFrom: rec.period_start || null,
+          periodTo: rec.period_end || null,
+          error: safe(rec.last_error || '')
+        }
+      },
+      attachmentIntegration: {
+        enabled: false,
+        status: 'Confirmação automática de anexos ainda não implementada; verificar teste no Apps Script.'
+      },
+      note: 'Envio aceito pelo provedor não comprova entrega na caixa postal. Monitor somente leitura.'
+    });
+  }
   if (action === 'directory') {
     // Consulta administrativa. A ultima data importada nao prova atividade nem ausencia de trabalho.
     const [rows,checkpoint,incremental,recent] = await Promise.all([
@@ -696,7 +767,7 @@ async function handleRequest(req: Request): Promise<Response> {
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if (action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit') {
+    if (action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
       return action === 'manual_official' ? await manualOfficial(payload)
         : action === 'preview_audit' ? await manualOfficial({...payload,previewOnly:true})

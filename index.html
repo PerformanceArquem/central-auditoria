@@ -4679,9 +4679,13 @@ async function monitorDispatch(){
    '<td>'+esc(x.kind)+'</td><td>'+esc(x.status)+(x.stalled?' · Revisar':'')+'</td><td>'+esc(openDate(x.sentAt))+'</td>'+
    '<td>'+esc(x.error||'—')+'</td></tr>'));
   el('imAttachmentsStatus').textContent=(d.attachmentIntegration?.enabled?'Anexos PDF/XLSX: ':'Anexos PDF/XLSX pendentes: ')+(d.attachmentIntegration?.status||'Verificar Apps Script');
-  el('imDispatchStatus').textContent='Consulta administrativa: '+openDate(d.checkedAt)+
-   '. Histórico completo: '+(d.historical?.completed?'marcado como completo':'AINDA EM IMPORTAÇÃO')+
-   '. Registros exibidos: '+recent.length+'. Nenhum e-mail disparado.';
+  const incremental=d.sync?.incremental||{}, reconciliation=d.sync?.reconciliation||{};
+   const syncLabel=(label,item)=>label+': '+(item.fresh?'atualizada':'ATENÇÃO')+
+     ' ('+(item.ageMinutes==null?'sem confirmação':item.ageMinutes+' min desde a última conclusão')+')';
+   el('imDispatchStatus').textContent='Consulta administrativa: '+openDate(d.checkedAt)+
+    '. Histórico: '+(d.historical?.completed?'concluído':'AINDA EM IMPORTAÇÃO')+
+    '. '+syncLabel('Incremental',incremental)+'. '+syncLabel('Conciliação',reconciliation)+
+    '. Registros exibidos: '+recent.length+'. Nenhum e-mail disparado.';
  }catch(e){el('imDispatchStatus').textContent='Falha ao consultar envios: '+e.message}
  finally{el('imDispatchRefresh').disabled=false}
 }
