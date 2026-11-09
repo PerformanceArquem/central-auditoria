@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-lightweight-ticket-snapshot-20261109-v21';
+const RELEASE_ID = 'email-freshness-guard-20261109-v22';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -480,8 +480,15 @@ async function recentCoverage(from:string,to:string) {
   // Não considerar pronto um período fora da janela: é justamente o erro
   // que deixava passar dados antigos sem conciliação.
   const covered=from>=String(s.period_start) && to<String(s.period_end);
-  const ready=covered && s.completed===true && !s.last_error && !!s.last_success_at;
-  return {ready,covered,from:s.period_start,to:s.period_end,offset:s.next_offset,
+  const lastSuccessMs=Date.parse(String(s.last_success_at||''));
+  const ageMinutes=Number.isFinite(lastSuccessMs)
+    ? Math.max(0,Math.round((Date.now()-lastSuccessMs)/60000)) : null;
+  // A conciliacao reabre a cada 6 horas; tolerar ate 12 horas antes de
+  // considerar o snapshot velho e impedir um relatorio oficial incorreto.
+  const fresh=ageMinutes!==null && ageMinutes<=720;
+  const ready=covered && s.completed===true && !s.last_error && fresh;
+  return {ready,covered,fresh,ageMinutes,maxAgeMinutes:720,
+    from:s.period_start,to:s.period_end,offset:s.next_offset,
     completed:s.completed,lastSuccess:s.last_success_at,lastError:s.last_error};
 }
 async function manualOfficial(payload: R) {
@@ -650,7 +657,7 @@ async function dispatch() {
   const from = tasks.reduce((s, t) => t.from < s ? t.from : s, tasks[0].from);
   const to = tasks.reduce((s, t) => t.to > s ? t.to : s, tasks[0].to);
   const coverage = await recentCoverage(from,to);
-  if (!coverage.ready) return json({ok:true,skipped:'Conciliação das datas necessárias ao relatório ainda não concluída; próximo agendamento fará nova tentativa',from,to,coverage});
+  if (!coverage.ready) return json({ok:true,skipped:'Conciliação incompleta ou desatualizada para o período; próximo agendamento fará nova tentativa',from,to,coverage});
   const appts = await source(from, to);
   const allTickets = await ticketSource();
   const results: R[] = [];
