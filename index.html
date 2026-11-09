@@ -1046,9 +1046,11 @@
           <select id="emailOfficialRecipient"><option value="">Carregando destinatário...</option></select></div>
         <div class="fg"><label for="emailOfficialKind">Relatório</label><select id="emailOfficialKind"><option value="daily">Diário — dia útil anterior</option><option value="weekly">Semanal — segunda até a data escolhida</option></select></div>
         <div class="fg"><label for="emailOfficialReferenceDate">Data de referência</label><input type="date" id="emailOfficialReferenceDate" required></div>
+        <button type="button" id="emailOfficialPreview" class="s">Prévia da auditoria (sem envio)</button>
         <button type="button" id="emailOfficialSend" class="b">Enviar e-mail de teste agora</button>
       </div>
       <p id="emailOfficialStatus" role="status" class="subtle" style="margin:12px 0 0">O envio é realizado apenas após confirmação.</p>
+      <div id="emailOfficialPreviewResult" class="hide" style="border:1px solid #d6e1f0;background:#fff;border-radius:10px;padding:14px;margin-top:12px"></div>
     </div>
     <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Diário</th><th>Semanal</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="8">Abra o módulo para carregar.</td></tr></tbody></table></div>
     <h3 style="margin-top:22px">Histórico dos últimos envios</h3><div class="tw"><table><thead><tr><th>Data</th><th>Destinatário</th><th>Tipo</th><th>Período</th><th>Status</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
@@ -3832,6 +3834,33 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     officialDate.value=p.year+'-'+p.month+'-'+p.day;
     officialDate.max=officialDate.value;
   }
+  $('emailOfficialPreview').addEventListener('click',async()=>{
+    const button=$('emailOfficialPreview'),status=$('emailOfficialStatus'),area=$('emailOfficialPreviewResult');
+    const recipientId=$('emailOfficialRecipient').value,kind=$('emailOfficialKind').value,referenceDate=$('emailOfficialReferenceDate').value;
+    if(!recipientId||!referenceDate){status.textContent='Selecione o colaborador e a data de referência.';return;}
+    button.disabled=true;status.textContent='Consultando horas e pendências sem enviar e-mail...';
+    area.classList.add('hide');
+    try{
+      await verify();
+      const {data,error}=await client.functions.invoke('audit-email-dispatch',{body:{action:'preview_audit',recipientId,kind,referenceDate}});
+      if(error)throw error;
+      if(!data?.ok)throw Error(data?.error||'Não foi possível consultar a prévia.');
+      const m=data.metrics||{},t=data.ticketMetrics||{},p=data.ticketPreview||{};
+      const line=(item,category)=>'<tr><td style="padding:7px;border-bottom:1px solid #e5edf7"><a href="'+esc(item.url)+'" target="_blank" rel="noopener noreferrer">#'+esc(item.id)+'</a></td><td style="padding:7px;border-bottom:1px solid #e5edf7">'+esc(item.subject)+'</td><td style="padding:7px;border-bottom:1px solid #e5edf7">'+esc(item.owner)+' · '+esc(item.sector)+'</td><td style="padding:7px;border-bottom:1px solid #e5edf7">'+esc(category==='sla'?item.sla:(item.days+' dias'))+'</td></tr>';
+      const examples=[...(p.overdue||[]).map(x=>line(x,'sla')),...(p.stalled||[]).map(x=>line(x,'stalled'))];
+      area.innerHTML='<strong>Prévia — '+esc(data.from)+' a '+esc(data.to)+'</strong>'+
+        '<p style="margin:8px 0">Horas: '+esc(String(m.minutes??0))+' minutos · Apontamentos: '+esc(String(m.appointments??0))+
+        ' · Chamados com horas: '+esc(String(m.tickets??0))+'</p>'+
+        '<p>Em aberto: '+esc(String(t.open??0))+' · SLA vencido: '+esc(String(t.overdue??0))+
+        ' · Sem ação há 7+ dias: '+esc(String(t.stalled??0))+' · Sem SLA: '+esc(String(t.withoutSla??0))+'</p>'+
+        (data.partial?'<p style="color:#9a6713">A sincronização de apontamentos ainda pode estar incompleta.</p>':'')+
+        '<p class="subtle">Exemplos dos chamados identificados (até 5 por categoria). Um chamado pode aparecer em ambas.</p>'+
+        (examples.length?'<div style="overflow-x:auto"><table style="width:100%"><thead><tr><th>Ticket</th><th>Assunto</th><th>Responsável / setor</th><th>Prazo / inatividade</th></tr></thead><tbody>'+examples.join('')+'</tbody></table></div>':'<p>Nenhum exemplo de pendência nos registros importados.</p>');
+      area.classList.remove('hide');
+      status.textContent='Prévia gerada sem disparo de e-mail nem alteração dos agendamentos.';
+    }catch(err){status.textContent='Erro na prévia: '+(err?.message||err)}
+    finally{button.disabled=false}
+  });
   $('emailOfficialSend').addEventListener('click',async()=>{
     const button=$('emailOfficialSend'),status=$('emailOfficialStatus');
     const recipientId=$('emailOfficialRecipient').value;
