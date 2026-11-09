@@ -959,6 +959,7 @@
   <p class="subtle">A classificação de impacto é operacional: <b>consumo de horas e pendências atuais</b>, não prejuízo financeiro ou criticidade contratual comprovada.</p>
  </div>
  <div id="imBody" class="hide">
+  <div id="imHistoryWarning" role="status" class="card" style="display:none;border-left:4px solid #c59432;background:#fff9ea;color:#79521b;margin:12px 0"></div>
   <div id="imMetrics" class="kpis"></div>
   <div class="card"><h3>Clientes com maior consumo de horas</h3><div id="imClientBars" style="display:grid;gap:9px"></div>
     <div class="tw" style="margin-top:14px"><table id="imClients"><thead><tr><th>Cliente</th><th>Horas</th><th>Chamados</th><th>Apontamentos</th><th>VIP</th></tr></thead><tbody></tbody></table></div></div>
@@ -988,6 +989,17 @@
   <div class="card"><h3>Progresso acumulado no período</h3>
    <div class="tw"><table id="imProgress"><thead><tr><th>Data</th><th>Horas no dia</th><th>Horas acumuladas</th></tr></thead><tbody></tbody></table></div>
   </div>
+ </div>
+ <div class="card">
+  <h3>Monitor de envios e integridade da sincronização</h3>
+  <p class="subtle">Consulta administrativa. Exibe mensagens confirmadas pelo provedor, falhas e tentativas pendentes, sem realizar novos envios.</p>
+  <div class="row noprint" style="align-items:center"><button type="button" class="s" id="imDispatchRefresh">↻ Consultar envios</button></div>
+  <p id="imDispatchStatus" class="subtle" role="status">Clique para verificar o histórico recente de disparos.</p>
+  <div id="imDispatchKpis" class="kpis"></div>
+  <div class="tw" style="margin-top:10px"><table id="imDispatchTable">
+   <thead><tr><th>Destinatário</th><th>Período</th><th>Tipo</th><th>Status</th><th>Enviado em</th><th>Ocorrência</th></tr></thead><tbody></tbody>
+  </table></div>
+  <p class="subtle">Ação de reenvio não é automática: uma falha registrada pode ter ocorrido depois da aceitação da mensagem pelo provedor. O administrador deve conferir a entrega antes de autorizar nova tentativa.</p>
  </div>
  <div class="card">
   <h3>Clientes VIP — lista corporativa compartilhada</h3>
@@ -4549,6 +4561,9 @@ function bars(id,rows,label,value){
 }
 function render(){
  const d=report;if(!d)return;el('imBody').classList.remove('hide');
+ const historic=d.historicalCoverage||{},incomplete=historic.completed!==true;
+ el('imHistoryWarning').style.display=incomplete?'':'none';
+ if(incomplete)el('imHistoryWarning').textContent='ATENÇÃO · Comparativo 2025 × 2026 PRELIMINAR: histórico do Movidesk ainda em importação. Até a última sincronização: '+num(historic.counts?.y2025)+' apontamentos de 2025 e '+num(historic.counts?.y2026)+' de 2026. Não usar os números anuais para conclusão definitiva.';
  const metrics=[['Horas apontadas',hr(d.minutes)],['Apontamentos',num(d.appointments)],['Colaboradores',num(d.people)],
   ['Dias úteis',num(d.days)],['Clientes no ranking',num((d.customersByHours||[]).length)],
   ['Tickets ativos cobertos',num(d.openTicketCoverage)],['VIPs cadastrados',num(d.vipConfigured)]];
@@ -4612,6 +4627,32 @@ function exportExcel(){
  XLSX.writeFile(wb,'Impacto_Clientes_'+d.from+'_'+d.to+'.xlsx',{compression:true});
  status('Planilha Excel exportada. Nenhum e-mail enviado.');
 }
+
+async function monitorDispatch(){
+ el('imDispatchRefresh').disabled=true;
+ el('imDispatchStatus').textContent='Conferindo envios e sincronização...';
+ try{
+  const d=await call({action:'dispatch_health'});
+  const s=d.summary||{};
+  const recent=d.recent||[];
+  const openDate=v=>{
+   if(!v)return '—';
+   const date=new Date(v);
+   return Number.isNaN(date.getTime())?String(v):date.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'});
+  };
+  el('imDispatchKpis').innerHTML=[
+    ['Enviados (recentes)',s.sent||0],['Falhas (recentes)',s.failed||0],
+    ['Em processamento',s.processing||0],['Processamento antigo',s.staleProcessing||0]
+  ].map(([label,value])=>'<div class="card"><small>'+esc(label)+'</small><h3>'+num(value)+'</h3></div>').join('');
+  table('imDispatchTable',recent.map(x=>'<tr><td>'+esc(x.recipient)+'</td><td>'+esc(x.from)+' a '+esc(x.to)+'</td>'+
+   '<td>'+esc(x.kind)+'</td><td>'+esc(x.status)+(x.stalled?' · Revisar':'')+'</td><td>'+esc(openDate(x.sentAt))+'</td>'+
+   '<td>'+esc(x.error||'—')+'</td></tr>'));
+  el('imDispatchStatus').textContent='Consulta administrativa: '+openDate(d.checkedAt)+
+   '. Histórico completo: '+(d.historical?.completed?'marcado como completo':'AINDA EM IMPORTAÇÃO')+
+   '. Registros exibidos: '+recent.length+'. Nenhum e-mail disparado.';
+ }catch(e){el('imDispatchStatus').textContent='Falha ao consultar envios: '+e.message}
+ finally{el('imDispatchRefresh').disabled=false}
+}
 window.clientImpactInit=()=>{
  if(!init){
   init=true;const today=now();el('imTo').value=today;el('imTo').max=today;el('imFrom').value=today.slice(0,7)+'-01';
@@ -4619,11 +4660,13 @@ window.clientImpactInit=()=>{
   el('imCustomSector').innerHTML=sectorNames.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');
   el('imScope').addEventListener('change',()=>el('imCustomWrap').style.display=el('imScope').value==='custom'?'':'none');
   el('imLoad').addEventListener('click',load);el('imExcel').addEventListener('click',exportExcel);
+  el('imDispatchRefresh').addEventListener('click',monitorDispatch);
   el('imVipReload').addEventListener('click',vips);el('imVipSave').addEventListener('click',saveVip);
   el('imVipImport').addEventListener('click',()=>{const local=localStorage.getItem('md_vip')||'';
     if(local){el('imVipEdit').value=local;vipStatus('Lista local importada para revisão. Clique Salvar para torná-la corporativa.')}
     else vipStatus('Não há lista VIP salva neste navegador.')});
   vips();
+  monitorDispatch();
  }
  load();
 };
