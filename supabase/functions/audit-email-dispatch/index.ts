@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-attachments-packet-20261109-v26';
+const RELEASE_ID = 'email-attachment-health-20261109-v27';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -507,6 +507,38 @@ async function isAdmin(req: Request) {
 }
 async function adminAction(payload: R) {
   const action = String(payload.action);
+  if (action === 'attachment_health') {
+    // Consulta autenticada ao Apps Script, sem e-mail e sem anexos gerados.
+    // Não expor URL privada ou segredos no retorno administrativo.
+    const flag=E('REPORT_ATTACHMENTS_ENABLED')==='true';
+    if (!E('GMAIL_WEBAPP_URL') || !E('GMAIL_MAIL_SECRET'))
+      return json({ok:true,enabled:flag,ready:false,
+        status:'Integração Gmail incompleta no servidor; verificar configurações.'});
+    try {
+      const response=await fetch(validUrl(),{
+        method:'POST',redirect:'follow',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({token:E('GMAIL_MAIL_SECRET'),action:'capabilities'}),
+        signal:AbortSignal.timeout(12000)
+      });
+      if(!response.ok)return json({ok:true,enabled:flag,ready:false,
+        status:'Apps Script indisponível para verificação (HTTP '+response.status+').'});
+      const capabilities=await response.json().catch(()=>null) as R|null;
+      const formats=Array.isArray(capabilities?.formats)?capabilities.formats:[];
+      const ready=capabilities?.sucesso===true &&
+        formats.includes('pdf') && formats.includes('xlsx') &&
+        capabilities.paperTemplateConfigured===true;
+      return json({ok:true,enabled:flag,ready,
+        templateConfigured:capabilities?.paperTemplateConfigured===true,
+        formats:formats.filter(x=>x==='pdf'||x==='xlsx'),
+        status:ready?(flag?'PDF/XLSX habilitados; validar entrega real em teste autorizado.':
+          'Gerador e timbrado anunciados pelo Apps Script; falta autorizar a ativação.'):
+          'Apps Script não confirmou PDF, Excel e papel timbrado configurado.'});
+    }catch(ex){
+      return json({ok:true,enabled:flag,ready:false,
+        status:'Falha na verificação do Apps Script: '+safe(err(ex))});
+    }
+  }
   if (action === 'dispatch_health') {
     // Monitor administrativo de leitura: nenhuma reserva de envio ou disparo.
     const [history, incremental, recentSync, logs, recipients] = await Promise.all([
@@ -872,7 +904,7 @@ async function handleRequest(req: Request): Promise<Response> {
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if (action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health') {
+    if (action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
       return action === 'manual_official' ? await manualOfficial(payload)
         : action === 'preview_audit' ? await manualOfficial({...payload,previewOnly:true})
