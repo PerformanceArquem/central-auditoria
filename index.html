@@ -879,6 +879,7 @@
             <button data-t="charts">▥ &nbsp;Gráficos comparativos</button>
             <button data-t="report-preview">✉ &nbsp;Prévia de relatórios</button>
             <button data-t="support-quality">🎧 &nbsp;Qualidade do Suporte</button>
+            <button data-t="production-audit">🏭 &nbsp;Auditoria da Produção</button>
             <button data-t="vip">★ &nbsp;Clientes VIP</button>
             <button data-t="occ">♙ &nbsp;Colaboradores</button>
             <button data-t="proj">▤ &nbsp;Projetos e prazos</button>
@@ -930,7 +931,57 @@
               </div>
             </div>
             </div>
-            <div id="t-support-quality" class="hide">
+            
+<div id="t-production-audit" class="hide">
+ <div class="mh"><div><div class="eyebrow">PRODUÇÃO - CPO · ANÁLISE GERENCIAL</div><h2>Auditoria da Produção</h2>
+   <p>Horas, apontamentos, chamados vencidos, falta de andamento, projetos e comparativo por colaborador.</p></div></div>
+ <div class="card">
+   <div class="row noprint" style="align-items:flex-end">
+    <div class="fg"><label for="pdDate">Data de referência</label><input id="pdDate" type="date"></div>
+    <div class="fg"><label for="pdPeriod">Comparar períodos</label><select id="pdPeriod"><option value="week">Semanal</option><option value="month" selected>Mensal</option></select></div>
+    <button type="button" id="pdRefresh" class="b">↻ Atualizar Produção</button>
+   </div>
+   <p class="subtle" id="pdStatus" role="status">Selecione o período para analisar a Produção.</p>
+   <p class="subtle">Origem: apontamentos e tickets já sincronizados no Movidesk. O período pode estar parcialmente conciliado. Nenhum e-mail é enviado.</p>
+ </div>
+ <div id="pdKpis" class="kpis" style="margin-top:12px"></div>
+ <div class="card">
+  <h3>Comparativo entre períodos</h3>
+  <div class="tw"><table id="pdCompare"><thead><tr><th>Indicador</th><th>Período atual</th><th>Período anterior</th><th>Variação</th></tr></thead><tbody></tbody></table></div>
+  <p class="subtle">Para meses parciais, compare as médias por dia útil antes de interpretar totais absolutos. As diferenças não indicam produtividade individual.</p>
+ </div>
+ <div class="card">
+  <h3>Chamados vencidos e sem andamento — situação atual</h3>
+  <div class="tw"><table id="pdAlerts"><thead><tr><th>Critério</th><th>Chamado</th><th>Assunto</th><th>Responsável</th><th>Status</th><th>Prazo / Dias sem ação</th></tr></thead><tbody></tbody></table></div>
+  <p class="subtle">SLA vencido: prazo de solução anterior a hoje e SLA não pausado. Sem andamento: última ação registrada há 7+ dias. Um ticket pode estar nas duas categorias. Indicadores mostram o estoque atual de chamados conhecidos pelo sistema.</p>
+ </div>
+ <div class="card">
+  <h3>Trabalhos e projetos com maior tempo apontado</h3>
+  <p class="subtle">Selecionados pelas categorias relacionadas a projeto, melhoria, integração ou gestão de produção, além de assuntos explicitamente identificados como projeto. Não inclui automaticamente todas as atividades do módulo Projetos.</p>
+  <div class="tw"><table id="pdProjects"><thead><tr><th>Chamado</th><th>Assunto</th><th>Categoria</th><th>Status atual</th><th>Colaboradores</th><th>Apontamentos</th><th>Horas</th></tr></thead><tbody></tbody></table></div>
+ </div>
+ <div class="card">
+  <h3>Apontamentos por colaborador</h3>
+  <div class="tw"><table id="pdPeople"><thead><tr><th>Colaborador</th><th>Horas</th><th>Apontamentos</th><th>Chamados</th></tr></thead><tbody></tbody></table></div>
+ </div>
+ <div class="card">
+  <h3>Picos de trabalho por horário e dia da semana</h3>
+  <p class="subtle">Os horários representam o início dos apontamentos, não a chegada de novos tickets.</p>
+  <div id="pdPeakBars" style="display:grid;gap:8px;margin-bottom:15px"></div>
+  <div class="tw"><table id="pdWeekdays"><thead><tr><th>Dia</th><th>Inícios</th><th>Dias úteis no período</th><th>Média diária</th></tr></thead><tbody></tbody></table></div>
+ </div>
+ <div class="card">
+  <h3>Intervalos sem apontamento por colaborador</h3>
+  <p class="subtle"><b>Não significa tempo ocioso.</b> São somente lacunas entre apontamentos consecutivos no mesmo dia. Almoço, reuniões e trabalho sem ticket podem fazer parte dos intervalos. Escalas, feriados, finais de semana e afastamentos devem ser verificados antes de avaliações individuais.</p>
+  <div class="tw"><table id="pdGaps"><thead><tr><th>Colaborador</th><th>Dias com registro</th><th>Intervalos entre lançamentos</th><th>Maior intervalo</th></tr></thead><tbody></tbody></table></div>
+ </div>
+ <div class="card">
+  <h3>Chamados com mais horas de trabalho</h3>
+  <div class="tw"><table id="pdTopTickets"><thead><tr><th>Chamado</th><th>Assunto</th><th>Categoria</th><th>Horas</th><th>Apontamentos</th></tr></thead><tbody></tbody></table></div>
+ </div>
+</div>
+
+<div id="t-support-quality" class="hide">
   <div class="mh"><div><div class="eyebrow">SUPORTE · QUALIDADE DE ATENDIMENTO</div><h2>Voz, chat e satisfação</h2>
     <p>TMA e TME de referência, tempos observados no chat, chamados e avaliações reais.</p></div></div>
   <div class="card" style="border-left:4px solid #2765dc">
@@ -2594,10 +2645,10 @@ function showTab(t){
   ACT=t;document.body.dataset.t=t;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-cfg').classList.toggle('hide',t!=='cfg');
-  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','support-quality'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
-  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='report-preview'||t==='support-quality');
-  if(raw.length&&!['load','cfg','diag','alerts','report-preview','support-quality'].includes(t)&&qn(t)!==lastQ) applyFilters();
+  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','support-quality','production-audit'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
+  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='report-preview'||t==='support-quality'||t==='production-audit');
+  if(raw.length&&!['load','cfg','diag','alerts','report-preview','support-quality','production-audit'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
 $('tabs').addEventListener('click',e=>{const btn=e.target.closest('button');if(btn&&btn.dataset.t)showTab(btn.dataset.t)});
 
@@ -4290,6 +4341,68 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    }
    load();loadPeaks();
  };
+})();
+</script>
+
+
+<script id="productionAuditScript">
+(()=>{'use strict';
+const el=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','&#39;'}[c]));
+const fmt=minutes=>{let n=Math.max(0,Math.round(Number(minutes)||0));return Math.floor(n/60)+'h'+String(n%60).padStart(2,'0')};
+const dateBR=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const ptDate=v=>String(v||'').split('-').reverse().join('/');
+const ticketLink=id=>/^\d+$/.test(String(id))?'<a href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(id)+'" target="_blank" rel="noopener noreferrer">#'+esc(id)+'</a>':esc(id||'—');
+let started=false,busy=false;
+function table(id,rows){el(id).querySelector('tbody').innerHTML=rows.join('')||'<tr><td colspan="8">Nenhum registro disponível para o período.</td></tr>'}
+function say(t){el('pdStatus').textContent=t}
+async function api(body){
+ const client=window.tmEmailAdminClient;
+ if(!client)throw new Error('Entre novamente para consultar o Supabase.');
+ const {data,error}=await client.functions.invoke('audit-email-dispatch',{body});
+ if(error)throw new Error(data?.error||error.message||'Falha de comunicação');
+ if(!data?.ok)throw new Error(data?.error||'Consulta não autorizada');
+ return data;
+}
+function render(d){
+ const n=d.current||{},p=d.previous||{},risk=d.alertMetrics||{};
+ const from=ptDate(d.from),to=ptDate(d.to);
+ const cards=[['Período',from+' a '+to],['Horas trabalhadas',fmt(n.minutes)],['Apontamentos',n.appointments||0],
+  ['Chamados trabalhados',n.tickets||0],['Colaboradores',n.people||0],['Chamados em aberto',risk.open||0],
+  ['SLA vencido',risk.overdue||0],['Sem ação há 7+ dias',risk.stalled||0],['Sem SLA',risk.withoutSla||0]];
+ el('pdKpis').innerHTML=cards.map(([name,value])=>'<div class="card"><div class="subtle">'+esc(name)+'</div><h3 style="margin:7px 0">'+esc(value)+'</h3></div>').join('');
+ const metrics=[
+  ['Horas apontadas',n.minutes||0,p.minutes||0,'minutes'],['Apontamentos',n.appointments||0,p.appointments||0,'count'],
+  ['Chamados trabalhados',n.tickets||0,p.tickets||0,'count'],['Colaboradores com lançamentos',n.people||0,p.people||0,'count'],
+  ['Dias úteis da referência',n.workingDays||0,p.workingDays||0,'count'],
+  ['Minutos apontados por dia útil',n.minutesPerWorkday||0,p.minutesPerWorkday||0,'minutes']];
+ table('pdCompare',metrics.map(([label,current,prior,type])=>{
+  const diff=prior?((current-prior)/prior*100):null;
+  const value=x=>type==='minutes'?fmt(x):esc(x);
+  return '<tr><td>'+esc(label)+'</td><td>'+value(current)+'</td><td>'+value(prior)+'</td><td>'+(diff==null?'—':(diff>=0?'+':'')+diff.toFixed(1)+'%')+'</td></tr>';
+ }));
+ const overdue=(d.alerts?.overdue||[]).slice(0,35).map(x=>({type:'SLA vencido',...x}));
+ const stale=(d.alerts?.stalled||[]).slice(0,35).map(x=>({type:'Sem andamento',...x}));
+ table('pdAlerts',[...overdue,...stale].map(t=>'<tr><td>'+esc(t.type)+'</td><td>'+ticketLink(t.id)+'</td><td>'+esc(t.subject)+'</td><td>'+esc(t.owner)+'</td><td>'+esc(t.status)+'</td><td>'+esc(t.type==='SLA vencido'?ptDate(t.sla):String(t.ageDays)+' dias')+'</td></tr>'));
+ table('pdProjects',(d.projects||[]).map(t=>'<tr><td>'+ticketLink(t.id)+'</td><td>'+esc(t.subject)+'</td><td>'+esc(t.category)+'</td><td>'+esc(t.status)+'</td><td>'+esc(t.collaborators)+'</td><td>'+esc(t.appointments)+'</td><td>'+fmt(t.minutes)+'</td></tr>'));
+ table('pdPeople',(n.peopleRows||[]).map(t=>'<tr><td>'+esc(t.name)+'</td><td>'+fmt(t.minutes)+'</td><td>'+esc(t.appointments)+'</td><td>'+esc(t.tickets)+'</td></tr>'));
+ const hours=(d.hourly||[]).filter(x=>x.count>0),maximum=Math.max(1,...hours.map(x=>x.count));
+ el('pdPeakBars').innerHTML=hours.map(x=>'<div style="display:grid;grid-template-columns:60px minmax(50px,1fr) 90px;gap:12px;align-items:center"><b>'+esc(x.hour)+'</b><div style="border-radius:6px;background:#e9eff8;height:13px;overflow:hidden"><div style="background:#347acc;height:100%;width:'+Math.max(1,Math.round(x.count/maximum*100))+'%"></div></div><span>'+esc(x.count)+' inícios</span></div>').join('')||'<p class="subtle">Sem horários registrados.</p>';
+ table('pdWeekdays',(d.weekdays||[]).map(x=>'<tr><td>'+esc(x.weekday)+'</td><td>'+esc(x.count)+'</td><td>'+esc(x.days)+'</td><td>'+esc(x.average)+'</td></tr>'));
+ table('pdGaps',(d.gaps||[]).map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.days)+'</td><td>'+fmt(x.internalGapMinutes)+'</td><td>'+fmt(x.longestGapMinutes)+'</td></tr>'));
+ table('pdTopTickets',(n.tasks||[]).slice(0,25).map(x=>'<tr><td>'+ticketLink(x.id)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.category)+'</td><td>'+fmt(x.minutes)+'</td><td>'+esc(x.appointments)+'</td></tr>'));
+ say('Fonte: Supabase / Movidesk · '+from+' a '+to+'. '+(d.partial?'Conciliação em andamento: resultados parciais.':'Período conciliado.')+' Alertas de SLA e andamento representam a situação atual dos chamados.');
+}
+async function load(){
+ if(busy)return;busy=true;el('pdRefresh').disabled=true;say('Consultando Produção, projetos e alertas...');
+ try{render(await api({action:'production_metrics',date:el('pdDate').value,period:el('pdPeriod').value}))}
+ catch(e){say('Não foi possível atualizar: '+e.message)}
+ finally{busy=false;el('pdRefresh').disabled=false}
+}
+window.productionAuditInit=()=>{
+ if(!started){started=true;el('pdDate').value=dateBR();el('pdDate').max=dateBR();
+ el('pdRefresh').addEventListener('click',load);el('pdPeriod').addEventListener('change',load);}
+ load();
+};
 })();
 </script>
 
