@@ -422,22 +422,29 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
   ];
   if (scope === 'management') lines.push('', 'Horas por setor:', ...[...bySector].map(([s, m]) => `- ${safe(s)}: ${duration(m)}`));
   const daySet=new Set(days);
+  const byActivity=new Map<string,number>();
+  for(const a of selected){
+    const name=String(a.activity||'Não informado');
+    byActivity.set(name,(byActivity.get(name)||0)+Number(a.duration_minutes||0));
+  }
   const exportData={
     collaborators:[...byPerson.entries()].sort((a,b)=>b[1]-a[1]).slice(0,70)
-      .map(([name,minutes])=>({name,sector:scope==='management'?'Setores selecionados':String(rec.sector||rec.sectors?.[0]||''),
+      .map(([name,minutes])=>({name,sector:scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
         minutes,minimumMinutes:days.length*targetPerDay*minimumPercent/100,
         targetMinutes:days.length*targetPerDay,minimumGap:Math.max(0,days.length*targetPerDay*minimumPercent/100-minutes),
         targetGap:Math.max(0,days.length*targetPerDay-minutes),ruleSource:'Referência padrão; não é controle de ponto'})),
-    daily:daily.slice(0,90).map(x=>({date:x.day,person:x.name,sector:scope==='management'?'Setores selecionados':String(rec.sector||rec.sectors?.[0]||''),
+    daily:daily.slice(0,90).map(x=>({date:x.day,person:x.name,sector:scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
       minutes:x.minutes,referenceMinutes:daySet.has(x.day)?targetPerDay:0,
       minimumMinutes:daySet.has(x.day)?Math.round(targetPerDay*minimumPercent/100):0,status:'Apontamento importado'})),
-    customers:companies.map(x=>({name:x.name,minutes:x.minutes,tickets:x.tickets,appointments:0}))
+    customers:companies.map(x=>({name:x.name,minutes:x.minutes,tickets:x.tickets,appointments:0})),
+    activities:[...byActivity].sort((a,b)=>b[1]-a[1]).slice(0,30).map(([name,minutes])=>({name,minutes}))
   };
   return { text: lines.join('\n'), detailsHtml, exportData,
     metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
 }
-function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:string,partial:boolean,historicalIncomplete:boolean):R {
+function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:string,partial:boolean,historicalIncomplete:boolean,clients:R[]):R {
  const data=report.exportData as R;
+ const clientNames=new Map(clients.map(x=>[String(x.ticket_id),String(x.client_name||'')]));
  return {
    schema:'arquem-mail-v1',
    title:'Relatório '+(kind==='weekly'?'semanal':'diário')+' - '+safe(rec.name||rec.sector||'Gestão'),
@@ -445,7 +452,9 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:string
    metrics:report.metrics,
    collaborators:data.collaborators||[],daily:data.daily||[],
    customers:data.customers||[],
-   tickets:tickets.attachmentTickets||[],activities:[]
+   tickets:(Array.isArray(tickets.attachmentTickets)?tickets.attachmentTickets:[])
+     .map(x=>({...x,client:clientNames.get(String(x.id))||'Não identificado'})),
+   activities:data.activities||[]
  };
 }
 async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R) {
@@ -720,7 +729,7 @@ async function manualOfficial(payload: R) {
   if (!inserted?.length) return json({ ok: true, skipped: 'Relatorio ja reservado para envio' });
   try {
     await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html,report.detailsHtml),
-      reportPacket(rec,report,tickets,from,to,kind,partial,checkpoint.completed!==true));
+      reportPacket(rec,report,tickets,from,to,kind,partial,checkpoint.completed!==true,clients));
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -772,7 +781,7 @@ async function dispatchWeeklyPreliminary() {
       if(!inserted?.length){results.push({recipientId:id,status:'skipped',reason:'Outra execução reservou o envio'});continue;}
       try{
         await sendMail(String(r.email),subject,disclaimer+report.text+'\n\n'+alerts.text,html,
-          reportPacket(r,report,alerts,from,to,'weekly',true,true));
+          reportPacket(r,report,alerts,from,to,'weekly',true,true,clients));
         await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
           method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
         });
@@ -844,7 +853,7 @@ async function dispatch() {
       try {
         await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text+'\n\n'+tickets.text,
           reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml),
-          reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false));
+          reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients));
         await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH', body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString(), provider_id: 'gmail-apps-script' }) });
         results.push({ recipientId: id, kind: t.kind, status: 'sent', ...report.metrics });
