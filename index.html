@@ -4492,7 +4492,7 @@ function render(d){
  window.productionLegacyRows=legacy;
  window.productionLegacyRender=()=>{
    const key=el('pdLegacyFilter').value;
-   table('pdLegacy',(window.productionLegacyRows?.[key]||[]).map(x=>'<tr><td>'+ticketLink(x.id)+'</td><td>'+esc(x.client)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.owner)+'</td><td>'+esc(x.status)+'</td><td>'+(x.ageDays==null?'—':esc(x.ageDays)+' dias')+'</td><td>'+esc(x.noAppointmentEver?'Nenhum registro':(x.daysWithoutAppointment==null?'—':fmt(0)))+'</td><td>'+(x.noAppointmentEver?'Sem registro':x.daysWithoutAppointment==null?'—':esc(x.daysWithoutAppointment)+' dias')+'</td><td>'+esc(x.withoutForecast?'Sem previsão':ptDate(x.sla))+'</td></tr>'));
+   table('pdLegacy',(window.productionLegacyRows?.[key]||[]).map(x=>'<tr><td>'+ticketLink(x.id)+'</td><td>'+esc(x.client)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.owner)+'</td><td>'+esc(x.status)+'</td><td>'+(x.ageDays==null?'—':esc(x.ageDays)+' dias')+'</td><td>'+esc(x.noAppointmentEver?'Nenhum registro importado':(x.daysWithoutAppointment==null?'—':'Último registro disponível'))+'</td><td>'+(x.noAppointmentEver?'Sem registro':x.daysWithoutAppointment==null?'—':esc(x.daysWithoutAppointment)+' dias')+'</td><td>'+esc(x.withoutForecast?'Sem previsão':ptDate(x.sla))+'</td></tr>'));
  };
  window.productionLegacyRender();
  const hours=(d.hourly||[]).filter(x=>x.count>0),maximum=Math.max(1,...hours.map(x=>x.count));
