@@ -75,10 +75,21 @@ async function db(path, { method = 'GET', body, prefer } = {}) {
 }
 
 function parseBody(req) {
-  if (typeof req.body === 'string') {
-    return JSON.parse(req.body);
+  let body = req.body;
+  if (typeof body === 'string') {
+    if (!body.trim()) {
+      throw Object.assign(new Error('Corpo JSON vazio'), { status: 400 });
+    }
+    try {
+      body = JSON.parse(body);
+    } catch {
+      throw Object.assign(new Error('Corpo JSON inválido'), { status: 400 });
+    }
   }
-  return req.body || {};
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw Object.assign(new Error('Envie um objeto JSON válido'), { status: 400 });
+  }
+  return body;
 }
 
 export default async function handler(req, res) {
