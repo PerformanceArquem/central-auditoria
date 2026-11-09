@@ -911,6 +911,24 @@
                 <textarea id="previewText" rows="9" style="width:100%;line-height:1.6" readonly placeholder="O resumo será exibido aqui após a consulta."></textarea>
               </div>
             </div>
+
+            <div class="card" id="executiveReportCard" style="margin-top:20px;border-top:4px solid #173c6e">
+              <div class="mh"><div><div class="eyebrow">DIREÇÃO · TODOS OS SETORES</div><h2>Relatório Executivo Semanal</h2><p>Prévia do e-mail com indicadores, gráficos e exportação da planilha Excel. A consulta não envia e-mails.</p></div></div>
+              <div class="row noprint" style="align-items:end;gap:12px;flex-wrap:wrap">
+                <div class="fg"><label for="executiveDate">Semana de referência</label><input id="executiveDate" type="date"></div>
+                <button type="button" class="b" id="executiveLoad">Gerar prévia executiva</button>
+                <button type="button" class="s" id="executiveExcel" disabled>Exportar Excel (.xlsx)</button>
+              </div>
+              <p class="subtle" id="executiveStatus" role="status">Somente leitura. Nenhum disparo ou cadastro de destinatário será alterado.</p>
+              <div id="executiveResult" class="hide">
+                <div class="kpis" id="executiveKpis"></div>
+                <h3 style="margin-top:18px">Distribuição de horas por setor</h3>
+                <div id="executiveBars" style="display:grid;gap:9px"></div>
+                <h3 style="margin-top:22px">Prévia do e-mail para a Direção</h3>
+                <iframe id="executiveEmailFrame" title="Prévia do e-mail executivo" sandbox="" style="width:100%;height:880px;border:1px solid #dde6f2;border-radius:10px;background:#f1f5fb"></iframe>
+                <p class="subtle">O Excel é exportado localmente pelo navegador autenticado, contendo indicadores, setores, colaboradores, evolução diária, chamados com SLA vencido e sem andamento. O envio como anexo ainda depende da confirmação de compatibilidade do serviço Gmail.</p>
+              </div>
+            </div>
             <div id="t-live" class="hide">
                 <div class="card">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
@@ -2498,7 +2516,7 @@ function showTab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-cfg').classList.toggle('hide',t!=='cfg');
   ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='report-preview' && window.previewInit)window.previewInit(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
+  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='report-preview');
   if(raw.length&&!['load','cfg','diag','alerts','report-preview'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
@@ -3674,6 +3692,85 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    for(const r of rows){lines.push(`${r.collaborator} | ${r.sectors.join(', ')}`,`Chamados: ${r.ticketIds.length} | Apontamentos: ${r.entries} | Horas: ${fmt(r.minutes)}`,`Referência mínima: ${fmt(r.minimum)} | Falta: ${fmt(min(r))}`,`Referência de jornada: ${fmt(r.target)} | Falta: ${fmt(jornada(r))} | Excedente: ${fmt(extra(r))}`,'')}
    lines.push('Referências calculadas sobre dias úteis do período, excluindo feriados cadastrados; sem escalas e ausências individuais.','Conciliação do período: '+(latest.sync?.completed?'concluída':'em andamento')+'. Nenhum e-mail enviado.');
    el('previewText').value=lines.join('\n');say(`Prévia carregada: ${rows.length} colaborador(es), ${entries} apontamento(s). Nenhum e-mail enviado.`);
+ }
+})();
+</script>
+
+<script id="executiveReportScript">
+(()=>{'use strict';
+ const el=id=>document.getElementById(id);
+ const fmt=v=>{const n=Math.max(0,Math.round(Number(v)||0));return Math.floor(n/60)+'h'+String(n%60).padStart(2,'0')};
+ const escapeText=v=>String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s]));
+ let report=null,busy=false,initialized=false;
+ const dateBR=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ function init(){
+   if(initialized)return;initialized=true;
+   const now=dateBR(),today=new Date(now+'T12:00:00Z');
+   const dow=today.getUTCDay(),prevSunday=new Date(today);
+   prevSunday.setUTCDate(prevSunday.getUTCDate()-((dow+6)%7)-1);
+   el('executiveDate').value=prevSunday.toISOString().slice(0,10);
+   el('executiveLoad').addEventListener('click',load);
+   el('executiveExcel').addEventListener('click',exportExcel);
+ }
+ window.executiveReportInit=init;
+ const status=value=>{const node=el('executiveStatus');if(node)node.textContent=value};
+ async function load(){
+   if(busy)return;busy=true;report=null;el('executiveLoad').disabled=true;el('executiveExcel').disabled=true;
+   status('Consultando os dados disponíveis em todos os setores da Central de Auditoria...');
+   try{
+     const client=window.tmEmailAdminClient;
+     if(!client)throw Error('Entre com o usuário administrador da Central de Auditoria.');
+     const {data,error}=await client.functions.invoke('audit-email-dispatch',{body:{action:'director_preview',date:el('executiveDate').value}});
+     if(error)throw error;
+     if(!data?.ok)throw Error(data?.error||'Falha ao gerar relatório.');
+     report=data;
+     el('executiveResult').classList.remove('hide');
+     const m=data.metrics||{},risk=data.ticketMetrics||{};
+     const values=[['Setores',m.sectors],['Colaboradores',m.collaborators],['Horas apontadas',fmt(m.minutes)],['Apontamentos',m.appointments],['Chamados trabalhados',m.tickets],['SLAs vencidos',risk.overdue],['Sem ação há 7+ dias',risk.stalled],['Chamados em aberto',risk.open]];
+     el('executiveKpis').innerHTML=values.map(([name,value])=>'<div class="card" style="border-left:3px solid #2d66ab"><small>'+escapeText(name)+'</small><div><b style="font-size:21px">'+escapeText(value??0)+'</b></div></div>').join('');
+     const sectors=data.sectorRows||[];
+     const max=Math.max(1,...sectors.map(r=>Number(r.minutes)||0));
+     el('executiveBars').innerHTML=sectors.map(r=>'<div style="display:grid;grid-template-columns:minmax(110px,1fr) 2.2fr 75px;gap:10px;align-items:center"><span style="font-size:12px">'+escapeText(r.sector)+'</span><div style="background:#e7eef7;height:16px;border-radius:9px;overflow:hidden"><div style="height:100%;width:'+Math.max(1,Math.round(100*(Number(r.minutes)||0)/max))+'%;background:#2867b7;border-radius:9px"></div></div><b style="font-size:12px;text-align:right">'+fmt(r.minutes)+'</b></div>').join('');
+     // A prévia renderiza HTML gerado pelo backend numa moldura isolada, sem scripts e sem acesso ao aplicativo.
+     el('executiveEmailFrame').srcdoc=data.emailHtml||'<p>Prévia indisponível.</p>';
+     el('executiveExcel').disabled=false;
+     status('Prévia '+data.start+' a '+data.end+' · '+(data.partial?'DADOS PARCIAIS':'PERÍODO CONCILIADO')+' · gerada com a base do sistema. Nenhum e-mail enviado.');
+   }catch(err){
+     el('executiveResult').classList.add('hide');
+     status('Não foi possível gerar a prévia executiva: '+String(err?.message||err));
+   }finally{busy=false;el('executiveLoad').disabled=false;}
+ }
+ function exportExcel(){
+   if(!report||!window.XLSX){status('Excel indisponível; confira se a biblioteca XLSX foi carregada.');return;}
+   const excelText=s=>{const v=String(s??'');return /^[=+\-@]/.test(v)?'\''+v:v;};
+   const wb=XLSX.utils.book_new();
+   function add(name,heads,rows){
+     const array=[heads,...rows.map(row=>row.map(cell=>typeof cell==='string'?excelText(cell):cell))];
+     const ws=XLSX.utils.aoa_to_sheet(array);
+     ws['!cols']=heads.map((header,i)=>({wch:Math.min(46,Math.max(15,String(header).length+5,...rows.slice(0,100).map(x=>Math.min(46,String(x[i]??'').length+2))))}));
+     ws['!autofilter']={ref:ws['!ref']};
+     ws['!freeze']={xSplit:0,ySplit:1,topLeftCell:'A2',activePane:'bottomLeft',state:'frozen'};
+     XLSX.utils.book_append_sheet(wb,ws,name);
+   }
+   const m=report.metrics||{},risk=report.ticketMetrics||{};
+   add('Resumo Executivo',['Indicador','Valor'],[
+     ['Período inicial',report.start],['Período final',report.end],['Fonte','Central de Auditoria / Movidesk'],
+     ['Atualização',report.generatedAt],['Situação',report.partial?'Dados parciais':'Conciliado'],
+     ['Setores',m.sectors||0],['Colaboradores',m.collaborators||0],['Horas apontadas (minutos)',m.minutes||0],
+     ['Apontamentos',m.appointments||0],['Chamados trabalhados',m.tickets||0],
+     ['Chamados em aberto',risk.open||0],['SLA vencido',risk.overdue||0],['Sem ação há 7+ dias',risk.stalled||0],['Sem SLA',risk.withoutSla||0]
+   ]);
+   add('Setores',['Setor','Horas (min)','Apontamentos','Chamados distintos','Colaboradores'],(report.sectorRows||[]).map(r=>[r.sector,r.minutes,r.entries,r.tickets,r.collaborators]));
+   add('Colaboradores',['Setor','Colaborador','Horas (min)','Apontamentos','Chamados distintos'],(report.collaboratorRows||[]).map(r=>[r.sector,r.collaborator,r.minutes,r.entries,r.tickets]));
+   add('Evolução Diária',['Data','Horas (min)','Apontamentos','Chamados distintos'],(report.dailyRows||[]).map(r=>[r.date,r.minutes,r.entries,r.tickets]));
+   const issueRows=items=>(items||[]).map(r=>[r.id,r.sector,r.owner,r.status,r.subject,r.sla||'',r.lastAction||'',r.ageDays||0,r.url]);
+   const issueHeaders=['Chamado','Setor','Responsável','Status','Assunto','SLA','Última ação','Dias sem ação','Link Movidesk'];
+   add('SLA Vencido',issueHeaders,issueRows(report.alerts?.overdue));
+   add('Sem Andamento',issueHeaders,issueRows(report.alerts?.stalled));
+   const name='Relatorio_Executivo_Arquem_'+report.start+'_'+report.end+'.xlsx';
+   XLSX.writeFile(wb,name,{compression:true});
+   const limits=(report.alerts?.overdueTruncated||report.alerts?.stalledTruncated);
+   status('Planilha Excel gerada: '+name+(limits?' · atenção: listas de alertas limitadas a 1.500 registros por categoria.':'')+'. Nenhum e-mail enviado.');
  }
 })();
 </script>
