@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-dispatch-health-20261109-v23';
+const RELEASE_ID = 'email-closed-week-catchup-20261109-v24';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -588,9 +588,10 @@ async function manualOfficial(payload: R) {
   const day = weekday(referenceDate);
   let from = shift(referenceDate, -1), to = from;
   if (kind === 'weekly') {
-    // Semana da data de referencia: segunda ate a data escolhida (inclusive).
-    from = shift(referenceDate, -((day + 6) % 7));
-    to = referenceDate;
+    // A data de referencia e a data do ENVIO: usar a semana anterior ja encerrada.
+    const thisMonday = shift(referenceDate, -((day + 6) % 7));
+    from = shift(thisMonday, -7);
+    to = shift(thisMonday, -1);
   } else {
     while ([0, 6].includes(weekday(from)) || hol.has(from)) from = shift(from, -1);
     to = from;
@@ -717,7 +718,10 @@ async function dispatch() {
   let firstBusinessDay = thisMonday;
   while ([0, 6].includes(weekday(firstBusinessDay)) || hol.has(firstBusinessDay))
     firstBusinessDay = shift(firstBusinessDay, 1);
-  const weeklyDue = today === firstBusinessDay;
+  // A partir do primeiro dia util: se a conciliacao atrasar na segunda,
+  // tentar novamente nos dias uteis seguintes. A chave por periodo/destinatario
+  // impede o envio duplicado de uma semana ja registrada.
+  const weeklyDue = today >= firstBusinessDay;
   const tasks: { r: R; kind: 'daily' | 'weekly'; from: string; to: string }[] = [];
   for (const r of await recipientList()) {
     if (r.daily_enabled === true) tasks.push({ r, kind: 'daily', from: prev, to: prev });
