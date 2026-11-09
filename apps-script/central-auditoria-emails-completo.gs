@@ -151,6 +151,9 @@ function arquemTesteAnexosSemEnvio() {
       {name:'Outra empresa demonstrativa',minutes:1820,tickets:3,appointments:22}],
     activities:[{name:'Correção',minutes:3200},{name:'Melhoria',minutes:2762}]
   };
+  if(arquemH_(3964)!=='66:04:00' ||
+     Math.abs(arquemExcelHora_(3964)*1440-3964)>0.000001)
+    throw new Error('Formato de horas incorreto');
   const files=arquemCreateReportAttachments_(packet);
   if(files.length!==2)throw new Error('Esperados 2 anexos');
   const pdf=files.find(b=>b.getContentType()==='application/pdf');
@@ -228,7 +231,17 @@ function arquemCell_(v) {
 }
 function arquemH_(minutes) {
   const m = Math.max(0,Math.round(Number(minutes)||0));
-  return Math.floor(m/60) + 'h' + ('0'+(m%60)).slice(-2);
+  return String(Math.floor(m/60)).padStart(2,'0') +
+    ':' + String(m%60).padStart(2,'0') + ':00';
+}
+// Excel: número em frações de dia, não texto. Permite SOMA e mantém
+// horas acumuladas acima de 24h com o formato [h]:mm:ss.
+function arquemExcelHora_(minutes) {
+  return Math.max(0,Math.round(Number(minutes)||0))/1440;
+}
+function arquemFormatarHoras_(sheet,columns,totalRows) {
+  if(!totalRows)return;
+  columns.forEach(col=>sheet.getRange(2,col,totalRows,1).setNumberFormat('[h]:mm:ss'));
 }
 function arquemAddHeading_(body, str, style) {
   const p = body.appendParagraph(String(str));
@@ -315,19 +328,22 @@ function arquemXlsx_(p, keep) {
   arquemSheet_(first,
     ['Indicador','Resultado'],
     [['Relatório',p.title],['Início',p.from],['Fim',p.to],
-     ['Horas apontadas',arquemH_(p.metrics&&p.metrics.minutes)],
+     ['Horas apontadas',arquemExcelHora_(p.metrics&&p.metrics.minutes)],
      ['Apontamentos',Number(p.metrics&&p.metrics.appointments)||0],
      ['Chamados trabalhados',Number(p.metrics&&p.metrics.tickets)||0],
      ['Conciliação',p.partial?'Dados parciais':'Dados disponíveis'],
      ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]);
-  arquemCreateSheet_(ss,'Colaboradores',
+  first.getRange('B4').setNumberFormat('[h]:mm:ss');
+  const people=arquemCreateSheet_(ss,'Colaboradores',
     ['Colaborador','Setor','Horas','Mínimo','Jornada','Falta mínimo','Falta jornada','Origem'],
-    (p.collaborators||[]).map(x=>[x.name,x.sector,arquemH_(x.minutes),arquemH_(x.minimumMinutes),
-     arquemH_(x.targetMinutes),arquemH_(x.minimumGap),arquemH_(x.targetGap),x.ruleSource||'Padrão']));
-  arquemCreateSheet_(ss,'Dia a dia',
+    (p.collaborators||[]).map(x=>[x.name,x.sector,arquemExcelHora_(x.minutes),arquemExcelHora_(x.minimumMinutes),
+     arquemExcelHora_(x.targetMinutes),arquemExcelHora_(x.minimumGap),arquemExcelHora_(x.targetGap),x.ruleSource||'Padrão']));
+  arquemFormatarHoras_(people,[3,4,5,6,7],(p.collaborators||[]).length);
+  const daySheet=arquemCreateSheet_(ss,'Dia a dia',
     ['Data','Colaborador','Setor','Horas','Jornada','Mínimo','Situação'],
-    (p.daily||[]).map(x=>[x.date,x.person,x.sector,arquemH_(x.minutes),
-      arquemH_(x.referenceMinutes),arquemH_(x.minimumMinutes),x.status]));
+    (p.daily||[]).map(x=>[x.date,x.person,x.sector,arquemExcelHora_(x.minutes),
+      arquemExcelHora_(x.referenceMinutes),arquemExcelHora_(x.minimumMinutes),x.status]));
+  arquemFormatarHoras_(daySheet,[4,5,6],(p.daily||[]).length);
   const ticketSheet=arquemCreateSheet_(ss,'Chamados',
     ['Chamado','Cliente','Responsável','Status','Idade (dias)','Link Movidesk'],
     (p.tickets||[]).map(x=>['#'+String(x.id||''),x.client,x.owner,x.status,x.ageDays,x.url]));
@@ -337,10 +353,12 @@ function arquemXlsx_(p, keep) {
   }
   const cust=arquemCreateSheet_(ss,'Empresas',
     ['Empresa','Horas','Chamados','Apontamentos'],
-    (p.customers||[]).map(x=>[x.name,arquemH_(x.minutes),x.tickets,x.appointments]));
-  arquemCreateSheet_(ss,'Atividades',
+    (p.customers||[]).map(x=>[x.name,arquemExcelHora_(x.minutes),x.tickets,x.appointments]));
+  arquemFormatarHoras_(cust,[2],(p.customers||[]).length);
+  const acts=arquemCreateSheet_(ss,'Atividades',
     ['Atividade','Horas'],
-    (p.activities||[]).map(x=>[x.name,arquemH_(x.minutes)]));
+    (p.activities||[]).map(x=>[x.name,arquemExcelHora_(x.minutes)]));
+  arquemFormatarHoras_(acts,[2],(p.activities||[]).length);
   if((p.customers||[]).length>1){
     // Chart values use numeric hours to preserve comparability; displayed HHhMM remains in the table.
     cust.getRange(1,5).setValue('Horas (numérico)');
