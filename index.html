@@ -1026,6 +1026,21 @@
   <p class="subtle">SLA vencido: prazo de solução anterior a hoje e SLA não pausado. Sem andamento: última ação registrada há 7+ dias. Um ticket pode estar nas duas categorias. Indicadores mostram o estoque atual de chamados conhecidos pelo sistema.</p>
  </div>
  <div class="card">
+  <h3>Chamados antigos, sem previsão e sem apontamento recente — Produção</h3>
+  <p class="subtle">Baseado no mesmo histórico de chamados e apontamentos do sistema. Chamados antigos: 90+ dias abertos. Sem previsão: abertos há 30+ dias sem SLA de solução. Sem apontamento recente: sem registro na base ou com último apontamento há 30+ dias. <b>Falta de apontamento não comprova falta de trabalho.</b></p>
+  <div id="pdLegacyKpis" class="kpis" style="margin:12px 0"></div>
+  <div class="row noprint" style="align-items:flex-end;margin:10px 0">
+    <div class="fg"><label for="pdLegacyFilter">Filtrar pendências</label><select id="pdLegacyFilter">
+      <option value="old">Mais antigos (90+ dias)</option>
+      <option value="withoutForecast">Sem previsão (30+ dias)</option>
+      <option value="withoutAppointment">Sem apontamento recente (30+ dias)</option>
+      <option value="withoutAction">Sem ação (7+ dias)</option>
+    </select></div>
+  </div>
+  <div class="tw"><table id="pdLegacy"><thead><tr><th>Chamado</th><th>Cliente</th><th>Assunto</th><th>Responsável</th><th>Status</th><th>Tempo em aberto</th><th>Último apontamento</th><th>Dias sem apontamento</th><th>Previsão</th></tr></thead><tbody></tbody></table></div>
+  <p class="subtle">A situação dos tickets é atual, não uma fotografia histórica. Chamados podem aparecer em mais de uma categoria. O número abre diretamente o Movidesk.</p>
+ </div>
+ <div class="card">
   <h3>Trabalhos e projetos com maior tempo apontado</h3>
   <p class="subtle">Selecionados pelas categorias relacionadas a projeto, melhoria, integração ou gestão de produção, além de assuntos explicitamente identificados como projeto. Não inclui automaticamente todas as atividades do módulo Projetos.</p>
   <div class="tw"><table id="pdProjects"><thead><tr><th>Chamado</th><th>Assunto</th><th>Categoria</th><th>Status atual</th><th>Colaboradores</th><th>Apontamentos</th><th>Horas</th></tr></thead><tbody></tbody></table></div>
@@ -1033,6 +1048,11 @@
  <div class="card">
   <h3>Apontamentos por colaborador</h3>
   <div class="tw"><table id="pdPeople"><thead><tr><th>Colaborador</th><th>Horas</th><th>Apontamentos</th><th>Chamados</th></tr></thead><tbody></tbody></table></div>
+ </div>
+ <div class="card">
+  <h3>Colaboradores — jornada e horas dia a dia</h3>
+  <p class="subtle">Mesmo modelo da aba Colaboradores: referência de 8h diárias e mínimo de 80% (6h24), com horas apontadas, percentual e diferença para jornada. O sistema mostra somente datas com registros. Não é controle de presença, ponto ou ociosidade.</p>
+  <div class="tw"><table id="pdDailyJourney"><thead><tr><th>Data</th><th>Colaborador</th><th>Horas</th><th>Jornada ref.</th><th>Mínimo ref.</th><th>%</th><th>Falta mínimo</th><th>Falta jornada</th><th>Excedente</th><th>Situação</th></tr></thead><tbody></tbody></table></div>
  </div>
  <div class="card">
   <h3>Picos de trabalho por horário e dia da semana</h3>
@@ -4465,6 +4485,16 @@ function render(d){
  table('pdAlerts',[...overdue,...stale].map(t=>'<tr><td>'+esc(t.type)+'</td><td>'+ticketLink(t.id)+'</td><td>'+esc(t.subject)+'</td><td>'+esc(t.owner)+'</td><td>'+esc(t.status)+'</td><td>'+esc(t.type==='SLA vencido'?ptDate(t.sla):String(t.ageDays)+' dias')+'</td></tr>'));
  table('pdProjects',(d.projects||[]).map(t=>'<tr><td>'+ticketLink(t.id)+'</td><td>'+esc(t.subject)+'</td><td>'+esc(t.category)+'</td><td>'+esc(t.status)+'</td><td>'+esc(t.collaborators)+'</td><td>'+esc(t.appointments)+'</td><td>'+fmt(t.minutes)+'</td></tr>'));
  table('pdPeople',(n.peopleRows||[]).map(t=>'<tr><td>'+esc(t.name)+'</td><td>'+fmt(t.minutes)+'</td><td>'+esc(t.appointments)+'</td><td>'+esc(t.tickets)+'</td></tr>'));
+ table('pdDailyJourney',(d.dailyRows||[]).map(x=>'<tr><td>'+esc(ptDate(x.date))+'</td><td>'+esc(x.person)+'</td><td>'+fmt(x.minutes)+'</td><td>'+(x.workday?fmt(x.referenceMinutes):'—')+'</td><td>'+(x.workday?fmt(x.minimumMinutes):'—')+'</td><td>'+(x.percent==null?'—':esc(x.percent)+'%')+'</td><td>'+(x.minimumGap==null?'—':fmt(x.minimumGap))+'</td><td>'+(x.journeyGap==null?'—':fmt(x.journeyGap))+'</td><td>'+(x.extraMinutes==null?'—':fmt(x.extraMinutes))+'</td><td>'+esc(x.status)+'</td></tr>'));
+ const legacy=d.legacyAlerts||{counts:{}},lc=legacy.counts||{};
+ const newKpis=[['Antigos 90+ dias',lc.old90||0],['Sem previsão 30+ dias',lc.withoutForecast30||0],['Sem apontamento recente',lc.withoutAppointment30||0],['Sem ação 7+ dias',lc.withoutAction7||0]];
+ el('pdLegacyKpis').innerHTML=newKpis.map(([name,n])=>'<div class="card"><div class="subtle">'+esc(name)+'</div><h3>'+esc(n)+'</h3></div>').join('');
+ window.productionLegacyRows=legacy;
+ window.productionLegacyRender=()=>{
+   const key=el('pdLegacyFilter').value;
+   table('pdLegacy',(window.productionLegacyRows?.[key]||[]).map(x=>'<tr><td>'+ticketLink(x.id)+'</td><td>'+esc(x.client)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.owner)+'</td><td>'+esc(x.status)+'</td><td>'+(x.ageDays==null?'—':esc(x.ageDays)+' dias')+'</td><td>'+esc(x.noAppointmentEver?'Nenhum registro':(x.daysWithoutAppointment==null?'—':fmt(0)))+'</td><td>'+(x.noAppointmentEver?'Sem registro':x.daysWithoutAppointment==null?'—':esc(x.daysWithoutAppointment)+' dias')+'</td><td>'+esc(x.withoutForecast?'Sem previsão':ptDate(x.sla))+'</td></tr>'));
+ };
+ window.productionLegacyRender();
  const hours=(d.hourly||[]).filter(x=>x.count>0),maximum=Math.max(1,...hours.map(x=>x.count));
  el('pdPeakBars').innerHTML=hours.map(x=>'<div style="display:grid;grid-template-columns:60px minmax(50px,1fr) 90px;gap:12px;align-items:center"><b>'+esc(x.hour)+'</b><div style="border-radius:6px;background:#e9eff8;height:13px;overflow:hidden"><div style="background:#347acc;height:100%;width:'+Math.max(1,Math.round(x.count/maximum*100))+'%"></div></div><span>'+esc(x.count)+' inícios</span></div>').join('')||'<p class="subtle">Sem horários registrados.</p>';
  table('pdWeekdays',(d.weekdays||[]).map(x=>'<tr><td>'+esc(x.weekday)+'</td><td>'+esc(x.count)+'</td><td>'+esc(x.days)+'</td><td>'+esc(x.average)+'</td></tr>'));
@@ -4480,7 +4510,7 @@ async function load(){
 }
 window.productionAuditInit=()=>{
  if(!started){started=true;el('pdDate').value=dateBR();el('pdDate').max=dateBR();
- el('pdRefresh').addEventListener('click',load);el('pdPeriod').addEventListener('change',load);}
+ el('pdRefresh').addEventListener('click',load);el('pdPeriod').addEventListener('change',load);el('pdLegacyFilter').addEventListener('change',()=>window.productionLegacyRender?.());}
  load();
 };
 })();
