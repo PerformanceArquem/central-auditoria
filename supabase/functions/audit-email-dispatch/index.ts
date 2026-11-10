@@ -1,4 +1,5 @@
 import {forecastSection} from "./forecast-variance.ts";
+import {dashboardReport} from "./dashboard-report.ts";
 // Central de Auditoria — Supabase direto -> Google Apps Script/Gmail
 // Compatível com as ações existentes: status e test (admin JWT).
 // NUNCA colocar credenciais no HTML. Nenhum disparo automático sem flags explícitas.
@@ -1547,15 +1548,24 @@ async function directorPreview(payload:R):Promise<Response>{
   forecastVariances:forecast.rows,emailHtml:html
  });
 }
+// Interface de colaboradores: somente leitura, dados e permissões existentes.
+async function dashboardReportAction(payload:R){
+ const result=await dashboardReport(payload,{
+  source:(from,to)=>source(from,to),
+  recipients:recipientList,holidays,state,recentCoverage,norm,today:dateBR
+ });
+ return json(result);
+}
 async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'Apenas POST' }, 405);
   let payload: R = {};
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if (action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
+    if (action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
-      return action === 'director_preview' ? await directorPreview(payload)
+      return action === 'dashboard_report' ? await dashboardReportAction(payload)
+        : action === 'director_preview' ? await directorPreview(payload)
         : action === 'manual_official' ? await manualOfficial(payload)
         : action === 'preview_audit' ? await manualOfficial({...payload,previewOnly:true})
         : action === 'support_quality_metrics' ? await supportQualityMetrics(payload)
