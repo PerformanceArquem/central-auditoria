@@ -1970,6 +1970,40 @@
                             </table>
                         </div>
                     </div>
+                    <div class="card" id="forecastAuditCard">
+                        <h3>Auditoria de previsões superestimadas · Produção</h3>
+                        <p style="color:var(--muted);margin:0 0 12px">
+                            Robô de regras: compara a previsão informada com <b>todos os apontamentos carregados</b> do chamado.
+                            Prioriza chamados encerrados; não trata diferença como irregularidade comprovada.
+                            Previsões digitadas neste navegador têm prioridade sobre o campo Movidesk e a leitura do texto.
+                        </p>
+                        <div class="row noprint" style="margin-bottom:12px">
+                            <div class="fg"><label>Previsão mínima (horas)</label>
+                                <input id="faMinHours" type="number" min="1" step="1" value="8" onchange="renderForecastAudit()">
+                            </div>
+                            <div class="fg"><label>Desvio mínimo (% abaixo da previsão)</label>
+                                <input id="faMinGap" type="number" min="1" max="99" step="5" value="60" onchange="renderForecastAudit()">
+                            </div>
+                            <div class="fg"><label>Situação</label>
+                                <select id="faScope" onchange="renderForecastAudit()">
+                                    <option value="closed">Somente encerrados (prioridade)</option>
+                                    <option value="all">Encerrados e abertos (abertos = provisórios)</option>
+                                </select>
+                            </div>
+                            <button class="s" type="button" onclick="exportForecastAuditCsv()">Exportar CSV para Excel</button>
+                        </div>
+                        <p id="faSummary" class="subtle" aria-live="polite">Calculando desvios das previsões...</p>
+                        <div class="tw"><table id="tForecastAuditTable">
+                            <thead><tr>
+                                <th>Chamado</th><th>Assunto</th><th>Cliente</th><th>Setor</th><th>Status</th>
+                                <th>Previsto</th><th>Apontado</th><th>Diferença</th><th>Desvio</th><th>Origem</th><th>Diagnóstico</th>
+                            </tr></thead>
+                            <tbody id="tForecastAudit"></tbody>
+                        </table></div>
+                        <p class="subtle" style="margin-top:10px">Critério: diferença = previsto − apontado; desvio = diferença ÷ previsto.
+                        Ausência de apontamentos, escopo alterado ou trabalho não registrado exigem confirmação antes de concluir que houve superestimativa.
+                        A avaliação usa apenas os chamados e lançamentos efetivamente carregados na Central.</p>
+                    </div>
                 </div>
                 <div id="t-occ" class="hide">
                     <div class="card">
@@ -2597,7 +2631,7 @@ function render(){
 
 
   renderPivot();renderDiag();renderLiveDaily();if(ACT==='live'&&!window.managerReportEdited)generateManagerReport();
-  renderProj(c);renderBudget(c);renderOcc(c);renderMgmt(c);renderVip(c);renderCharts(c);renderComparisons();renderBot(c);renderAlerts();
+  renderProj(c);renderBudget(c);renderForecastAudit();renderOcc(c);renderMgmt(c);renderVip(c);renderCharts(c);renderComparisons();renderBot(c);renderAlerts();
   enhanceTables();
 }
 
@@ -2929,6 +2963,88 @@ function renderBudget(c){
   }).join('')||empty(13);
 }
 function setBudget(id,v){const b=JSON.parse(localStorage.getItem('md_budget')||'{}');b[id]=+v||0;localStorage.setItem('md_budget',JSON.stringify(b));render()}
+
+// Auditoria determinística de desvios: não afirma fraude, produtividade ou
+// economia financeira. Sem previsão explícita ou horas importadas, não calcula.
+let forecastAuditVisible=[];
+const forecastClosed=(status)=>/fechad|concluid|conclu[ií]d|resolvid|finalizad|encerrad/i.test(
+  String(status||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+);
+function forecastAuditData(){
+  const c=R();
+  const minHours=Math.max(1,Number($('faMinHours')?.value)||8);
+  const minGap=Math.min(99,Math.max(1,Number($('faMinGap')?.value)||60));
+  const scope=$('faScope')?.value||'closed';
+  const id=projRequestedTicket();
+  const items=budgetData(c,'a');
+  const valid=items.filter(p=>{
+    if(id&&String(p.id)!==id)return false;
+    if(!Number.isFinite(p.pl)||p.pl<minHours||!Number.isFinite(p.h)||p.h<=0)return false;
+    if(p.h>=p.pl)return false;
+    if((1-p.h/p.pl)*100<minGap)return false;
+    if(scope==='closed'&&!forecastClosed(p.status))return false;
+    return true;
+  }).map(p=>{
+    const gap=p.pl-p.h,percentage=(gap/p.pl)*100,closed=forecastClosed(p.status);
+    return {...p,gap,percentage,closed,
+      priority:closed&&percentage>=80&&gap>=24?'Crítico para revisão':
+        closed?'Revisar previsão':'Provisório: em andamento',
+      sector:String(p.r?.sector||p.r?.service_name||'Sem setor'),
+      diagnosis:closed?
+        'Validar escopo, versão da previsão e integridade dos apontamentos antes de classificar.' :
+        'Ainda aberto: diferença não representa execução final.'};
+  });
+  valid.sort((a,b)=>Number(b.closed)-Number(a.closed)||b.gap-a.gap||b.percentage-a.percentage);
+  return {items:valid,reviewed:items.length,minHours,minGap,scope};
+}
+function renderForecastAudit(){
+  if(!$('tForecastAudit'))return;
+  const {items,reviewed}=forecastAuditData();
+  forecastAuditVisible=items;
+  const closed=items.filter(p=>p.closed);
+  const critical=closed.filter(p=>p.priority==='Crítico para revisão');
+  const totalHours=closed.reduce((sum,p)=>sum+p.gap,0);
+  const q=projRequestedTicket();
+  $('faSummary').textContent=
+    `${reviewed} chamado(s) com horas carregadas analisados · ${items.length} sinalizado(s) · ${closed.length} encerrado(s) · ${critical.length} crítico(s) · ${H(totalHours)} de diferença estimada nos encerrados.`+
+    (q?` Pesquisa por #${q}.`:'')+
+    ' Diferença de previsão não é prova de ociosidade nem de horas faturáveis.';
+  $('tForecastAudit').innerHTML=items.slice(0,250).map(p=>
+    `<tr>
+      <td>${alarmCellTicket(p.id)}</td>
+      <td>${esc(p.subject)}</td><td>${esc(p.client)}</td>
+      <td>${esc(p.sector)}</td><td>${esc(p.status)}</td>
+      <td data-v="${p.pl}"><b>${H(p.pl)}</b></td>
+      <td data-v="${p.h}">${H(p.h)}</td>
+      <td data-v="${p.gap}"><b>${H(p.gap)}</b></td>
+      <td data-v="${p.percentage}"><span class="pill ${p.closed?'bad':'warn'}">${nf(p.percentage,1)}%</span></td>
+      <td>${esc(p.src||'Não informada')}</td>
+      <td><span class="pill ${p.priority==='Crítico para revisão'?'bad':'warn'}">${esc(p.priority)}</span>
+        <span title="${esc(p.diagnosis)}" style="font-size:11px;color:var(--muted)">Revisar contexto</span></td>
+    </tr>`).join('')||
+    '<tr><td colspan="11" style="color:var(--muted)">Nenhuma previsão com o desvio configurado foi encontrada nos chamados carregados. Verifique o status, as previsões e a sincronização dos apontamentos.</td></tr>';
+}
+function exportForecastAuditCsv(){
+  const {items}=forecastAuditData();
+  if(!items.length){alert('Nenhum chamado sinalizado para exportar.');return}
+  // Escapar células e neutralizar fórmulas interpretadas pelo Excel.
+  const cell=x=>{
+    let v=String(x??'').replace(/[\r\n\t]+/g,' ');
+    if(/^[=+\-@]/.test(v.trimStart()))v="'"+v;
+    return '"'+v.replace(/"/g,'""')+'"';
+  };
+  const lines=[
+    ['Chamado','Assunto','Cliente','Setor','Status','Previsto (h)','Apontado (h)','Diferença (h)','Desvio (%)','Origem da previsão','Prioridade','Diagnóstico'],
+    ...items.map(p=>[p.id,p.subject,p.client,p.sector,p.status,
+      p.pl.toFixed(2),p.h.toFixed(2),p.gap.toFixed(2),p.percentage.toFixed(1),
+      p.src,p.priority,p.diagnosis])
+  ];
+  const blob=new Blob(['\uFEFF'+lines.map(row=>row.map(cell).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='auditoria_previsao_x_apontado_'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
 
 function offByAgent(kd){const o={};rows.forEach(r=>{if(kd(r.date))o[r.owner_name]=(o[r.owner_name]||0)+r.hours});return o}
 const offPill=o=>o?`<span class="pill warn">${H(o)}</span>`:'—';
