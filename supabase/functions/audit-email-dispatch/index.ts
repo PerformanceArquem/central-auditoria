@@ -1458,7 +1458,7 @@ async function dispatch() {
         const december = t.includeDecember
           ? buildReport(t.r,appts.filter(x=>String(x.appointment_date).startsWith(year+'-12-')),year+'-12-01',t.to,'monthly',hol,false,clients).metrics
           : null;
-        annual = annualHighlights(t,report.metrics,previous.metrics,december,overview.metrics&&'monthly' in overview.metrics?overview.metrics.monthly:[]);
+        annual = annualHighlights(t,report.metrics,previous.metrics,december,overview.metrics&&'monthly' in overview.metrics?(overview.metrics.monthly||[]):[]);
       }
       const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
         method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
