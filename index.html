@@ -1480,28 +1480,7 @@
                     </div>
                     <p style="color:var(--muted);margin:8px 0 0">O relatório fica na aba Clientes VIP.</p>
                 </div>
-                <div class="card">
-                    <h3>Leitura por IA (opcional)</h3>
-                    <div class="row">
-                        <div class="fg">
-                            <label>Analisar</label>
-                            <select id="iaMode" onchange="iaChanged()">
-                                <option value="off">Desligada</option>
-                                <option value="proj">Só chamados de projeto</option>
-                                <option value="all">Todos com horas apontadas</option>
-                            </select>
-                        </div>
-                        <div class="fg" style="flex:1;min-width:240px">
-                            <label>Senha da função (ACCESS_KEY)</label>
-                            <input id="iaKey" type="password" onchange="iaChanged()">
-                        </div>
-                        <button class="b" onclick="iaRun()">Analisar agora</button>
-                    </div>
-                    <div id="iaMsg"></div>
-                    <p style="color:var(--muted);margin:10px 0 0">
-                        Só entram chamados sem previsão digitada, sem campo personalizado e sem previsão lida pelo robô de regras. Cada chamado é analisado uma vez (de novo só se o texto mudar) e o resultado fica salvo neste navegador. <b>Quando o Gemini estiver configurado, o assunto e a descrição serão enviados ao provedor de IA. Sem essa integração, o robô local analisa apenas estimativas explicitamente descritas; não envia textos ao Gemini.</b>
-                    </p>
-                </div>
+
             </div>
             <div id="app" class="hide">
                 <div class="card filters">
@@ -2468,7 +2447,6 @@ async function sync(auto){
     log(full?`Concluído em ${((performance.now()-t0)/1000).toFixed(1)}s: ${list.length} tickets, ${raw.length} lançamentos de tempo.`
             :`Atualizado: ${all.length} ticket(s) alterado(s), ${list.length} no total.`,'okc');
     if(!raw.length&&!auto) showTab(TK.size?'alerts':'diag');
-    iaRun(true);
     if(!historyScanning&&!document.hidden)setTimeout(()=>scanHistorical(false),100); // após liberar o bloqueio de sincronização
   }catch(e){
     fails++;lastErr=e.message;
@@ -2845,7 +2823,7 @@ function showTab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-cfg').classList.toggle('hide',t!=='cfg');
   ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','support-quality','production-audit','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
+  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='client-impact');
   if(raw.length&&!['load','cfg','diag','alerts','report-preview','support-quality','production-audit','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
@@ -2995,29 +2973,50 @@ let forecastAuditVisible=[];
 const forecastClosed=(status)=>/fechad|concluid|conclu[ií]d|resolvid|finalizad|encerrad/i.test(
   String(status||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
 );
+let forecastSnapshotRows=null,forecastSnapshotLoading=false;
+async function loadForecastSnapshots(){
+ if(forecastSnapshotLoading)return;
+ forecastSnapshotLoading=true;
+ try{
+  const session=await window.tmAuth?.getSession?.();
+  if(!session?.access_token)throw Error('Sessão não disponível');
+  const response=await fetch('/api/audit-forecast-variances',{
+   cache:'no-store',headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'}
+  });
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok||result.ok!==true||!Array.isArray(result.items))throw Error(result.error||'Consulta indisponível');
+  forecastSnapshotRows=result.items;
+ }catch(e){
+  console.warn('Auditoria automática indisponível:',e.message||e);
+  forecastSnapshotRows=null;
+ }finally{
+  forecastSnapshotLoading=false;
+  renderForecastAudit();
+ }
+}
 function forecastAuditData(){
   const c=R();
   const minHours=Math.max(1,Number($('faMinHours')?.value)||8);
   const minGap=Math.min(99,Math.max(1,Number($('faMinGap')?.value)||60));
   const sectorScope=$('faSector')?.value||'production';
   const id=projRequestedTicket();
-  const items=budgetData(c,'a');
+  const items=forecastSnapshotRows===null?budgetData(c,'a'):forecastSnapshotRows;
   const valid=items.filter(p=>{
     if(id&&String(p.id)!==id)return false;
     if(sectorScope==='production'&&!/producao|produc|cpo/i.test(
-      String(p.r?.sector||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      String(p.sector||p.r?.sector||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     ))return false;
-    if(!Number.isFinite(p.pl)||p.pl<minHours||!Number.isFinite(p.h)||p.h<=0)return false;
-    if(p.h>=p.pl)return false;
-    if((1-p.h/p.pl)*100<minGap)return false;
+    if(!Number.isFinite(Number(p.pl))||Number(p.pl)<minHours||!Number.isFinite(Number(p.h))||Number(p.h)<=0)return false;
+    if(Number(p.h)>=Number(p.pl))return false;
+    if((1-Number(p.h)/Number(p.pl))*100<minGap)return false;
     if(!forecastClosed(p.status))return false;
     return true;
   }).map(p=>{
-    const gap=p.pl-p.h,percentage=(gap/p.pl)*100;
-    return {...p,gap,percentage,closed:true,
+    const gap=Number(p.pl)-Number(p.h),percentage=(gap/Number(p.pl))*100;
+    return {...p,pl:Number(p.pl),h:Number(p.h),gap,percentage,closed:true,
       priority:percentage>=80&&gap>=24?'Crítico para revisão':'Revisar previsão',
-      sector:String(p.r?.sector||p.r?.service_name||'Sem setor'),
-      diagnosis:'Validar escopo, versão da previsão e integridade dos apontamentos antes de classificar.'};
+      sector:String(p.sector||p.r?.sector||p.r?.service_name||'Sem setor'),
+      diagnosis:'Validar aprovação da estimativa, escopo e integridade dos apontamentos antes de concluir.'};
   });
   valid.sort((a,b)=>b.gap-a.gap||b.percentage-a.percentage);
   return {items:valid,reviewed:items.length,minHours,minGap};
@@ -3031,7 +3030,7 @@ function renderForecastAudit(){
   const totalHours=closed.reduce((sum,p)=>sum+p.gap,0);
   const q=projRequestedTicket();
   $('faSummary').textContent=
-    `${reviewed} chamado(s) com horas carregadas analisados · ${items.length} sinalizado(s) · ${closed.length} encerrado(s) · ${critical.length} crítico(s) · ${H(totalHours)} de diferença estimada nos encerrados.`+
+    (forecastSnapshotRows===null?'Dados carregados no navegador (parciais). ':'Auditoria consolidada automaticamente no Supabase. ')+`${reviewed} chamado(s) com horas carregadas analisados · ${items.length} sinalizado(s) · ${closed.length} encerrado(s) · ${critical.length} crítico(s) · ${H(totalHours)} de diferença estimada nos encerrados.`+
     (q?` Pesquisa por #${q}.`:'')+
     ' Diferença de previsão não é prova de ociosidade nem de horas faturáveis.';
   $('tForecastAudit').innerHTML=items.slice(0,250).map(p=>
@@ -3708,47 +3707,9 @@ $('app').addEventListener('click',e=>{
   enhanceTables();
 });
 
-/* ---------- leitura por IA (chama /api/estimar na Vercel; a chave fica no servidor) ---------- */
-let IA=(()=>{try{return JSON.parse(localStorage.getItem('md_ia')||'{}')}catch(e){return {}}})(),iaBusy=false;
+/* ---------- Estimativas registradas antes da retirada da interface manual ---------- */
+let IA=(()=>{try{return JSON.parse(localStorage.getItem('md_ia')||'{}')}catch(e){return {}}})();
 const hash=x=>{let h=5381;for(let i=0;i<x.length;i++)h=((h<<5)+h+x.charCodeAt(i))|0;return String(h)};
-const iaLog=(m,c)=>{$('iaMsg').className=c||'';$('iaMsg').textContent=m};
-function iaChanged(){localStorage.setItem('md_iamode',$('iaMode').value);localStorage.setItem('md_iakey',$('iaKey').value.trim());if($('iaMode').value!=='off'&&raw.length)iaRun()}
-async function iaRun(auto){
-  if(iaBusy) return;
-  const mode=$('iaMode').value,key=$('iaKey').value.trim();
-  if(mode==='off') return auto?0:iaLog('IA desligada. Escolha quais chamados analisar.');
-  if(!key) return auto?0:iaLog('Informe a senha da função (ACCESS_KEY).','err');
-  const c=R(),bud=JSON.parse(localStorage.getItem('md_budget')||'{}'),seen=new Set(),todo=[];
-  raw.forEach(r=>{
-    if(seen.has(r.ticket_id)) return;seen.add(r.ticket_id);
-    if(r.est||r.planned||+bud[r.ticket_id]||!r.txt) return;
-    if(mode==='proj'&&!isProj(r,c)) return;
-    const h=hash(r.txt),x=IA[r.ticket_id];
-    if(x&&x.h===h) return;
-    todo.push({id:r.ticket_id,h,texto:r.txt});
-  });
-  if(!todo.length) return auto?0:iaLog('Nada novo para analisar.','okc');
-  const MAXRUN=400,LOTE=8,fila=todo.slice(0,MAXRUN);let ok=0,modo='ia';
-  iaBusy=true;
-  try{
-    for(let i=0;i<fila.length;i+=LOTE){
-      const lote=fila.slice(i,i+LOTE);
-      iaLog(`IA analisando ${Math.min(i+LOTE,fila.length)} de ${todo.length} chamados pendentes...`);
-      const r=await fetch('/api/estimar',{method:'POST',headers:{'Content-Type':'application/json','x-access-key':key},body:JSON.stringify({jornada:c.jor,tickets:lote.map(t=>({id:t.id,texto:t.texto}))})});
-      const j=await r.json().catch(()=>({}));
-      if(!r.ok) throw new Error(j.erro||('erro '+r.status));
-      modo=j.modo==='regras'?'regras':'ia';
-      (j.resultados||[]).forEach(x=>{const t=lote.find(l=>l.id===String(x.id));if(t){const horas=Number(x.horas??x.hours),conf=x.confianca??x.confidence,trecho=x.trecho??x.excerpt;if(Number.isFinite(horas)&&horas>0){IA[t.id]={h:t.h,horas,conf:conf==null?'':String(conf),trecho:trecho==null?'':String(trecho),origem:modo};ok++}}});
-      try{localStorage.setItem('md_ia',JSON.stringify(IA))}catch(e){}
-      render();
-      if(i+LOTE<fila.length) await sleep(900); // intervalo curto para reduzir risco de limite de requisições
-    }
-    iaLog(`${modo==='regras'?'Robô de regras (Gemini não configurado)':'IA Gemini'}: ${ok} previsão(ões) explícita(s) encontrada(s)`+(todo.length>fila.length?`; faltam ${todo.length-fila.length} (serão retomados na próxima sincronização ou em "Analisar agora").`:'.')+(modo==='regras'?' Nenhum texto foi enviado ao Gemini.':''),'okc');
-  }catch(e){
-    iaLog('IA: '+e.message+(e instanceof TypeError?' (a função /api/estimar não respondeu; ela só existe depois de publicar na Vercel)':''),'err');
-  }finally{iaBusy=false}
-}
-
 /* ---------- busca por módulo ---------- */
 const hay=r=>r._s??=norm([r.ticket_id,r.client_name,r.subject,r.owner_name,r.sector,r.activity,r.service_name,r.category,r.status,fmtDate(r.date)].join(' '));
 function doSearch(t){
@@ -3760,7 +3721,7 @@ function doSearch(t){
   if(t==='proj')findProjectTicket();
 }
 function clearSearch(t){$('q_'+t).value='';doSearch(t)}
-const MODS={alerts:['Alertas e pendências','Monitoramento de chamados abertos, com ranking dos mais antigos em todos os setores.'],live:['Tempo real','Alterações de previsão, status e atualização dos chamados, detectadas a cada sincronização.'],cfg:['Configurações','Regras de cálculo, lista de clientes VIP e leitura por IA.'],mgmt:['Visão geral','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos comparativos','Comparativo mensal e anual, evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
+const MODS={alerts:['Alertas e pendências','Monitoramento de chamados abertos, com ranking dos mais antigos em todos os setores.'],live:['Tempo real','Alterações de previsão, status e atualização dos chamados, detectadas a cada sincronização.'],cfg:['Configurações','Regras de cálculo e lista de clientes VIP.'],mgmt:['Visão geral','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos comparativos','Comparativo mensal e anual, evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
 
 /* ---------- robô: painel de leituras ---------- */
 let IG=(()=>{try{return JSON.parse(localStorage.getItem('md_ig')||'{}')}catch(e){return {}}})();
@@ -3837,7 +3798,6 @@ function applyCloudSettings(){
   try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{if(sv[i]!=null)$(i).value=sv[i]})}catch(e){}
   $('autoMin').value=localStorage.getItem('md_auto')??$('autoMin').value;
   $('alarmMinDays').value=localStorage.getItem('md_alarm_days')||$('alarmMinDays').value;
-  $('iaMode').value=localStorage.getItem('md_iamode')||$('iaMode').value||'off';
   try{IA=JSON.parse(localStorage.getItem('md_ia')||'{}')}catch(e){IA={}}
   try{IG=JSON.parse(localStorage.getItem('md_ig')||'{}')}catch(e){IG={}}
   try{liveEvents=JSON.parse(localStorage.getItem('md_live_events')||'[]');showLiveEvents()}catch(e){}
@@ -3920,7 +3880,7 @@ $('cfId').value=localStorage.getItem('md_cf')||'';
 $('vipList').value=localStorage.getItem('md_vip')??['Dr Oculos','Ferri','Instituto','Paulo e Condah','Atacadão do Oculos','IMV','Paschoal LAB','Cardeal','Sr dos Oculos','Lux'].join('\n');
 try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{if(sv[i]!=null)$(i).value=sv[i]})}catch(e){}
 $('autoMin').value=localStorage.getItem('md_auto')??'5';
-$('iaMode').value=localStorage.getItem('md_iamode')||'off';$('iaKey').value=localStorage.getItem('md_iakey')||'';
+localStorage.removeItem('md_iakey'); localStorage.removeItem('md_iamode');
 lastToday=$('endDate').value;
 showTab('cfg');
 $('alarmMinDays').value=localStorage.getItem('md_alarm_days')||'7';
