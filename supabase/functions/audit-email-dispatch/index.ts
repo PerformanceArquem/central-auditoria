@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'support-superadores-20261110';
+const RELEASE_ID = 'management-team-journey-20261110';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -393,7 +393,7 @@ function workdays(from: string, to: string, ignored: Set<string>) {
 
 const emailEsc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]||ch));
 const displayDate=(d:string)=>/^\d{4}-\d{2}-\d{2}$/.test(d)?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):d;
-function reportEmailHtml(rec:R,report:{text:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:string,partial:boolean,manual:boolean,alertsHtml='',detailsHtml=''){
+function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:string,partial:boolean,manual:boolean,alertsHtml='',detailsHtml=''){
  const m=report.metrics;
  const targetPerDay=Number(rec.daily_target_minutes??480);
  const minPercent=Number(rec.minimum_percent??80);
@@ -401,7 +401,7 @@ function reportEmailHtml(rec:R,report:{text:string;metrics:{appointments:number;
  const minimum=Math.round(target*minPercent/100);
  const missing=m.appointments===0;
  const person=safe(rec.collaborator_name)||'Equipe';
- const sector=(Array.isArray(rec.sectors)&&rec.sectors.length?rec.sectors.map(safe).join(' · '):(rec.scope==='management'?'Todos os setores':safe(rec.sector)))||'Gestão';
+ const sector=(Array.isArray(rec.sectors)&&rec.sectors.length?rec.sectors.map(safe).join(' · '):(safe(rec.sector)||(rec.scope==='management'?'Todos os setores':'')))||'Gestão';
  const k=kind==='weekly'?'SEMANAL':'DIÁRIO';
  const badge=manual?'TESTE MANUAL':partial?'DADOS PARCIAIS':'RELATÓRIO DE APONTAMENTOS';
  const esc=emailEsc;
@@ -437,8 +437,8 @@ function reportEmailHtml(rec:R,report:{text:string;metrics:{appointments:number;
  tile('Horas apontadas',duration(m.minutes))+tile('Apontamentos',String(m.appointments))+'</tr><tr>'+
  tile('Chamados com horas',String(m.tickets))+tile('Dias úteis de referência',String(m.days))+'</tr></table>'+
  warning+
- '<div style="font-size:15px;color:#18385e;font-weight:700;margin:23px 0 6px">Referências de jornada</div>'+
- missingMetrics+
+ (report.teamJourneyHtml||
+   '<div style="font-size:15px;color:#18385e;font-weight:700;margin:23px 0 6px">Referências de jornada</div>'+missingMetrics)+
  '<div style="font-size:15px;color:#18385e;font-weight:700;margin:24px 0 12px">Atividades e lançamentos</div>'+
  '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5edf7;border-radius:8px;overflow:hidden">'+lines+'</table>'+
  detailsHtml+alertsHtml+
@@ -452,9 +452,9 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
   if (!['sector', 'management'].includes(scope)) throw new Error('Escopo de destinatario nao reconhecido');
   const person = norm(rec.collaborator_name);
   // Compatibilidade: cadastros antigos usam sector, novos podem ter varios sectors.
-  const selectedSectors = Array.isArray(rec.sectors) && rec.sectors.length
-    ? [...new Set(rec.sectors.map((v:unknown)=>norm(v)).filter(Boolean))]
-    : [norm(rec.sector)].filter(Boolean);
+  const sectorLabels = (Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors : [rec.sector]).map(safe).filter(Boolean);
+  const selectedSectors = [...new Set(sectorLabels.map(norm))];
+  const scopedManagement = scope === 'management' && selectedSectors.length > 0;
   if (scope === 'sector' && !selectedSectors.length) throw new Error('Destinatario setorial sem setor');
   if (scope === 'sector' && !person && !authorizedSingleManual && E('REPORT_ALLOW_SECTOR_EMAIL') !== 'true')
     throw new Error('Envio setorial coletivo exige REPORT_ALLOW_SECTOR_EMAIL=true e autorizacao da supervisao');
@@ -480,21 +480,42 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
   const byPerson = new Map<string, number>();
   const bySector = new Map<string, number>();
   for (const a of selected) {
-    const n = String(a.collaborator_name || 'Nao informado');
+    const n = String(a.collaborator_name || 'Não informado');
     byPerson.set(n, (byPerson.get(n) || 0) + Number(a.duration_minutes || 0));
     const s = String(a.sector || 'Nao informado');
     bySector.set(s, (bySector.get(s) || 0) + Number(a.duration_minutes || 0));
   }
   const worked = new Set(selected.map(a => String(a.ticket_id))).size;
   const dayMap=new Map<string,number>();
+  const sectorsByDay=new Map<string,Set<string>>();
+  const daySet=new Set(days);
   const clientsById=new Map(clients.map(x=>[String(x.ticket_id),String(x.client_name||'').trim()]));
   const companyMap=new Map<string,{minutes:number;tickets:Set<string>}>();
+  const teamMembers=new Map<string,{sectors:Set<string>;tickets:Set<string>;clients:Set<string>;dates:Set<string>;entries:number;offMinutes:number}>();
   for(const a of selected){
     const who=String(a.collaborator_name||'Não informado');
     const day=String(a.appointment_date||'').slice(0,10);
     const mins=Number(a.duration_minutes||0);
     const k=who+'|'+day;dayMap.set(k,(dayMap.get(k)||0)+mins);
     const id=String(a.ticket_id||''),company=clientsById.get(id)||'Empresa não identificada';
+    if(scopedManagement){
+      let member=teamMembers.get(who);
+      if(!member){
+        member={sectors:new Set(),tickets:new Set(),clients:new Set(),dates:new Set(),entries:0,offMinutes:0};
+        teamMembers.set(who,member);
+      }
+      member.entries++;
+      member.sectors.add(String(a.sector||''));
+      const daySectors=sectorsByDay.get(k)??new Set<string>();
+      daySectors.add(String(a.sector||''));
+      sectorsByDay.set(k,daySectors);
+      if(id)member.tickets.add(id);
+      if(clientsById.get(id))member.clients.add(company);
+      if(day){
+        member.dates.add(day);
+        if(!daySet.has(day))member.offMinutes+=mins;
+      }
+    }
     if(!companyMap.has(company))companyMap.set(company,{minutes:0,tickets:new Set()});
     const row=companyMap.get(company)!;row.minutes+=mins;if(id)row.tickets.add(id);
   }
@@ -507,16 +528,56 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;border-collapse:collapse">'+
     '<tr style="background:#f1f5fb">'+cols.map(c=>'<th style="'+cell+'">'+emailEsc(c)+'</th>').join('')+'</tr>'+
     rows.map(row=>'<tr>'+row.map(c=>'<td style="'+cell+'">'+emailEsc(c)+'</td>').join('')+'</tr>').join('')+'</table>';
+  const periodReference=(minutes:number,capacity:number,min:number)=>({
+    percent:capacity>0?Math.round(100*minutes/capacity):null,
+    minimumGap:Math.max(0,min-minutes),
+    targetGap:Math.max(0,capacity-minutes),
+    status:capacity===0?'Sem jornada de referência':minutes>=min?'Mínimo atingido':'Abaixo do mínimo de referência'
+  });
+  const journey=[...teamMembers].map(([name,member])=>{
+    const minutes=byPerson.get(name)??0;
+    return {
+      name,sector:[...member.sectors].sort().join(' · '),minutes,
+      entries:member.entries,tickets:member.tickets.size,clients:member.clients.size,days:member.dates.size,
+      averageMinutes:member.dates.size?minutes/member.dates.size:null,offMinutes:member.offMinutes,
+      targetMinutes:target,minimumMinutes:minimum,...periodReference(minutes,target,minimum)
+    };
+  }).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+  const dailyJourney=daily.map(x=>{
+    const workday=daySet.has(x.day),referenceMinutes=workday?targetPerDay:0;
+    const minimumMinutes=workday?Math.round(targetPerDay*minimumPercent/100):0;
+    const comparison=periodReference(x.minutes,referenceMinutes,minimumMinutes);
+    const sector=[...(sectorsByDay.get(x.name+'|'+x.day)??[])].sort().join(' · ');
+    return {...x,sector,referenceMinutes,minimumMinutes,...comparison,status:workday?comparison.status:'Dia não útil'};
+  });
+  const showJourneyPercent=(n:number|null)=>n===null?'—':n+'%';
+  const journeyNote='Referência por colaborador conforme o cadastro do destinatário e os dias úteis do período. Horas em dias não úteis entram no total. São exibidos apenas colaboradores com apontamentos nos setores vinculados.';
+  const teamJourneyHtml=scopedManagement?
+    '<h2 style="font-size:17px;color:#18385e;margin:23px 0 6px">Colaboradores: horas apontadas e jornada</h2>'+
+    '<p style="font-size:12px;color:#65748b">'+emailEsc(journeyNote)+'</p>'+
+    (journey.length?detailTable(['Colaborador','Equipe','Apontadas','Capacidade','Mínimo','%'],journey.map(x=>
+      [x.name,x.sector,duration(x.minutes),duration(x.targetMinutes),duration(x.minimumMinutes),showJourneyPercent(x.percent)]))+
+    '<h3 style="font-size:14px;color:#17345d">Diferenças e situação</h3>'+
+    detailTable(['Colaborador','Falta mínimo','Falta jornada','Situação'],journey.map(x=>
+      [x.name,duration(x.minimumGap),duration(x.targetGap),x.status]))+
+    '<h3 style="font-size:14px;color:#17345d">Volume de apontamentos</h3>'+
+    detailTable(['Colaborador','Lançamentos','Chamados','Clientes','Dias','Média/dia','Dias não úteis'],journey.map(x=>
+      [x.name,String(x.entries),String(x.tickets),String(x.clients),String(x.days),x.averageMinutes===null?'—':duration(x.averageMinutes),duration(x.offMinutes)])):
+      '<p style="font-size:12px">Sem apontamentos importados nos setores vinculados.</p>'):'';
   const detailsHtml='<div style="margin-top:24px;border-top:2px solid #dce6f4;padding-top:12px">'+
     '<h3 style="color:#17345d;font-size:15px">Horas por colaborador, dia a dia</h3>'+
-    (daily.length?detailTable(['Colaborador','Data','Horas'],daily.slice(0,90).map(x=>[x.name,displayDate(x.day),duration(x.minutes)])):
+    (daily.length?(scopedManagement?
+      detailTable(['Colaborador','Data','Horas','Jornada','%','Falta jornada','Situação'],dailyJourney.slice(0,90).map(x=>
+        [x.name,displayDate(x.day),duration(x.minutes),x.referenceMinutes?duration(x.referenceMinutes):'—',
+          showJourneyPercent(x.percent),x.referenceMinutes?duration(x.targetGap):'—',x.status])):
+      detailTable(['Colaborador','Data','Horas'],daily.slice(0,90).map(x=>[x.name,displayDate(x.day),duration(x.minutes)]))):
       '<p style="font-size:12px">Sem apontamentos importados.</p>')+
     (daily.length>90?'<p style="font-size:12px">Exibindo 90 de '+daily.length+' linhas.</p>':'')+
     '<h3 style="color:#17345d;font-size:15px;margin-top:24px">Empresas com maior consumo de horas</h3>'+
     (companies.length?detailTable(['Empresa','Tempo','Chamados'],companies.map(x=>[x.name,duration(x.minutes),String(x.tickets)])):
       '<p style="font-size:12px">Sem empresas identificadas.</p>')+
     '<p style="font-size:11px;color:#64748b">Somente horas importadas do Movidesk; ausência de lançamento não comprova falta de trabalho.</p></div>';
-  const title = `${kind === 'weekly' ? 'Relatorio semanal' : 'Relatorio diario'} - ${scope === 'management' ? (selectedSectors.length ? 'Gestao / ' + rec.sectors.map(safe).join(' + ') : 'Gestao / Todos os setores') : (Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors.map(safe).join(' + ') : safe(rec.sector))}${person ? ' / ' + safe(rec.collaborator_name) : ''}`;
+  const title = `${kind === 'weekly' ? 'Relatorio semanal' : 'Relatorio diario'} - ${scope === 'management' ? 'Gestao / ' + (sectorLabels.join(' + ') || 'Todos os setores') : sectorLabels.join(' + ')}${person ? ' / ' + safe(rec.collaborator_name) : ''}`;
   const details = person ? selected.slice(0, 100).map(a =>
     `- ${String(a.appointment_date)} | #${safe(a.ticket_id)} | ${duration(Number(a.duration_minutes || 0))} | ${safe(a.activity)}`)
     : [...byPerson.entries()].sort((a, b) => b[1] - a[1]).map(([n, m]) => `- ${safe(n)}: ${duration(m)}`);
@@ -535,9 +596,13 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     `Chamados com horas ......... ${worked}`,
     `Dias úteis de referência ... ${days.length}`,
     '',
-    'REFERÊNCIAS DE JORNADA',
+    scopedManagement?'COLABORADORES: HORAS APONTADAS E JORNADA':'REFERÊNCIAS DE JORNADA',
     '────────────────────────────────────────',
-    ...(selected.length ? [
+    ...(scopedManagement ? [
+      journeyNote,
+      ...journey.map(x=>`${safe(x.name)} | ${safe(x.sector)} | ${duration(x.minutes)} apontadas | jornada ${duration(x.targetMinutes)} | mínimo ${duration(x.minimumMinutes)} | ${showJourneyPercent(x.percent)} | faltam ${duration(x.minimumGap)} para o mínimo e ${duration(x.targetGap)} para a jornada | ${x.status}`),
+      ...(!journey.length?['Sem apontamentos importados nos setores vinculados.']:[])
+    ] : selected.length ? [
       `Meta mínima de referência . ${duration(minimum)}`,
       `Jornada de referência ..... ${duration(target)}`,
       `Diferença para a mínima ... ${duration(Math.max(0, minimum-minutes))}`,
@@ -554,7 +619,8 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     '',
     'HORAS POR COLABORADOR E DIA',
     '────────────────────────────────────────',
-    ...daily.slice(0,90).map(x=>'- '+safe(x.name)+' | '+displayDate(x.day)+' | '+duration(x.minutes)),
+    ...dailyJourney.slice(0,90).map(x=>'- '+safe(x.name)+' | '+displayDate(x.day)+' | '+duration(x.minutes)+
+      (scopedManagement?' | '+(x.referenceMinutes?duration(x.referenceMinutes)+' de jornada | '+showJourneyPercent(x.percent)+' | ':'')+x.status:'')),
     '',
     'EMPRESAS QUE MAIS CONSUMIRAM TEMPO',
     '────────────────────────────────────────',
@@ -569,25 +635,29 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     'ARQUEM | Relatório emitido pela Central de Auditoria'
   ];
   if (scope === 'management') lines.push('', 'Horas por setor:', ...[...bySector].map(([s, m]) => `- ${safe(s)}: ${duration(m)}`));
-  const daySet=new Set(days);
   const byActivity=new Map<string,number>();
   for(const a of selected){
     const name=String(a.activity||'Não informado');
     byActivity.set(name,(byActivity.get(name)||0)+Number(a.duration_minutes||0));
   }
   const exportData={
-    collaborators:[...byPerson.entries()].sort((a,b)=>b[1]-a[1]).slice(0,70)
+    collaborators:scopedManagement?journey.slice(0,70).map(x=>({
+      name:x.name,sector:x.sector,minutes:x.minutes,minimumMinutes:x.minimumMinutes,targetMinutes:x.targetMinutes,
+      minimumGap:x.minimumGap,targetGap:x.targetGap,ruleSource:'Referência do cadastro; não é controle de ponto'
+    })):[...byPerson.entries()].sort((a,b)=>b[1]-a[1]).slice(0,70)
       .map(([name,minutes])=>({name,sector:scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
         minutes,minimumMinutes:days.length*targetPerDay*minimumPercent/100,
         targetMinutes:days.length*targetPerDay,minimumGap:Math.max(0,days.length*targetPerDay*minimumPercent/100-minutes),
         targetGap:Math.max(0,days.length*targetPerDay-minutes),ruleSource:'Referência padrão; não é controle de ponto'})),
-    daily:daily.slice(0,90).map(x=>({date:x.day,person:x.name,sector:scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
-      minutes:x.minutes,referenceMinutes:daySet.has(x.day)?targetPerDay:0,
-      minimumMinutes:daySet.has(x.day)?Math.round(targetPerDay*minimumPercent/100):0,status:'Apontamento importado'})),
+    daily:dailyJourney.slice(0,90).map(x=>({date:x.day,person:x.name,
+      sector:scopedManagement?x.sector:
+        scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
+      minutes:x.minutes,referenceMinutes:x.referenceMinutes,minimumMinutes:x.minimumMinutes,
+      status:scopedManagement?x.status:'Apontamento importado'})),
     customers:companies.map(x=>({name:x.name,minutes:x.minutes,tickets:x.tickets,appointments:0})),
     activities:[...byActivity].sort((a,b)=>b[1]-a[1]).slice(0,30).map(([name,minutes])=>({name,minutes}))
   };
-  return { text: lines.join('\n'), detailsHtml, exportData,
+  return { text: lines.join('\n'), detailsHtml, teamJourneyHtml, teamJourney:journey, exportData,
     metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
 }
 function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:string,partial:boolean,historicalIncomplete:boolean,clients:R[]):R {
@@ -892,7 +962,7 @@ async function manualOfficial(payload: R) {
   // Prévia de auditoria não cria disparos, não acessa o Gmail e não muda agendamentos.
   if (previewOnly) return json({ok:true,preview:true,release:RELEASE_ID,
     recipient:target,kind,from,to,partial,empty,
-    metrics:report.metrics,ticketMetrics:tickets.metrics,superadores:quality.metric,
+    metrics:report.metrics,ticketMetrics:tickets.metrics,superadores:quality.metric,teamJourney:report.teamJourney,
     // Até cinco exemplos por categoria para conferência sem expor todos os dados.
     ticketPreview:tickets.preview
   });
