@@ -2,7 +2,7 @@ name: Validate executive forecast email
 on:
   push:
     branches:
-      - feat/executive-email-forecast-variances-20261110
+      - main
   pull_request:
     paths:
       - 'supabase/functions/audit-email-dispatch/**'
