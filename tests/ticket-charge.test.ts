@@ -37,3 +37,21 @@ Deno.test('uses edited introduction but preserves canonical ticket table',()=>{
  assert(a.text.startsWith('Mensagem revisada'),'editing ignored');
  assert(a.text.includes('Chamado #77533'),'canonical ticket details missing');
 });
+
+Deno.test('corporate HTML uses Arquem report design, accessible links and edited paragraphs',()=>{
+ const msg='Prezados,\n\nFavor atualizar os chamados.\n\nAguardo retorno.';
+ const result=composeTicketCharge(base,'direcao@arquem.com.br',msg);
+ assert(result.html.includes('ARQUEM <span'),'wordmark missing');
+ assert(result.html.includes('background:#122d4d'),'corporate header missing');
+ assert(result.html.includes('background:#eaf2fa'),'corporate table missing');
+ assert(result.html.includes('https://arquem.movidesk.com/Ticket/Edit/77533'),'clickable Movidesk link missing');
+ assert(result.html.includes('Chamados selecionados'),'selected tickets header missing');
+ assert(result.html.includes('Prezados,\n\nFavor atualizar os chamados.\n\nAguardo retorno.'),'edited paragraph line breaks were not preserved');
+ assert(result.html.includes('role="presentation"'),'email-compatible table missing');
+});
+Deno.test('HTML body escapes injected markup without losing paragraph separators',()=>{
+ const result=composeTicketCharge(base,'direcao@arquem.com.br','Olá <script>alert(1)</script>\nAguardo retorno.');
+ assert(!result.html.includes('<script>'),'unsafe script persisted');
+ assert(result.html.includes('&lt;script&gt;'),'HTML entity escaping missing');
+ assert(result.html.includes('\nAguardo retorno.'),'line breaks lost');
+});
