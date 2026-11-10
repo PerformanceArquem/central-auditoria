@@ -35,9 +35,26 @@ async function movidesk(params:Record<string,string>){
  const token=E('MOVIDESK_TOKEN');if(!token)throw Error('MOVIDESK_TOKEN indisponivel');
  const u=new URL(API);u.searchParams.set('token',token);
  for(const [k,v] of Object.entries(params))u.searchParams.set(k,v);
- const r=await fetch(u,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(22000)});
- if(!r.ok)throw Error('Movidesk HTTP '+r.status+' na conciliacao de apontamentos');
- return r.json();
+ // Repetir apenas falhas transitorias; nunca avancar checkpoint sem salvar o lote.
+ for(let attempt=0;attempt<3;attempt++){
+  try{
+   const r=await fetch(u,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)});
+   if(r.ok)return await r.json();
+   if(![429,500,502,503,504].includes(r.status)||attempt===2)
+    throw Error('Movidesk HTTP '+r.status+' na conciliacao de apontamentos');
+   const retryAfter=Number(r.headers.get('Retry-After'));
+   const wait=Number.isFinite(retryAfter)&&retryAfter>0
+    ? Math.min(4000,retryAfter*1000):500*2**attempt;
+   await new Promise(resolve=>setTimeout(resolve,wait));
+  }catch(error){
+   if(attempt===2||!(
+    error instanceof TypeError||
+    error instanceof DOMException&&error.name==='TimeoutError'
+   ))throw error;
+   await new Promise(resolve=>setTimeout(resolve,500*2**attempt));
+  }
+ }
+ throw Error('Tentativas Movidesk esgotadas');
 }
 async function isAdmin(req:Request){
  const auth=req.headers.get('Authorization')||'';
