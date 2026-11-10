@@ -1,6 +1,6 @@
 // Composição segura de cobranças de chamados abertos, sem envio automático.
 type TicketRow=Record<string,any>;
-export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:string){
+export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:string,options:{includeGuidance?:boolean}={}){
  if(!Array.isArray(rows)||rows.length<1||rows.length>20)throw Error('Selecione de 1 a 20 chamados.');
  if(!/^[^@\s]+@arquem\.com\.br$/i.test(recipient))throw Error('Informe um destinatário corporativo @arquem.com.br.');
  const clean=(v:unknown,max=230)=>String(v??'').replace(/[\x00-\x1f\x7f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,max);
@@ -24,8 +24,47 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  const requested=body===undefined?'':String(body).trim();
  if(requested.length>8500)throw Error('O texto ultrapassa 8.500 caracteres.');
  const message=requested||'Prezados,\n\nSolicito, por gentileza, uma atualização sobre os chamados abaixo, que permanecem em aberto e necessitam de acompanhamento.\n\nPeço informar o andamento de cada demanda, o próximo encaminhamento e, quando aplicável, a previsão de conclusão.\n\nAgradeço o retorno.';
+ // Orientacoes operacionais: criterios verificaveis. Nunca avaliam personalidade,
+ // esforco ou desempenho individual e nao inferem que falta de acao = falta de horas.
+ const guidance:{evidence:string;action:string}[]=[];
+ const now=Date.now(),daysSince=(value:string)=>{
+   const ms=Date.parse(value);
+   return Number.isFinite(ms)?Math.max(0,Math.floor((now-ms)/86400000)):null;
+ };
+ const idle=normalized.map(t=>({t,days:daysSince(t.last)}))
+   .filter(x=>x.days!==null&&x.days>=7).sort((a,b)=>(b.days||0)-(a.days||0));
+ if(idle.length){
+   const examples=idle.slice(0,3).map(x=>'#'+x.t.id+' ('+x.days+' dias)').join(', ');
+   guidance.push({evidence:idle.length+' chamado(s) sem atualizacao registrada ha 7 dias ou mais: '+examples+'.',
+     action:'Revisar o andamento com a equipe, registrar o proximo passo, quem depende da resposta e uma data realista para nova atualizacao.'});
+ }
+ const withoutOwner=normalized.filter(t=>/^nao atribuido|^sem responsavel|^nao informado/i.test(t.owner.normalize('NFD').replace(/[\u0300-\u036f]/g,'')));
+ if(withoutOwner.length)guidance.push({evidence:withoutOwner.length+' chamado(s) sem responsavel identificado na consulta.',
+   action:'Conferir o responsavel atual no Movidesk e alinhar a distribuicao antes de definir prazos.'});
+ const missingDate=normalized.filter(t=>!t.last||daysSince(t.last)===null);
+ if(missingDate.length)guidance.push({evidence:missingDate.length+' chamado(s) com data de atualizacao indisponivel ou invalida.',
+   action:'Verificar a sincronizacao e os registros do chamado antes de tirar conclusoes sobre inatividade.'});
+ const sectors=new Set(normalized.map(t=>t.sector).filter(t=>t!=='Sem setor'));
+ if(sectors.size>1)guidance.push({evidence:'A selecao inclui '+sectors.size+' setores diferentes.',
+   action:'Organizar o acompanhamento por setor, confirmar prioridades e dependencias entre as equipes.'});
+ // Toda orientacao e provisoria, limitada aos chamados selecionados e nao a
+ // qualquer suposto perfil psicologico ou rendimento do colaborador.
+ if(!guidance.length)guidance.push({evidence:'Os chamados selecionados nao apresentaram esses alertas objetivos na consulta.',
+   action:'Confirmar prioridades, eventuais dependencias e previsoes com as pessoas envolvidas.'});
+ const includeGuidance=options.includeGuidance===true;
+ const guidanceText=includeGuidance?'DICAS DO MANAGER — APOIO AO ACOMPANHAMENTO\n'+
+   guidance.map((g,i)=>(i+1)+'. Observacao: '+g.evidence+'\n   Sugestao: '+g.action).join('\n\n')+
+   '\n\nAnalise limitada aos chamados selecionados e aos registros sincronizados. Ausencia de atualizacao nao significa ausencia de trabalho. Valide com a equipe antes de adotar medidas.':'';
+ const guidanceHtml=includeGuidance?
+   '<div style="padding:20px 26px;border-top:1px solid #dce5f2;background:#f4f8ff">'+
+   '<h2 style="font-size:14px;color:#173454;margin:0 0 8px">Dicas do Manager · Orientacoes para organizar o acompanhamento</h2>'+
+   '<p style="font-size:11px;line-height:1.6;color:#5b6d86;margin:0 0 12px">Sugestoes baseadas apenas nos chamados selecionados e na informacao sincronizada.</p>'+
+   guidance.map((g,i)=>'<div style="padding:10px 0;border-bottom:1px solid #dae5f2;font-size:12px;line-height:1.6">'+
+     '<strong style="color:#173454">Ponto '+(i+1)+'</strong><div><b>Observacao:</b> '+esc(g.evidence)+'</div>'+
+     '<div><b>Sugestao pratica:</b> '+esc(g.action)+'</div></div>').join('')+
+   '<p style="font-size:10px;color:#60738b;margin:12px 0 0">Orientacoes para apoio, nao avaliacao individual. Ausencia de atualizacao nao comprova ausencia de trabalho.</p></div>':'';
  const lines=normalized.map((t,i)=>(i+1)+'. Chamado #'+t.id+' — '+t.subject+'\n   Cliente: '+t.client+' | Setor: '+t.sector+' | Responsável: '+t.owner+'\n   Status: '+t.status+' | Última atualização: '+(t.last||'Não informada')+'\n   '+t.url);
- const text=message+'\n\nCHAMADOS PARA ACOMPANHAMENTO\n'+lines.join('\n\n')+'\n\nFonte: Central de Auditoria / Movidesk. Os status refletem a consulta atual.';
+ const text=message+'\n\nCHAMADOS PARA ACOMPANHAMENTO\n'+lines.join('\n\n')+\n (includeGuidance?'\n\n'+guidanceText:'')+'\n\nFonte: Central de Auditoria / Movidesk. Os status refletem a consulta atual.';
 
  // O mesmo HTML é usado na prévia e no envio efetivo. CSS inline para clientes de e-mail.
  const font='font-family:Arial,Helvetica,sans-serif';
@@ -72,6 +111,7 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;min-width:620px">'+
  '<thead style="background:#eaf2fa"><tr>'+header('Chamado')+header('Cliente / setor')+header('Assunto')+header('Responsável / status')+'</tr></thead>'+
  '<tbody>'+table+'</tbody></table></div>'+
+ guidanceHtml+
  '<div style="padding:18px 28px;background:#f6f9fc;border-top:1px solid #e2eaf3">'+
  '<p style="font-size:12px;line-height:1.6;color:#354e6a;margin:0 0 7px"><strong>Próximo encaminhamento solicitado:</strong> informar andamento, responsável e previsão realista de retorno quando aplicável.</p>'+
  '<p style="font-size:11px;line-height:1.6;color:#708198;margin:0">Informações obtidas na Central de Auditoria a partir dos chamados sincronizados do Movidesk. Os registros refletem a situação no momento da consulta.</p>'+
@@ -79,5 +119,5 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  '<p style="max-width:780px;margin:13px auto 0;text-align:center;font-size:10px;color:#7b8ea6">ARQUEM SISTEMAS · Gestão de Qualidade · Acompanhamento de demandas</p>'+
  '</body></html>';
 
- return {subject,text,html,tickets:normalized};
+ return {subject,text,html,tickets:normalized,guidance:includeGuidance?guidance:[]};
 }
