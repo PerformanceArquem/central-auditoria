@@ -1975,7 +1975,7 @@
                         <div class="tw"><table id="tForecastAuditTable">
                             <thead><tr>
                                 <th>Chamado</th><th>Assunto</th><th>Cliente</th><th>Setor</th><th>Status</th>
-                                <th>Previsto</th><th>Apontado</th><th>Diferença</th><th>Desvio</th><th>Origem</th><th>Diagnóstico</th>
+                                <th>Previsto</th><th>Apontado</th><th>Diferença</th><th>Desvio</th><th>Confiança</th><th>Origem</th><th>Diagnóstico</th>
                             </tr></thead>
                             <tbody id="tForecastAudit"></tbody>
                         </table></div>
@@ -2973,7 +2973,7 @@ let forecastAuditVisible=[];
 const forecastClosed=(status)=>/fechad|concluid|conclu[ií]d|resolvid|finalizad|encerrad/i.test(
   String(status||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
 );
-let forecastSnapshotRows=null,forecastSnapshotLoading=false;
+let forecastSnapshotRows=null,forecastSnapshotLoading=false,forecastSnapshotUpdatedAt=null,forecastSnapshotError='';
 async function loadForecastSnapshots(){
  if(forecastSnapshotLoading)return;
  forecastSnapshotLoading=true;
@@ -2986,9 +2986,13 @@ async function loadForecastSnapshots(){
   const result=await response.json().catch(()=>({}));
   if(!response.ok||result.ok!==true||!Array.isArray(result.items))throw Error(result.error||'Consulta indisponível');
   forecastSnapshotRows=result.items;
+  forecastSnapshotUpdatedAt=result.generatedAt||null;
+  forecastSnapshotError='';
  }catch(e){
   console.warn('Auditoria automática indisponível:',e.message||e);
+  forecastSnapshotError=String(e.message||e);
   forecastSnapshotRows=null;
+  forecastSnapshotUpdatedAt=null;
  }finally{
   forecastSnapshotLoading=false;
   renderForecastAudit();
@@ -3029,10 +3033,19 @@ function renderForecastAudit(){
   const critical=closed.filter(p=>p.priority==='Crítico para revisão');
   const totalHours=closed.reduce((sum,p)=>sum+p.gap,0);
   const q=projRequestedTicket();
+  const all=forecastSnapshotRows,sectorScope=$('faSector')?.value||'production';
+  const confidenceHigh=items.filter(p=>String(p.confidence).toLowerCase()==='alta').length;
+  const stamp=forecastSnapshotUpdatedAt?new Date(forecastSnapshotUpdatedAt):null;
+  const last=stamp&&Number.isFinite(stamp.getTime())?
+    stamp.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'sem confirmação';
   $('faSummary').textContent=
-    (forecastSnapshotRows===null?'Dados carregados no navegador (parciais). ':'Auditoria consolidada automaticamente no Supabase. ')+`${reviewed} chamado(s) com horas carregadas analisados · ${items.length} sinalizado(s) · ${closed.length} encerrado(s) · ${critical.length} crítico(s) · ${H(totalHours)} de diferença estimada nos encerrados.`+
+    (all===null?
+      'Fonte parcial: dados carregados neste navegador'+(forecastSnapshotError?' (consulta indisponível: '+forecastSnapshotError+')':'')+'. ':
+      'Base consolidada Supabase: '+all.length+' candidato(s), gerada em '+last+' (Brasília). ')+
+    `${items.length} exibido(s) nos filtros · ${confidenceHigh} com confiança alta · ${critical.length} prioritário(s) · ${H(totalHours)} de diferença estimada.`+
+    (sectorScope==='production'&&all&&all.length>items.length?' Para visualizar também os demais setores, escolha "Todos os setores".':'')+
     (q?` Pesquisa por #${q}.`:'')+
-    ' Diferença de previsão não é prova de ociosidade nem de horas faturáveis.';
+    ' Diferença estimada não comprova irregularidade; revisar escopo, apontamentos e aprovação.';
   $('tForecastAudit').innerHTML=items.slice(0,250).map(p=>
     `<tr>
       <td>${alarmCellTicket(p.id)}</td>
@@ -3042,11 +3055,12 @@ function renderForecastAudit(){
       <td data-v="${p.h}">${H(p.h)}</td>
       <td data-v="${p.gap}"><b>${H(p.gap)}</b></td>
       <td data-v="${p.percentage}"><span class="pill ${p.closed?'bad':'warn'}">${nf(p.percentage,1)}%</span></td>
+      <td><span class="pill ${p.confidence==='alta'?'ok':'warn'}">${esc(p.confidence||'não classificada')}</span></td>
       <td>${esc(p.src||'Não informada')}</td>
       <td><span class="pill ${p.priority==='Crítico para revisão'?'bad':'warn'}">${esc(p.priority)}</span>
         <span title="${esc(p.diagnosis)}" style="font-size:11px;color:var(--muted)">Revisar contexto</span></td>
     </tr>`).join('')||
-    '<tr><td colspan="11" style="color:var(--muted)">Nenhuma previsão com o desvio configurado foi encontrada nos chamados carregados. Verifique o status, as previsões e a sincronização dos apontamentos.</td></tr>';
+    '<tr><td colspan="12" style="color:var(--muted)">Nenhuma previsão com o desvio configurado foi encontrada nos chamados carregados. Verifique o status, as previsões e a sincronização dos apontamentos.</td></tr>';
 }
 function exportForecastAuditCsv(){
   const {items}=forecastAuditData();
@@ -3058,10 +3072,10 @@ function exportForecastAuditCsv(){
     return '"'+v.replace(/"/g,'""')+'"';
   };
   const lines=[
-    ['Chamado','Assunto','Cliente','Setor','Status','Previsto (h)','Apontado (h)','Diferença (h)','Desvio (%)','Origem da previsão','Prioridade','Diagnóstico'],
+    ['Chamado','Assunto','Cliente','Setor','Status','Previsto (h)','Apontado (h)','Diferença (h)','Desvio (%)','Confiança','Origem da previsão','Prioridade','Diagnóstico'],
     ...items.map(p=>[p.id,p.subject,p.client,p.sector,p.status,
       p.pl.toFixed(2),p.h.toFixed(2),p.gap.toFixed(2),p.percentage.toFixed(1),
-      p.src,p.priority,p.diagnosis])
+      p.confidence||'não classificada',p.src,p.priority,p.diagnosis])
   ];
   const blob=new Blob(['\uFEFF'+lines.map(row=>row.map(cell).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob),a=document.createElement('a');
@@ -3721,6 +3735,8 @@ function doSearch(t){
   if(t==='proj')findProjectTicket();
 }
 function clearSearch(t){$('q_'+t).value='';doSearch(t)}
+// Enquanto a aba está aberta, atualize os resultados sem intervenção manual.
+setInterval(()=>{if(ACT==='proj'&&!document.hidden)loadForecastSnapshots()},5*60*1000);
 const MODS={alerts:['Alertas e pendências','Monitoramento de chamados abertos, com ranking dos mais antigos em todos os setores.'],live:['Tempo real','Alterações de previsão, status e atualização dos chamados, detectadas a cada sincronização.'],cfg:['Configurações','Regras de cálculo e lista de clientes VIP.'],mgmt:['Visão geral','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos comparativos','Comparativo mensal e anual, evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
 
 /* ---------- robô: painel de leituras ---------- */
