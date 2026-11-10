@@ -1970,10 +1970,10 @@
                         </div>
                     </div>
                     <div class="card" id="forecastAuditCard">
-                        <h3>Auditoria de previsões superestimadas · Produção</h3>
+                        <h3>Auditoria de previsões · chamados resolvidos ou fechados</h3>
                         <p style="color:var(--muted);margin:0 0 12px">
                             Robô de regras: compara a previsão informada com <b>todos os apontamentos carregados</b> do chamado.
-                            Prioriza chamados encerrados; não trata diferença como irregularidade comprovada.
+                            Analisa exclusivamente chamados Fechados, Concluídos ou Resolvidos; a diferença não comprova irregularidade.
                             Previsões digitadas neste navegador têm prioridade sobre o campo Movidesk e a leitura do texto.
                         </p>
                         <div class="row noprint" style="margin-bottom:12px">
@@ -1985,16 +1985,11 @@
                             </div>
                             <div class="fg"><label>Setores</label>
                                 <select id="faSector" onchange="renderForecastAudit()">
-                                    <option value="production">Produção (prioridade)</option>
+                                    <option value="production">Produção</option>
                                     <option value="all">Todos os setores</option>
                                 </select>
                             </div>
-                            <div class="fg"><label>Situação</label>
-                                <select id="faScope" onchange="renderForecastAudit()">
-                                    <option value="closed">Somente encerrados (prioridade)</option>
-                                    <option value="all">Encerrados e abertos (abertos = provisórios)</option>
-                                </select>
-                            </div>
+                            <span class="subtle" style="align-self:center"><b>Situação:</b> somente Fechado, Concluído ou Resolvido</span>
                             <button class="s" type="button" onclick="exportForecastAuditCsv()">Exportar CSV para Excel</button>
                         </div>
                         <p id="faSummary" class="subtle" aria-live="polite">Calculando desvios das previsões...</p>
@@ -2979,7 +2974,6 @@ function forecastAuditData(){
   const c=R();
   const minHours=Math.max(1,Number($('faMinHours')?.value)||8);
   const minGap=Math.min(99,Math.max(1,Number($('faMinGap')?.value)||60));
-  const scope=$('faScope')?.value||'closed';
   const sectorScope=$('faSector')?.value||'production';
   const id=projRequestedTicket();
   const items=budgetData(c,'a');
@@ -2991,20 +2985,17 @@ function forecastAuditData(){
     if(!Number.isFinite(p.pl)||p.pl<minHours||!Number.isFinite(p.h)||p.h<=0)return false;
     if(p.h>=p.pl)return false;
     if((1-p.h/p.pl)*100<minGap)return false;
-    if(scope==='closed'&&!forecastClosed(p.status))return false;
+    if(!forecastClosed(p.status))return false;
     return true;
   }).map(p=>{
-    const gap=p.pl-p.h,percentage=(gap/p.pl)*100,closed=forecastClosed(p.status);
-    return {...p,gap,percentage,closed,
-      priority:closed&&percentage>=80&&gap>=24?'Crítico para revisão':
-        closed?'Revisar previsão':'Provisório: em andamento',
+    const gap=p.pl-p.h,percentage=(gap/p.pl)*100;
+    return {...p,gap,percentage,closed:true,
+      priority:percentage>=80&&gap>=24?'Crítico para revisão':'Revisar previsão',
       sector:String(p.r?.sector||p.r?.service_name||'Sem setor'),
-      diagnosis:closed?
-        'Validar escopo, versão da previsão e integridade dos apontamentos antes de classificar.' :
-        'Ainda aberto: diferença não representa execução final.'};
+      diagnosis:'Validar escopo, versão da previsão e integridade dos apontamentos antes de classificar.'};
   });
-  valid.sort((a,b)=>Number(b.closed)-Number(a.closed)||b.gap-a.gap||b.percentage-a.percentage);
-  return {items:valid,reviewed:items.length,minHours,minGap,scope};
+  valid.sort((a,b)=>b.gap-a.gap||b.percentage-a.percentage);
+  return {items:valid,reviewed:items.length,minHours,minGap};
 }
 function renderForecastAudit(){
   if(!$('tForecastAudit'))return;
