@@ -1703,10 +1703,11 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                           <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">
                             <button type="button" class="s" onclick="alarmEmailDraft()">Gerar texto padrão</button>
                             <button type="button" class="s" id="alarmEmailAiDraft" onclick="alarmEmailAiDraft()" style="border-color:#b8c7e9;background:#eef4ff;color:#1b4da0;font-weight:700">✦ Dicas do Manager</button>
+                            <label style="display:inline-flex;align-items:center;gap:7px;padding:9px 12px;background:#f2f6fd;border:1px solid #d5e2f5;border-radius:9px;font-size:12px;cursor:pointer"><input type="checkbox" id="alarmEmailIncludeGuidance" checked onchange="alarmEmailInvalidate()"> Incluir orientações práticas no rodapé do e-mail</label>
                             <button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
                             <button type="button" class="b" id="alarmEmailSend" onclick="alarmEmailSend()" disabled title="Disponível somente depois de visualizar e conferir a prévia">Confirmar e enviar</button><style>#alarmEmailSend:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}</style>
                           </div>
-                          <p class="subtle" style="margin:0 0 10px;color:#596c86">A Dicas do Manager prepara somente o texto inicial; o visual corporativo e os links dos chamados permanecem iguais. Revise a sugestão antes de enviar. Os dados dos chamados selecionados poderão ser processados pelo Gemini.</p>
+                          <p class="subtle" style="margin:0 0 10px;color:#596c86">O Dicas do Manager prepara a mensagem inicial e o sistema pode acrescentar orientações operacionais verificáveis no rodapé. Revise a sugestão antes de enviar. Os dados dos chamados selecionados poderão ser processados pelo Gemini.</p>
                           <p id="alarmEmailStatus" role="status" class="subtle">Selecione os chamados e gere a prévia para liberar o envio.</p>
                           <button type="button" class="s hide noprint" id="alarmEmailRemoveMissing" onclick="alarmRemoveMissingTickets()">Desmarcar os chamados não sincronizados</button>
                           <div id="alarmEmailPreviewArea" class="hide" style="border:1px solid #dce5f0;border-radius:9px;background:#fff;padding:14px;margin-top:10px">
@@ -2996,7 +2997,7 @@ let alarmEmailMissingIds=[];
 const alarmSelectionSignature=()=>{
  const ids=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
  return JSON.stringify({ids,recipient:alarmRecipientEmail(),
-   message:$('alarmEmailMessage')?.value||''});
+   message:$('alarmEmailMessage')?.value||'',includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked});
 };
 function alarmUpdateSelectedCount(){
  if($('alarmSelectedCount'))$('alarmSelectedCount').textContent=alarmSelected.size+' chamado(s) selecionado(s) · limite de 20';
@@ -3089,7 +3090,7 @@ async function alarmEmailCall(action,confirmed=false){
  const recipient=alarmRecipientEmail();
  if(!/^[^@\s]+@arquem\.com\.br$/.test(recipient))throw Error('Informe um destinatário @arquem.com.br.');
  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
-  body:{action,ticketIds:ids,recipient,message:$('alarmEmailMessage').value,confirmed,requestId:alarmEmailRequestId}
+  body:{action,ticketIds:ids,recipient,message:$('alarmEmailMessage').value,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,requestId:alarmEmailRequestId}
  });
  if(error){
   let detail=error.message||'Falha no serviço de e-mail.';
@@ -3128,7 +3129,7 @@ async function alarmEmailPreview(){
   alarmEmailApproved=alarmSelectionSignature();
   alarmEmailRequestId=crypto.randomUUID();
   button.disabled=false;
-  $('alarmEmailStatus').textContent='Prévia pronta. Confira destinatário, números e texto antes de confirmar o envio.';
+  $('alarmEmailStatus').textContent='Prévia pronta. Confira destinatário, chamados, texto e orientações antes de confirmar o envio.';
  }catch(e){
   alarmEmailApproved='';
   alarmEmailMissingIds=Array.isArray(e.missingIds)?e.missingIds:[];
