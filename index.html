@@ -1124,7 +1124,7 @@
       <button id="sqLoad" class="b" type="button">↻ Atualizar indicadores</button>
     </div>
     <p id="sqStatus" class="subtle" role="status">Selecione o período e atualize.</p>
-    <p class="subtle">TMA e TME configurados são <b>estimativas gerenciais</b>. As notas são lançadas manualmente, não inferidas dos chamados.</p>
+    <p class="subtle">TMA e TME de referência são <b>estimativas gerenciais</b>. As notas vêm das pesquisas do Movidesk e dos registros manuais.</p>
   </div>
   <div id="sqKpis" class="kpis" style="margin:12px 0"></div>
   <div class="card"><h3>Tempos de atendimento por canal</h3>
@@ -1133,7 +1133,8 @@
   </div>
   <div class="card"><h3>Qualidade das avaliações</h3>
     <p class="subtle"><b>Notas importadas automaticamente do Movidesk</b>, considerando a data da resposta da pesquisa. O campo disponível é NPS (escala 0–10). Para o <b>CSAT definido pela gestão</b>, calculamos notas 9 e 10 ÷ todas as respostas válidas do canal × 100. A nota 8 não conta como positiva e a nota 0 entra como negativa. Avaliações manuais continuam disponíveis sem duplicar ticket/canal com resposta da API.</p><div id="sqCsatOverall" class="card" style="margin:10px 0" role="status">CSAT: aguardando avaliações reais.</div>
-    <div class="tw"><table id="sqRatingSummary"><thead><tr><th>Canal</th><th>Avaliações</th><th>Notas 0–7</th><th>Notas 8–10</th><th>Notas 9–10</th><th>CSAT (%)</th><th>Via API</th><th>Manuais</th></tr></thead><tbody></tbody></table></div>
+    <div id="sqSuperadores" class="card" style="margin:10px 0" role="status">Superadores: aguardando avaliações.</div>
+    <div class="tw"><table id="sqRatingSummary"><thead><tr><th>Canal</th><th>Avaliações</th><th>Notas 0–7</th><th>Notas 8–10</th><th>Notas 9–10</th><th>CSAT (%)</th><th>Superadores (%)</th><th>Via API</th><th>Manuais</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card"><h3>Registrar avaliação de atendimento</h3>
     <p class="subtle">Apenas administradores autenticados podem salvar. Notas ficam no Supabase e são compartilhadas entre dispositivos.</p>
@@ -4372,6 +4373,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
  const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const hhmm=minutes=>{const n=Math.round(Number(minutes)||0);return Math.floor(n/60)+'h'+String(n%60).padStart(2,'0')};
  const sec=seconds=>seconds==null?'—':(Math.floor(seconds/60)+'min '+String(Math.round(seconds%60)).padStart(2,'0')+'s');
+ const percent=value=>value==null?'—':Number(value).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
+ const reference=value=>value==null?'Sem referência':escape(value)+' min (estimado)';
  const localeDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  let initialized=false,loading=false,latest=null;
  function msg(t){el('sqStatus').textContent=t;}
@@ -4442,12 +4445,14 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    const cards=[['Horas apontadas',hhmm(m.minutes)],['Apontamentos',m.appointments||0],['Chamados distintos',m.tickets||0],['Dias úteis (referência)',d.businessDays],['Colaboradores',m.collaborators||0],['Avaliações',q.reduce((s,x)=>s+x.total,0)]];
    el('sqKpis').innerHTML=cards.map(([name,value])=>'<div class="card"><div class="subtle">'+escape(name)+'</div><h2 style="margin:7px 0">'+escape(value)+'</h2></div>').join('');
    table('sqTimes',[
-    '<tr><td>Chat</td><td>'+escape(cfg.chat?.tmaMinutes)+' min (estimado)</td><td>'+escape(cfg.chat?.tmeMinutes)+' min (estimado)</td><td>'+sec(mc.tmaSeconds)+' ('+escape(mc.tmaSamples||0)+' tickets)</td><td>'+sec(mc.tmeSeconds)+' ('+escape(mc.tmeSamples||0)+' tickets)</td></tr>',
-    '<tr><td>Voz</td><td>'+escape(cfg.voz?.tmaMinutes)+' min (estimado)</td><td>'+escape(cfg.voz?.tmeMinutes)+' min (estimado)</td><td>Não disponível</td><td>Não disponível</td></tr>'
+    '<tr><td>Chat</td><td>'+reference(cfg.chat?.tmaMinutes)+'</td><td>'+reference(cfg.chat?.tmeMinutes)+'</td><td>'+sec(mc.tmaSeconds)+' ('+escape(mc.tmaSamples||0)+' tickets)</td><td>'+sec(mc.tmeSeconds)+' ('+escape(mc.tmeSamples||0)+' tickets)</td></tr>',
+    '<tr><td>Voz</td><td>'+reference(cfg.voz?.tmaMinutes)+'</td><td>'+reference(cfg.voz?.tmeMinutes)+'</td><td>Não disponível</td><td>Não disponível</td></tr>'
    ]);
    const csat=d.csat||{};
    el('sqCsatOverall').innerHTML='<strong>CSAT geral do Suporte (voz e chat): '+(csat.percent==null?'Sem avaliações':escape(csat.percent)+'%')+'</strong><p class="subtle" style="margin:6px 0 0">'+escape(csat.positive||0)+' notas 9–10 de '+escape(csat.total||0)+' respostas válidas. API Movidesk: '+escape(csat.movidesk||0)+' · Manual: '+escape(csat.manual||0)+' · Canal não identificado: '+escape(csat.unclassified||0)+' (fora do CSAT).</p>';
-   table('sqRatingSummary',q.map(r=>'<tr><td>'+escape(r.channel==='voz'?'Voz':'Chat')+'</td><td>'+escape(r.total)+'</td><td>'+escape(r.ruim)+'</td><td>'+escape(r.excelente)+'</td><td>'+escape(r.csatPositive||0)+'</td><td>'+(r.csatPercent==null?'—':escape(r.csatPercent)+'%')+'</td><td>'+escape(r.movidesk||0)+'</td><td>'+escape(r.manual||0)+'</td></tr>'));
+   const superadores=d.superadores||{};
+   el('sqSuperadores').innerHTML='<strong>Superadores do Suporte: '+(superadores.percent==null?'Sem pontuação no período':percent(superadores.percent))+'</strong><p class="subtle" style="margin:6px 0 0">Soma das notas 8, 9 e 10 ÷ soma de todas as notas válidas. '+escape(superadores.points??0)+' de '+escape(superadores.totalPoints??0)+' pontos, considerando todos os canais.</p>';
+   table('sqRatingSummary',q.map(r=>'<tr><td>'+escape(r.channel==='voz'?'Voz':r.channel==='chat'?'Chat':'Outros')+'</td><td>'+escape(r.total)+'</td><td>'+escape(r.ruim)+'</td><td>'+escape(r.excelente)+'</td><td>'+escape(r.csatPositive||0)+'</td><td>'+(r.channel==='outros'?'—':percent(r.csatPercent))+'</td><td>'+percent(r.superadores?.percent)+'</td><td>'+escape(r.movidesk||0)+'</td><td>'+escape(r.manual||0)+'</td></tr>'));
    const people=d.collaborators||[];
    table('sqPeopleTable',people.map(p=>'<tr><td>'+escape(p.person)+'</td><td>'+hhmm(p.minutes)+'</td><td>'+escape(p.appointments)+'</td><td>'+escape(p.tickets)+'</td><td>'+escape(p.ratings)+'</td><td>'+escape(p.excellent)+'</td></tr>'));
    el('sqPeople').innerHTML=people.map(p=>'<option value="'+escape(p.person)+'"></option>').join('');
