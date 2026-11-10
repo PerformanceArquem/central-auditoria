@@ -2358,13 +2358,24 @@ function printManagerReport(){
  w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Resumo Gerencial</title><style>body{font:14px/1.6 Arial,sans-serif;padding:34px;color:#192842}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body><h2>Resumo Gerencial de Chamados</h2><pre>'+safe+'</pre></body></html>');
  w.document.close();w.focus();w.print();
 }
+// Reinterpreta eventos antigos criados pelo navegador antes da correção de fuso.
+// Preserve o texto se ele não estiver no padrão histórico conhecido.
+function liveEventDetail(e){
+ if(e.sourceLastUpdate)return 'Atualização no Movidesk: '+liveTimeBR(e.sourceLastUpdate)+' (Brasília)';
+ const detail=String(e.detail||'');
+ if(e.kind!=='CHAMADO ATUALIZADO')return detail;
+ const m=/^Última atualização: (\d{2})\/(\d{2})\/(\d{4}),?\s+(\d{2}):(\d{2}):(\d{2})$/.exec(detail);
+ if(!m)return detail;
+ const iso=m[3]+'-'+m[2]+'-'+m[1]+'T'+m[4]+':'+m[5]+':'+m[6]+'Z';
+ return 'Atualização no Movidesk: '+liveTimeBR(iso)+' (Brasília; registro anterior à correção)';
+}
 function showLiveEvents(){
  const el=$('liveChanges'),panel=$('livePanelList'),f=$('liveFilter')?.value||'all',q=norm($('liveSearch')?.value||'');
  const due=liveEvents.filter(e=>e.kind==='PREVISÃO / PRAZO ALTERADO').length,st=liveEvents.filter(e=>e.kind==='STATUS ALTERADO').length,gen=liveEvents.filter(e=>e.kind==='CHAMADO ATUALIZADO').length;
  if($('liveCount'))$('liveCount').textContent=liveEvents.length;if($('liveDue'))$('liveDue').textContent=due;if($('liveStatus'))$('liveStatus').textContent=st;if($('liveGeneral'))$('liveGeneral').textContent=gen;
  const list=liveEvents.filter(e=>(f==='all'||e.kind===f)&&(!q||norm([e.id,e.subject,e.detail].join(' ')).includes(q)));
- const html=list.length?list.slice(0,100).map(e=>`<div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:13px;border:1px solid #e5eaf2;border-radius:10px;margin:8px 0;background:#fff"><div style="min-width:0"><b style="color:#14213d">#${esc(e.id)}</b> · <b>${esc(e.subject)}</b><div style="margin-top:5px"><span class="pill">${esc(e.kind)}</span> ${esc(e.detail)}</div></div><small style="color:#778;white-space:nowrap">${'Detectado pela Central: '+liveTimeBR(e.at)+' (Brasília)'}</small></div>`).join(''):'<div style="padding:22px;text-align:center;color:var(--muted)">Nenhum ticket corresponde ao filtro. As novas alterações aparecerão aqui após a sincronização.</div>';
- if(el)el.innerHTML=liveEvents.length?liveEvents.slice(0,20).map(e=>`<div style="padding:7px 0;border-bottom:1px solid #e1e8f3"><b>#${esc(e.id)}</b> · ${esc(e.subject)}<br><span style="color:#2457a7">${esc(e.kind)}</span> ${esc(e.detail)}<small style="display:block;color:#778">${'Detectado pela Central: '+liveTimeBR(e.at)+' (Brasília)'}</small></div>`).join(''):'Nenhuma alteração detectada ainda.';
+ const html=list.length?list.slice(0,100).map(e=>`<div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:13px;border:1px solid #e5eaf2;border-radius:10px;margin:8px 0;background:#fff"><div style="min-width:0"><b style="color:#14213d">#${esc(e.id)}</b> · <b>${esc(e.subject)}</b><div style="margin-top:5px"><span class="pill">${esc(e.kind)}</span> ${esc(liveEventDetail(e))}</div></div><small style="color:#778;white-space:nowrap">${'Detectado pela Central: '+liveTimeBR(e.at)+' (Brasília)'}</small></div>`).join(''):'<div style="padding:22px;text-align:center;color:var(--muted)">Nenhum ticket corresponde ao filtro. As novas alterações aparecerão aqui após a sincronização.</div>';
+ if(el)el.innerHTML=liveEvents.length?liveEvents.slice(0,20).map(e=>`<div style="padding:7px 0;border-bottom:1px solid #e1e8f3"><b>#${esc(e.id)}</b> · ${esc(e.subject)}<br><span style="color:#2457a7">${esc(e.kind)}</span> ${esc(liveEventDetail(e))}<small style="display:block;color:#778">${'Detectado pela Central: '+liveTimeBR(e.at)+' (Brasília)'}</small></div>`).join(''):'Nenhuma alteração detectada ainda.';
  if(panel)panel.innerHTML=html;
  renderLiveDaily();
 }
