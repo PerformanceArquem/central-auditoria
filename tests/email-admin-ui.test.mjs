@@ -64,3 +64,13 @@ test('cobrança informa chamados não sincronizados e bloqueia envio antes da pr
  assert.match(source,/function alarmRemoveMissingTickets\(\)/);
  assert.match(source,/alarmEmailApproved=alarmSelectionSignature\(\)/);
 });
+
+test('prévia da cobrança usa o mesmo HTML enviado, com isolamento e texto opcional',()=>{
+ const app=extract('tm-application-source');
+ assert.doesNotThrow(()=>new Function(app));
+ assert.match(html,/id="alarmEmailPreviewFrame"[^>]*sandbox="allow-popups allow-popups-to-escape-sandbox"/);
+ assert.match(html,/Ver versão em texto do e-mail/);
+ assert.match(app,/alarmEmailPreviewFrame'\)\.srcdoc=data\.html/);
+ assert.match(app,/if\(typeof data\.html!=='string'/);
+ assert.match(app,/frame\.removeAttribute\('srcdoc'\)/);
+});
