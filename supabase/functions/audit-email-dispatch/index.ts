@@ -1558,8 +1558,27 @@ async function dashboardReportAction(payload:R){
  return json(result);
 }
 // Apenas administradores. A seleção enviada pelo browser é revalidada no banco.
-async function ticketChargeAction(payload:R):Promise<Response>{
+// Histórico durável: acesso apenas via esta Edge Function (admin JWT), não expor tabela diretamente.
+async function ticketChargeHistory():Promise<Response>{
+ const records=await db('audit_ticket_charge_history?select=id,recipient,subject,ticket_ids,ticket_snapshot,status,created_at,sent_at,updated_at,sent_by,error_summary&order=created_at.desc&limit=250') as R[];
+ return json({ok:true,items:Array.isArray(records)?records:[],
+  note:'Enviado = aceite confirmado pelo serviço de e-mail; não implica leitura pelo destinatário.'});
+}
+async function ticketChargeAdminUser(req:Request):Promise<string>{
+ const token=/^Bearer\s+(.+)$/i.exec(req.headers.get('authorization')||'')?.[1];
+ if(!token)throw Error('Sessão administrativa ausente.');
+ const response=await fetch(E('SUPABASE_URL').replace(/\/$/,'')+'/auth/v1/user',{
+  headers:{apikey:E('SUPABASE_ANON_KEY'),Authorization:'Bearer '+token},
+  signal:AbortSignal.timeout(12000)
+ });
+ if(!response.ok)throw Error('Não foi possível confirmar a identidade do remetente.');
+ const user=await response.json();
+ if(!/^[0-9a-f-]{36}$/i.test(String(user?.id||'')))throw Error('Usuário autenticado inválido.');
+ return String(user.id);
+}
+async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  const action=String(payload.action||'');
+ if(action==='ticket_charge_history')return ticketChargeHistory();
  const ids=Array.isArray(payload.ticketIds)?payload.ticketIds.map((x:unknown)=>String(x)):[];
  if(ids.length<1||ids.length>20||ids.some(x=>!/^\d{1,12}$/.test(x))||
     new Set(ids).size!==ids.length)
@@ -1569,7 +1588,15 @@ async function ticketChargeAction(payload:R):Promise<Response>{
   return json({ok:false,error:'Destinatário deve ser um e-mail corporativo @arquem.com.br.'},400);
  const message=String(payload.message||'').trim();
  if(message.length>8500)return json({ok:false,error:'O texto é muito longo.'},400);
- const records=await db('audit_direct_tickets?select=ticket_id,payload,created_at_source,last_update_source&ticket_id=in.('+ids.join(',')+')&limit=20');
+ const requestId=String(payload.requestId||'');
+ if(action==='ticket_charge_send'){
+  if(payload.confirmed!==true)return json({ok:false,error:'Confirmação explícita necessária antes do envio.'},400);
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId))
+   return json({ok:false,error:'Identificador de envio inválido. Gere nova prévia.'},400);
+  const existing=await db('audit_ticket_charge_history?select=id,status,recipient,created_at&request_id=eq.'+requestId+'&limit=1') as R[];
+  if(existing.length)return json({ok:false,error:'Esta solicitação já foi registrada ('+existing[0].status+'). Consulte o histórico antes de reenviar.',requestId},409);
+ }
+ const records=await db('audit_direct_tickets?select=ticket_id,payload,created_at_source,last_update_source&ticket_id=in.('+ids.join(',')+')&limit=20') as R[];
  if(!Array.isArray(records)||records.length!==ids.length)
   return json({ok:false,error:'Alguns chamados não estão sincronizados na Central. Atualize e selecione novamente.'},409);
  const lookup=new Map(records.map((x:R)=>[String(x.ticket_id),x]));
@@ -1579,11 +1606,50 @@ async function ticketChargeAction(payload:R):Promise<Response>{
   return json({ok:true,preview:true,recipient,subject:draft.subject,text:draft.text,
     html:draft.html,ticketCount:draft.tickets.length,ids});
  if(action!=='ticket_charge_send')return json({ok:false,error:'Ação não autorizada.'},400);
- if(payload.confirmed!==true)return json({ok:false,error:'Confirmação explícita necessária antes do envio.'},400);
- // Envio único por clique, sem reenvio automático. Falha ambígua deve ser verificada no Gmail.
- await sendMail(recipient,draft.subject,draft.text,draft.html);
- return json({ok:true,sent:true,recipient,subject:draft.subject,ticketCount:draft.tickets.length,
-  info:'Solicitação aceita pelo serviço Gmail. Em caso de dúvida, confirme a entrega antes de reenviar.'});
+ const sender=await ticketChargeAdminUser(req);
+ const snapshot=draft.tickets.map(x=>({id:x.id,subject:x.subject,client:x.client,sector:x.sector,
+  owner:x.owner,status:x.status,url:x.url}));
+ // A reserva é persistida ANTES da chamada externa. Unique request_id impede duplo envio por retry.
+ const record={
+  request_id:requestId,recipient,subject:draft.subject,ticket_ids:ids,
+  ticket_snapshot:snapshot,status:'sending',sent_by:sender
+ };
+ let stored:R[];
+ try{
+  stored=await db('audit_ticket_charge_history?select=id,request_id,status',{
+   method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(record)
+  }) as R[];
+ }catch{
+  return json({ok:false,error:'Não foi possível reservar o registro do envio. Nenhum e-mail foi solicitado. Consulte o histórico e tente uma nova prévia.'},503);
+ }
+ if(!Array.isArray(stored)||stored.length!==1)
+  return json({ok:false,error:'Registro não confirmado; envio bloqueado.'},503);
+ const rowId=String(stored[0].id);
+ try{
+  await sendMail(recipient,draft.subject,draft.text,draft.html);
+ }catch(e){
+  const detail=String(err(e)||'Falha de envio').slice(0,180);
+  // Pode ter havido aceite antes de uma queda na conexão: classificar como indeterminado.
+  try{
+   await db('audit_ticket_charge_history?id=eq.'+rowId,{
+    method:'PATCH',body:JSON.stringify({status:'uncertain',updated_at:new Date().toISOString(),
+     error_summary:detail})
+   });
+  }catch(logError){console.error('Falha ao marcar envio incerto:',err(logError))}
+  return json({ok:false,error:'Envio não confirmado. Verifique o Gmail antes de repetir. O histórico registra esta tentativa como indeterminada.',requestId},502);
+ }
+ try{
+  await db('audit_ticket_charge_history?id=eq.'+rowId,{
+   method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),
+    updated_at:new Date().toISOString(),error_summary:null})
+  });
+ }catch(logError){
+  console.error('Gmail aceitou mas falhou atualização do histórico:',err(logError));
+  return json({ok:false,error:'Serviço Gmail confirmou aceite, mas não foi possível finalizar o histórico. Não reenvie: confirme o registro com a gestão.',requestId},502);
+ }
+ return json({ok:true,sent:true,recorded:true,requestId,recipient,subject:draft.subject,
+  ticketCount:draft.tickets.length,ids,sentAt:new Date().toISOString(),
+  info:'Aceite confirmado pelo serviço Gmail. A entrega/leitura na caixa postal não foi verificada.'});
 }
 async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'Apenas POST' }, 405);
@@ -1591,9 +1657,9 @@ async function handleRequest(req: Request): Promise<Response> {
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if (action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
+    if (action === 'ticket_charge_history' || action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
-      return (action === 'ticket_charge_preview' || action === 'ticket_charge_send') ? await ticketChargeAction(payload)
+      return (action === 'ticket_charge_history' || action === 'ticket_charge_preview' || action === 'ticket_charge_send') ? await ticketChargeAction(payload,req)
         : action === 'dashboard_report' ? await dashboardReportAction(payload)
         : action === 'director_preview' ? await directorPreview(payload)
         : action === 'manual_official' ? await manualOfficial(payload)

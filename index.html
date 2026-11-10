@@ -1636,6 +1636,25 @@
                           </div>
                         </div>
                         <div class="tw"><table><thead><tr><th class="noprint">Sel.</th><th>Chamado</th><th>Setor</th><th>Cliente</th><th>Assunto</th><th>Responsável</th><th>Status</th><th>Aberto em</th><th>Última atualização</th><th>Dias parado</th><th>Dias aberto</th><th>Abrir</th></tr></thead><tbody id="tAlarmOldest"></tbody></table></div>
+                        <div class="card" id="alarmEmailHistoryCard" style="margin-top:16px;border:1px solid #d4e3f2">
+                          <div class="row" style="align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                            <div>
+                              <h3>Relatório de e-mails de cobrança</h3>
+                              <p class="subtle">Histórico centralizado dos envios manuais. “Enviado” indica aceite pelo serviço Gmail, não leitura ou entrega comprovada.</p>
+                            </div>
+                            <div class="row noprint" style="gap:8px;flex-wrap:wrap">
+                              <button type="button" class="s" onclick="alarmEmailHistoryLoad()">↻ Atualizar histórico</button>
+                              <button type="button" class="s" onclick="alarmEmailHistoryExport()">Exportar Excel (CSV)</button>
+                            </div>
+                          </div>
+                          <p id="alarmEmailHistoryStatus" role="status" class="subtle">Carregando histórico de e-mails...</p>
+                          <div class="row noprint" style="gap:10px;margin:12px 0;flex-wrap:wrap">
+                            <div class="fg"><label for="alarmEmailHistoryFilter">Situação</label><select id="alarmEmailHistoryFilter" onchange="alarmEmailHistoryRender()"><option value="all">Todos os registros</option><option value="sent">Enviados (confirmados)</option><option value="uncertain">Verificação necessária</option></select></div>
+                            <div class="fg" style="flex:1;min-width:180px"><label for="alarmEmailHistorySearch">Buscar chamado ou destinatário</label><input id="alarmEmailHistorySearch" oninput="alarmEmailHistoryRender()" placeholder="Número do chamado ou e-mail"></div>
+                          </div>
+                          <div id="alarmEmailHistorySummary" class="subtle"></div>
+                          <div class="tw"><table><thead><tr><th>Data e hora (Brasília)</th><th>Destinatário</th><th>Situação</th><th>Chamados incluídos</th><th>Quantidade</th><th>Protocolo</th></tr></thead><tbody id="alarmEmailHistoryRows"><tr><td colspan="6">Carregando...</td></tr></tbody></table></div>
+                        </div>
                     </div>
                 </div>
                 <div id="t-mgmt" class="hide">
@@ -2800,6 +2819,87 @@ async function alarmLoadRegisteredRecipients(){
  }
 }
 
+// Histórico centralizado de cobranças; não confundir aceite do gateway com entrega/leitura.
+let alarmEmailHistory=[],alarmEmailHistoryLoading=false,alarmEmailHistoryLoaded=false,alarmEmailRequestId='';
+const alarmEmailTime=(stamp)=>{
+ const d=new Date(stamp||0);
+ return Number.isFinite(d.getTime())?
+  d.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):
+  'Não informado';
+};
+const alarmEmailHistoryStatus=status=>status==='sent'?'E-mail enviado':
+ status==='uncertain'?'Verificar envio':'Aguardando confirmação';
+function alarmEmailHistoryRender(){
+ const body=$('alarmEmailHistoryRows'),info=$('alarmEmailHistorySummary');
+ if(!body)return;
+ const filter=$('alarmEmailHistoryFilter')?.value||'all';
+ const term=String($('alarmEmailHistorySearch')?.value||'').trim().toLowerCase();
+ const rows=alarmEmailHistory.filter(r=>(filter==='all'||(filter==='uncertain'?r.status!=='sent':r.status===filter))&&
+  (!term||String(r.recipient||'').toLowerCase().includes(term)||
+    (r.ticket_ids||[]).some(x=>String(x).includes(term))));
+ const sent=alarmEmailHistory.filter(r=>r.status==='sent');
+ const unique=new Set(sent.flatMap(r=>r.ticket_ids||[]));
+ info.textContent=sent.length+' e-mail(s) com aceite confirmado · '+unique.size+
+  ' chamado(s) distintos cobrados · '+alarmEmailHistory.filter(r=>r.status!=='sent').length+
+  ' envio(s) que exigem conferência. Histórico iniciado com esta funcionalidade; limite de 250 registros recentes.';
+ body.innerHTML=rows.map(r=>{
+  const ids=Array.isArray(r.ticket_ids)?r.ticket_ids:[];
+  const links=ids.map(id=>'<a target="_blank" rel="noopener noreferrer" href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(String(id))+'">#'+esc(id)+'</a>').join(' · ');
+  const sentDate=r.sent_at||r.created_at;
+  const state=r.status==='sent'?'ok':r.status==='uncertain'?'alert-warn':'alert-warn';
+  return '<tr><td>'+esc(alarmEmailTime(sentDate))+'</td><td>'+esc(r.recipient)+'</td>'+
+    '<td><span class="pill '+state+'">'+esc(alarmEmailHistoryStatus(r.status))+'</span></td>'+
+    '<td>'+links+'</td><td>'+ids.length+'</td><td title="'+esc(r.id||'')+'">'+esc(String(r.request_id||r.id||'').slice(0,8))+'</td></tr>';
+ }).join('')||'<tr><td colspan="6">Nenhum registro corresponde ao filtro.</td></tr>';
+}
+function alarmEmailHistoryExport(){
+ const filter=$('alarmEmailHistoryFilter')?.value||'all';
+ const term=String($('alarmEmailHistorySearch')?.value||'').trim().toLowerCase();
+ const rows=alarmEmailHistory.filter(r=>(filter==='all'||(filter==='uncertain'?r.status!=='sent':r.status===filter))&&
+  (!term||String(r.recipient||'').toLowerCase().includes(term)||(r.ticket_ids||[]).some(x=>String(x).includes(term))));
+ if(!rows.length){alert('Não há registros para exportar.');return}
+ const csvCell=value=>{
+  let v=String(value??'').replace(/\r?\n/g,' ');
+  if(/^[\s]*[=+\-@]/.test(v))v="'"+v;
+  return '"'+v.replace(/"/g,'""')+'"';
+ };
+ const cols=[['Data Brasília','Destinatário','Situação','Chamados','Quantidade','Assunto','Protocolo','Registrado em UTC']];
+ const lines=rows.map(r=>[alarmEmailTime(r.sent_at||r.created_at),r.recipient,alarmEmailHistoryStatus(r.status),
+  (r.ticket_ids||[]).map(id=>'#'+id).join(' | '),(r.ticket_ids||[]).length,r.subject,r.request_id||'',r.created_at]);
+ const csv='\uFEFF'+cols.concat(lines).map(row=>row.map(csvCell).join(';')).join('\r\n');
+ const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='historico_emails_cobranca_'+new Date().toISOString().slice(0,10)+'.csv';
+ document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
+}
+async function alarmEmailHistoryLoad(){
+ const status=$('alarmEmailHistoryStatus');
+ if(alarmEmailHistoryLoading||!status)return;
+ alarmEmailHistoryLoading=true;status.textContent='Consultando histórico de cobranças no Supabase...';
+ try{
+  const client=window.tmEmailAdminClient;
+  if(!client)throw Error('Faça login para visualizar o histórico.');
+  const {data,error}=await client.functions.invoke('audit-email-dispatch',{body:{action:'ticket_charge_history'}});
+  if(error){
+   let message=error.message||'Consulta indisponível';
+   try{const e=await error.context?.json?.();if(e?.error)message=e.error}catch(_){}
+   throw Error(message);
+  }
+  if(!data?.ok||!Array.isArray(data.items))throw Error(data?.error||'Resposta inválida');
+  alarmEmailHistory=data.items;alarmEmailHistoryLoaded=true;
+  status.textContent='Histórico atualizado às '+alarmEmailTime(new Date().toISOString())+'.';
+  alarmEmailHistoryRender();renderAlerts();
+ }catch(e){
+  status.textContent='Não foi possível carregar o histórico: '+(e.message||e);
+ }finally{alarmEmailHistoryLoading=false}
+}
+function alarmEmailTicketBadge(id){
+ const relevant=alarmEmailHistory.filter(r=>(r.ticket_ids||[]).map(String).includes(String(id)));
+ const sent=relevant.find(r=>r.status==='sent');
+ if(sent)return ' <span class="pill ok" title="'+esc('Aceite pelo Gmail em '+alarmEmailTime(sent.sent_at||sent.created_at)+' · Para: '+sent.recipient)+'">✉ E-mail enviado</span>';
+ if(relevant.length)return ' <span class="pill alert-warn" title="Envio não confirmado: consulte o relatório de e-mails.">✉ Verificar envio</span>';
+ return '';
+}
+
 const alarmSelected=new Set();
 let alarmEmailApproved='',alarmEmailSending=false;
 const alarmSelectionSignature=()=>{
@@ -2811,7 +2911,7 @@ function alarmUpdateSelectedCount(){
  if($('alarmSelectedCount'))$('alarmSelectedCount').textContent=alarmSelected.size+' chamado(s) selecionado(s) · limite de 20';
 }
 function alarmEmailInvalidate(){
- alarmEmailApproved='';
+ alarmEmailApproved='';alarmEmailRequestId='';
  const button=$('alarmEmailSend');if(button)button.disabled=true;
  $('alarmEmailPreviewArea')?.classList.add('hide');
 }
@@ -2859,7 +2959,7 @@ async function alarmEmailCall(action,confirmed=false){
  const recipient=alarmRecipientEmail();
  if(!/^[^@\s]+@arquem\.com\.br$/.test(recipient))throw Error('Informe um destinatário @arquem.com.br.');
  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
-  body:{action,ticketIds:ids,recipient,message:$('alarmEmailMessage').value,confirmed}
+  body:{action,ticketIds:ids,recipient,message:$('alarmEmailMessage').value,confirmed,requestId:alarmEmailRequestId}
  });
  if(error){
   let detail=error.message||'Falha no serviço de e-mail.';
@@ -2879,6 +2979,7 @@ async function alarmEmailPreview(){
   $('alarmEmailPreviewText').textContent=data.text;
   $('alarmEmailPreviewArea').classList.remove('hide');
   alarmEmailApproved=alarmSelectionSignature();
+  alarmEmailRequestId=crypto.randomUUID();
   button.disabled=false;
   $('alarmEmailStatus').textContent='Prévia pronta. Confira destinatário, números e texto antes de confirmar o envio.';
  }catch(e){alarmEmailApproved='';$('alarmEmailStatus').textContent='Erro na prévia: '+(e.message||e)}
@@ -2894,10 +2995,12 @@ async function alarmEmailSend(){
  try{
   const result=await alarmEmailCall('ticket_charge_send',true);
   $('alarmEmailStatus').textContent='Solicitação enviada ao serviço Gmail para '+result.recipient+'. Confirme a entrega antes de qualquer reenvio.';
-  alarmEmailApproved='';alarmSelected.clear();renderAlerts();
+  alarmEmailApproved='';alarmEmailRequestId='';alarmSelected.clear();
+  await alarmEmailHistoryLoad();renderAlerts();
  }catch(e){
   $('alarmEmailStatus').textContent='Envio não confirmado: '+(e.message||e)+'. Consulte o Gmail antes de tentar novamente.';
-  alarmEmailApproved='';
+  alarmEmailApproved='';alarmEmailRequestId='';
+  await alarmEmailHistoryLoad();
  }finally{alarmEmailSending=false;$('alarmEmailSend').disabled=true}
 }
 function renderAlerts(){
@@ -2923,7 +3026,7 @@ function renderAlerts(){
   $('alertKpis').innerHTML=counts.map(([k,v,d])=>`<div class="card"><small>${esc(k)}</small><div><b>${esc(v)}</b></div><span class="subtle">${esc(d)}</span></div>`).join('');
   const groups=[...teams.values()].sort((a,b)=>(b.worst?.idle||0)-(a.worst?.idle||0));
   $('tAlarmSector').innerHTML=groups.length?groups.map(g=>`<tr><td><b>${esc(g.team)}</b></td><td>${g.total}</td><td><b>${g.alert}</b></td><td>${alarmCellTicket(g.worst.id)}</td><td>${alarmBadge(g.worst.idle,limit)}</td><td>${alarmDateLabel(g.worst.last)}${g.worst.estimated?' <small title="Sem lastUpdate; usada data de abertura">¹</small>':''}</td></tr>`).join(''):'<tr><td colspan="6">Ainda não há chamados com informações suficientes para esse ranking.</td></tr>';
-  $('tAlarmOldest').innerHTML=display.length?display.map(t=>`<tr><td class="noprint"><input aria-label="Selecionar chamado ${esc(t.id)}" type="checkbox" data-alarm-ticket="${esc(t.id)}" onchange="alarmSelectionToggle(this)" ${alarmSelected.has(t.id)?'checked':''}></td><td><b>${alarmCellTicket(t.id)}</b></td><td>${esc(t.team)}</td><td>${esc(t.client)}</td><td title="${esc(t.subject)}">${esc(t.subject)}</td><td>${esc(t.owner)}</td><td><span class="pill">${esc(t.status)}</span></td><td>${alarmDateLabel(t.created)}</td><td>${alarmDateLabel(t.last)}${t.estimated?' <span title="Sem última atualização informada; usada a abertura">¹</span>':''}</td><td>${alarmBadge(t.idle,limit)}</td><td>${t.open==null?'—':t.open+' d'}</td><td>${ticketUrl(t.id)?`<a href="${esc(ticketUrl(t.id))}" target="_blank" rel="noopener noreferrer">Abrir ↗</a>`:'Sem portal'}</td></tr>`).join(''):'<tr><td colspan="12">Nenhum chamado corresponde aos critérios ou não há dados carregados.</td></tr>';
+  $('tAlarmOldest').innerHTML=display.length?display.map(t=>`<tr><td class="noprint"><input aria-label="Selecionar chamado ${esc(t.id)}" type="checkbox" data-alarm-ticket="${esc(t.id)}" onchange="alarmSelectionToggle(this)" ${alarmSelected.has(t.id)?'checked':''}></td><td><b>${alarmCellTicket(t.id)}</b>${alarmEmailTicketBadge(t.id)}</td><td>${esc(t.team)}</td><td>${esc(t.client)}</td><td title="${esc(t.subject)}">${esc(t.subject)}</td><td>${esc(t.owner)}</td><td><span class="pill">${esc(t.status)}</span></td><td>${alarmDateLabel(t.created)}</td><td>${alarmDateLabel(t.last)}${t.estimated?' <span title="Sem última atualização informada; usada a abertura">¹</span>':''}</td><td>${alarmBadge(t.idle,limit)}</td><td>${t.open==null?'—':t.open+' d'}</td><td>${ticketUrl(t.id)?`<a href="${esc(ticketUrl(t.id))}" target="_blank" rel="noopener noreferrer">Abrir ↗</a>`:'Sem portal'}</td></tr>`).join(''):'<tr><td colspan="12">Nenhum chamado corresponde aos critérios ou não há dados carregados.</td></tr>';
   alarmUpdateSelectedCount();
   $('alarmRowsCount').textContent=`Exibindo ${display.length} de ${list.length} chamados abertos identificados.${display.length<list.length?' A exportação Excel inclui todos.':''} O total não depende das horas apontadas.`;
   const missingLabel=hiddenUnknown?` · ${hiddenUnknown} chamado(s) sem status ou data suficiente para classificar`:'';
@@ -3020,7 +3123,7 @@ function showTab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   $('t-cfg').classList.toggle('hide',t!=='cfg');
   ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','support-quality','production-audit','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts')renderAlerts(); if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
+  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='client-impact');
   if(raw.length&&!['load','cfg','diag','alerts','report-preview','support-quality','production-audit','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
