@@ -25,3 +25,16 @@ test('os scripts essenciais de interface compilam',()=>{
   assert.doesNotThrow(()=>new Function(extract(id)),id);
  }
 });
+
+test('cobrança permite selecionar os e-mails corporativos cadastrados',()=>{
+ const source=extract('tm-application-source');
+ assert.doesNotThrow(()=>new Function(source));
+ assert.match(html,/id="alarmEmailRecipient"[^>]*onchange="alarmRecipientChanged\(\)"/);
+ assert.match(html,/id="alarmEmailRecipientOther"/);
+ assert.match(source,/audit_email_recipients/);
+ assert.match(source,/eq\('active',true\)/);
+ assert.match(source,/audit_is_email_admin/);
+ assert.match(source,/alarmLoadRegisteredRecipients\(\)/);
+ assert.match(source,/const recipient=alarmRecipientEmail\(\)/);
+ assert.match(source,/alarmEmailInvalidate\(\)/);
+});
