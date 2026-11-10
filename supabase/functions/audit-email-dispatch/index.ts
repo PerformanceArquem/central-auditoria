@@ -1264,6 +1264,46 @@ function annualHighlights(task:ScheduledReport, report:ReportTotals, previous:Re
   };
 }
 
+// Relatorio preliminar independente da conclusao da conciliacao recente.
+// Nunca substitui o envio oficial: usa chave separada e banner inequivoco.
+async function dispatchPreliminary(t:ScheduledReport,hol:Set<string>,clientsAndTickets:()=>Promise<[R[],R[]]>) {
+  if (E('REPORT_PRELIMINARY_SEND_ENABLED')!=='true' || !['daily','weekly'].includes(t.kind))
+    return {recipientId:String(t.r.id),kind:t.kind,skipped:'Aguardando conciliação do período'};
+  const id=String(t.r.id);
+  const key='preliminary:'+id+':'+t.kind+':'+t.from+':'+t.to;
+  const existing=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=dispatch_key,status&limit=1');
+  if(existing.length)return {recipientId:id,kind:t.kind,skipped:'Preliminar ja registrado'};
+  const [allTickets,clients]=await clientsAndTickets();
+  const appts=await source(t.from,t.to);
+  const report=buildReport(t.r,appts,t.from,t.to,t.kind,hol,false,clients);
+  const alerts=ticketAlerts(t.r,allTickets);
+  const quality=await supportRatingCache()(t.r,t.from,t.to);
+  const overview=await directionOverviewCache()(t.r,t.from,t.to,alerts.activeTickets,t.kind);
+  const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
+    method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
+    body:JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:t.kind,
+      period_from:t.from,period_to:t.to,status:'processing'})
+  });
+  if(!inserted?.length)return {recipientId:id,kind:t.kind,skipped:'Preliminar reservado por outra execução'};
+  try{
+    const notice='RELATORIO PRELIMINAR - CONCILIACAO MOVIDESK EM ANDAMENTO. Os totais ainda podem mudar. Este documento NAO substitui o fechamento oficial.\\n\\n';
+    await sendMail(String(t.r.email),'[PRELIMINAR - DADOS PARCIAIS] Central de Auditoria - '+REPORT_LABEL[t.kind]+' - '+t.from,
+      notice+report.text+overview.text+quality.text+'\\n\\n'+alerts.text,
+      reportEmailHtml(t.r,report,t.from,t.to,t.kind,true,true,alerts.html,report.detailsHtml+quality.html,overview.html),
+      reportPacket(t.r,report,alerts,t.from,t.to,t.kind,true,true,clients));
+    await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+      method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
+    });
+    return {recipientId:id,kind:t.kind,status:'sent_preliminary',appointments:report.metrics.appointments};
+  }catch(ex){
+    // Uma mensagem pode ter sido aceita pelo provedor antes da falha no checkpoint.
+    // Bloquear nova tentativa automatica evita envio duplicado sem reconciliar o provedor.
+    await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+      method:'PATCH',body:JSON.stringify({status:'failed',error_message:err(ex).slice(0,300)})
+    }).catch(()=>{});
+    return {recipientId:id,kind:t.kind,status:'failed',error:err(ex)};
+  }
+}
 async function dispatch() {
   if (E('REPORT_EMAIL_SEND_ENABLED') !== 'true') return json({ ok: true, skipped: 'Envio automatico desativado' });
   const today = dateBR();
@@ -1306,7 +1346,8 @@ async function dispatch() {
       if (exists.length) { results.push({ recipientId: id, kind: t.kind, skipped: 'Ja registrado; revisar status antes de retentar' }); continue; }
       const appts = await readPeriod(t);
       if (!appts) {
-        results.push({recipientId:id,kind:t.kind,skipped:'Aguardando conciliação do período'});
+        referenceData ??= Promise.all([ticketSource(),clientSource()]);
+        results.push(await dispatchPreliminary(t,hol,()=>referenceData!));
         continue;
       }
       referenceData ??= Promise.all([ticketSource(),clientSource()]);
