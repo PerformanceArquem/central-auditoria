@@ -1702,7 +1702,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                           <div class="fg" style="margin-top:10px"><label for="alarmEmailMessage">Texto de abertura (editável)</label><textarea id="alarmEmailMessage" rows="7" style="width:100%" oninput="alarmEmailInvalidate()"></textarea></div>
                           <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">
                             <button type="button" class="s" onclick="alarmEmailDraft()">Gerar texto padrão</button>
-                            <button type="button" class="s" id="alarmEmailAiDraft" onclick="alarmEmailAiDraft()" style="border-color:#b8c7e9;background:#eef4ff;color:#1b4da0;font-weight:700">✦ Dicas do Manager</button>
+                            <button type="button" class="s" id="alarmEmailAiDraft" onclick="alarmEmailAiDraft()" disabled title="Verificando disponibilidade do Gemini..." style="border-color:#b8c7e9;background:#eef4ff;color:#1b4da0;font-weight:700">✦ Dicas do Manager</button>
                             <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="alarmEmailExternalAiConsent"> Autorizo enviar dados resumidos dos chamados ao Gemini para gerar sugestões</label>
                             <label style="display:inline-flex;align-items:center;gap:7px;padding:9px 12px;background:#f2f6fd;border:1px solid #d5e2f5;border-radius:9px;font-size:12px;cursor:pointer"><input type="checkbox" id="alarmEmailIncludeGuidance" checked onchange="alarmEmailInvalidate()"> Incluir orientações práticas no rodapé do e-mail</label>
                             <button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
@@ -3039,6 +3039,7 @@ function alarmOpenComposer(){
  if(!alarmSelected.size){alert('Selecione pelo menos um chamado no ranking.');return}
  $('alarmEmailPanel').classList.remove('hide');
  alarmLoadRegisteredRecipients();
+ alarmEmailAiAvailability();
  if(!$('alarmEmailMessage').value.trim())alarmEmailDraft();
  $('alarmEmailPanel').scrollIntoView({behavior:'smooth',block:'center'});
 }
@@ -3052,6 +3053,24 @@ function alarmEmailDraft(){
  };
  $('alarmEmailMessage').value=templates[tone]||templates.cordial;
  alarmEmailInvalidate();
+}
+async function alarmEmailAiAvailability(){
+ const btn=$('alarmEmailAiDraft');
+ if(!btn)return;
+ btn.disabled=true;btn.title='Consultando disponibilidade do Gemini...';
+ try{
+  const client=window.tmEmailAdminClient;
+  if(!client)throw Error('Acesso administrativo necessario.');
+  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
+    body:{action:'ticket_charge_capabilities'}
+  });
+  if(error||!data?.ok)throw Error('Nao foi possivel confirmar a disponibilidade da IA.');
+  btn.disabled=data.aiAvailable!==true;
+  btn.title=data.aiAvailable===true?'Requer autorizacao explicita para enviar dados resumidos ao Gemini.':
+    'Gemini ainda nao habilitado pelo administrador. Use a previa para orientacoes operacionais sem IA externa.';
+ }catch(e){
+  btn.disabled=true;btn.title='IA indisponivel: '+String(e.message||e);
+ }
 }
 // Gera somente rascunho, nunca libera o botao de enviar.
 async function alarmEmailAiDraft(){
