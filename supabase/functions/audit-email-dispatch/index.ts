@@ -1573,7 +1573,7 @@ async function ticketChargeAction(payload:R):Promise<Response>{
  if(!Array.isArray(records)||records.length!==ids.length)
   return json({ok:false,error:'Alguns chamados não estão sincronizados na Central. Atualize e selecione novamente.'},409);
  const lookup=new Map(records.map((x:R)=>[String(x.ticket_id),x]));
- const ordered=ids.map(id=>lookup.get(id));
+ const ordered=ids.map(id=>{const record=lookup.get(id);if(!record)throw Error('Chamado não encontrado: #'+id);return record;});
  const draft=composeTicketCharge(ordered,recipient,message);
  if(action==='ticket_charge_preview')
   return json({ok:true,preview:true,recipient,subject:draft.subject,text:draft.text,
