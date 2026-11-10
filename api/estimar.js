@@ -32,7 +32,8 @@ function estimateByRules(ticket, jornada) {
   const hours=b*(amount[3].startsWith('dia')?jornada:1);
   if(!Number.isFinite(hours)||hours<=0||hours>10000)continue;
   const evidence=tx.slice(match.index,Math.min(tx.length,match.index+match[0].length+amount.index+amount[0].length));
-  best={id:ticket.id,horas:Math.round(hours*100)/100,confianca:amount[2]?'media':'alta',
+  const conditional=/\b(?:inicial|preliminar|provisori|sem resposta|sem confirmacao|depende|se fosse|caso seja)\b/.test(plain.slice(Math.max(0,match.index-120),Math.min(plain.length,match.index+130)));
+  best={id:ticket.id,horas:Math.round(hours*100)/100,confianca:conditional?'baixa':amount[2]?'media':'alta',
     trecho:evidence.slice(0,240),origem:'regras'};
  }
  return best;
