@@ -64,7 +64,8 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
      '<div><b>Sugestao pratica:</b> '+esc(g.action)+'</div></div>').join('')+
    '<p style="font-size:10px;color:#60738b;margin:12px 0 0">Orientacoes para apoio, nao avaliacao individual. Ausencia de atualizacao nao comprova ausencia de trabalho.</p></div>':'';
  const lines=normalized.map((t,i)=>(i+1)+'. Chamado #'+t.id+' — '+t.subject+'\n   Cliente: '+t.client+' | Setor: '+t.sector+' | Responsável: '+t.owner+'\n   Status: '+t.status+' | Última atualização: '+(t.last||'Não informada')+'\n   '+t.url);
- const text=message+'\n\nCHAMADOS PARA ACOMPANHAMENTO\n'+lines.join('\n\n')+\n (includeGuidance?'\n\n'+guidanceText:'')+'\n\nFonte: Central de Auditoria / Movidesk. Os status refletem a consulta atual.';
+ const text=message+'\n\nCHAMADOS PARA ACOMPANHAMENTO\n'+lines.join('\n\n')+
+ (includeGuidance?'\n\n'+guidanceText:'')+'\n\nFonte: Central de Auditoria / Movidesk. Os status refletem a consulta atual.';
 
  // O mesmo HTML é usado na prévia e no envio efetivo. CSS inline para clientes de e-mail.
  const font='font-family:Arial,Helvetica,sans-serif';
