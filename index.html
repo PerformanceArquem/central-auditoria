@@ -1701,10 +1701,12 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                           </div>
                           <div class="fg" style="margin-top:10px"><label for="alarmEmailMessage">Texto de abertura (editável)</label><textarea id="alarmEmailMessage" rows="7" style="width:100%" oninput="alarmEmailInvalidate()"></textarea></div>
                           <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">
-                            <button type="button" class="s" onclick="alarmEmailDraft()">Gerar texto</button>
+                            <button type="button" class="s" onclick="alarmEmailDraft()">Gerar texto padrão</button>
+                            <button type="button" class="s" id="alarmEmailAiDraft" onclick="alarmEmailAiDraft()" style="border-color:#b8c7e9;background:#eef4ff;color:#1b4da0;font-weight:700">✦ Gerar com IA</button>
                             <button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
                             <button type="button" class="b" id="alarmEmailSend" onclick="alarmEmailSend()" disabled title="Disponível somente depois de visualizar e conferir a prévia">Confirmar e enviar</button><style>#alarmEmailSend:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}</style>
                           </div>
+                          <p class="subtle" style="margin:0 0 10px;color:#596c86">A IA prepara somente o texto inicial; o visual corporativo e os links dos chamados permanecem iguais. Revise a sugestão antes de enviar. Os dados dos chamados selecionados poderão ser processados pelo Gemini.</p>
                           <p id="alarmEmailStatus" role="status" class="subtle">Selecione os chamados e gere a prévia para liberar o envio.</p>
                           <button type="button" class="s hide noprint" id="alarmEmailRemoveMissing" onclick="alarmRemoveMissingTickets()">Desmarcar os chamados não sincronizados</button>
                           <div id="alarmEmailPreviewArea" class="hide" style="border:1px solid #dce5f0;border-radius:9px;background:#fff;padding:14px;margin-top:10px">
@@ -3042,6 +3044,43 @@ function alarmEmailDraft(){
  $('alarmEmailMessage').value=templates[tone]||templates.cordial;
  alarmEmailInvalidate();
 }
+// Gera somente rascunho, nunca libera o botao de enviar.
+async function alarmEmailAiDraft(){
+ const btn=$('alarmEmailAiDraft');
+ if(alarmEmailSending||btn?.disabled)return;
+ if(!alarmSelected.size){$('alarmEmailStatus').textContent='Selecione um ou mais chamados antes de gerar com IA.';return}
+ const client=window.tmEmailAdminClient;
+ if(!client){$('alarmEmailStatus').textContent='Acesso autenticado necessario para utilizar a IA.';return}
+ const ids=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
+ const tone=$('alarmEmailTone').value;
+ const initialMessage=$('alarmEmailMessage').value;
+ if(btn)btn.disabled=true;
+ $('alarmEmailStatus').textContent='Gerando sugestao a partir dos chamados sincronizados. Nenhum e-mail sera enviado...';
+ try{
+  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
+   body:{action:'ticket_charge_ai_draft',ticketIds:ids,tone}
+  });
+  if(error){
+   let detail=error.message||'A IA nao respondeu.';
+   try{const e=await error.context?.json?.();if(e?.error)detail=e.error}catch(_){}
+   throw Error(detail);
+  }
+  if(!data?.ok||typeof data.message!=='string'||!data.message.trim())
+   throw Error(data?.error||'A IA nao retornou rascunho valido.');
+  const currentIds=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
+  if(JSON.stringify(ids)!==JSON.stringify(currentIds)||
+     tone!==$('alarmEmailTone').value||initialMessage!==$('alarmEmailMessage').value){
+   $('alarmEmailStatus').textContent='Selecao, modelo ou texto alterado durante a geracao; nada foi substituido. Gere novamente.';
+   return;
+  }
+  $('alarmEmailMessage').value=data.message.trim();
+  alarmEmailInvalidate();
+  $('alarmEmailStatus').textContent='✦ Sugestao da IA pronta. Revise as informacoes e clique em Visualizar e-mail antes do envio.';
+ }catch(e){
+  $('alarmEmailStatus').textContent='IA indisponivel: '+(e?.message||String(e))+'. O texto foi mantido; Gerar texto padrao continua disponivel.';
+ }finally{if(btn)btn.disabled=false}
+}
+
 async function alarmEmailCall(action,confirmed=false){
  const client=window.tmEmailAdminClient;
  if(!client)throw Error('Acesso administrativo necessário. Entre novamente na Central.');
