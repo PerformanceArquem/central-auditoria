@@ -1296,7 +1296,7 @@
                 </div>
                 
 <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
-  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Cadastre setores, colaboradores e Gestão. Envio programado às 9h do próximo dia útil; segunda inclui resumo semanal.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
+  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
   <div id="emailAdminPanel" class="hide">
     <p id="emailAdminStatus" role="status" class="coverage-note">Aguardando abertura.</p>
     <form id="emailAdminForm"><input id="emailRecordId" type="hidden">
@@ -1307,7 +1307,13 @@
         <div class="fg" id="emailSectorBox"><label>Setores do Movidesk (selecione um ou mais)</label><details id="emailSectorPicker" style="border:1px solid #ccd7e8;border-radius:9px;padding:9px 12px"><summary id="emailSectorSummary" style="cursor:pointer;font-size:13px">Carregando setores...</summary><div id="emailSectorChoices" style="max-height:230px;overflow-y:auto;padding:10px 0;display:grid;gap:7px"></div></details><small class="subtle">Na Gestão, deixe todas as opções desmarcadas para incluir todos os setores. Marque um ou mais para limitar o relatório.</small></div>
         <div class="fg" id="emailCollabBox"><label for="emailCollaboratorSelect">Colaborador do Movidesk (opcional)</label><select id="emailCollaboratorSelect"><option value="">Selecione um setor primeiro</option></select><small id="emailMovideskDirectoryHint" class="subtle">Buscando nomes e setores no Movidesk...</small></div>
       </div>
-      <div class="row" style="margin:12px 0"><label><input id="emailDaily" type="checkbox" checked> Diário às 9h</label><label><input id="emailWeekly" type="checkbox" checked> Semanal às 9h</label><label><input id="emailActive" type="checkbox" checked> Ativo</label></div>
+      <div class="row" style="margin:12px 0">
+        <label><input id="emailDaily" type="checkbox" checked> Diário</label>
+        <label><input id="emailWeekly" type="checkbox" checked> Semanal</label>
+        <label id="emailMonthlyBox" class="hide"><input id="emailMonthly" type="checkbox"> Mensal (dia 1º)</label>
+        <label id="emailAnnualBox" class="hide"><input id="emailAnnual" type="checkbox"> Anual (1º de janeiro)</label>
+        <label><input id="emailActive" type="checkbox" checked> Ativo</label>
+      </div>
       <div class="row"><button type="submit" class="b">Salvar destinatário</button><button type="button" class="s" id="emailNew">Novo cadastro</button><button type="button" class="s" id="emailReload">Atualizar lista</button><button type="button" class="s" id="emailRefreshDirectory">↻ Buscar setores e colaboradores</button></div>
     </form>
     <div class="card" id="emailSyncCoverageCard" style="margin-top:16px;border-left:4px solid var(--blue)">
@@ -1335,7 +1341,7 @@
       <p id="emailOfficialStatus" role="status" class="subtle" style="margin:12px 0 0">O envio é realizado apenas após confirmação.</p>
       <div id="emailOfficialPreviewResult" class="hide" style="border:1px solid #d6e1f0;background:#fff;border-radius:10px;padding:14px;margin-top:12px"></div>
     </div>
-    <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Diário</th><th>Semanal</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="8">Abra o módulo para carregar.</td></tr></tbody></table></div>
+    <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Frequências</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="7">Abra o módulo para carregar.</td></tr></tbody></table></div>
     <h3 style="margin-top:22px">Histórico dos últimos envios</h3><div class="tw"><table><thead><tr><th>Data</th><th>Destinatário</th><th>Tipo</th><th>Período</th><th>Status</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
     <p class="subtle" style="margin-top:12px">O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
   </div>
@@ -4054,7 +4060,18 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   let client=null, records=[], loaded=false, loading=false;
   const say=t=>{if($('emailAdminStatus'))$('emailAdminStatus').textContent=t};
   const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.remove('hide');$('emailCollabBox').classList.toggle('hide',isManagement);if(isManagement)$('emailCollaboratorSelect').value='';updateEmailSectorSummary();};
+  const directionForm=()=>$('emailScope').value==='management'&&
+    $('emailRecordId').value==='1b8168c6-bec0-4f6d-a3f9-feaec63ed147'&&
+    $('emailAddress').value.trim().toLowerCase()==='canestraro@arquem.com.br';
+  const frequencies=()=>{
+    const management=$('emailScope').value==='management',direction=directionForm();
+    $('emailMonthlyBox').classList.toggle('hide',!management);
+    $('emailAnnualBox').classList.toggle('hide',!direction);
+    $('emailDaily').disabled=direction;
+    if(direction)$('emailDaily').checked=false;
+  };
+  const scope=()=>{const isManagement=$('emailScope').value==='management';$('emailSectorBox').classList.remove('hide');$('emailCollabBox').classList.toggle('hide',isManagement);if(isManagement)$('emailCollaboratorSelect').value='';frequencies();updateEmailSectorSummary();};
+  $('emailAddress').addEventListener('input',frequencies);
   function reset(){ $('emailAdminForm').reset();$('emailRecordId').value='';$('emailCollaboratorSelect').value='';selectedEmailSectors.clear();refreshSectorOptions([]);$('emailDaily').checked=true;$('emailWeekly').checked=true;$('emailActive').checked=true;scope() }
   // Diretorio de setores e colaboradores: somente via Edge Function autenticada.
   // O navegador nao le a tabela de apontamentos diretamente (RLS).
@@ -4177,7 +4194,11 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         eligible.forEach(x=>manualSelect.add(new Option((x.collaborator_name||x.name)+' — '+x.email+' ('+(x.sector||'Setor')+')',String(x.id))));
         if(eligible.some(x=>String(x.id)===old))manualSelect.value=old;
       }
-      $('emailRecipients').innerHTML=records.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?(x.sectors?.length?'Gestão · '+esc(x.sectors.join(', ')):'Gestão · Todos'):esc(Array.isArray(x.sectors)&&x.sectors.length?x.sectors.join(', '):x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${x.daily_enabled?'Sim':'Não'}</td><td>${x.weekly_enabled?'Sim':'Não'}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
+      $('emailRecipients').innerHTML=records.map(x=>{
+        const cadence=[[x.daily_enabled,'Diário'],[x.weekly_enabled,'Semanal'],[x.monthly_enabled,'Mensal'],[x.annual_enabled,'Anual']]
+          .filter(([enabled])=>enabled).map(([,label])=>label).join(' · ');
+        return `<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?(x.sectors?.length?'Gestão · '+esc(x.sectors.join(', ')):'Gestão · Todos'):esc(Array.isArray(x.sectors)&&x.sectors.length?x.sectors.join(', '):x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${esc(cadence||'—')}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`;
+      }).join('')||'<tr><td colspan="7">Nenhum destinatário cadastrado.</td></tr>';
       const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
       $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
       loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
@@ -4266,7 +4287,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     $('emailRecordId').value=x.id;$('emailName').value=x.name;$('emailAddress').value=x.email;
     $('emailScope').value=x.scope||'sector';scope();refreshSectorOptions(Array.isArray(x.sectors)&&x.sectors.length?x.sectors:(x.scope==='management'?[]:(x.sector?[x.sector]:[])));
     refreshCollaboratorOptions(x.collaborator_name||'');$('emailDaily').checked=x.daily_enabled;
-    $('emailWeekly').checked=x.weekly_enabled;$('emailActive').checked=x.active;
+    $('emailWeekly').checked=x.weekly_enabled;$('emailMonthly').checked=x.monthly_enabled===true;
+    $('emailAnnual').checked=x.annual_enabled===true;$('emailActive').checked=x.active;frequencies();
     $('emailAdminCard').scrollIntoView({behavior:'smooth',block:'start'});
   });
   $('emailAdminForm').addEventListener('submit',async e=>{
@@ -4274,7 +4296,11 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     try{
       await verify();
       const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:(emailSelectedSectors()[0]||null),sectors:emailSelectedSectors(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaboratorSelect').value.trim()||null),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
-      if(!data.daily_enabled&&!data.weekly_enabled)throw Error('Marque ao menos uma frequência.');
+      data.monthly_enabled=data.scope==='management'&&$('emailMonthly').checked;
+      data.annual_enabled=directionForm()&&$('emailAnnual').checked;
+      if(directionForm())data.daily_enabled=false;
+      if(!data.daily_enabled&&!data.weekly_enabled&&!data.monthly_enabled&&!data.annual_enabled)throw Error('Marque ao menos uma frequência.');
+      if((data.monthly_enabled||data.annual_enabled)&&!data.sectors.length)throw Error('Selecione os setores do fechamento.');
       if(data.scope==='sector'&&!data.sectors.length)throw Error('Selecione pelo menos um setor.');
       if(!data.sectors.every(s=>movideskGroups.has(s)))throw Error('Selecione apenas setores válidos do Movidesk.');
       say('Salvando cadastro...');const id=$('emailRecordId').value;

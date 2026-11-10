@@ -4,9 +4,15 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'direction-ticket-trends-20261110';
+const RELEASE_ID = 'report-calendar-20261110';
 const DIRECTION_RECIPIENT_ID = '1b8168c6-bec0-4f6d-a3f9-feaec63ed147';
 const DIRECTION_EMAIL = 'canestraro@arquem.com.br';
+const FIRST_MONTHLY_RUN = '2026-12-01';
+type ReportKind = 'daily' | 'weekly' | 'monthly' | 'annual';
+type ScheduledReport = { r:R; kind:ReportKind; from:string; to:string; includeDecember?:boolean };
+const REPORT_LABEL:Record<ReportKind,string> = {daily:'Diário',weekly:'Semanal',monthly:'Mensal',annual:'Anual'};
+const directionRecipient = (rec:R) =>
+  rec.id===DIRECTION_RECIPIENT_ID && norm(rec.email)===DIRECTION_EMAIL && rec.scope==='management';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -91,10 +97,10 @@ async function requireProductionReady() {
   if (s.last_error) throw new Error('Erro registrado no checkpoint: envio bloqueado');
   return s;
 }
-async function source(from: string, to: string) {
+async function source(from: string, to: string, limit = 25000) {
   // Datas de atividade, não datas de abertura dos tickets.
   const appts = await list('audit_direct_appointments',
-    `?select=appointment_key,ticket_id,collaborator_name,sector,activity,appointment_date,duration_minutes&appointment_date=gte.${from}&appointment_date=lte.${to}&order=appointment_date.asc`);
+    `?select=appointment_key,ticket_id,collaborator_name,sector,activity,appointment_date,duration_minutes&appointment_date=gte.${from}&appointment_date=lte.${to}&order=appointment_date.asc,appointment_key.asc`,limit);
   if (appts.some(a => !Number.isFinite(Number(a.duration_minutes)) || Number(a.duration_minutes) < 0))
     throw new Error('Duracao negativa ou invalida encontrada: validar base antes do envio');
   return appts;
@@ -318,7 +324,7 @@ function ticketAlerts(rec:R,records:R[]) {
     (mode==='sla'?'SLA: '+(a.sla?displayDate(a.sla):'—'):'Sem ação há '+a.ageDays+' dias')+
     ' | '+a.status+' | '+a.owner+' | '+a.sector+' | '+a.subject+
     '\n'+a.url;
-  const limited=20;
+  const limited=8;
   const lines=['','━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     'PANORAMA DE CHAMADOS EM ABERTO (SITUAÇÃO ATUAL)',
     'Base: chamados já importados do Movidesk. Dados podem estar incompletos.',
@@ -339,7 +345,7 @@ function ticketAlerts(rec:R,records:R[]) {
     '',
     'CRITÉRIOS: SLA vencido exige data de solução anterior à data de hoje e SLA não pausado.',
     'Sem andamento = última ação registrada há pelo menos 7 dias; requer análise humana.',
-    'Um mesmo chamado pode aparecer nas duas categorias. A lista mostra os 20 primeiros de cada.',
+    'Um chamado pode aparecer nas duas categorias. O e-mail mostra até '+limited+' por categoria.',
     'Os alertas refletem a situação atual, mesmo se o relatório de horas for de uma data passada.'];
   const htmlRow=(a:TicketAlert,mode:'sla'|'idle')=>
     '<tr><td style="padding:10px 8px;border-bottom:1px solid #e8edf5;font-size:12px;vertical-align:top">'+
@@ -382,10 +388,9 @@ function ticketAlerts(rec:R,records:R[]) {
 
 function directionOverviewCache() {
   let history: Promise<R[] | null> | undefined;
-  return async (rec:R, from:string, to:string, open:TicketAlert[]) => {
+  return async (rec:R, from:string, to:string, open:TicketAlert[], kind:ReportKind = 'weekly') => {
     const empty = { text:'', html:'', metrics:null };
-    if (rec.id !== DIRECTION_RECIPIENT_ID || norm(rec.email) !== DIRECTION_EMAIL || rec.scope !== 'management')
-      return empty;
+    if (!directionRecipient(rec)) return empty;
     const configured = Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors : [rec.sector];
     const allowed = new Set(configured.map(norm).filter(Boolean));
     if (!allowed.size) return empty;
@@ -395,11 +400,11 @@ function directionOverviewCache() {
       console.error('Comparativo da Direção indisponível:', err(error));
       return null;
     });
-    return directionTicketOverview(await history, open, allowed, from, to);
+    return directionTicketOverview(await history, open, allowed, from, to, kind);
   };
 }
 
-function directionTicketOverview(history:R[]|null, open:TicketAlert[], allowed:Set<string>, from:string, to:string) {
+function directionTicketOverview(history:R[]|null, open:TicketAlert[], allowed:Set<string>, from:string, to:string, kind:ReportKind = 'weekly') {
   type Counts = { opened:number; closed:number };
   type SectorCounts = Counts & { name:string; open:number; updateQueue:number };
   const newCounts = ():Counts => ({opened:0,closed:0});
@@ -490,11 +495,15 @@ function directionTicketOverview(history:R[]|null, open:TicketAlert[], allowed:S
   const sectors = [...bySector.values()].filter(x=>x.open||x.opened||x.closed).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
   const summary = `No período de ${displayDate(from)} a ${displayDate(to)}: ${period.opened} abertos e ${period.closed} encerrados.`;
   const note = 'Contagens da base sincronizada do Movidesk, em horário de Brasília. Abertos pela data de criação e encerrados pela data de encerramento registrada. O mês e a semana mais recentes vão até o fim do período deste relatório. A fila de atualização da Produção faz parte dos chamados em aberto.';
-  const sections = [
-    { title:'Comparativo mensal · histórico importado', rows:monthly },
-    { title:'Comparativo semanal · últimas 8 semanas', rows:weekly },
-    { title:'Comparativo diário · últimos 7 dias', rows:daily }
-  ];
+  const sections = kind==='annual'
+    ? [{title:'Meses do ano fechado',rows:monthly.filter(x=>x.label.endsWith('/'+to.slice(0,4)))}]
+    : kind==='monthly'
+    ? [{title:'Comparativo mensal · histórico importado',rows:monthly}]
+    : [
+      { title:'Comparativo mensal · últimos 3 meses', rows:monthly.slice(0,3) },
+      { title:'Comparativo semanal · últimas 8 semanas', rows:weekly },
+      { title:'Comparativo diário · últimos 7 dias', rows:daily }
+    ];
   const textRows = sections.flatMap(s=>['',s.title,'Período | Abertos | Encerrados',
     ...s.rows.map(x=>`${x.label} | ${x.opened} | ${x.closed}`)]);
   const table = (columns:string[],rows:(string|number)[][]) => {
@@ -531,7 +540,7 @@ function workdays(from: string, to: string, ignored: Set<string>) {
 
 const emailEsc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]||ch));
 const displayDate=(d:string)=>/^\d{4}-\d{2}-\d{2}$/.test(d)?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):d;
-function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:string,partial:boolean,manual:boolean,alertsHtml='',detailsHtml='',executiveHtml=''){
+function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:ReportKind,partial:boolean,manual:boolean,alertsHtml='',detailsHtml='',executiveHtml=''){
  const m=report.metrics;
  const targetPerDay=Number(rec.daily_target_minutes??480);
  const minPercent=Number(rec.minimum_percent??80);
@@ -540,11 +549,11 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metri
  const missing=m.appointments===0;
  const person=safe(rec.collaborator_name)||'Equipe';
  const sector=(Array.isArray(rec.sectors)&&rec.sectors.length?rec.sectors.map(safe).join(' · '):(safe(rec.sector)||(rec.scope==='management'?'Todos os setores':'')))||'Gestão';
- const k=kind==='weekly'?'SEMANAL':'DIÁRIO';
+ const k=REPORT_LABEL[kind];
  const badge=manual?'TESTE MANUAL':partial?'DADOS PARCIAIS':'RELATÓRIO DE APONTAMENTOS';
  const esc=emailEsc;
  const tile=(label:string,value:string)=>'<td width="50%" valign="top" style="padding:8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f6fc;border:1px solid #e0e7f2;border-radius:10px"><tr><td style="padding:15px 16px"><div style="color:#65748b;font-size:12px;font-weight:600">'+esc(label)+'</div><div style="color:#102b51;font-size:23px;font-weight:750;margin-top:6px">'+esc(value)+'</div></td></tr></table></td>';
- const detail=report.text.split('\n').filter(x=>x.startsWith('- ')).slice(0,30);
+ const detail=report.text.split('\n').filter(x=>x.startsWith('- ')).slice(0,12);
  const lines=detail.length?detail.map((s,i)=>'<tr><td style="padding:10px 12px;background:'+(i%2?'#f5f8fc':'#ffffff')+';border-bottom:1px solid #e7edf6;color:#293b54;font-size:12px">'+esc(s.slice(2))+'</td></tr>').join(''):
    '<tr><td style="padding:15px 12px;color:#65748b;font-size:13px">Não há apontamentos importados para este período.</td></tr>';
  const completeness=partial?'A sincronização dos registros do Movidesk ainda está em andamento. Os números podem mudar.':
@@ -566,7 +575,7 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metri
  '<tr><td style="background:#102c4f;padding:28px 30px;color:#fff">'+
  '<div style="font-size:13px;letter-spacing:2px;font-weight:750;color:#8fd5e7">ARQUEM SISTEMAS</div>'+
  '<div style="font-size:26px;font-weight:750;margin-top:12px">Central de Auditoria</div>'+
- '<div style="font-size:13px;color:#bed1e8;margin-top:8px">Relatório '+esc(k.toLowerCase())+' de apontamentos</div>'+
+ '<div style="font-size:13px;color:#bed1e8;margin-top:8px">'+esc(kind==='monthly'||kind==='annual'?'Balancete '+k.toLowerCase():'Relatório '+k.toLowerCase()+' de apontamentos')+'</div>'+
  '</td></tr><tr><td style="padding:26px 26px 12px">'+test+
  '<div style="font-size:11px;color:#3873ae;letter-spacing:1px;font-weight:700">'+esc(badge)+'</div>'+
  '<h1 style="font-size:23px;line-height:1.2;margin:10px 0 8px;color:#102b51">'+esc(person)+'</h1>'+
@@ -578,15 +587,16 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metri
  executiveHtml+
  (report.teamJourneyHtml||
    '<div style="font-size:15px;color:#18385e;font-weight:700;margin:23px 0 6px">Referências de jornada</div>'+missingMetrics)+
- '<div style="font-size:15px;color:#18385e;font-weight:700;margin:24px 0 12px">Atividades e lançamentos</div>'+
- '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5edf7;border-radius:8px;overflow:hidden">'+lines+'</table>'+
+ (report.teamJourneyHtml?'':'<div style="font-size:15px;color:#18385e;font-weight:700;margin:24px 0 12px">'+
+   esc(rec.collaborator_name?'Destaques dos apontamentos':'Resumo por colaborador')+'</div>'+
+   '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5edf7;border-radius:8px;overflow:hidden">'+lines+'</table>')+
  detailsHtml+alertsHtml+
  '<p style="font-size:11px;line-height:1.6;color:#64748b;margin:22px 0">Fonte: API Movidesk / Central de Auditoria. Registros importados; não substitui o ponto eletrônico e não comprova produtividade ou presença.</p>'+
  '</td></tr><tr><td style="background:#f4f7fb;border-top:1px solid #dce5f0;padding:20px 26px;color:#718096;font-size:11px">'+
  'ARQUEM SISTEMAS &nbsp;|&nbsp; Central de Auditoria &nbsp;|&nbsp; Mensagem automática, não responda</td></tr>'+
  '</table></td></tr></table></body></html>';
 }
-function buildReport(rec: R, appts: R[], from: string, to: string, kind: string, hol: Set<string>, authorizedSingleManual = false, clients: R[] = []) {
+function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportKind, hol: Set<string>, authorizedSingleManual = false, clients: R[] = []) {
   const scope = String(rec.scope || 'sector');
   if (!['sector', 'management'].includes(scope)) throw new Error('Escopo de destinatario nao reconhecido');
   const person = norm(rec.collaborator_name);
@@ -690,33 +700,36 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     return {...x,sector,referenceMinutes,minimumMinutes,...comparison,status:workday?comparison.status:'Dia não útil'};
   });
   const showJourneyPercent=(n:number|null)=>n===null?'—':n+'%';
+  const emailTeam=journey.slice(0,24);
   const journeyNote='Referência por colaborador conforme o cadastro do destinatário e os dias úteis do período. Horas em dias não úteis entram no total. São exibidos apenas colaboradores com apontamentos nos setores vinculados.';
   const teamJourneyHtml=scopedManagement?
     '<h2 style="font-size:17px;color:#18385e;margin:23px 0 6px">Colaboradores: horas apontadas e jornada</h2>'+
     '<p style="font-size:12px;color:#65748b">'+emailEsc(journeyNote)+'</p>'+
-    (journey.length?detailTable(['Colaborador','Equipe','Apontadas','Capacidade','Mínimo','%'],journey.map(x=>
+    (journey.length?detailTable(['Colaborador','Equipe','Apontadas','Capacidade','Mínimo','%'],emailTeam.map(x=>
       [x.name,x.sector,duration(x.minutes),duration(x.targetMinutes),duration(x.minimumMinutes),showJourneyPercent(x.percent)]))+
     '<h3 style="font-size:14px;color:#17345d">Diferenças e situação</h3>'+
-    detailTable(['Colaborador','Falta mínimo','Falta jornada','Situação'],journey.map(x=>
+    detailTable(['Colaborador','Falta mínimo','Falta jornada','Situação'],emailTeam.map(x=>
       [x.name,duration(x.minimumGap),duration(x.targetGap),x.status]))+
     '<h3 style="font-size:14px;color:#17345d">Volume de apontamentos</h3>'+
-    detailTable(['Colaborador','Lançamentos','Chamados','Clientes','Dias','Média/dia','Dias não úteis'],journey.map(x=>
-      [x.name,String(x.entries),String(x.tickets),String(x.clients),String(x.days),x.averageMinutes===null?'—':duration(x.averageMinutes),duration(x.offMinutes)])):
+    detailTable(['Colaborador','Lançamentos','Chamados','Clientes','Dias','Média/dia','Dias não úteis'],emailTeam.map(x=>
+      [x.name,String(x.entries),String(x.tickets),String(x.clients),String(x.days),x.averageMinutes===null?'—':duration(x.averageMinutes),duration(x.offMinutes)]))+
+    (journey.length>emailTeam.length?'<p style="font-size:12px">Mostrando '+emailTeam.length+' de '+journey.length+' colaboradores. Consulte o Excel, quando disponível, para mais detalhes.</p>':''):
       '<p style="font-size:12px">Sem apontamentos importados nos setores vinculados.</p>'):'';
+  const emailDailyLimit=12;
   const detailsHtml='<div style="margin-top:24px;border-top:2px solid #dce6f4;padding-top:12px">'+
     '<h3 style="color:#17345d;font-size:15px">Horas por colaborador, dia a dia</h3>'+
     (daily.length?(scopedManagement?
-      detailTable(['Colaborador','Data','Horas','Jornada','%','Falta jornada','Situação'],dailyJourney.slice(0,90).map(x=>
+      detailTable(['Colaborador','Data','Horas','Jornada','%','Falta jornada','Situação'],dailyJourney.slice(0,emailDailyLimit).map(x=>
         [x.name,displayDate(x.day),duration(x.minutes),x.referenceMinutes?duration(x.referenceMinutes):'—',
           showJourneyPercent(x.percent),x.referenceMinutes?duration(x.targetGap):'—',x.status])):
-      detailTable(['Colaborador','Data','Horas'],daily.slice(0,90).map(x=>[x.name,displayDate(x.day),duration(x.minutes)]))):
+      detailTable(['Colaborador','Data','Horas'],daily.slice(0,emailDailyLimit).map(x=>[x.name,displayDate(x.day),duration(x.minutes)]))):
       '<p style="font-size:12px">Sem apontamentos importados.</p>')+
-    (daily.length>90?'<p style="font-size:12px">Exibindo 90 de '+daily.length+' linhas.</p>':'')+
+    (daily.length>emailDailyLimit?'<p style="font-size:12px">Resumo no e-mail: '+emailDailyLimit+' de '+daily.length+' linhas. Consulte o Excel, quando disponível, para mais detalhes.</p>':'')+
     '<h3 style="color:#17345d;font-size:15px;margin-top:24px">Empresas com maior consumo de horas</h3>'+
     (companies.length?detailTable(['Empresa','Tempo','Chamados'],companies.map(x=>[x.name,duration(x.minutes),String(x.tickets)])):
       '<p style="font-size:12px">Sem empresas identificadas.</p>')+
     '<p style="font-size:11px;color:#64748b">Somente horas importadas do Movidesk; ausência de lançamento não comprova falta de trabalho.</p></div>';
-  const title = `${kind === 'weekly' ? 'Relatorio semanal' : 'Relatorio diario'} - ${scope === 'management' ? 'Gestao / ' + (sectorLabels.join(' + ') || 'Todos os setores') : sectorLabels.join(' + ')}${person ? ' / ' + safe(rec.collaborator_name) : ''}`;
+  const title = `${kind==='monthly'||kind==='annual'?'Balancete':'Relatório'} ${REPORT_LABEL[kind].toLowerCase()} - ${scope === 'management' ? 'Gestao / ' + (sectorLabels.join(' + ') || 'Todos os setores') : sectorLabels.join(' + ')}${person ? ' / ' + safe(rec.collaborator_name) : ''}`;
   const details = person ? selected.slice(0, 100).map(a =>
     `- ${String(a.appointment_date)} | #${safe(a.ticket_id)} | ${duration(Number(a.duration_minutes || 0))} | ${safe(a.activity)}`)
     : [...byPerson.entries()].sort((a, b) => b[1] - a[1]).map(([n, m]) => `- ${safe(n)}: ${duration(m)}`);
@@ -739,7 +752,8 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     '────────────────────────────────────────',
     ...(scopedManagement ? [
       journeyNote,
-      ...journey.map(x=>`${safe(x.name)} | ${safe(x.sector)} | ${duration(x.minutes)} apontadas | jornada ${duration(x.targetMinutes)} | mínimo ${duration(x.minimumMinutes)} | ${showJourneyPercent(x.percent)} | faltam ${duration(x.minimumGap)} para o mínimo e ${duration(x.targetGap)} para a jornada | ${x.status}`),
+      ...emailTeam.map(x=>`${safe(x.name)} | ${safe(x.sector)} | ${duration(x.minutes)} apontadas | jornada ${duration(x.targetMinutes)} | mínimo ${duration(x.minimumMinutes)} | ${showJourneyPercent(x.percent)} | faltam ${duration(x.minimumGap)} para o mínimo e ${duration(x.targetGap)} para a jornada | ${x.status}`),
+      ...(journey.length>emailTeam.length?[`Mostrando ${emailTeam.length} de ${journey.length} colaboradores. Consulte o Excel, quando disponível, para mais detalhes.`]:[]),
       ...(!journey.length?['Sem apontamentos importados nos setores vinculados.']:[])
     ] : selected.length ? [
       `Meta mínima de referência . ${duration(minimum)}`,
@@ -758,7 +772,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
     '',
     'HORAS POR COLABORADOR E DIA',
     '────────────────────────────────────────',
-    ...dailyJourney.slice(0,90).map(x=>'- '+safe(x.name)+' | '+displayDate(x.day)+' | '+duration(x.minutes)+
+    ...dailyJourney.slice(0,emailDailyLimit).map(x=>'- '+safe(x.name)+' | '+displayDate(x.day)+' | '+duration(x.minutes)+
       (scopedManagement?' | '+(x.referenceMinutes?duration(x.referenceMinutes)+' de jornada | '+showJourneyPercent(x.percent)+' | ':'')+x.status:'')),
     '',
     'EMPRESAS QUE MAIS CONSUMIRAM TEMPO',
@@ -799,12 +813,12 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: string,
   return { text: lines.join('\n'), detailsHtml, teamJourneyHtml, teamJourney:journey, exportData,
     metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
 }
-function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:string,partial:boolean,historicalIncomplete:boolean,clients:R[]):R {
+function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:ReportKind,partial:boolean,historicalIncomplete:boolean,clients:R[]):R {
  const data=report.exportData as R;
  const clientNames=new Map(clients.map(x=>[String(x.ticket_id),String(x.client_name||'')]));
  return {
    schema:'arquem-mail-v1',
-   title:'Relatório '+(kind==='weekly'?'semanal':'diário')+' - '+safe(rec.name||rec.sector||'Gestão'),
+   title:(kind==='monthly'||kind==='annual'?'Balancete ':'Relatório ')+REPORT_LABEL[kind].toLowerCase()+' - '+safe(rec.name||rec.sector||'Gestão'),
    from,to,partial,historicalIncomplete,
    metrics:report.metrics,
    collaborators:data.collaborators||[],daily:data.daily||[],
@@ -1095,7 +1109,7 @@ async function manualOfficial(payload: R) {
   const report = buildReport(rec, appts, from, to, kind, hol, true, clients);
   const tickets = ticketAlerts(rec, await ticketSource());
   const quality = await supportRatingCache()(rec, from, to);
-  const overview = await directionOverviewCache()(rec, from, to, tickets.activeTickets);
+  const overview = await directionOverviewCache()(rec, from, to, tickets.activeTickets,kind);
   // Mesmo com zero apontamentos, o teste manual verifica o envio e informa a ausencia no corpo.
   const partial = !checkpoint.completed || !coverage.ready;
   const empty = !report.metrics.appointments;
@@ -1194,42 +1208,93 @@ async function dispatchWeeklyPreliminary() {
   return json({ok:!results.some(x=>x.status==='failed'),preliminary:true,period:{from,to},
     coverageComplete:coverage.ready,results});
 }
-async function dispatch() {
-  if (E('REPORT_EMAIL_SEND_ENABLED') !== 'true') return json({ ok: true, skipped: 'Envio automatico desativado' });
-  // Envio oficial: exigir conciliação completa das datas do relatório.
-  // O histórico total de chamados pode continuar em backfill sem impedir
-  // resultados do período conciliado diretamente pela API Movidesk.
-  const today = dateBR();
+function scheduledReports(today:string, hol:Set<string>, recipients:R[]):ScheduledReport[] {
   const dow = weekday(today);
-  if ([0, 6].includes(dow)) return json({ ok: true, skipped: 'Fim de semana' });
-  const hol = await holidays();
-  if (hol.has(today)) return json({ ok: true, skipped: 'Feriado' });
+  const businessDay = ![0,6].includes(dow) && !hol.has(today);
   let prev = shift(today, -1);
   while ([0, 6].includes(weekday(prev)) || hol.has(prev)) prev = shift(prev, -1);
-  // A semana anterior e enviada no primeiro dia util da semana atual.
-  // Se segunda for feriado, adia para o proximo dia util cadastrado.
   const thisMonday = shift(today, -((dow + 6) % 7));
   const prevMonday = shift(thisMonday, -7);
   const prevSunday = shift(thisMonday, -1);
-  let firstBusinessDay = thisMonday;
-  while ([0, 6].includes(weekday(firstBusinessDay)) || hol.has(firstBusinessDay))
-    firstBusinessDay = shift(firstBusinessDay, 1);
-  // A partir do primeiro dia util: se a conciliacao atrasar na segunda,
-  // tentar novamente nos dias uteis seguintes. A chave por periodo/destinatario
-  // impede o envio duplicado de uma semana ja registrada.
-  const weeklyDue = today >= firstBusinessDay;
-  const tasks: { r: R; kind: 'daily' | 'weekly'; from: string; to: string }[] = [];
-  for (const r of await recipientList()) {
-    if (r.daily_enabled === true) tasks.push({ r, kind: 'daily', from: prev, to: prev });
-    if (weeklyDue && r.weekly_enabled === true) tasks.push({ r, kind: 'weekly', from: prevMonday, to: prevSunday });
+  const monthStart = today.slice(0,7)+'-01';
+  const prevMonthEnd = shift(monthStart,-1);
+  const priorYear = prevMonthEnd.slice(0,4);
+  const periodic = monthStart >= FIRST_MONTHLY_RUN;
+  const january = today.slice(5,7)==='01';
+  const tasks:ScheduledReport[] = [];
+  for (const r of recipients) {
+    const director = directionRecipient(r);
+    if (businessDay && !director && r.daily_enabled===true)
+      tasks.push({r,kind:'daily',from:prev,to:prev});
+    if ((businessDay || (director && dow===1)) && r.weekly_enabled===true)
+      tasks.push({r,kind:'weekly',from:prevMonday,to:prevSunday});
+    const linked = (Array.isArray(r.sectors)&&r.sectors.length?r.sectors:[r.sector]).some(x=>norm(x));
+    if (!periodic || r.scope!=='management' || !linked) continue;
+    if (director && january && r.annual_enabled===true) {
+      tasks.push({r,kind:'annual',from:priorYear+'-01-01',to:priorYear+'-12-31',includeDecember:r.monthly_enabled===true});
+    } else if (r.monthly_enabled===true) {
+      tasks.push({r,kind:'monthly',from:prevMonthEnd.slice(0,7)+'-01',to:prevMonthEnd});
+    }
   }
+  // Primeiro os fechamentos de período e os relatórios da Direção; nenhuma chave é
+  // repetida se o agendamento precisar aguardar a conciliação.
+  const order:Record<ReportKind,number>={annual:0,monthly:1,weekly:2,daily:3};
+  return tasks.sort((a,b)=>order[a.kind]-order[b.kind]||Number(directionRecipient(b.r))-Number(directionRecipient(a.r)));
+}
+
+type ReportTotals = {appointments:number;tickets:number;minutes:number;days:number};
+function annualHighlights(task:ScheduledReport, report:ReportTotals, previous:ReportTotals, december:ReportTotals|null, months:{label:string;opened:number;closed:number}[]) {
+  const year = task.from.slice(0,4);
+  const previousYear = String(Number(year)-1);
+  const row = (label:string, totals:ReportTotals, filter:(month:string)=>boolean) => {
+    const counts = months.filter(x=>filter(x.label)).reduce((acc,x)=>({opened:acc.opened+x.opened,closed:acc.closed+x.closed}),{opened:0,closed:0});
+    return [label,duration(totals.minutes),String(totals.appointments),String(totals.tickets),months.length?String(counts.opened):'—',months.length?String(counts.closed):'—'];
+  };
+  const rows = [row(year,report,x=>x.endsWith('/'+year)),row(previousYear,previous,x=>x.endsWith('/'+previousYear))];
+  if (december) rows.push(row('Dezembro '+year,december,x=>x==='12/'+year));
+  const cols=['Período','Horas','Apontamentos','Com horas','Abertos','Encerrados'];
+  const note='Comparação de anos fechados, com os registros disponíveis na base. A cobertura histórica pode diferir entre anos; os totais não comprovam variação de produtividade.';
+  return {
+    text:'\n\nCOMPARATIVO ANUAL\n'+cols.join(' | ')+'\n'+rows.map(x=>x.join(' | ')).join('\n')+'\n'+note,
+    html:'<h2 style="font-size:17px;color:#18385e;margin:24px 0 8px">Comparativo anual</h2>'+
+      '<table width="100%" cellpadding="6" cellspacing="0" style="font-size:12px;border-collapse:collapse">'+
+      '<tr style="background:#edf3fb">'+cols.map(x=>'<th align="left">'+emailEsc(x)+'</th>').join('')+'</tr>'+
+      rows.map(x=>'<tr>'+x.map(cell=>'<td>'+emailEsc(cell)+'</td>').join('')+'</tr>').join('')+'</table>'+
+      '<p style="font-size:12px;color:#64748b">'+emailEsc(note)+'</p>'
+  };
+}
+
+async function dispatch() {
+  if (E('REPORT_EMAIL_SEND_ENABLED') !== 'true') return json({ ok: true, skipped: 'Envio automatico desativado' });
+  const today = dateBR();
+  const [hol, recipients] = await Promise.all([holidays(),recipientList()]);
+  const tasks = scheduledReports(today,hol,recipients);
   if (!tasks.length) return json({ ok: true, skipped: 'Sem relatorios programados' });
-  // Leitura de periodo: somente datas necessarias. Sem fonte antiga Vercel.
-  const from = tasks.reduce((s, t) => t.from < s ? t.from : s, tasks[0].from);
-  const to = tasks.reduce((s, t) => t.to > s ? t.to : s, tasks[0].to);
-  const coverage = await recentCoverage(from,to);
-  if (!coverage.ready) return json({ok:true,skipped:'Conciliação incompleta ou desatualizada para o período; próximo agendamento fará nova tentativa',from,to,coverage});
-  const [appts,allTickets,clients]=await Promise.all([source(from,to),ticketSource(),clientSource()]);
+  const periods = new Map<string,Promise<R[]|null>>();
+  let history:ReturnType<typeof state>|undefined;
+  let referenceData:Promise<[R[],R[]]>|undefined;
+  const readPeriod = (t:ScheduledReport) => {
+    const key = t.kind+':'+t.from+':'+t.to;
+    let pending = periods.get(key);
+    if (!pending) {
+      pending = (async () => {
+        const closing = t.kind==='monthly'||t.kind==='annual';
+        // Períodos longos usam o histórico e exigem conciliação recente do
+        // trecho final, que é o trecho ainda sujeito a importações de fechamento.
+        const tail = shift(t.to,-6);
+        const coverage = await recentCoverage(closing&&tail>t.from?tail:t.from,t.to);
+        if (!coverage.ready) return null;
+        if (closing) {
+          history ??= state();
+          const checkpoint = await history;
+          if (checkpoint.completed!==true || checkpoint.last_error) return null;
+        }
+        return source(t.from,t.to,t.kind==='annual'?100000:25000);
+      })();
+      periods.set(key,pending);
+    }
+    return pending;
+  };
   const getQuality = supportRatingCache();
   const getOverview = directionOverviewCache();
   const results: R[] = [];
@@ -1239,11 +1304,27 @@ async function dispatch() {
     try {
       const exists = await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}&select=dispatch_key,status&limit=1`);
       if (exists.length) { results.push({ recipientId: id, kind: t.kind, skipped: 'Ja registrado; revisar status antes de retentar' }); continue; }
+      const appts = await readPeriod(t);
+      if (!appts) {
+        results.push({recipientId:id,kind:t.kind,skipped:'Aguardando conciliação do período'});
+        continue;
+      }
+      referenceData ??= Promise.all([ticketSource(),clientSource()]);
+      const [allTickets,clients] = await referenceData;
       const report = buildReport(t.r, appts, t.from, t.to, t.kind, hol, false, clients);
       const tickets = ticketAlerts(t.r, allTickets);
-      if (!report.metrics.appointments) { results.push({ recipientId: id, kind: t.kind, skipped: 'Sem apontamentos; envio suspenso' }); continue; }
+      if (!report.metrics.appointments && (t.kind==='daily'||t.kind==='weekly')) { results.push({ recipientId: id, kind: t.kind, skipped: 'Sem apontamentos; envio suspenso' }); continue; }
       const quality = await getQuality(t.r, t.from, t.to);
-      const overview = await getOverview(t.r, t.from, t.to, tickets.activeTickets);
+      const overview = await getOverview(t.r, t.from, t.to, tickets.activeTickets,t.kind);
+      let annual = {text:'',html:''};
+      if (t.kind==='annual') {
+        const year = t.from.slice(0,4), prior = String(Number(year)-1);
+        const previous = buildReport(t.r,await source(prior+'-01-01',prior+'-12-31',100000),prior+'-01-01',prior+'-12-31','annual',hol,false,clients);
+        const december = t.includeDecember
+          ? buildReport(t.r,appts.filter(x=>String(x.appointment_date).startsWith(year+'-12-')),year+'-12-01',t.to,'monthly',hol,false,clients).metrics
+          : null;
+        annual = annualHighlights(t,report.metrics,previous.metrics,december,overview.metrics&&'monthly' in overview.metrics?overview.metrics.monthly:[]);
+      }
       const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
         method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
         body: JSON.stringify({ dispatch_key: key, recipient_id: id, report_kind: t.kind,
@@ -1251,8 +1332,9 @@ async function dispatch() {
       });
       if (!inserted?.length) continue;
       try {
-        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text+overview.text+quality.text+'\n\n'+tickets.text,
-          reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml+quality.html,overview.html),
+        const label = t.includeDecember?'Anual e fechamento de dezembro':REPORT_LABEL[t.kind];
+        await sendMail(String(t.r.email), `Central de Auditoria - ${label} - ${t.from}`, report.text+annual.text+overview.text+quality.text+'\n\n'+tickets.text,
+          reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml+quality.html,annual.html+overview.html),
           reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients));
         await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH', body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString(), provider_id: 'gmail-apps-script' }) });
