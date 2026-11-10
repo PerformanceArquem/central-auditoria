@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'report-calendar-20261110';
+const RELEASE_ID = 'annual-management-20261110';
 const DIRECTION_RECIPIENT_ID = '1b8168c6-bec0-4f6d-a3f9-feaec63ed147';
 const DIRECTION_EMAIL = 'canestraro@arquem.com.br';
 const FIRST_MONTHLY_RUN = '2026-12-01';
@@ -390,7 +390,8 @@ function directionOverviewCache() {
   let history: Promise<R[] | null> | undefined;
   return async (rec:R, from:string, to:string, open:TicketAlert[], kind:ReportKind = 'weekly') => {
     const empty = { text:'', html:'', metrics:null };
-    if (!directionRecipient(rec)) return empty;
+    if (!directionRecipient(rec) && !(kind==='annual' && rec.scope==='management' && rec.annual_enabled===true))
+      return empty;
     const configured = Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors : [rec.sector];
     const allowed = new Set(configured.map(norm).filter(Boolean));
     if (!allowed.size) return empty;
@@ -494,7 +495,8 @@ function directionTicketOverview(history:R[]|null, open:TicketAlert[], allowed:S
   }
   const sectors = [...bySector.values()].filter(x=>x.open||x.opened||x.closed).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
   const summary = `No período de ${displayDate(from)} a ${displayDate(to)}: ${period.opened} abertos e ${period.closed} encerrados.`;
-  const note = 'Contagens da base sincronizada do Movidesk, em horário de Brasília. Abertos pela data de criação e encerrados pela data de encerramento registrada. O mês e a semana mais recentes vão até o fim do período deste relatório. A fila de atualização da Produção faz parte dos chamados em aberto.';
+  const note = 'Contagens da base sincronizada do Movidesk, em horário de Brasília. Abertos pela data de criação e encerrados pela data de encerramento registrada. O mês e a semana mais recentes vão até o fim do período deste relatório.'+
+    (queueInScope?' A fila de atualização da Produção faz parte dos chamados em aberto.':'');
   const sections = kind==='annual'
     ? [{title:'Meses do ano fechado',rows:monthly.filter(x=>x.label.endsWith('/'+to.slice(0,4)))}]
     : kind==='monthly'
@@ -1230,7 +1232,7 @@ function scheduledReports(today:string, hol:Set<string>, recipients:R[]):Schedul
       tasks.push({r,kind:'weekly',from:prevMonday,to:prevSunday});
     const linked = (Array.isArray(r.sectors)&&r.sectors.length?r.sectors:[r.sector]).some(x=>norm(x));
     if (!periodic || r.scope!=='management' || !linked) continue;
-    if (director && january && r.annual_enabled===true) {
+    if (january && r.annual_enabled===true) {
       tasks.push({r,kind:'annual',from:priorYear+'-01-01',to:priorYear+'-12-31',includeDecember:r.monthly_enabled===true});
     } else if (r.monthly_enabled===true) {
       tasks.push({r,kind:'monthly',from:prevMonthEnd.slice(0,7)+'-01',to:prevMonthEnd});
