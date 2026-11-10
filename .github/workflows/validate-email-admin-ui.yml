@@ -1,0 +1,24 @@
+name: Validate recipient manager UI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - index.html
+      - tests/email-admin-ui.test.mjs
+      - .github/workflows/validate-email-admin-ui.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify recipient manager and report scripts
+        run: node --test tests/email-admin-ui.test.mjs

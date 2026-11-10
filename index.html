@@ -4548,7 +4548,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         ' · Sem ação há 7+ dias: '+esc(String(t.stalled??0))+' · Sem SLA: '+esc(String(t.withoutSla??0))+'</p>'+
         (data.partial?'<p style="color:#9a6713">A sincronização de apontamentos ainda pode estar incompleta.</p>':'')+
         '<p class="subtle">Exemplos dos chamados identificados (até 5 por categoria). Um chamado pode aparecer em ambas.</p>'+
-        (examples.length?'<div style="overflow-x:auto"><table style="width:100%"><thead><tr><th>Ticket</th><th>Assunto</th><th>Responsável / setor</th><th>Prazo / inatividade</th></tr></thead><tbody>'+examples.join('')+'</tbody></table></div>':'<p>Nenhum exemplo de pendência nos registros importados.</p>'+forecastSection;
+        (examples.length?'<div style="overflow-x:auto"><table style="width:100%"><thead><tr><th>Ticket</th><th>Assunto</th><th>Responsável / setor</th><th>Prazo / inatividade</th></tr></thead><tbody>'+examples.join('')+'</tbody></table></div>':'<p>Nenhum exemplo de pendência nos registros importados.</p>')+forecastSection;
       area.classList.remove('hide');
       status.textContent='Prévia gerada sem disparo de e-mail nem alteração dos agendamentos.';
     }catch(err){status.textContent='Erro na prévia: '+(err?.message||err)}
