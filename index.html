@@ -1702,11 +1702,11 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                           <div class="fg" style="margin-top:10px"><label for="alarmEmailMessage">Texto de abertura (editável)</label><textarea id="alarmEmailMessage" rows="7" style="width:100%" oninput="alarmEmailInvalidate()"></textarea></div>
                           <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">
                             <button type="button" class="s" onclick="alarmEmailDraft()">Gerar texto padrão</button>
-                            <button type="button" class="s" id="alarmEmailAiDraft" onclick="alarmEmailAiDraft()" style="border-color:#b8c7e9;background:#eef4ff;color:#1b4da0;font-weight:700">✦ Gerar com IA</button>
+                            <button type="button" class="s" id="alarmEmailAiDraft" onclick="alarmEmailAiDraft()" style="border-color:#b8c7e9;background:#eef4ff;color:#1b4da0;font-weight:700">✦ Orientação para E-mails</button>
                             <button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
                             <button type="button" class="b" id="alarmEmailSend" onclick="alarmEmailSend()" disabled title="Disponível somente depois de visualizar e conferir a prévia">Confirmar e enviar</button><style>#alarmEmailSend:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}</style>
                           </div>
-                          <p class="subtle" style="margin:0 0 10px;color:#596c86">A IA prepara somente o texto inicial; o visual corporativo e os links dos chamados permanecem iguais. Revise a sugestão antes de enviar. Os dados dos chamados selecionados poderão ser processados pelo Gemini.</p>
+                          <p class="subtle" style="margin:0 0 10px;color:#596c86">A Orientação para E-mails prepara somente o texto inicial; o visual corporativo e os links dos chamados permanecem iguais. Revise a sugestão antes de enviar. Os dados dos chamados selecionados poderão ser processados pelo Gemini.</p>
                           <p id="alarmEmailStatus" role="status" class="subtle">Selecione os chamados e gere a prévia para liberar o envio.</p>
                           <button type="button" class="s hide noprint" id="alarmEmailRemoveMissing" onclick="alarmRemoveMissingTickets()">Desmarcar os chamados não sincronizados</button>
                           <div id="alarmEmailPreviewArea" class="hide" style="border:1px solid #dce5f0;border-radius:9px;background:#fff;padding:14px;margin-top:10px">
@@ -3075,7 +3075,7 @@ async function alarmEmailAiDraft(){
   }
   $('alarmEmailMessage').value=data.message.trim();
   alarmEmailInvalidate();
-  $('alarmEmailStatus').textContent='✦ Sugestao da IA pronta. Revise as informacoes e clique em Visualizar e-mail antes do envio.';
+  $('alarmEmailStatus').textContent='✦ Orientação para E-mails: sugestão pronta. Revise as informacoes e clique em Visualizar e-mail antes do envio.';
  }catch(e){
   $('alarmEmailStatus').textContent='IA indisponivel: '+(e?.message||String(e))+'. O texto foi mantido; Gerar texto padrao continua disponivel.';
  }finally{if(btn)btn.disabled=false}
