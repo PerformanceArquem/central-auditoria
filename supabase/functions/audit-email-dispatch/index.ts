@@ -4,7 +4,9 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'management-team-journey-20261110';
+const RELEASE_ID = 'direction-ticket-trends-20261110';
+const DIRECTION_RECIPIENT_ID = '1b8168c6-bec0-4f6d-a3f9-feaec63ed147';
+const DIRECTION_EMAIL = 'canestraro@arquem.com.br';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -369,12 +371,148 @@ function ticketAlerts(rec:R,records:R[]) {
     '<p style="font-size:11px;line-height:1.5;color:#64748b;margin-top:20px">SLA vencido: data anterior a hoje, excluindo SLA pausado. '+
     'Sem ação: última ação registrada há 7 dias ou mais. Um ticket pode estar nas duas listas. '+
     'Os alertas refletem a situação atual e somente os tickets já importados.</p></div>';
-  return {text:lines.join('\n'),html,
+  return {text:lines.join('\n'),html,activeTickets:active,
     attachmentTickets:[...new Map([...overdue.slice(0,30),...stalled.slice(0,30)]
       .map(a=>[a.id,{id:a.id,client:'',owner:a.owner,status:a.status,ageDays:a.ageDays,url:a.url}])).values()].slice(0,60),
     metrics:{open:active.length,overdue:overdue.length,stalled:stalled.length,withoutSla},
     preview:{overdue:overdue.slice(0,5).map(a=>({id:a.id,subject:a.subject,owner:a.owner,sector:a.sector,sla:a.sla,url:a.url})),
       stalled:stalled.slice(0,5).map(a=>({id:a.id,subject:a.subject,owner:a.owner,sector:a.sector,days:a.ageDays,url:a.url}))}
+  };
+}
+
+function directionOverviewCache() {
+  let history: Promise<R[] | null> | undefined;
+  return async (rec:R, from:string, to:string, open:TicketAlert[]) => {
+    const empty = { text:'', html:'', metrics:null };
+    if (rec.id !== DIRECTION_RECIPIENT_ID || norm(rec.email) !== DIRECTION_EMAIL || rec.scope !== 'management')
+      return empty;
+    const configured = Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors : [rec.sector];
+    const allowed = new Set(configured.map(norm).filter(Boolean));
+    if (!allowed.size) return empty;
+    history ??= list('audit_direct_tickets',
+      '?select=ticket_id,created_at_source,closed_at_source,sector:payload->>ownerTeam&order=ticket_id.asc', 100000
+    ).catch(error => {
+      console.error('Comparativo da Direção indisponível:', err(error));
+      return null;
+    });
+    return directionTicketOverview(await history, open, allowed, from, to);
+  };
+}
+
+function directionTicketOverview(history:R[]|null, open:TicketAlert[], allowed:Set<string>, from:string, to:string) {
+  type Counts = { opened:number; closed:number };
+  type SectorCounts = Counts & { name:string; open:number; updateQueue:number };
+  const newCounts = ():Counts => ({opened:0,closed:0});
+  const keyFor = (sector:unknown) => {
+    const key = norm(sector);
+    if (allowed.has(key)) return key;
+    return key === 'sucesso do cliente' && allowed.has('sucesso') ? 'sucesso' : '';
+  };
+  const groupedName = (sector:string) => {
+    const key = norm(sector);
+    if (['producao','producao - cpo'].includes(key)) return 'Produção';
+    if (['financeiro','financeiro - cfo'].includes(key)) return 'Financeiro';
+    return sector;
+  };
+  const bySector = new Map<string,SectorCounts>();
+  const sectorBucket = (sector:string) => {
+    const name = groupedName(sector);
+    const key = norm(name);
+    let bucket = bySector.get(key);
+    if (!bucket) {
+      bucket = { name, opened:0, closed:0, open:0, updateQueue:0 };
+      bySector.set(key,bucket);
+    }
+    return bucket;
+  };
+  for (const ticket of open) {
+    if (!keyFor(ticket.sector)) continue;
+    const row = sectorBucket(ticket.sector);
+    row.open++;
+    if (row.name === 'Produção' && norm(ticket.status) === 'liberar atualizacao') row.updateQueue++;
+  }
+  const currentOpen = [...bySector.values()].reduce((sum,row)=>sum+row.open,0);
+  const updateQueue = bySector.get('producao')?.updateQueue ?? 0;
+  const queueInScope = allowed.has('producao') || allowed.has('producao - cpo');
+  const queueText = queueInScope ? ` · Produção em “Liberar Atualização”: ${updateQueue}` : '';
+  const snapshot = `Chamados em aberto em ${displayDate(dateBR())}: ${currentOpen}${queueText}.`;
+  const title = 'Resumo executivo de chamados';
+  const heading = '<h2 style="font-size:17px;color:#18385e;margin:24px 0 8px">'+title+'</h2>';
+  if (!history) return {
+    text:'\n\n'+title+'\n'+snapshot+'\nHistórico de aberturas e encerramentos indisponível nesta consulta.',
+    html:heading+'<p>'+emailEsc(snapshot)+'</p><p>Histórico de aberturas e encerramentos indisponível nesta consulta.</p>',
+    metrics:{currentOpen,updateQueue:queueInScope?updateQueue:null,historyAvailable:false}
+  };
+
+  const dateFormat = new Intl.DateTimeFormat('sv-SE',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'});
+  const byDay = new Map<string,Counts>();
+  const months = new Map<string,Counts>();
+  const weeks = new Map<string,Counts>();
+  const bucket = (map:Map<string,Counts>, key:string) => {
+    let row = map.get(key);
+    if (!row) { row = newCounts(); map.set(key,row); }
+    return row;
+  };
+  const monday = (date:string) => shift(date,-((weekday(date)+6)%7));
+  const period = newCounts();
+  const add = (value:unknown, kind:keyof Counts, sector:SectorCounts) => {
+    if (!value) return;
+    const parsed = new Date(String(value));
+    if (!Number.isFinite(parsed.getTime())) return;
+    const date = dateFormat.format(parsed);
+    if (date > to) return;
+    bucket(byDay,date)[kind]++;
+    bucket(weeks,monday(date))[kind]++;
+    bucket(months,date.slice(0,7))[kind]++;
+    if (date >= from) { period[kind]++; sector[kind]++; }
+  };
+  for (const ticket of history) {
+    if (!keyFor(ticket.sector)) continue;
+    const sector = sectorBucket(String(ticket.sector));
+    add(ticket.created_at_source,'opened',sector);
+    add(ticket.closed_at_source,'closed',sector);
+  }
+  const daily = Array.from({length:7},(_,i)=>{
+    const day = shift(to,-i);
+    return { label:displayDate(day),...(byDay.get(day)??newCounts()) };
+  });
+  const weekly = Array.from({length:8},(_,i)=>{
+    const start = shift(monday(to),-7*i);
+    const end = shift(start,6);
+    return { label:displayDate(start)+' a '+displayDate(end>to?to:end),...(weeks.get(start)??newCounts()) };
+  });
+  const monthly = [];
+  const firstMonth = [...months.keys()].sort()[0];
+  for (let month = to.slice(0,7); firstMonth && month >= firstMonth;) {
+    monthly.push({label:month.slice(5)+'/'+month.slice(0,4),...(months.get(month)??newCounts())});
+    month = shift(month+'-01',-1).slice(0,7);
+  }
+  const sectors = [...bySector.values()].filter(x=>x.open||x.opened||x.closed).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+  const summary = `No período de ${displayDate(from)} a ${displayDate(to)}: ${period.opened} abertos e ${period.closed} encerrados.`;
+  const note = 'Contagens da base sincronizada do Movidesk, em horário de Brasília. Abertos pela data de criação e encerrados pela data de encerramento registrada. O mês e a semana mais recentes vão até o fim do período deste relatório. A fila de atualização da Produção faz parte dos chamados em aberto.';
+  const sections = [
+    { title:'Comparativo mensal · histórico importado', rows:monthly },
+    { title:'Comparativo semanal · últimas 8 semanas', rows:weekly },
+    { title:'Comparativo diário · últimos 7 dias', rows:daily }
+  ];
+  const textRows = sections.flatMap(s=>['',s.title,'Período | Abertos | Encerrados',
+    ...s.rows.map(x=>`${x.label} | ${x.opened} | ${x.closed}`)]);
+  const table = (columns:string[],rows:(string|number)[][]) => {
+    const cell = 'padding:6px 8px;border-bottom:1px solid #e5edf7;text-align:left';
+    return '<table width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;border-collapse:collapse"><thead><tr style="background:#f1f5fb">'+
+      columns.map(x=>'<th style="'+cell+'">'+emailEsc(x)+'</th>').join('')+'</tr></thead><tbody>'+
+      rows.map(row=>'<tr>'+row.map(x=>'<td style="'+cell+'">'+emailEsc(x)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+  };
+  const subtitle = (text:string) => '<h3 style="font-size:14px;color:#17345d;margin:16px 0 6px">'+emailEsc(text)+'</h3>';
+  return {
+    text:['','',title,summary,snapshot,'','Por setor no período | Abertos | Encerrados | Em aberto agora',
+      ...sectors.map(x=>`${safe(x.name)} | ${x.opened} | ${x.closed} | ${x.open}`),...textRows,'',note].join('\n'),
+    html:heading+'<p><strong>'+emailEsc(summary)+'</strong><br>'+emailEsc(snapshot)+'</p>'+
+      subtitle('Por setor · período do relatório e fila atual')+
+      table(['Setor','Abertos','Encerrados','Em aberto agora'],sectors.map(x=>[x.name,x.opened,x.closed,x.open]))+
+      sections.map(s=>subtitle(s.title)+table(['Período','Abertos','Encerrados'],s.rows.map(x=>[x.label,x.opened,x.closed]))).join('')+
+      '<p style="font-size:11px;color:#64748b">'+emailEsc(note)+'</p>',
+    metrics:{period,currentOpen,updateQueue:queueInScope?updateQueue:null,historyAvailable:true,sectors,monthly,weekly,daily}
   };
 }
 async function recipientList() {
@@ -393,7 +531,7 @@ function workdays(from: string, to: string, ignored: Set<string>) {
 
 const emailEsc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]||ch));
 const displayDate=(d:string)=>/^\d{4}-\d{2}-\d{2}$/.test(d)?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):d;
-function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:string,partial:boolean,manual:boolean,alertsHtml='',detailsHtml=''){
+function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:string,partial:boolean,manual:boolean,alertsHtml='',detailsHtml='',executiveHtml=''){
  const m=report.metrics;
  const targetPerDay=Number(rec.daily_target_minutes??480);
  const minPercent=Number(rec.minimum_percent??80);
@@ -437,6 +575,7 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metri
  tile('Horas apontadas',duration(m.minutes))+tile('Apontamentos',String(m.appointments))+'</tr><tr>'+
  tile('Chamados com horas',String(m.tickets))+tile('Dias úteis de referência',String(m.days))+'</tr></table>'+
  warning+
+ executiveHtml+
  (report.teamJourneyHtml||
    '<div style="font-size:15px;color:#18385e;font-weight:700;margin:23px 0 6px">Referências de jornada</div>'+missingMetrics)+
  '<div style="font-size:15px;color:#18385e;font-weight:700;margin:24px 0 12px">Atividades e lançamentos</div>'+
@@ -956,6 +1095,7 @@ async function manualOfficial(payload: R) {
   const report = buildReport(rec, appts, from, to, kind, hol, true, clients);
   const tickets = ticketAlerts(rec, await ticketSource());
   const quality = await supportRatingCache()(rec, from, to);
+  const overview = await directionOverviewCache()(rec, from, to, tickets.activeTickets);
   // Mesmo com zero apontamentos, o teste manual verifica o envio e informa a ausencia no corpo.
   const partial = !checkpoint.completed || !coverage.ready;
   const empty = !report.metrics.appointments;
@@ -963,6 +1103,7 @@ async function manualOfficial(payload: R) {
   if (previewOnly) return json({ok:true,preview:true,release:RELEASE_ID,
     recipient:target,kind,from,to,partial,empty,
     metrics:report.metrics,ticketMetrics:tickets.metrics,superadores:quality.metric,teamJourney:report.teamJourney,
+    directionOverview:overview.metrics,
     // Até cinco exemplos por categoria para conferência sem expor todos os dados.
     ticketPreview:tickets.preview
   });
@@ -972,14 +1113,14 @@ async function manualOfficial(payload: R) {
     '\nEste e-mail verifica o recebimento e não é um relatório definitivo.'+
     (partial?'\nATENÇÃO: sincronização incompleta; indicadores parciais.':'')+
     (empty?'\nSEM APONTAMENTOS IMPORTADOS: não é possível concluir ausência de trabalho.':'')+
-    '\nDestinatário: '+safe(rec.email)+'\n\n'+report.text+quality.text+'\n\n'+tickets.text;
+    '\nDestinatário: '+safe(rec.email)+'\n\n'+report.text+overview.text+quality.text+'\n\n'+tickets.text;
   const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
     method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
     body: JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:kind,period_from:from,period_to:to,status:'processing'})
   });
   if (!inserted?.length) return json({ ok: true, skipped: 'Relatorio ja reservado para envio' });
   try {
-    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html,report.detailsHtml+quality.html),
+    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html,report.detailsHtml+quality.html,overview.html),
       reportPacket(rec,report,tickets,from,to,kind,partial,checkpoint.completed!==true,clients));
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
@@ -1008,6 +1149,7 @@ async function dispatchWeeklyPreliminary() {
   if(!recipients.length) return json({ok:false,error:'Sem destinatários semanais ativos'},409);
   const [appts,allTickets,clients]=await Promise.all([source(from,to),ticketSource(),clientSource()]);
   const getQuality = supportRatingCache();
+  const getOverview = directionOverviewCache();
   const results:R[]=[];
   for(const r of recipients){
     const id=String(r.id);
@@ -1018,6 +1160,7 @@ async function dispatchWeeklyPreliminary() {
       const report=buildReport(r,appts,from,to,'weekly',hol,false,clients);
       const alerts=ticketAlerts(r,allTickets);
       const quality = await getQuality(r, from, to);
+      const overview = await getOverview(r, from, to, alerts.activeTickets);
       const empty=!report.metrics.appointments;
       const subject='[BALANCETE PRELIMINAR - DADOS PARCIAIS] Central de Auditoria - Semana 02 a 08/11/2026'+(empty?' [SEM APONTAMENTOS]':'');
       const disclaimer='BALANCETE SEMANAL PRELIMINAR — 02 A 08/11/2026\n'+
@@ -1025,7 +1168,7 @@ async function dispatchWeeklyPreliminary() {
         '02/11: FINADOS (FERIADO). DIAS ÚTEIS: 03, 04, 05 E 06/11.\n'+
         'HORAS E DIFERENÇAS PARA METAS PODEM MUDAR APÓS A CONCILIAÇÃO.\n'+
         'NÃO USAR ESTE DOCUMENTO PARA AVALIAÇÃO DEFINITIVA DE JORNADA OU PRODUTIVIDADE.\n\n';
-      const html=reportEmailHtml(r,report,from,to,'weekly',true,true,alerts.html,report.detailsHtml+quality.html);
+      const html=reportEmailHtml(r,report,from,to,'weekly',true,true,alerts.html,report.detailsHtml+quality.html,overview.html);
       const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
         method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
         body:JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:'weekly',
@@ -1033,7 +1176,7 @@ async function dispatchWeeklyPreliminary() {
       });
       if(!inserted?.length){results.push({recipientId:id,status:'skipped',reason:'Outra execução reservou o envio'});continue;}
       try{
-        await sendMail(String(r.email),subject,disclaimer+report.text+quality.text+'\n\n'+alerts.text,html,
+        await sendMail(String(r.email),subject,disclaimer+report.text+overview.text+quality.text+'\n\n'+alerts.text,html,
           reportPacket(r,report,alerts,from,to,'weekly',true,true,clients));
         await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
           method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
@@ -1088,6 +1231,7 @@ async function dispatch() {
   if (!coverage.ready) return json({ok:true,skipped:'Conciliação incompleta ou desatualizada para o período; próximo agendamento fará nova tentativa',from,to,coverage});
   const [appts,allTickets,clients]=await Promise.all([source(from,to),ticketSource(),clientSource()]);
   const getQuality = supportRatingCache();
+  const getOverview = directionOverviewCache();
   const results: R[] = [];
   for (const t of tasks) {
     const id = String(t.r.id);
@@ -1099,6 +1243,7 @@ async function dispatch() {
       const tickets = ticketAlerts(t.r, allTickets);
       if (!report.metrics.appointments) { results.push({ recipientId: id, kind: t.kind, skipped: 'Sem apontamentos; envio suspenso' }); continue; }
       const quality = await getQuality(t.r, t.from, t.to);
+      const overview = await getOverview(t.r, t.from, t.to, tickets.activeTickets);
       const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
         method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
         body: JSON.stringify({ dispatch_key: key, recipient_id: id, report_kind: t.kind,
@@ -1106,8 +1251,8 @@ async function dispatch() {
       });
       if (!inserted?.length) continue;
       try {
-        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text+quality.text+'\n\n'+tickets.text,
-          reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml+quality.html),
+        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text+overview.text+quality.text+'\n\n'+tickets.text,
+          reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml+quality.html,overview.html),
           reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients));
         await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH', body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString(), provider_id: 'gmail-apps-script' }) });
