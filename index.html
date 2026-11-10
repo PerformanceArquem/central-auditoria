@@ -1952,6 +1952,19 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                     </div>
                 </div>
                 <div id="t-charts" class="hide">
+                    <div class="card" id="corporateCopilotCard" style="border-top:3px solid #4975c5;background:linear-gradient(130deg,#fff,#f7faff)">
+                      <div class="row" style="align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                        <div><div class="eyebrow">ASSISTENTE CORPORATIVO · INDICADORES</div><h3 style="margin:4px 0">✦ Gargalos e próximos passos</h3>
+                          <p class="subtle">Análise orientativa baseada nos chamados e apontamentos sincronizados. Não é avaliação psicológica, controle de ponto nem classificação de desempenho pessoal.</p></div>
+                        <div class="row noprint" style="align-items:end;gap:8px">
+                          <div class="fg"><label for="copilotPerson">Colaborador (opcional)</label><select id="copilotPerson" onchange="renderCorporateCopilot()"><option value="">Visão geral da equipe</option></select></div>
+                          <button type="button" class="s" onclick="renderCorporateCopilot()">↻ Analisar dados</button>
+                        </div>
+                      </div>
+                      <div class="kpis" id="copilotKpis" style="margin:12px 0"></div>
+                      <div id="copilotFindings" class="sum" aria-live="polite"></div>
+                      <p id="copilotCoverage" class="coverage-note">O assistente informa evidências, hipóteses e próximos passos. Confirme a cobertura da sincronização e converse com a equipe antes de tirar conclusões.</p>
+                    </div>
                     <div class="card">
                         <div class="alert-heading"><div><div class="eyebrow">EVOLUÇÃO HISTÓRICA</div><h3>Comparativos mensais e anuais</h3><p class="subtle">Acompanhe a evolução de horas apontadas, chamados trabalhados ou lançamentos, comparando períodos equivalentes.</p></div></div>
                         <div class="row noprint">
@@ -2347,6 +2360,81 @@ function managerReportData(){
   const sortable=m=>[...m].sort((a,b)=>b[1].total-a[1].total||a[0].localeCompare(b[0],'pt-BR'));
   return {day,types,opened:sortable(opened),closed:sortable(closed),overall,withoutClosedDate,selectedSector,matchingCount:[...TK.values()].filter(t=>!selectedSector||alarmTeamName(t)===selectedSector).length};
 }
+// Assistente baseado em evidencias de operacao; sem inferir intencoes, personalidade
+// ou qualidade humana a partir de horas de tickets. Sem transferencia para IA externa.
+function corporateCopilotEvidence(sector='',person=''){
+ const normPerson=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+ const relevant=[...TK.values()].filter(t=>(!sector||alarmTeamName(t)===sector));
+ const selected=person?raw.filter(r=>normPerson(r.owner_name)===normPerson(person)&&(!sector||r.sector===sector)):raw.filter(r=>!sector||r.sector===sector);
+ const ids=new Set(selected.map(r=>String(r.ticket_id)));
+ // Sem pessoa selecionada, carteira inteira; com pessoa, somente tickets com hora registrada,
+ // o que nao identifica todo o portifolio de atribuicoes: nota de cobertura obrigatoria.
+ const candidates=person?relevant.filter(t=>ids.has(String(t.id))):relevant;
+ const now=Date.now();
+ const open=candidates.filter(t=>!alarmIsClosed(t.status));
+ const idle=open.map(t=>{
+   const updated=alarmDate(t.lastUpdate)||alarmDate(liveCreatedDate(t));
+   return {t,days:updated?Math.max(0,Math.floor((now-updated)/86400000)):null};
+ });
+ const overdue=idle.filter(x=>x.days!==null&&x.days>=7).sort((a,b)=>b.days-a.days);
+ const noOwner=open.filter(t=>!nm(t.owner));
+ const noUpdate=idle.filter(x=>x.days===null);
+ const byTicket=new Map();
+ for(const r of selected){
+   const id=String(r.ticket_id||'');
+   if(!id)continue;
+   const m=byTicket.get(id)||{hours:0,count:0,subject:String(r.subject||'Sem assunto')};
+   m.hours+=Number(r.hours)||0;m.count++;byTicket.set(id,m);
+ }
+ const hours=[...byTicket.values()].reduce((n,x)=>n+x.hours,0);
+ const top=[...byTicket.entries()].sort((a,b)=>b[1].hours-a[1].hours)[0]||null;
+ const concentration=hours>0&&top?top[1].hours/hours:0;
+ const findings=[];
+ if(overdue.length)findings.push({title:'Fila sem atualizacao recente',severity:'attention',
+   evidence:overdue.length+' chamado(s) em aberto sem atualizacao registrada ha pelo menos 7 dias.'+
+      ' Mais antigo: #'+overdue[0].t.id+' ('+overdue[0].days+' dias).',
+   hypothesis:'Pode haver espera por decisao, dependencia externa ou atraso na atualizacao do ticket. A causa nao esta comprovada.',
+   action:'Revisar prioridades e registrar para cada chamado o impedimento, responsavel pelo proximo passo e data realista de retorno.'});
+ if(noOwner.length)findings.push({title:'Pendencias sem responsavel definido',severity:'attention',
+   evidence:noOwner.length+' ticket(s) abertos sem responsavel identificado na carteira consultada.',
+   hypothesis:'A atribuicao pode estar incompleta ou ainda nao sincronizada.',
+   action:'Confirmar a distribuicao com o gestor e atualizar a atribuicao no Movidesk.'});
+ if(concentration>=0.45&&byTicket.size>=3)findings.push({title:'Concentracao de horas em uma demanda',severity:'review',
+   evidence:'O chamado #'+top[0]+' representa '+(concentration*100).toFixed(1).replace('.',',')+'% das horas importadas para esta selecao.',
+   hypothesis:'A demanda pode ser complexa, importante ou ter bloqueios externos; horas concentradas nao comprovam baixa produtividade.',
+   action:'Revisar escopo, dependencias, previsao e necessidade de apoio, sem comparar colaboradores por um unico indicador.'});
+ if(noUpdate.length)findings.push({title:'Cobertura de datas insuficiente',severity:'review',
+   evidence:noUpdate.length+' chamado(s) sem data de atualizacao/abertura validada.',
+   hypothesis:'Pode haver falha de importacao ou campos incompletos.',
+   action:'Conferir a sincronizacao antes de classificar esses chamados como parados.'});
+ if(!findings.length)findings.push({title:'Sem gargalos objetivos detectados nesta consulta',severity:'neutral',
+   evidence:'Os criterios de 7 dias sem atualizacao, falta de responsavel e concentracao elevada nao produziram alertas nos registros consultados.',
+   hypothesis:'Isso nao comprova ausencia de impedimentos no trabalho real.',
+   action:'Confirmar dependencias, prioridades e qualidade dos dados com a equipe.'});
+ return {findings,open:open.length,overdue:overdue.length,noOwner:noOwner.length,
+   hours,entries:selected.length,distinctTickets:byTicket.size,person,top,
+   scopeLimited:!!person,records:relevant.length};
+}
+function renderCorporateCopilot(){
+ const select=$('copilotPerson'),holder=$('copilotFindings');
+ if(!select||!holder)return;
+ const current=select.value;
+ const people=[...new Set(raw.map(r=>String(r.owner_name||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+ if([...select.options].length!==people.length+1){
+   select.replaceChildren(new Option('Visao geral da equipe',''),...people.map(n=>new Option(n,n)));
+   select.value=people.includes(current)?current:'';
+ }
+ const e=corporateCopilotEvidence('',select.value);
+ const kpi=[['Chamados em aberto no recorte',e.open],['Sem atualizacao 7+ dias',e.overdue],
+    ['Sem responsavel identificado',e.noOwner],['Horas importadas',H(e.hours)]];
+ $('copilotKpis').innerHTML=kpi.map(([k,v])=>'<div class="card"><small>'+esc(k)+'</small><div><b>'+esc(v)+'</b></div></div>').join('');
+ holder.innerHTML=e.findings.map((x,i)=>'<div class="card" style="margin:9px 0;border-left:3px solid '+(x.severity==='attention'?'#d19b35':'#658ac7')+'"><strong>'+esc((i+1)+'. '+x.title)+'</strong><p><b>Evidencia:</b> '+esc(x.evidence)+'</p><p><b>Hipotese a verificar:</b> '+esc(x.hypothesis)+'</p><p><b>Proxima acao sugerida:</b> '+esc(x.action)+'</p></div>').join('');
+ $('copilotCoverage').textContent=(e.scopeLimited?
+   'Visao individual parcial: somente chamados com apontamentos atribuidos ao colaborador; nao inclui necessariamente todos os chamados sob sua responsabilidade. ':
+   'Visao da carteira disponivel por setor atual e das horas importadas. ')+
+   'Ausencia de apontamentos nao comprova falta de trabalho. Nenhum dado e enviado a provedores de IA nesta analise.';
+}
+
 function generateManagerReport(){
   const el=$('managerReportText'),notice=$('managerReportNotice'),button=$('managerGenerateButton');
   if(!el)return false;
@@ -2444,6 +2532,13 @@ function generateManagerReport(){
       if(!ranking.length)lines.push('• Nenhum chamado com apontamento encontrado.');
       else ranking.forEach(([id,r])=>lines.push(`• #${id} — ${H(r.hours)} em ${r.count} lançamento(s), ${r.people.size} colaborador(es) — ${r.subject.slice(0,100)}.`));
       lines.push('','9. ANÁLISE E RECOMENDAÇÕES');
+      const copilot=corporateCopilotEvidence(sector);
+      for(const finding of copilot.findings){
+        lines.push('• Gargalo ou ponto de atencao: '+finding.title+'.');
+        lines.push('  Evidencia: '+finding.evidence);
+        lines.push('  Hipotese (nao comprovada): '+finding.hypothesis);
+        lines.push('  Acao sugerida: '+finding.action);
+      }
       if(delayed.length)lines.push(`• Priorizar a revisão dos ${delayed.length} chamados sem atualização há pelo menos ${oldLimit} dias, começando pelos mais antigos.`);
       if(byPerson.size)lines.push('• Conferir a distribuição de horas entre os colaboradores e investigar concentrações de esforço em poucos chamados.');
       if(openTickets.length)lines.push('• Revisar os chamados abertos e atualizar responsáveis, status e previsões conforme o fluxo do setor.');
@@ -3238,7 +3333,7 @@ function showTab(t){
   revealActiveNavigation(t);
   $('t-cfg').classList.toggle('hide',t!=='cfg');
   ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
+  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}if(t==='charts')renderCorporateCopilot();
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='email-admin'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='client-impact');
   if(raw.length&&!['load','cfg','diag','alerts','email-admin','report-preview','support-quality','production-audit','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
