@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - fix/dashboard-report-collaborators-20261110
   pull_request:
     paths:
       - 'supabase/functions/audit-email-dispatch/**'
@@ -24,3 +25,5 @@ jobs:
         run: deno check supabase/functions/audit-email-dispatch/index.ts
       - name: Test forecast email scoping and escaping
         run: deno test tests/forecast-email.test.ts
+      - name: Test collaborator preview and period validation
+        run: deno test tests/dashboard-report.test.ts
