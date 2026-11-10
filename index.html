@@ -928,13 +928,14 @@
             <summary><span class="nav-folder-icon" aria-hidden="true">✉</span><span>Relatórios e e-mails</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary>
             <div class="nav-folder-items">
               <button data-t="report-preview">✉ &nbsp;Prévia de relatórios</button>
+              <button data-t="email-admin">✉ &nbsp;Gerenciar e-mails</button>
               <button data-t="entries">≡ &nbsp;Lançamentos</button>
             </div>
           </details>
           <details class="nav-folder" data-folder="4">
             <summary><span class="nav-folder-icon" aria-hidden="true">⚙</span><span>Administração</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary>
             <div class="nav-folder-items">
-              <button data-t="cfg">⚙ &nbsp;Configurações e e-mails</button>
+              <button data-t="cfg">⚙ &nbsp;Conexões e configurações</button>
               <button data-t="diag">◈ &nbsp;Diagnóstico</button>
             </div>
           </details>
@@ -1332,17 +1333,9 @@
                     <p style="font-size:12px;color:var(--muted);margin-top:12px">O painel registra alterações identificadas entre sincronizações. Para receber eventos instantaneamente, sem aguardar a próxima consulta, é necessário configurar webhook no backend. Horários em Brasília: “Detectado” é o horário da consulta; “Atualização no Movidesk” é o horário informado pelo chamado.</p>
                 </div>
             </div>
-            <div id="t-cfg" class="hide">
-                <div class="card" style="border-left:4px solid var(--blue)">
-                    <h2 style="margin:0 0 5px">Conexão e carregamento de dados</h2>
-                    <p style="margin:0;color:var(--muted)">Configure a API Movidesk, importe arquivos e acompanhe a sincronização automática.</p>
-                </div>
-                <div class="card" id="cloudCard" style="border:1px solid #b8c9e8;background:#f7faff">
-                    <h3>Dados compartilhados</h3>
-                    <p id="cloudMsg" role="status" style="margin:0">Conectando automaticamente ao banco de dados...</p>
-                </div>
-                
-<div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
+            <div id="t-email-admin" class="hide">
+                <div class="mh"><div><div class="eyebrow">RELATÓRIOS · ADMINISTRAÇÃO</div><h2>Central de e-mails e destinatários</h2><p>Gerencie relatórios automáticos, testes individuais e histórico de envio sem misturar com as configurações técnicas.</p></div></div>
+                <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
   <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
   <div id="emailAdminPanel" class="hide">
     <p id="emailAdminStatus" role="status" class="coverage-note">Aguardando abertura.</p>
@@ -1393,6 +1386,18 @@
     <p class="subtle" style="margin-top:12px">O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
   </div>
 </div>
+            </div>
+            <div id="t-cfg" class="hide">
+                <div class="card" style="border-left:4px solid var(--blue)">
+                    <h2 style="margin:0 0 5px">Conexão e carregamento de dados</h2>
+                    <p style="margin:0;color:var(--muted)">Configure a API Movidesk, importe arquivos e acompanhe a sincronização automática.</p>
+                </div>
+                <div class="card" id="cloudCard" style="border:1px solid #b8c9e8;background:#f7faff">
+                    <h3>Dados compartilhados</h3>
+                    <p id="cloudMsg" role="status" style="margin:0">Conectando automaticamente ao banco de dados...</p>
+                </div>
+                
+
 <div id="t-load">
                     <div class="card">
                         <h3>API Movidesk</h3>
@@ -3209,10 +3214,11 @@ function showTab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   revealActiveNavigation(t);
   $('t-cfg').classList.toggle('hide',t!=='cfg');
-  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','support-quality','production-audit','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  if(t==='email-admin' && !document.getElementById('emailAdminPanel')?.classList.contains('hide') && !document.getElementById('emailRecipients')?.textContent?.includes('Abra o módulo')) { /* sessão do gerenciador preservada */ }
   if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
-  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='client-impact');
-  if(raw.length&&!['load','cfg','diag','alerts','report-preview','support-quality','production-audit','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
+  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='email-admin'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='client-impact');
+  if(raw.length&&!['load','cfg','diag','alerts','email-admin','report-preview','support-quality','production-audit','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
 $('tabs').addEventListener('click',e=>{const btn=e.target.closest('button');if(btn&&btn.dataset.t)showTab(btn.dataset.t)});
 
