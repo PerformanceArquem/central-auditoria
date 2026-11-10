@@ -1703,11 +1703,12 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                           <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">
                             <button type="button" class="s" onclick="alarmEmailDraft()">Gerar texto padrão</button>
                             <button type="button" class="s" id="alarmEmailAiDraft" onclick="alarmEmailAiDraft()" style="border-color:#b8c7e9;background:#eef4ff;color:#1b4da0;font-weight:700">✦ Dicas do Manager</button>
+                            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="alarmEmailExternalAiConsent"> Autorizo enviar dados resumidos dos chamados ao Gemini para gerar sugestões</label>
                             <label style="display:inline-flex;align-items:center;gap:7px;padding:9px 12px;background:#f2f6fd;border:1px solid #d5e2f5;border-radius:9px;font-size:12px;cursor:pointer"><input type="checkbox" id="alarmEmailIncludeGuidance" checked onchange="alarmEmailInvalidate()"> Incluir orientações práticas no rodapé do e-mail</label>
                             <button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
                             <button type="button" class="b" id="alarmEmailSend" onclick="alarmEmailSend()" disabled title="Disponível somente depois de visualizar e conferir a prévia">Confirmar e enviar</button><style>#alarmEmailSend:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}</style>
                           </div>
-                          <p class="subtle" style="margin:0 0 10px;color:#596c86">O Dicas do Manager prepara a mensagem inicial e o sistema pode acrescentar orientações operacionais verificáveis no rodapé. Revise a sugestão antes de enviar. Os dados dos chamados selecionados poderão ser processados pelo Gemini.</p>
+                          <p class="subtle" style="margin:0 0 10px;color:#596c86">O Dicas do Manager pode sugerir o texto inicial com Gemini mediante autorização. O diagnóstico operacional e as orientações no rodapé são gerados pelas regras do sistema, sem enviar dados ao Gemini. Revise a sugestão antes de enviar. Os dados dos chamados selecionados poderão ser processados pelo Gemini.</p>
                           <p id="alarmEmailStatus" role="status" class="subtle">Selecione os chamados e gere a prévia para liberar o envio.</p>
                           <button type="button" class="s hide noprint" id="alarmEmailRemoveMissing" onclick="alarmRemoveMissingTickets()">Desmarcar os chamados não sincronizados</button>
                           <div id="alarmEmailManagerDiagnosis" class="hide" style="margin-top:12px;padding:14px;border-radius:12px;border:1px solid #c7d9ee;background:#f6faff">
@@ -3057,6 +3058,10 @@ async function alarmEmailAiDraft(){
  const btn=$('alarmEmailAiDraft');
  if(alarmEmailSending||btn?.disabled)return;
  if(!alarmSelected.size){$('alarmEmailStatus').textContent='Selecione um ou mais chamados antes de gerar com IA.';return}
+ if(!$('alarmEmailExternalAiConsent')?.checked){
+  $('alarmEmailStatus').textContent='Marque a autorizacao de processamento com Gemini antes de gerar sugestoes.';
+  return;
+ }
  const client=window.tmEmailAdminClient;
  if(!client){$('alarmEmailStatus').textContent='Acesso autenticado necessario para utilizar a IA.';return}
  const ids=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
@@ -3066,7 +3071,7 @@ async function alarmEmailAiDraft(){
  $('alarmEmailStatus').textContent='Gerando sugestao a partir dos chamados sincronizados. Nenhum e-mail sera enviado...';
  try{
   const {data,error}=await client.functions.invoke('audit-email-dispatch',{
-   body:{action:'ticket_charge_ai_draft',ticketIds:ids,tone}
+   body:{action:'ticket_charge_ai_draft',ticketIds:ids,tone,externalAiConsent:true}
   });
   if(error){
    let detail=error.message||'A IA nao respondeu.';
