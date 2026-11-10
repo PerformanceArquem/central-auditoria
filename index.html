@@ -1610,7 +1610,17 @@
                           <h3 style="margin:0 0 6px">Cobrança corporativa · chamados selecionados</h3>
                           <p class="subtle">O sistema prepara a mensagem com os chamados, clientes e responsáveis. Revise o texto e a prévia antes de autorizar o envio. Nenhum e-mail é enviado automaticamente.</p>
                           <div class="row" style="gap:12px;flex-wrap:wrap;align-items:end;margin-top:12px">
-                            <div class="fg" style="flex:1;min-width:230px"><label for="alarmEmailRecipient">Enviar para (e-mail corporativo)</label><input id="alarmEmailRecipient" type="email" autocomplete="off" placeholder="destinatario@arquem.com.br" oninput="alarmEmailInvalidate()"></div>
+                            <div class="fg" style="flex:1;min-width:230px">
+                              <label for="alarmEmailRecipient">Enviar para (destinatários cadastrados)</label>
+                              <div class="row" style="gap:6px;align-items:center">
+                                <select id="alarmEmailRecipient" style="flex:1;min-width:0" onchange="alarmRecipientChanged()">
+                                  <option value="">Selecione um destinatário cadastrado</option>
+                                </select>
+                                <button type="button" class="s" onclick="alarmLoadRegisteredRecipients()" title="Atualizar lista de destinatários">↻</button>
+                              </div>
+                              <input id="alarmEmailRecipientOther" type="email" autocomplete="off" class="hide" placeholder="outro@arquem.com.br" oninput="alarmEmailInvalidate()" aria-label="Outro e-mail corporativo">
+                              <small id="alarmEmailRecipientHelp" class="subtle">Carregando e-mails ativos da Central de Auditoria...</small>
+                            </div>
                             <div class="fg" style="min-width:180px"><label for="alarmEmailTone">Modelo de mensagem</label><select id="alarmEmailTone" onchange="alarmEmailDraft()"><option value="cordial">Cobrança cordial</option><option value="priority">Prioridade e previsão</option><option value="management">Resumo para gestão</option></select></div>
                           </div>
                           <div class="fg" style="margin-top:10px"><label for="alarmEmailMessage">Texto de abertura (editável)</label><textarea id="alarmEmailMessage" rows="7" style="width:100%" oninput="alarmEmailInvalidate()"></textarea></div>
@@ -2729,11 +2739,72 @@ function alarmSetTeamOptions(all){
   select.innerHTML='<option value="">Todos os setores</option>'+teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
   select.value=teams.includes(chosen)?chosen:'';select.dataset.sig=sig;
 }
+// Destinatários cadastrados na mesma base utilizada pelos relatórios automáticos.
+const alarmRecipientOtherChoice='__other_corporate_email__';
+function alarmRecipientEmail(){
+ const chosen=$('alarmEmailRecipient')?.value||'';
+ return (chosen===alarmRecipientOtherChoice?
+   $('alarmEmailRecipientOther')?.value||'':chosen).trim().toLowerCase();
+}
+function alarmRecipientChanged(){
+ const manual=$('alarmEmailRecipient').value===alarmRecipientOtherChoice;
+ $('alarmEmailRecipientOther').classList.toggle('hide',!manual);
+ if(manual)$('alarmEmailRecipientOther').focus();
+ alarmEmailInvalidate();
+}
+let alarmLoadingRecipients=false;
+async function alarmLoadRegisteredRecipients(){
+ const field=$('alarmEmailRecipient'),hint=$('alarmEmailRecipientHelp');
+ if(!field||alarmLoadingRecipients)return;
+ const previous=field.value;
+ alarmLoadingRecipients=true;
+ hint.textContent='Consultando destinatários ativos...';
+ try{
+  const client=window.tmEmailAdminClient;
+  if(!client)throw Error('Faça login para acessar os destinatários.');
+  const auth=await client.auth.getUser();
+  if(auth.error||!auth.data?.user)throw Error('Sua sessão expirou. Entre novamente.');
+  const permit=await client.rpc('audit_is_email_admin');
+  if(permit.error||permit.data!==true)
+   throw Error('Somente administradores podem consultar os destinatários.');
+  const result=await client.from('audit_email_recipients')
+   .select('name,email,scope,sector,active').eq('active',true).order('name',{ascending:true}).limit(250);
+  if(result.error)throw Error(result.error.message||'Falha na consulta.');
+  const byEmail=new Map();
+  for(const item of result.data||[]){
+   const email=String(item.email||'').trim().toLowerCase();
+   if(!/^[^@\s]+@arquem\.com\.br$/.test(email))continue;
+   const name=String(item.name||email).trim();
+   const detail=String(item.scope)==='management'?'Gestão':String(item.sector||'Setor');
+   if(!byEmail.has(email))byEmail.set(email,{email,name,details:new Set()});
+   byEmail.get(email).details.add(detail);
+  }
+  field.replaceChildren(new Option('Selecione um destinatário cadastrado',''));
+  for(const info of byEmail.values()){
+   field.add(new Option(info.name+' — '+info.email+' ('+[...info.details].join(', ')+')',info.email));
+  }
+  field.add(new Option('Outro e-mail corporativo (digitar)',alarmRecipientOtherChoice));
+  if([...field.options].some(o=>o.value===previous))field.value=previous;
+  else field.value='';
+  $('alarmEmailRecipientOther').classList.toggle('hide',field.value!==alarmRecipientOtherChoice);
+  hint.textContent=byEmail.size+' e-mail(s) corporativo(s) ativo(s) encontrado(s). A lista é a mesma dos relatórios automáticos.';
+ }catch(error){
+  // Se não for possível consultar, permitir digitação manual corporativa como antes.
+  field.replaceChildren(new Option('Selecionar destinatário',''),new Option('Digitar e-mail corporativo',alarmRecipientOtherChoice));
+  field.value=alarmRecipientOtherChoice;
+  $('alarmEmailRecipientOther').classList.remove('hide');
+  hint.textContent='Lista indisponível: '+(error.message||error)+'. Digite um e-mail corporativo autorizado.';
+ }finally{
+  alarmLoadingRecipients=false;
+  alarmEmailInvalidate();
+ }
+}
+
 const alarmSelected=new Set();
 let alarmEmailApproved='',alarmEmailSending=false;
 const alarmSelectionSignature=()=>{
  const ids=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
- return JSON.stringify({ids,recipient:$('alarmEmailRecipient')?.value.trim().toLowerCase()||'',
+ return JSON.stringify({ids,recipient:alarmRecipientEmail(),
    message:$('alarmEmailMessage')?.value||''});
 };
 function alarmUpdateSelectedCount(){
@@ -2765,6 +2836,7 @@ function alarmClearSelection(){alarmSelected.clear();renderAlerts();alarmEmailIn
 function alarmOpenComposer(){
  if(!alarmSelected.size){alert('Selecione pelo menos um chamado no ranking.');return}
  $('alarmEmailPanel').classList.remove('hide');
+ alarmLoadRegisteredRecipients();
  if(!$('alarmEmailMessage').value.trim())alarmEmailDraft();
  $('alarmEmailPanel').scrollIntoView({behavior:'smooth',block:'center'});
 }
@@ -2784,7 +2856,7 @@ async function alarmEmailCall(action,confirmed=false){
  if(!client)throw Error('Acesso administrativo necessário. Entre novamente na Central.');
  const ids=[...alarmSelected];
  if(!ids.length||ids.length>20)throw Error('Selecione de 1 a 20 chamados.');
- const recipient=$('alarmEmailRecipient').value.trim().toLowerCase();
+ const recipient=alarmRecipientEmail();
  if(!/^[^@\s]+@arquem\.com\.br$/.test(recipient))throw Error('Informe um destinatário @arquem.com.br.');
  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
   body:{action,ticketIds:ids,recipient,message:$('alarmEmailMessage').value,confirmed}
@@ -2815,7 +2887,7 @@ async function alarmEmailSend(){
  if(alarmEmailSending||!alarmEmailApproved||alarmEmailApproved!==alarmSelectionSignature()){
   $('alarmEmailStatus').textContent='Gere uma nova prévia após qualquer alteração.';return
  }
- const recipient=$('alarmEmailRecipient').value.trim(),n=alarmSelected.size;
+ const recipient=alarmRecipientEmail(),n=alarmSelected.size;
  if(!window.confirm('Enviar agora a cobrança de '+n+' chamado(s) para '+recipient+'? Este envio é real e não pode ser desfeito.'))return;
  alarmEmailSending=true;$('alarmEmailSend').disabled=true;
  $('alarmEmailStatus').textContent='Enviando mensagem corporativa...';
