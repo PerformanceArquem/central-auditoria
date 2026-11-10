@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - main
-      - fix/email-admin-button-syntax-20261110
   pull_request:
     paths:
       - index.html
