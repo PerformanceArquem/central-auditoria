@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - main
-      - fix/alert-table-column-filters-20261110
   pull_request:
     paths:
       - index.html
