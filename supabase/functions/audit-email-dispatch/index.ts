@@ -1495,15 +1495,68 @@ async function dispatch() {
   }
   return json({ ok: !results.some(x => x.status === 'failed'), date: today, results });
 }
+// Prévia executiva semanal: apenas leitura, sem Gmail, sem fila de envio e sem cache de disparos.
+// Escopo e formatação baseados nos cadastros e no mesmo relatório corporativo da Direção.
+async function directorPreview(payload:R):Promise<Response>{
+ const selected=String(payload.date||'');
+ const today=dateBR();
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(selected)||
+   selected>today||selected<shift(today,-370)||
+   Number.isNaN(Date.parse(selected+'T12:00:00Z')))
+  return json({ok:false,error:'Selecione uma data de referência válida, não futura (até 370 dias).'},400);
+ const dow=weekday(selected);
+ // O cartão seleciona domingo. Em qualquer outro dia, usar a semana completa anterior.
+ const end=dow===0?selected:shift(selected,-dow),start=shift(end,-6);
+ const recipients=await recipientList(),rec=recipients.find(directionRecipient);
+ if(!rec)return json({ok:false,error:'Destinatário de Direção não cadastrado ou inativo.'},404);
+ const sectors=(Array.isArray(rec.sectors)&&rec.sectors.length?rec.sectors:[rec.sector]).map(norm).filter(Boolean);
+ if(!sectors.length)return json({ok:false,error:'Direção sem setores autorizados.'},422);
+ const [appts,hol,clients]=await Promise.all([source(start,end),holidays(),clientSource()]);
+ const report=buildReport(rec,appts,start,end,'weekly',hol,false,clients);
+ const scoped=appts.filter(a=>sectors.includes(norm(a.sector)));
+ const groups=new Map<string,{sector:string;minutes:number;entries:number;tickets:Set<string>;collaborators:Set<string>}>();
+ const people=new Map<string,{sector:string;collaborator:string;minutes:number;entries:number;tickets:Set<string>}>();
+ const dates=new Map<string,{date:string;minutes:number;entries:number;tickets:Set<string>}>();
+ for(const a of scoped){
+  const sector=String(a.sector||'Sem setor'),person=String(a.collaborator_name||'Sem colaborador');
+  const id=String(a.ticket_id||''),minutes=Math.max(0,Number(a.duration_minutes)||0);
+  const group=groups.get(sector)||{sector,minutes:0,entries:0,tickets:new Set<string>(),collaborators:new Set<string>()};
+  group.minutes+=minutes;group.entries++;group.tickets.add(id);group.collaborators.add(person);groups.set(sector,group);
+  const pk=sector+'|'+person,prow=people.get(pk)||{sector,collaborator:person,minutes:0,entries:0,tickets:new Set<string>()};
+  prow.minutes+=minutes;prow.entries++;prow.tickets.add(id);people.set(pk,prow);
+  const date=String(a.appointment_date||''),d=dates.get(date)||{date,minutes:0,entries:0,tickets:new Set<string>()};
+  d.minutes+=minutes;d.entries++;d.tickets.add(id);dates.set(date,d);
+ }
+ const sectorRows=[...groups.values()].map(x=>({sector:x.sector,minutes:x.minutes,entries:x.entries,
+  tickets:x.tickets.size,collaborators:x.collaborators.size})).sort((a,b)=>b.minutes-a.minutes);
+ const collaboratorRows=[...people.values()].map(x=>({sector:x.sector,collaborator:x.collaborator,minutes:x.minutes,
+  entries:x.entries,tickets:x.tickets.size})).sort((a,b)=>b.minutes-a.minutes);
+ const dailyRows=[...dates.values()].map(x=>({date:x.date,minutes:x.minutes,entries:x.entries,tickets:x.tickets.size})).sort((a,b)=>a.date.localeCompare(b.date));
+ // Pendências são o estado presente no Movidesk: não confundir com horas da semana.
+ const tickets=ticketAlerts(rec,await ticketSource());
+ const forecast=await optionalForecast(rec);
+ const html=reportEmailHtml(rec,report,start,end,'weekly',false,false,tickets.html,
+   report.detailsHtml,'',forecast.html);
+ const covered=await recentCoverage(start,end).catch(()=>({ready:false}));
+ return json({
+  ok:true,preview:true,start,end,generatedAt:new Date().toISOString(),partial:covered.ready!==true,
+  metrics:{...report.metrics,sectors:sectorRows.length,collaborators:new Set(scoped.map(a=>String(a.collaborator_name||'')).filter(Boolean)).size},
+  ticketMetrics:tickets.metrics,sectorRows,collaboratorRows,dailyRows,
+  alerts:{overdue:tickets.preview.overdue,stalled:tickets.preview.stalled},
+  impact:{customersByHours:report.exportData?.customers||[],activities:report.exportData?.activities||[]},
+  forecastVariances:forecast.rows,emailHtml:html
+ });
+}
 async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'Apenas POST' }, 405);
   let payload: R = {};
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if (action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
+    if (action === 'director_preview' || 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
-      return action === 'manual_official' ? await manualOfficial(payload)
+      return action === 'director_preview' ? await directorPreview(payload)
+        : action === 'manual_official' ? await manualOfficial(payload)
         : action === 'preview_audit' ? await manualOfficial({...payload,previewOnly:true})
         : action === 'support_quality_metrics' ? await supportQualityMetrics(payload)
         : await adminAction(payload);
