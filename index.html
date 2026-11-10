@@ -1296,7 +1296,7 @@
                 </div>
                 
 <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
-  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
+  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual dos gestores em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
   <div id="emailAdminPanel" class="hide">
     <p id="emailAdminStatus" role="status" class="coverage-note">Aguardando abertura.</p>
     <form id="emailAdminForm"><input id="emailRecordId" type="hidden">
@@ -4066,7 +4066,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   const frequencies=()=>{
     const management=$('emailScope').value==='management',direction=directionForm();
     $('emailMonthlyBox').classList.toggle('hide',!management);
-    $('emailAnnualBox').classList.toggle('hide',!direction);
+    $('emailAnnualBox').classList.toggle('hide',!management);
     $('emailDaily').disabled=direction;
     if(direction)$('emailDaily').checked=false;
   };
@@ -4297,7 +4297,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       await verify();
       const data={name:$('emailName').value.trim(),email:$('emailAddress').value.trim().toLowerCase(),scope:$('emailScope').value,sector:$('emailScope').value==='management'?null:(emailSelectedSectors()[0]||null),sectors:emailSelectedSectors(),collaborator_name:$('emailScope').value==='management'?null:($('emailCollaboratorSelect').value.trim()||null),daily_enabled:$('emailDaily').checked,weekly_enabled:$('emailWeekly').checked,active:$('emailActive').checked,updated_at:new Date().toISOString()};
       data.monthly_enabled=data.scope==='management'&&$('emailMonthly').checked;
-      data.annual_enabled=directionForm()&&$('emailAnnual').checked;
+      data.annual_enabled=data.scope==='management'&&$('emailAnnual').checked;
       if(directionForm())data.daily_enabled=false;
       if(!data.daily_enabled&&!data.weekly_enabled&&!data.monthly_enabled&&!data.annual_enabled)throw Error('Marque ao menos uma frequência.');
       if((data.monthly_enabled||data.annual_enabled)&&!data.sectors.length)throw Error('Selecione os setores do fechamento.');
