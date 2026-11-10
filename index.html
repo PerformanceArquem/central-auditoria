@@ -1050,11 +1050,10 @@
    <p>Horas, apontamentos, chamados vencidos, falta de andamento, projetos e comparativo por colaborador.</p></div></div>
  <div class="card">
    <div class="row noprint" style="align-items:flex-end">
-    <div class="fg"><label for="pdDate">Data de referência</label><input id="pdDate" type="date"></div>
-    <div class="fg"><label for="pdPeriod">Comparar períodos</label><select id="pdPeriod"><option value="week">Semanal</option><option value="month" selected>Mensal</option></select></div>
     <button type="button" id="pdRefresh" class="b">↻ Atualizar Produção</button>
+    <span class="subtle">Comparativo mensal automático · dados mais recentes do Supabase</span>
    </div>
-   <p class="subtle" id="pdStatus" role="status">Selecione o período para analisar a Produção.</p>
+   <p class="subtle" id="pdStatus" role="status">Clique em Atualizar Produção para consultar os dados mais recentes.</p>
    <p class="subtle">Origem: apontamentos e tickets já sincronizados no Movidesk. O período pode estar parcialmente conciliado. Nenhum e-mail é enviado.</p>
  </div>
  <div id="pdKpis" class="kpis" style="margin-top:12px"></div>
@@ -4685,7 +4684,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
 
 <script id="productionAuditScript">
 (()=>{'use strict';
-const el=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','&#39;'}[c]));
+const el=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=minutes=>{let n=Math.max(0,Math.round(Number(minutes)||0));return Math.floor(n/60)+'h'+String(n%60).padStart(2,'0')};
 const dateBR=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const ptDate=v=>String(v||'').split('-').reverse().join('/');
@@ -4693,13 +4692,16 @@ const ticketLink=id=>/^\d+$/.test(String(id))?'<a href="https://arquem.movidesk.
 let started=false,busy=false;
 function table(id,rows){el(id).querySelector('tbody').innerHTML=rows.join('')||'<tr><td colspan="8">Nenhum registro disponível para o período.</td></tr>'}
 function say(t){el('pdStatus').textContent=t}
-async function api(body){
- const client=window.tmEmailAdminClient;
- if(!client)throw new Error('Entre novamente para consultar o Supabase.');
- const {data,error}=await client.functions.invoke('audit-email-dispatch',{body});
- if(error)throw new Error(data?.error||error.message||'Falha de comunicação');
- if(!data?.ok)throw new Error(data?.error||'Consulta não autorizada');
- return data;
+async function api(){
+  const session=await window.tmAuth?.getSession?.();
+  if(!session?.access_token)throw new Error('Faça login novamente para consultar os dados.');
+  const response=await fetch('/api/audit-production-metrics',{
+    method:'GET',cache:'no-store',credentials:'same-origin',
+    headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'}
+  });
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||!data?.ok)throw new Error(data.error||'Falha na atualização (HTTP '+response.status+')');
+  return data;
 }
 function render(d){
  const n=d.current||{},p=d.previous||{},risk=d.alertMetrics||{};
@@ -4741,15 +4743,31 @@ function render(d){
  say('Fonte: Supabase / Movidesk · '+from+' a '+to+'. '+(d.partial?'Conciliação em andamento: resultados parciais.':'Período conciliado.')+' Alertas de SLA e andamento representam a situação atual dos chamados.');
 }
 async function load(){
- if(busy)return;busy=true;el('pdRefresh').disabled=true;say('Consultando Produção, projetos e alertas...');
- try{render(await api({action:'production_metrics',date:el('pdDate').value,period:el('pdPeriod').value}))}
- catch(e){say('Não foi possível atualizar: '+e.message)}
- finally{busy=false;el('pdRefresh').disabled=false}
+  if(busy)return;
+  busy=true;
+  const button=el('pdRefresh');
+  button.disabled=true;
+  button.textContent='↻ Atualizando...';
+  say('Consultando diretamente o Supabase: chamados, horas e alertas da Produção...');
+  try{
+    const data=await api();
+    render(data);
+    say(el('pdStatus').textContent+' Atualizado às '+
+      new Date(data.generatedAt||Date.now()).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'})+'.');
+  }catch(e){
+    console.error('Falha ao atualizar a Produção:',e);
+    say('Não foi possível atualizar a Produção: '+e.message);
+  }finally{
+    busy=false;button.disabled=false;button.textContent='↻ Atualizar Produção';
+  }
 }
 window.productionAuditInit=()=>{
- if(!started){started=true;el('pdDate').value=dateBR();el('pdDate').max=dateBR();
- el('pdRefresh').addEventListener('click',load);el('pdPeriod').addEventListener('change',load);el('pdLegacyFilter').addEventListener('change',()=>window.productionLegacyRender?.());}
- load();
+  if(!started){
+    started=true;
+    el('pdRefresh').addEventListener('click',load);
+    el('pdLegacyFilter').addEventListener('change',()=>window.productionLegacyRender?.());
+  }
+  load();
 };
 })();
 </script>
