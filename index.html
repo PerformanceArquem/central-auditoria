@@ -1710,7 +1710,12 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                           <p class="subtle" style="margin:0 0 10px;color:#596c86">O Dicas do Manager prepara a mensagem inicial e o sistema pode acrescentar orientações operacionais verificáveis no rodapé. Revise a sugestão antes de enviar. Os dados dos chamados selecionados poderão ser processados pelo Gemini.</p>
                           <p id="alarmEmailStatus" role="status" class="subtle">Selecione os chamados e gere a prévia para liberar o envio.</p>
                           <button type="button" class="s hide noprint" id="alarmEmailRemoveMissing" onclick="alarmRemoveMissingTickets()">Desmarcar os chamados não sincronizados</button>
-                          <div id="alarmEmailPreviewArea" class="hide" style="border:1px solid #dce5f0;border-radius:9px;background:#fff;padding:14px;margin-top:10px">
+                          <div id="alarmEmailManagerDiagnosis" class="hide" style="margin-top:12px;padding:14px;border-radius:12px;border:1px solid #c7d9ee;background:#f6faff">
+                              <h4 style="margin:0 0 6px;color:#183956">✦ Dicas do Manager · Diagnóstico antes do envio</h4>
+                              <p class="subtle" style="margin:0 0 8px">Indicadores objetivos dos chamados selecionados. Hipóteses e orientações precisam ser confirmadas com a equipe; não representam avaliação de pessoas.</p>
+                              <div id="alarmEmailDiagnosisList"></div>
+                            </div>
+                            <div id="alarmEmailPreviewArea" class="hide" style="border:1px solid #dce5f0;border-radius:9px;background:#fff;padding:14px;margin-top:10px">
                             <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px">
                               <strong id="alarmEmailPreviewSubject"></strong>
                               <span class="subtle" style="font-size:11px">Prévia real do HTML · Nenhum e-mail enviado</span>
@@ -3007,6 +3012,8 @@ function alarmEmailInvalidate(){
  $('alarmEmailRemoveMissing')?.classList.add('hide');
  const button=$('alarmEmailSend');if(button)button.disabled=true;
  $('alarmEmailPreviewArea')?.classList.add('hide');
+ $('alarmEmailManagerDiagnosis')?.classList.add('hide');
+ $('alarmEmailDiagnosisList')?.replaceChildren();
  const frame=$('alarmEmailPreviewFrame');if(frame)frame.removeAttribute('srcdoc');
 }
 function alarmSelectionToggle(checkbox){
@@ -3125,6 +3132,23 @@ async function alarmEmailPreview(){
   $('alarmEmailPreviewSubject').textContent='Assunto: '+data.subject;
   $('alarmEmailPreviewText').textContent=data.text||'';
   $('alarmEmailPreviewFrame').srcdoc=data.html;
+  const diagnosis=$('alarmEmailDiagnosisList'),diagBox=$('alarmEmailManagerDiagnosis');
+  if(diagnosis&&diagBox){
+   diagnosis.replaceChildren();
+   const guidance=Array.isArray(data.guidance)?data.guidance:[];
+   for(const entry of guidance){
+    const card=document.createElement('div');card.style.cssText='margin:8px 0;padding:11px;background:#fff;border:1px solid #dfe8f5;border-radius:9px';
+    const evidence=document.createElement('p'),action=document.createElement('p');
+    evidence.style.margin='0 0 6px';action.style.margin='0';
+    const evidenceTitle=document.createElement('strong'),actionTitle=document.createElement('strong');
+    evidenceTitle.textContent='Evidência: ';actionTitle.textContent='Próxima ação: ';
+    evidence.append(evidenceTitle,document.createTextNode(String(entry.evidence||'Não disponível')));
+    action.append(actionTitle,document.createTextNode(String(entry.action||'Revisar com a equipe')));
+    card.append(evidence,action);diagnosis.append(card);
+   }
+   diagBox.classList.toggle('hide',!$('alarmEmailIncludeGuidance')?.checked||!guidance.length);
+  }
+
   $('alarmEmailPreviewArea').classList.remove('hide');
   alarmEmailApproved=alarmSelectionSignature();
   alarmEmailRequestId=crypto.randomUUID();
