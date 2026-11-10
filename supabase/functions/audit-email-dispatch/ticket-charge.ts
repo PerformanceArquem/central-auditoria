@@ -5,6 +5,7 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  if(!/^[^@\s]+@arquem\.com\.br$/i.test(recipient))throw Error('Informe um destinatário corporativo @arquem.com.br.');
  const clean=(v:unknown,max=230)=>String(v??'').replace(/[\x00-\x1f\x7f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,max);
  const esc=(v:unknown)=>clean(v,500).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
+ const escBody=(value:string)=>value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
  const normalized=rows.map(t=>{
    const id=String(t.ticket_id||t.id||'');
    if(!/^\d{1,12}$/.test(id))throw Error('Identificador de chamado inválido.');
@@ -64,7 +65,7 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  '<div style="color:#627997;font-size:11px;text-transform:uppercase;letter-spacing:1px">Demandas para acompanhamento</div>'+
  '<div style="color:#153658;font-size:27px;font-weight:700;margin-top:4px">'+normalized.length+' <span style="font-size:13px;font-weight:400">chamado(s) em aberto</span></div>'+
  '</td></tr></table>'+
- '<div style="padding:18px 0 12px;font-size:13px;line-height:1.75;color:#34475d;white-space:pre-line">'+esc(message)+'</div>'+
+ '<div style="padding:18px 0 12px;font-size:13px;line-height:1.75;color:#34475d;white-space:pre-line">'+escBody(message)+'</div>'+
  '<h2 style="font-size:15px;color:#173454;margin:15px 0 10px;border-left:4px solid #2388c8;padding-left:10px">Chamados selecionados</h2>'+
  '</div>'+
  '<div style="padding:0 18px 22px;overflow-x:auto">'+
