@@ -3215,7 +3215,6 @@ function showTab(t){
   revealActiveNavigation(t);
   $('t-cfg').classList.toggle('hide',t!=='cfg');
   ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='email-admin' && !document.getElementById('emailAdminPanel')?.classList.contains('hide') && !document.getElementById('emailRecipients')?.textContent?.includes('Abra o módulo')) { /* sessão do gerenciador preservada */ }
   if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='email-admin'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='client-impact');
   if(raw.length&&!['load','cfg','diag','alerts','email-admin','report-preview','support-quality','production-audit','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
