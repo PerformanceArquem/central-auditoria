@@ -1600,7 +1600,32 @@
                     <div class="card">
                         <div class="alert-heading"><div><h3>Ranking de chamados sem movimentação</h3><p class="subtle" id="alarmRowsCount">Todos os chamados abertos identificados, inclusive sem horas apontadas.</p></div>
                         <span class="pill bad">Prioridade: maior tempo parado</span></div>
-                        <div class="tw"><table><thead><tr><th>Chamado</th><th>Setor</th><th>Cliente</th><th>Assunto</th><th>Responsável</th><th>Status</th><th>Aberto em</th><th>Última atualização</th><th>Dias parado</th><th>Dias aberto</th><th>Abrir</th></tr></thead><tbody id="tAlarmOldest"></tbody></table></div>
+                        <div class="row noprint" style="gap:8px;flex-wrap:wrap;margin:12px 0;align-items:center">
+                            <button type="button" class="s" onclick="alarmSelectVisible()">Selecionar até 20 visíveis</button>
+                            <button type="button" class="s" onclick="alarmClearSelection()">Limpar seleção</button>
+                            <strong id="alarmSelectedCount" style="font-size:12px;color:var(--muted)">0 chamado(s) selecionado(s) · limite de 20</strong>
+                            <button type="button" class="b" onclick="alarmOpenComposer()">Preparar cobrança por e-mail</button>
+                        </div>
+                        <div class="card hide noprint" id="alarmEmailPanel" style="margin:12px 0;border:1px solid #c6d9ed;background:#f8fbff">
+                          <h3 style="margin:0 0 6px">Cobrança corporativa · chamados selecionados</h3>
+                          <p class="subtle">O sistema prepara a mensagem com os chamados, clientes e responsáveis. Revise o texto e a prévia antes de autorizar o envio. Nenhum e-mail é enviado automaticamente.</p>
+                          <div class="row" style="gap:12px;flex-wrap:wrap;align-items:end;margin-top:12px">
+                            <div class="fg" style="flex:1;min-width:230px"><label for="alarmEmailRecipient">Enviar para (e-mail corporativo)</label><input id="alarmEmailRecipient" type="email" autocomplete="off" placeholder="destinatario@arquem.com.br" oninput="alarmEmailInvalidate()"></div>
+                            <div class="fg" style="min-width:180px"><label for="alarmEmailTone">Modelo de mensagem</label><select id="alarmEmailTone" onchange="alarmEmailDraft()"><option value="cordial">Cobrança cordial</option><option value="priority">Prioridade e previsão</option><option value="management">Resumo para gestão</option></select></div>
+                          </div>
+                          <div class="fg" style="margin-top:10px"><label for="alarmEmailMessage">Texto de abertura (editável)</label><textarea id="alarmEmailMessage" rows="7" style="width:100%" oninput="alarmEmailInvalidate()"></textarea></div>
+                          <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">
+                            <button type="button" class="s" onclick="alarmEmailDraft()">Gerar texto</button>
+                            <button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
+                            <button type="button" class="b" id="alarmEmailSend" onclick="alarmEmailSend()" disabled>Confirmar e enviar</button>
+                          </div>
+                          <p id="alarmEmailStatus" role="status" class="subtle">Selecione os chamados e gere a prévia para liberar o envio.</p>
+                          <div id="alarmEmailPreviewArea" class="hide" style="border:1px solid #dce5f0;border-radius:9px;background:white;padding:14px;margin-top:10px">
+                            <strong id="alarmEmailPreviewSubject"></strong>
+                            <pre id="alarmEmailPreviewText" style="font-family:inherit;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto"></pre>
+                          </div>
+                        </div>
+                        <div class="tw"><table><thead><tr><th class="noprint">Sel.</th><th>Chamado</th><th>Setor</th><th>Cliente</th><th>Assunto</th><th>Responsável</th><th>Status</th><th>Aberto em</th><th>Última atualização</th><th>Dias parado</th><th>Dias aberto</th><th>Abrir</th></tr></thead><tbody id="tAlarmOldest"></tbody></table></div>
                     </div>
                 </div>
                 <div id="t-mgmt" class="hide">
@@ -2704,6 +2729,105 @@ function alarmSetTeamOptions(all){
   select.innerHTML='<option value="">Todos os setores</option>'+teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
   select.value=teams.includes(chosen)?chosen:'';select.dataset.sig=sig;
 }
+const alarmSelected=new Set();
+let alarmEmailApproved='',alarmEmailSending=false;
+const alarmSelectionSignature=()=>{
+ const ids=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
+ return JSON.stringify({ids,recipient:$('alarmEmailRecipient')?.value.trim().toLowerCase()||'',
+   message:$('alarmEmailMessage')?.value||''});
+};
+function alarmUpdateSelectedCount(){
+ if($('alarmSelectedCount'))$('alarmSelectedCount').textContent=alarmSelected.size+' chamado(s) selecionado(s) · limite de 20';
+}
+function alarmEmailInvalidate(){
+ alarmEmailApproved='';
+ const button=$('alarmEmailSend');if(button)button.disabled=true;
+ $('alarmEmailPreviewArea')?.classList.add('hide');
+}
+function alarmSelectionToggle(checkbox){
+ const id=String(checkbox.dataset.alarmTicket||'');
+ if(!/^\d{1,12}$/.test(id))return;
+ if(checkbox.checked){
+  if(alarmSelected.size>=20){checkbox.checked=false;alert('Selecione no máximo 20 chamados por mensagem.');return}
+  alarmSelected.add(id);
+ }else alarmSelected.delete(id);
+ alarmUpdateSelectedCount();alarmEmailInvalidate();
+}
+function alarmSelectVisible(){
+ const visible=alarmList().filter(t=>{
+  const team=$('alarmTeam')?.value||'',q=norm(($('alarmSearch')?.value||'')+' '+(Q.alerts||'')).trim();
+  return (!team||t.team===team)&&(!q||norm([t.id,t.team,t.client,t.subject,t.owner,t.status].join(' ')).includes(q));
+ });
+ for(const item of visible){if(alarmSelected.size>=20)break;alarmSelected.add(item.id)}
+ renderAlerts();alarmEmailInvalidate();
+}
+function alarmClearSelection(){alarmSelected.clear();renderAlerts();alarmEmailInvalidate()}
+function alarmOpenComposer(){
+ if(!alarmSelected.size){alert('Selecione pelo menos um chamado no ranking.');return}
+ $('alarmEmailPanel').classList.remove('hide');
+ if(!$('alarmEmailMessage').value.trim())alarmEmailDraft();
+ $('alarmEmailPanel').scrollIntoView({behavior:'smooth',block:'center'});
+}
+function alarmEmailDraft(){
+ const count=alarmSelected.size;
+ const tone=$('alarmEmailTone').value;
+ const templates={
+  cordial:'Prezados,\n\nSolicito, por gentileza, uma atualização dos '+count+' chamados relacionados abaixo, que permanecem em aberto.\n\nPeço informar o andamento, próximo encaminhamento e previsão de conclusão, quando aplicável.\n\nObrigado pelo retorno.',
+  priority:'Prezados,\n\nIdentificamos '+count+' chamados em aberto que necessitam de prioridade no acompanhamento. Solicito uma posição objetiva sobre o que impede o andamento de cada demanda e uma previsão de tratativa.\n\nFavor informar responsável, ação prevista e data de retorno.\n\nAgradeço a atenção.',
+  management:'Prezados,\n\nEncaminho para análise gerencial os '+count+' chamados listados abaixo, com foco no tempo sem atualização e na necessidade de regularização dos encaminhamentos.\n\nSolicito retorno com situação, responsável pela próxima ação e previsão realista de conclusão.\n\nAtenciosamente.'
+ };
+ $('alarmEmailMessage').value=templates[tone]||templates.cordial;
+ alarmEmailInvalidate();
+}
+async function alarmEmailCall(action,confirmed=false){
+ const client=window.tmEmailAdminClient;
+ if(!client)throw Error('Acesso administrativo necessário. Entre novamente na Central.');
+ const ids=[...alarmSelected];
+ if(!ids.length||ids.length>20)throw Error('Selecione de 1 a 20 chamados.');
+ const recipient=$('alarmEmailRecipient').value.trim().toLowerCase();
+ if(!/^[^@\s]+@arquem\.com\.br$/.test(recipient))throw Error('Informe um destinatário @arquem.com.br.');
+ const {data,error}=await client.functions.invoke('audit-email-dispatch',{
+  body:{action,ticketIds:ids,recipient,message:$('alarmEmailMessage').value,confirmed}
+ });
+ if(error){
+  let detail=error.message||'Falha no serviço de e-mail.';
+  try{const e=await error.context?.json?.();if(e?.error)detail=e.error}catch(_){}
+  throw Error(detail);
+ }
+ if(!data?.ok)throw Error(data?.error||'Operação não concluída.');
+ return data;
+}
+async function alarmEmailPreview(){
+ if(alarmEmailSending)return;
+ const button=$('alarmEmailSend');button.disabled=true;
+ $('alarmEmailStatus').textContent='Conferindo chamados e preparando a prévia...';
+ try{
+  const data=await alarmEmailCall('ticket_charge_preview');
+  $('alarmEmailPreviewSubject').textContent='Assunto: '+data.subject;
+  $('alarmEmailPreviewText').textContent=data.text;
+  $('alarmEmailPreviewArea').classList.remove('hide');
+  alarmEmailApproved=alarmSelectionSignature();
+  button.disabled=false;
+  $('alarmEmailStatus').textContent='Prévia pronta. Confira destinatário, números e texto antes de confirmar o envio.';
+ }catch(e){alarmEmailApproved='';$('alarmEmailStatus').textContent='Erro na prévia: '+(e.message||e)}
+}
+async function alarmEmailSend(){
+ if(alarmEmailSending||!alarmEmailApproved||alarmEmailApproved!==alarmSelectionSignature()){
+  $('alarmEmailStatus').textContent='Gere uma nova prévia após qualquer alteração.';return
+ }
+ const recipient=$('alarmEmailRecipient').value.trim(),n=alarmSelected.size;
+ if(!window.confirm('Enviar agora a cobrança de '+n+' chamado(s) para '+recipient+'? Este envio é real e não pode ser desfeito.'))return;
+ alarmEmailSending=true;$('alarmEmailSend').disabled=true;
+ $('alarmEmailStatus').textContent='Enviando mensagem corporativa...';
+ try{
+  const result=await alarmEmailCall('ticket_charge_send',true);
+  $('alarmEmailStatus').textContent='Solicitação enviada ao serviço Gmail para '+result.recipient+'. Confirme a entrega antes de qualquer reenvio.';
+  alarmEmailApproved='';alarmSelected.clear();renderAlerts();
+ }catch(e){
+  $('alarmEmailStatus').textContent='Envio não confirmado: '+(e.message||e)+'. Consulte o Gmail antes de tentar novamente.';
+  alarmEmailApproved='';
+ }finally{alarmEmailSending=false;$('alarmEmailSend').disabled=true}
+}
 function renderAlerts(){
   if(!$('t-alerts'))return;
   const all=alarmList(),limit=alarmThreshold(),alerted=all.filter(x=>x.idle>=limit);
@@ -2727,7 +2851,8 @@ function renderAlerts(){
   $('alertKpis').innerHTML=counts.map(([k,v,d])=>`<div class="card"><small>${esc(k)}</small><div><b>${esc(v)}</b></div><span class="subtle">${esc(d)}</span></div>`).join('');
   const groups=[...teams.values()].sort((a,b)=>(b.worst?.idle||0)-(a.worst?.idle||0));
   $('tAlarmSector').innerHTML=groups.length?groups.map(g=>`<tr><td><b>${esc(g.team)}</b></td><td>${g.total}</td><td><b>${g.alert}</b></td><td>${alarmCellTicket(g.worst.id)}</td><td>${alarmBadge(g.worst.idle,limit)}</td><td>${alarmDateLabel(g.worst.last)}${g.worst.estimated?' <small title="Sem lastUpdate; usada data de abertura">¹</small>':''}</td></tr>`).join(''):'<tr><td colspan="6">Ainda não há chamados com informações suficientes para esse ranking.</td></tr>';
-  $('tAlarmOldest').innerHTML=display.length?display.map(t=>`<tr><td><b>${alarmCellTicket(t.id)}</b></td><td>${esc(t.team)}</td><td>${esc(t.client)}</td><td title="${esc(t.subject)}">${esc(t.subject)}</td><td>${esc(t.owner)}</td><td><span class="pill">${esc(t.status)}</span></td><td>${alarmDateLabel(t.created)}</td><td>${alarmDateLabel(t.last)}${t.estimated?' <span title="Sem última atualização informada; usada a abertura">¹</span>':''}</td><td>${alarmBadge(t.idle,limit)}</td><td>${t.open==null?'—':t.open+' d'}</td><td>${ticketUrl(t.id)?`<a href="${esc(ticketUrl(t.id))}" target="_blank" rel="noopener noreferrer">Abrir ↗</a>`:'Sem portal'}</td></tr>`).join(''):'<tr><td colspan="11">Nenhum chamado corresponde aos critérios ou não há dados carregados.</td></tr>';
+  $('tAlarmOldest').innerHTML=display.length?display.map(t=>`<tr><td class="noprint"><input aria-label="Selecionar chamado ${esc(t.id)}" type="checkbox" data-alarm-ticket="${esc(t.id)}" onchange="alarmSelectionToggle(this)" ${alarmSelected.has(t.id)?'checked':''}></td><td><b>${alarmCellTicket(t.id)}</b></td><td>${esc(t.team)}</td><td>${esc(t.client)}</td><td title="${esc(t.subject)}">${esc(t.subject)}</td><td>${esc(t.owner)}</td><td><span class="pill">${esc(t.status)}</span></td><td>${alarmDateLabel(t.created)}</td><td>${alarmDateLabel(t.last)}${t.estimated?' <span title="Sem última atualização informada; usada a abertura">¹</span>':''}</td><td>${alarmBadge(t.idle,limit)}</td><td>${t.open==null?'—':t.open+' d'}</td><td>${ticketUrl(t.id)?`<a href="${esc(ticketUrl(t.id))}" target="_blank" rel="noopener noreferrer">Abrir ↗</a>`:'Sem portal'}</td></tr>`).join(''):'<tr><td colspan="12">Nenhum chamado corresponde aos critérios ou não há dados carregados.</td></tr>';
+  alarmUpdateSelectedCount();
   $('alarmRowsCount').textContent=`Exibindo ${display.length} de ${list.length} chamados abertos identificados.${display.length<list.length?' A exportação Excel inclui todos.':''} O total não depende das horas apontadas.`;
   const missingLabel=hiddenUnknown?` · ${hiddenUnknown} chamado(s) sem status ou data suficiente para classificar`:'';
   const stamp=Number(localStorage.getItem('md_alarm_scan_time')||0);

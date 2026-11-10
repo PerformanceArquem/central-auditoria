@@ -1,5 +1,6 @@
 import {forecastSection} from "./forecast-variance.ts";
 import {dashboardReport} from "./dashboard-report.ts";
+import {composeTicketCharge} from "./ticket-charge.ts";
 // Central de Auditoria — Supabase direto -> Google Apps Script/Gmail
 // Compatível com as ações existentes: status e test (admin JWT).
 // NUNCA colocar credenciais no HTML. Nenhum disparo automático sem flags explícitas.
@@ -1556,15 +1557,44 @@ async function dashboardReportAction(payload:R){
  });
  return json(result);
 }
+// Apenas administradores. A seleção enviada pelo browser é revalidada no banco.
+async function ticketChargeAction(payload:R):Promise<Response>{
+ const action=String(payload.action||'');
+ const ids=Array.isArray(payload.ticketIds)?payload.ticketIds.map((x:unknown)=>String(x)):[];
+ if(ids.length<1||ids.length>20||ids.some(x=>!/^\d{1,12}$/.test(x))||
+    new Set(ids).size!==ids.length)
+  return json({ok:false,error:'Selecione entre 1 e 20 chamados distintos.'},400);
+ const recipient=String(payload.recipient||'').trim().toLowerCase();
+ if(!/^[^@\s]+@arquem\.com\.br$/.test(recipient))
+  return json({ok:false,error:'Destinatário deve ser um e-mail corporativo @arquem.com.br.'},400);
+ const message=String(payload.message||'').trim();
+ if(message.length>8500)return json({ok:false,error:'O texto é muito longo.'},400);
+ const records=await db('audit_direct_tickets?select=ticket_id,payload,created_at_source,last_update_source&ticket_id=in.('+ids.join(',')+')&limit=20');
+ if(!Array.isArray(records)||records.length!==ids.length)
+  return json({ok:false,error:'Alguns chamados não estão sincronizados na Central. Atualize e selecione novamente.'},409);
+ const lookup=new Map(records.map((x:R)=>[String(x.ticket_id),x]));
+ const ordered=ids.map(id=>{const record=lookup.get(id);if(!record)throw Error('Chamado não encontrado: #'+id);return record;});
+ const draft=composeTicketCharge(ordered,recipient,message);
+ if(action==='ticket_charge_preview')
+  return json({ok:true,preview:true,recipient,subject:draft.subject,text:draft.text,
+    html:draft.html,ticketCount:draft.tickets.length,ids});
+ if(action!=='ticket_charge_send')return json({ok:false,error:'Ação não autorizada.'},400);
+ if(payload.confirmed!==true)return json({ok:false,error:'Confirmação explícita necessária antes do envio.'},400);
+ // Envio único por clique, sem reenvio automático. Falha ambígua deve ser verificada no Gmail.
+ await sendMail(recipient,draft.subject,draft.text,draft.html);
+ return json({ok:true,sent:true,recipient,subject:draft.subject,ticketCount:draft.tickets.length,
+  info:'Solicitação aceita pelo serviço Gmail. Em caso de dúvida, confirme a entrega antes de reenviar.'});
+}
 async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'Apenas POST' }, 405);
   let payload: R = {};
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if (action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
+    if (action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
-      return action === 'dashboard_report' ? await dashboardReportAction(payload)
+      return (action === 'ticket_charge_preview' || action === 'ticket_charge_send') ? await ticketChargeAction(payload)
+        : action === 'dashboard_report' ? await dashboardReportAction(payload)
         : action === 'director_preview' ? await directorPreview(payload)
         : action === 'manual_official' ? await manualOfficial(payload)
         : action === 'preview_audit' ? await manualOfficial({...payload,previewOnly:true})
