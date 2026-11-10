@@ -2827,7 +2827,13 @@ function period(c){
   }
   o.cap=o.work*c.jor;return o;
 }
-const isProj=(r,c)=>c.ids.includes(r.ticket_id)||(c.kw&&String(r[c.fld]||'').toLowerCase().includes(c.kw));
+// Buscar o ID de um chamado na aba Projetos deve funcionar mesmo que o assunto
+// nao contenha a palavra-chave usada para classificar projetos automaticamente.
+const projRequestedTicket=()=>ACT==='proj'&&/^#?\d+$/.test(String(Q.proj||'').trim())
+  ?String(Q.proj).trim().replace(/^#/,''):null;
+const isProj=(r,c)=>c.ids.includes(String(r.ticket_id))||
+  (projRequestedTicket()===String(r.ticket_id))||
+  (c.kw&&String(r[c.fld]||'').toLowerCase().includes(c.kw));
 const bizDays=(a,b)=>{let n=0;for(let d=new Date(a+'T12:00:00'),e=new Date(b+'T12:00:00');d<=e;d.setDate(d.getDate()+1)){const w=d.getDay();if(w&&w<6)n++}return n};
 const nf=(v,d=2)=>v.toFixed(d).replace('.',',');
 // Durações em horas decimais nos cálculos; exibição HHhMM (com segundos somente quando existentes, inclusive >24h).
@@ -2852,12 +2858,23 @@ function renderProj(c){
     const p=P[r.ticket_id]??={id:r.ticket_id,subject:r.subject,client:r.client_name,d:{}};
     const d=p.d[r.date]??={h:0,a:new Set()};d.h+=r.hours;d.a.add(r.owner_name);
   });
+  // Se o chamado existe no cache mas nao ha apontamentos no periodo,
+  // exibir seu cadastro sem inventar horas ou colaboradores.
+  const searchedId=projRequestedTicket();
+  if(searchedId&&!P[searchedId]){
+    const t=TK.get(searchedId);
+    if(t){
+      const client=(t.clients||[])[0];
+      P[searchedId]={id:searchedId,subject:String(t.subject||'Sem assunto'),
+        client:nm(client?.organization)||nm(client)||'Não informado',d:{}};
+    }
+  }
   const st=h=>h<c.meta-tol?'low':h>c.meta+tol?'high':'ok';
   $('tProj').innerHTML=Object.values(P).map(p=>{
     const ds=Object.entries(p.d);let lo=0,ok=0,hi=0,tot=0;
     ds.forEach(([dt,v])=>{const s=st(v.h);if(s==='low')lo++;else if(s==='ok')ok++;else hi++;tot+=v.h;det.push({p,dt,v,s})});
-    const avg=tot/ds.length,s=st(avg);
-    return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${esc(p.client)}</td><td>${ds.length}</td><td><b>${H(tot)}</b></td><td><span class="pill ${s==='ok'?'ok':s==='high'?'bad':'warn'}">${H(avg)}</span></td><td>${lo}</td><td>${ok}</td><td>${hi?`<span class="pill bad">${hi}</span>`:0}</td></tr>`;
+    const avg=ds.length?tot/ds.length:0,s=st(avg);
+    return `<tr><td>${alarmCellTicket(p.id)}</td><td>${esc(p.subject)}</td><td>${esc(p.client)}</td><td>${ds.length}</td><td><b>${ds.length?H(tot):'Sem apontamentos no período'}</b></td><td><span class="pill ${s==='ok'?'ok':s==='high'?'bad':'warn'}">${ds.length?H(avg):'—'}</span></td><td>${lo}</td><td>${ok}</td><td>${hi?`<span class="pill bad">${hi}</span>`:0}</td></tr>`;
   }).join('')||empty(9);
   det.sort((a,b)=>b.dt.localeCompare(a.dt));
   $('tProjDay').innerHTML=det.slice(0,1000).map(({p,dt,v,s})=>{
