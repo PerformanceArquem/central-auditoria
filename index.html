@@ -4391,6 +4391,15 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       if(error)throw error;
       if(!data?.ok)throw Error(data?.error||'Não foi possível consultar a prévia.');
       const m=data.metrics||{},t=data.ticketMetrics||{},p=data.ticketPreview||{};
+      const forecast=Array.isArray(data.forecastPreview)?data.forecastPreview:[];
+      const hh=v=>{const n=Math.max(0,Math.round(Number(v)||0));return Math.floor(n/60)+'h'+String(n%60).padStart(2,'0')};
+      const forecastSection=forecast.length?
+        '<section style="margin-top:22px;border-top:3px solid #183956;padding-top:12px"><h3 style="color:#183956">Auditoria de previsões — chamados encerrados</h3>'+
+        '<p class="subtle">Situação atual da base; não representa somente o período do relatório. Diferenças exigem validação do escopo e não comprovam irregularidade.</p>'+
+        '<div style="overflow-x:auto"><table style="width:100%"><thead><tr><th>Chamado</th><th>Cliente / responsável</th><th>Previsto</th><th>Apontado</th><th>Diferença</th><th>Confiança</th></tr></thead><tbody>'+
+        forecast.map(x=>'<tr><td><a target="_blank" rel="noopener noreferrer" href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(String(x.id))+'">#'+esc(x.id)+'</a></td><td>'+esc(x.client)+'<small style="display:block">'+esc(x.owner)+' · '+esc(x.sector)+'</small></td><td>'+hh(Number(x.estimatedHours)*60)+'</td><td>'+hh(x.actualMinutes)+'</td><td>'+hh(Number(x.gapHours)*60)+' ('+esc(Number(x.variancePercent).toFixed(1))+'%)</td><td>'+esc(x.confidence)+'</td></tr>').join('')+'</tbody></table></div></section>':
+        '<p class="subtle">Nenhum desvio de previsão qualificado para o destinatário nesta consulta.</p>';
+
       const line=(item,category)=>'<tr><td style="padding:7px;border-bottom:1px solid #e5edf7"><a href="'+esc(item.url)+'" target="_blank" rel="noopener noreferrer">#'+esc(item.id)+'</a></td><td style="padding:7px;border-bottom:1px solid #e5edf7">'+esc(item.subject)+'</td><td style="padding:7px;border-bottom:1px solid #e5edf7">'+esc(item.owner)+' · '+esc(item.sector)+'</td><td style="padding:7px;border-bottom:1px solid #e5edf7">'+esc(category==='sla'?item.sla:(item.days+' dias'))+'</td></tr>';
       const examples=[...(p.overdue||[]).map(x=>line(x,'sla')),...(p.stalled||[]).map(x=>line(x,'stalled'))];
       area.innerHTML='<strong>Prévia — '+esc(data.from)+' a '+esc(data.to)+'</strong>'+
@@ -4400,7 +4409,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         ' · Sem ação há 7+ dias: '+esc(String(t.stalled??0))+' · Sem SLA: '+esc(String(t.withoutSla??0))+'</p>'+
         (data.partial?'<p style="color:#9a6713">A sincronização de apontamentos ainda pode estar incompleta.</p>':'')+
         '<p class="subtle">Exemplos dos chamados identificados (até 5 por categoria). Um chamado pode aparecer em ambas.</p>'+
-        (examples.length?'<div style="overflow-x:auto"><table style="width:100%"><thead><tr><th>Ticket</th><th>Assunto</th><th>Responsável / setor</th><th>Prazo / inatividade</th></tr></thead><tbody>'+examples.join('')+'</tbody></table></div>':'<p>Nenhum exemplo de pendência nos registros importados.</p>');
+        (examples.length?'<div style="overflow-x:auto"><table style="width:100%"><thead><tr><th>Ticket</th><th>Assunto</th><th>Responsável / setor</th><th>Prazo / inatividade</th></tr></thead><tbody>'+examples.join('')+'</tbody></table></div>':'<p>Nenhum exemplo de pendência nos registros importados.</p>'+forecastSection;
       area.classList.remove('hide');
       status.textContent='Prévia gerada sem disparo de e-mail nem alteração dos agendamentos.';
     }catch(err){status.textContent='Erro na prévia: '+(err?.message||err)}
