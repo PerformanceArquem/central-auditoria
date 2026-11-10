@@ -18,4 +18,4 @@ jobs:
       - name: Validate TypeScript
         run: deno check supabase/functions/audit-email-dispatch/index.ts
       - name: Test manual email guidance safely without sending email
-        run: deno test --allow-none tests/ticket-charge-guidance.test.ts
+        run: deno test tests/ticket-charge-guidance.test.ts
