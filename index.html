@@ -4147,7 +4147,14 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
      const client=window.tmEmailAdminClient;
      if(!client)throw Error('Entre com o usuário administrador da Central de Auditoria.');
      const {data,error}=await client.functions.invoke('audit-email-dispatch',{body:{action:'director_preview',date:el('executiveDate').value}});
-     if(error)throw error;
+     if(error){
+       let reason=error.message||'Falha na função de relatório.';
+       try{
+         const payload=await error.context?.json?.();
+         if(payload?.error)reason=payload.error;
+       }catch(_){}
+       throw Error(reason);
+     }
      if(!data?.ok)throw Error(data?.error||'Falha ao gerar relatório.');
      report=data;
      el('executiveResult').classList.remove('hide');
