@@ -74,9 +74,27 @@ async function md(params:Record<string,string>){
  const token=env("MOVIDESK_TOKEN");if(!token)throw Error("MOVIDESK_TOKEN ausente");
  const url=new URL(API);url.searchParams.set("token",token);
  for(const [key,val] of Object.entries(params))url.searchParams.set(key,val);
- const r=await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(20000)});
- if(!r.ok)throw Error("Movidesk HTTP "+r.status);
- return r.json();
+ // Falhas temporárias são repetidas sem avançar o checkpoint do lote.
+ // Limitar a espera evita prender a Edge Function indefinidamente.
+ for(let attempt=0;attempt<3;attempt++){
+  try{
+   const r=await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(12000)});
+   if(r.ok)return await r.json();
+   if(![429,500,502,503,504].includes(r.status)||attempt===2)
+    throw Error("Movidesk HTTP "+r.status);
+   const retryAfter=Number(r.headers.get("Retry-After"));
+   const delay=Number.isFinite(retryAfter)&&retryAfter>0
+    ? Math.min(4000,retryAfter*1000):500*2**attempt;
+   await new Promise(resolve=>setTimeout(resolve,delay));
+  }catch(error){
+   if(attempt===2||!(
+    error instanceof TypeError||
+    error instanceof DOMException&&error.name==="TimeoutError"
+   ))throw error;
+   await new Promise(resolve=>setTimeout(resolve,500*2**attempt));
+  }
+ }
+ throw Error("Tentativas Movidesk esgotadas");
 }
 async function admin(req:Request){
  const authorization=req.headers.get("Authorization")??"";
