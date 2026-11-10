@@ -4086,7 +4086,14 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
      const {data:unified,error:unifiedError}=await supabaseHost.functions.invoke('audit-email-dispatch',{
        body:{action:'dashboard_report',period:el('previewPeriod').value,date:el('previewDate').value,recipientId:el('previewManager').value}
      });
-     if(unifiedError)throw unifiedError;
+     if(unifiedError){
+       let explanation=unifiedError.message||'Consulta ao relatório indisponível.';
+       try{
+         const serverError=await unifiedError.context?.json?.();
+         if(serverError?.error)explanation=serverError.error;
+       }catch(_){}
+       throw Error(explanation);
+     }
      const response={ok:unified?.ok===true,status:unified?.ok===true?200:500};
      const responseData=unified;
      const json=responseData||{};
