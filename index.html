@@ -1984,6 +1984,12 @@
                             <div class="fg"><label>Desvio mínimo (% abaixo da previsão)</label>
                                 <input id="faMinGap" type="number" min="1" max="99" step="5" value="60" onchange="renderForecastAudit()">
                             </div>
+                            <div class="fg"><label>Setores</label>
+                                <select id="faSector" onchange="renderForecastAudit()">
+                                    <option value="production">Produção (prioridade)</option>
+                                    <option value="all">Todos os setores</option>
+                                </select>
+                            </div>
                             <div class="fg"><label>Situação</label>
                                 <select id="faScope" onchange="renderForecastAudit()">
                                     <option value="closed">Somente encerrados (prioridade)</option>
@@ -2975,10 +2981,14 @@ function forecastAuditData(){
   const minHours=Math.max(1,Number($('faMinHours')?.value)||8);
   const minGap=Math.min(99,Math.max(1,Number($('faMinGap')?.value)||60));
   const scope=$('faScope')?.value||'closed';
+  const sectorScope=$('faSector')?.value||'production';
   const id=projRequestedTicket();
   const items=budgetData(c,'a');
   const valid=items.filter(p=>{
     if(id&&String(p.id)!==id)return false;
+    if(sectorScope==='production'&&!/producao|produc|cpo/i.test(
+      String(p.r?.sector||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    ))return false;
     if(!Number.isFinite(p.pl)||p.pl<minHours||!Number.isFinite(p.h)||p.h<=0)return false;
     if(p.h>=p.pl)return false;
     if((1-p.h/p.pl)*100<minGap)return false;
