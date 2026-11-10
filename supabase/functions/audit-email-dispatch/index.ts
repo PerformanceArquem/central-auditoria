@@ -841,7 +841,11 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
 async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R) {
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
   if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
-  const withAttachments=E('REPORT_ATTACHMENTS_ENABLED')==='true' && !!reportData;
+  // Relatórios: nunca degradar silenciosamente para envio sem anexos.
+  // Mensagens operacionais (ex.: teste de conexão e cobrança avulsa) não são relatórios.
+  if (reportData && E('REPORT_ATTACHMENTS_ENABLED') !== 'true')
+    throw new Error('Envio de relatório bloqueado: PDF e Excel obrigatórios (REPORT_ATTACHMENTS_ENABLED).');
+  const withAttachments=!!reportData;
   const endpoint=validUrl();
   if(withAttachments) {
     // Exigir gerador validado e modelo timbrado antes de tentar um envio com anexos.
