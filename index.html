@@ -846,6 +846,55 @@
 #emailAdminPanel td button{white-space:nowrap}
 @media print{#emailAdminCard{display:none!important}}
 </style>
+<style id="audit-navigation-folders-style">
+/* Menu em pastas expansíveis: os data-t originais continuam intactos. */
+#tabs .nav-head{display:flex;align-items:center;justify-content:space-between;color:#7e8da8;letter-spacing:.1em;font-size:10px;padding:8px 12px 14px}
+#tabs .nav-head button{min-height:25px;width:27px;padding:3px 7px;justify-content:center;border:1px solid #e2e8f0;border-radius:7px;font-size:16px}
+#tabs .nav-folder{border:1px solid transparent;border-radius:12px;margin-bottom:5px;min-width:0}
+#tabs .nav-folder[open]{background:#f8faff;border-color:#e5edf8}
+#tabs .nav-folder>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 10px;color:#354764;font-weight:750;font-size:12.5px;border-radius:10px;user-select:none}
+#tabs .nav-folder>summary::-webkit-details-marker{display:none}
+#tabs .nav-folder>summary:hover{background:#edf3fd}
+#tabs .nav-folder>summary:focus-visible,#tabs .nav-folder button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#tabs .nav-folder-icon{font-size:15px;width:20px;text-align:center;color:#4771b2}
+#tabs .nav-chevron{margin-left:auto;transition:transform .18s ease;font-size:17px;color:#71809b}
+#tabs .nav-folder[open]>.nav-chevron,#tabs .nav-folder[open]>summary .nav-chevron{transform:rotate(180deg)}
+#tabs .nav-folder-items{display:flex;flex-direction:column;gap:3px;padding:1px 7px 8px 17px}
+#tabs .nav-folder-items>button{width:100%;font-size:12.5px;text-align:left;min-height:37px;padding:9px 10px;white-space:normal}
+#tabs .nav-folder:has(button.on)>summary{color:#2055ad}
+@media(max-width:900px){
+  #tabs{display:flex;flex-direction:column;align-items:stretch;max-height:55vh;overflow-y:auto;overflow-x:hidden;gap:3px}
+  #tabs .nav-head{display:flex}
+  #tabs .nav-folder{flex:0 0 auto;width:100%}
+  #tabs .nav-folder-items>button{white-space:normal;border-bottom:0;flex:0 0 auto}
+  #tabs .nav-folder-items>button.on{box-shadow:inset 3px 0 var(--blue);border-radius:8px}
+}
+@media(prefers-reduced-motion:reduce){#tabs .nav-chevron{transition:none}}
+@media print{#tabs{display:none!important}}
+</style>
+<style id="audit-executive-refresh-style">
+/* Modernização progressiva, sem interferir em gráficos, filtros ou valores de indicadores. */
+:root{--audit-surface:#fff;--audit-outline:#e0e8f4;--audit-soft-shadow:0 5px 18px rgba(25,45,81,.055)}
+main .card{background:var(--audit-surface);border:1px solid var(--audit-outline);box-shadow:var(--audit-soft-shadow);transition:box-shadow .2s ease,border-color .2s ease}
+main .card:hover{box-shadow:0 9px 25px rgba(25,45,81,.09);border-color:#cadbf0}
+main .card .card{box-shadow:none}
+main .kpis .card{position:relative;overflow:hidden;background:linear-gradient(135deg,#fff 60%,#f4f8ff);border-left:3px solid #4f79c9}
+main .kpis .card b{letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+main .mh{margin-bottom:20px}
+main .mh h2{color:#142b50}
+main .row.noprint button,main .card button{transition:background-color .17s ease,box-shadow .17s ease}
+main button:focus-visible,main select:focus-visible,main input:focus-visible{outline:2px solid #2765dc;outline-offset:2px}
+#t-email-admin>.mh{padding:8px 0 4px}
+#t-email-admin #emailAdminCard{background:linear-gradient(155deg,#fff,#f9fbff);border-top:3px solid #2765dc}
+#t-mgmt #mgKpi .card{min-height:90px}
+@media(max-width:900px){
+  main .card{border-radius:12px}
+  main .kpis{grid-template-columns:repeat(auto-fit,minmax(145px,1fr))}
+  #t-email-admin .email-admin-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media(prefers-reduced-motion:reduce){main .card,main .row.noprint button,main .card button{transition:none}}
+@media print{main .card{box-shadow:none!important;border:1px solid #d1d5db!important;background:#fff!important}}
+</style>
 </head>
     <body class="tm-locked">
         <form id="tm-login" class="card" hidden>
@@ -871,25 +920,48 @@
             </div>
         </header>
         <nav id="tabs" aria-label="Menu principal">
-            <div class="nav-section">MONITORAMENTO</div>
-            <button data-t="mgmt">▦ &nbsp;Visão geral</button>
-            <button data-t="alerts" class="nav-alerts">🚨 &nbsp;Alertas e pendências <span id="navAlarmCount" class="nav-count" aria-label="Alertas críticos">0</span></button>
-            <button data-t="live">◉ &nbsp;Tempo real</button>
-            <div class="nav-section">INDICADORES</div>
-            <button data-t="charts">▥ &nbsp;Gráficos comparativos</button>
-            <button data-t="report-preview">✉ &nbsp;Prévia de relatórios</button>
-            <button data-t="support-quality">🎧 &nbsp;Qualidade do Suporte</button>
-            <button data-t="production-audit">🏭 &nbsp;Auditoria da Produção</button>
-            <button data-t="client-impact">📊 &nbsp;Clientes e Impacto</button>
-            <button data-t="vip">★ &nbsp;Clientes VIP</button>
-            <button data-t="occ">♙ &nbsp;Colaboradores</button>
-            <button data-t="proj">▤ &nbsp;Projetos e prazos</button>
-            <div class="nav-section">DADOS E RELATÓRIOS</div>
-            <button data-t="entries">≡ &nbsp;Lançamentos</button>
-            <button data-t="pivot">▦ &nbsp;Tabela dinâmica</button>
-            <div class="nav-section">SISTEMA</div>
-            <button data-t="cfg">⚙ &nbsp;Configurações</button>
-            <button data-t="diag">◈ &nbsp;Diagnóstico</button>
+          <div class="nav-head"><strong>MENU PRINCIPAL</strong><button type="button" id="navCollapseAll" aria-label="Recolher todas as pastas" title="Recolher todas as pastas">−</button></div>
+          <details class="nav-folder" data-folder="0" open>
+            <summary><span class="nav-folder-icon" aria-hidden="true">◈</span><span>Monitoramento</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary>
+            <div class="nav-folder-items">
+              <button data-t="mgmt">▦ &nbsp;Visão geral</button>
+              <button data-t="alerts" class="nav-alerts">🚨 &nbsp;Alertas e pendências <span id="navAlarmCount" class="nav-count" aria-label="Alertas críticos">0</span></button>
+              <button data-t="live">◉ &nbsp;Tempo real</button>
+            </div>
+          </details>
+          <details class="nav-folder" data-folder="1">
+            <summary><span class="nav-folder-icon" aria-hidden="true">▤</span><span>Auditorias</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary>
+            <div class="nav-folder-items">
+              <button data-t="support-quality">🎧 &nbsp;Qualidade do Suporte</button>
+              <button data-t="production-audit">🏭 &nbsp;Auditoria da Produção</button>
+              <button data-t="proj">▤ &nbsp;Projetos e prazos</button>
+              <button data-t="occ">♙ &nbsp;Colaboradores</button>
+            </div>
+          </details>
+          <details class="nav-folder" data-folder="2">
+            <summary><span class="nav-folder-icon" aria-hidden="true">▥</span><span>Indicadores e análises</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary>
+            <div class="nav-folder-items">
+              <button data-t="charts">▥ &nbsp;Gráficos comparativos</button>
+              <button data-t="client-impact">📊 &nbsp;Clientes e Impacto</button>
+              <button data-t="vip">★ &nbsp;Clientes VIP</button>
+              <button data-t="pivot">▦ &nbsp;Tabela dinâmica</button>
+            </div>
+          </details>
+          <details class="nav-folder" data-folder="3">
+            <summary><span class="nav-folder-icon" aria-hidden="true">✉</span><span>Relatórios e e-mails</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary>
+            <div class="nav-folder-items">
+              <button data-t="report-preview">✉ &nbsp;Prévia de relatórios</button>
+              <button data-t="email-admin">✉ &nbsp;Gerenciar e-mails</button>
+              <button data-t="entries">≡ &nbsp;Lançamentos</button>
+            </div>
+          </details>
+          <details class="nav-folder" data-folder="4">
+            <summary><span class="nav-folder-icon" aria-hidden="true">⚙</span><span>Administração</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary>
+            <div class="nav-folder-items">
+              <button data-t="cfg">⚙ &nbsp;Conexões e configurações</button>
+              <button data-t="diag">◈ &nbsp;Diagnóstico</button>
+            </div>
+          </details>
         </nav>
         <main>
 
@@ -1284,17 +1356,9 @@
                     <p style="font-size:12px;color:var(--muted);margin-top:12px">O painel registra alterações identificadas entre sincronizações. Para receber eventos instantaneamente, sem aguardar a próxima consulta, é necessário configurar webhook no backend. Horários em Brasília: “Detectado” é o horário da consulta; “Atualização no Movidesk” é o horário informado pelo chamado.</p>
                 </div>
             </div>
-            <div id="t-cfg" class="hide">
-                <div class="card" style="border-left:4px solid var(--blue)">
-                    <h2 style="margin:0 0 5px">Conexão e carregamento de dados</h2>
-                    <p style="margin:0;color:var(--muted)">Configure a API Movidesk, importe arquivos e acompanhe a sincronização automática.</p>
-                </div>
-                <div class="card" id="cloudCard" style="border:1px solid #b8c9e8;background:#f7faff">
-                    <h3>Dados compartilhados</h3>
-                    <p id="cloudMsg" role="status" style="margin:0">Conectando automaticamente ao banco de dados...</p>
-                </div>
-                
-<div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
+            <div id="t-email-admin" class="hide">
+                <div class="mh"><div><div class="eyebrow">RELATÓRIOS · ADMINISTRAÇÃO</div><h2>Central de e-mails e destinatários</h2><p>Gerencie relatórios automáticos, testes individuais e histórico de envio sem misturar com as configurações técnicas.</p></div></div>
+                <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
   <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
   <div id="emailAdminPanel" class="hide">
     <p id="emailAdminStatus" role="status" class="coverage-note">Aguardando abertura.</p>
@@ -1345,6 +1409,18 @@
     <p class="subtle" style="margin-top:12px">O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
   </div>
 </div>
+            </div>
+            <div id="t-cfg" class="hide">
+                <div class="card" style="border-left:4px solid var(--blue)">
+                    <h2 style="margin:0 0 5px">Conexão e carregamento de dados</h2>
+                    <p style="margin:0;color:var(--muted)">Configure a API Movidesk, importe arquivos e acompanhe a sincronização automática.</p>
+                </div>
+                <div class="card" id="cloudCard" style="border:1px solid #b8c9e8;background:#f7faff">
+                    <h3>Dados compartilhados</h3>
+                    <p id="cloudMsg" role="status" style="margin:0">Conectando automaticamente ao banco de dados...</p>
+                </div>
+                
+
 <div id="t-load">
                     <div class="card">
                         <h3>API Movidesk</h3>
@@ -3159,13 +3235,28 @@ let ACT='cfg';
 function showTab(t){
   ACT=t;document.body.dataset.t=t;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  revealActiveNavigation(t);
   $('t-cfg').classList.toggle('hide',t!=='cfg');
-  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','support-quality','production-audit','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
   if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
-  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='client-impact');
-  if(raw.length&&!['load','cfg','diag','alerts','report-preview','support-quality','production-audit','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
+  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='email-admin'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='client-impact');
+  if(raw.length&&!['load','cfg','diag','alerts','email-admin','report-preview','support-quality','production-audit','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
 $('tabs').addEventListener('click',e=>{const btn=e.target.closest('button');if(btn&&btn.dataset.t)showTab(btn.dataset.t)});
+
+// Mantém a pasta do módulo ativo aberta, inclusive em atalhos e após atualizações.
+function revealActiveNavigation(t){
+  const item=[...document.querySelectorAll('#tabs button[data-t]')].find(b=>b.dataset.t===t);
+  const folder=item?.closest('.nav-folder');
+  if(folder)folder.open=true;
+}
+document.getElementById('navCollapseAll')?.addEventListener('click',()=>{
+  const folders=[...document.querySelectorAll('#tabs .nav-folder')];
+  const anyOtherOpen=folders.some(d=>d.open&&!d.querySelector('button.on'));
+  for(const folder of folders)folder.open=false;
+  if(anyOtherOpen){const current=document.querySelector('#tabs button.on');current?.closest('.nav-folder')?.setAttribute('open','');}
+});
+
 
 
 /* ---------- regras e relatórios ---------- */
