@@ -4,7 +4,7 @@
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
-const RELEASE_ID = 'email-attachment-health-20261109-v27';
+const RELEASE_ID = 'support-superadores-20261110';
 // CORS: permitir somente a origem oficial (e origens extras explicitamente configuradas).
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
@@ -96,6 +96,154 @@ async function source(from: string, to: string) {
   if (appts.some(a => !Number.isFinite(Number(a.duration_minutes)) || Number(a.duration_minutes) < 0))
     throw new Error('Duracao negativa ou invalida encontrada: validar base antes do envio');
   return appts;
+}
+
+type SupportRating = {
+  service_date: string;
+  channel: string;
+  collaborator_name: string;
+  ticket_id: string;
+  score: number;
+  source: 'movidesk' | 'manual';
+};
+
+async function supportRatings(from: string, to: string): Promise<SupportRating[]> {
+  const [surveys, manual] = await Promise.all([
+    list('audit_movidesk_survey_responses',
+      `?select=ticket_id,response_date,owner_name,channel,score&owner_team=eq.Suporte&response_date=gte.${from}&response_date=lte.${to}&score=gte.0&score=lte.10&order=response_date.desc,ticket_id.asc,response_id.asc,question_id.asc`),
+    list('audit_support_quality_ratings',
+      `?select=ticket_id,service_date,collaborator_name,channel,score&service_date=gte.${from}&service_date=lte.${to}&score=gte.0&score=lte.10&order=service_date.desc,id.asc`)
+  ]);
+  const channel = (value: unknown) => ['voz', 'chat'].includes(norm(value)) ? norm(value) : 'outros';
+  const imported: SupportRating[] = surveys.map(row => ({
+    service_date: String(row.response_date),
+    channel: channel(row.channel),
+    collaborator_name: String(row.owner_name ?? ''),
+    ticket_id: String(row.ticket_id ?? ''),
+    score: Number(row.score),
+    source: 'movidesk'
+  }));
+  const key = (ticket: unknown, origin: string) => `${String(ticket ?? '').trim()}:${origin}`;
+  const importedKeys = new Set(imported.filter(row => row.ticket_id).map(row => key(row.ticket_id, row.channel)));
+  const entered: SupportRating[] = manual
+    .filter(row => !row.ticket_id || !importedKeys.has(key(row.ticket_id, channel(row.channel))))
+    .map(row => ({
+      service_date: String(row.service_date),
+      channel: channel(row.channel),
+      collaborator_name: String(row.collaborator_name ?? ''),
+      ticket_id: String(row.ticket_id ?? ''),
+      score: Number(row.score),
+      source: 'manual'
+    }));
+  return [...imported, ...entered].sort((a, b) => b.service_date.localeCompare(a.service_date));
+}
+
+function ratingSummary(ratings: SupportRating[]) {
+  const totalPoints = ratings.reduce((sum, row) => sum + row.score, 0);
+  const high = ratings.filter(row => row.score >= 8);
+  const superadorPoints = high.reduce((sum, row) => sum + row.score, 0);
+  const positive = ratings.filter(row => row.score >= 9).length;
+  const percent = (numerator: number, denominator: number) =>
+    denominator ? Math.round(numerator / denominator * 10000) / 100 : null;
+  const movidesk = ratings.filter(row => row.source === 'movidesk').length;
+  return {
+    total: ratings.length, ruim: ratings.length - high.length, excelente: high.length,
+    csatPositive: positive, csatPercent: percent(positive, ratings.length),
+    superadores: { points: superadorPoints, totalPoints, percent: percent(superadorPoints, totalPoints) },
+    movidesk, manual: ratings.length - movidesk
+  };
+}
+
+async function supportQualityMetrics(payload: R) {
+  const from = String(payload.from ?? '');
+  const to = String(payload.to ?? '');
+  const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+  if (!validDate(from) || !validDate(to) || from > to || to > shift(from, 369))
+    return json({ ok: false, error: 'Selecione um período válido de até 370 dias.' }, 400);
+
+  const [ratings, ignored, appointments] = await Promise.all([
+    supportRatings(from, to), holidays(),
+    list('audit_direct_appointments',
+      `?select=appointment_key,ticket_id,collaborator_name,duration_minutes&sector=eq.Suporte&appointment_date=gte.${from}&appointment_date=lte.${to}&order=appointment_date.asc,appointment_key.asc`)
+  ]);
+  const team = new Map<string, { person: string; minutes: number; appointments: number; tickets: Set<string>; ratings: number; excellent: number }>();
+  const personFor = (name: unknown) => {
+    const key = norm(name);
+    let person = team.get(key);
+    if (!person) {
+      person = { person: String(name || 'Não informado'), minutes: 0, appointments: 0, tickets: new Set(), ratings: 0, excellent: 0 };
+      team.set(key, person);
+    }
+    return person;
+  };
+  const tickets = new Set<string>();
+  let minutes = 0;
+  for (const row of appointments) {
+    const person = personFor(row.collaborator_name);
+    const duration = Number(row.duration_minutes) || 0;
+    person.minutes += duration;
+    minutes += duration;
+    person.appointments++;
+    if (row.ticket_id) {
+      tickets.add(String(row.ticket_id));
+      person.tickets.add(String(row.ticket_id));
+    }
+  }
+  for (const row of ratings) {
+    const person = personFor(row.collaborator_name);
+    person.ratings++;
+    person.excellent += Number(row.score >= 8);
+  }
+  const chatTimes: R[] = [];
+  const ticketIds = [...tickets].filter(id => /^\d+$/.test(id));
+  for (let offset = 0; offset < ticketIds.length; offset += 150) {
+    chatTimes.push(...await list('audit_support_chat_times',
+      `?select=talk_seconds,wait_seconds&ticket_id=in.(${ticketIds.slice(offset, offset + 150).join(',')})`));
+  }
+  const seconds = (field: string) => chatTimes
+    .filter(row => row[field] != null && Number.isFinite(Number(row[field])) && Number(row[field]) >= 0)
+    .map(row => Number(row[field]));
+  const average = (values: number[]) => values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+  const talk = seconds('talk_seconds'), wait = seconds('wait_seconds');
+  const csat = ratingSummary(ratings.filter(row => row.channel !== 'outros'));
+  return json({
+    ok: true, businessDays: workdays(from, to, ignored).length,
+    metrics: { minutes, appointments: appointments.length, tickets: tickets.size, collaborators: team.size },
+    quality: ['voz', 'chat', 'outros'].map(channel => ({ channel, ...ratingSummary(ratings.filter(row => row.channel === channel)) })),
+    csat: { percent: csat.csatPercent, positive: csat.csatPositive, total: csat.total,
+      movidesk: csat.movidesk, manual: csat.manual, unclassified: ratings.length - csat.total },
+    superadores: ratingSummary(ratings).superadores,
+    ratings: ratings.slice(0, 100),
+    measuredChat: { tmaSeconds: average(talk), tmeSeconds: average(wait), tmaSamples: talk.length, tmeSamples: wait.length },
+    collaborators: [...team.values()].map(row => ({ ...row, tickets: row.tickets.size }))
+      .sort((a, b) => b.minutes - a.minutes || a.person.localeCompare(b.person, 'pt-BR'))
+  });
+}
+
+function supportRatingCache() {
+  const periods = new Map<string, Promise<SupportRating[] | null>>();
+  return async (rec: R, from: string, to: string) => {
+    const sectors = Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors : [rec.sector];
+    if (!sectors.some(sector => norm(sector) === 'suporte')) return { text: '', html: '', metric: null };
+    const key = `${from}:${to}`;
+    let pending = periods.get(key);
+    if (!pending) {
+      pending = supportRatings(from, to).catch(error => {
+        console.error('Avaliações de Suporte indisponíveis:', err(error));
+        return null;
+      });
+      periods.set(key, pending);
+    }
+    const rows = await pending;
+    const person = norm(rec.collaborator_name);
+    const metric = rows && ratingSummary(rows.filter(row => !person || norm(row.collaborator_name) === person)).superadores;
+    const result = metric?.percent != null
+      ? `${metric.percent.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% (${metric.points} de ${metric.totalPoints} pontos)`
+      : rows ? 'Sem pontuação no período' : 'Avaliações indisponíveis no momento';
+    const text = `Qualidade do Suporte — Superadores: ${result}.`;
+    return { text: '\n\n' + text, html: '<p><strong>' + emailEsc(text) + '</strong></p>', metric };
+  };
 }
 
 // Snapshot atual de chamados importados do Movidesk. Não confundir com horas do período.
@@ -737,13 +885,14 @@ async function manualOfficial(payload: R) {
   // A permissao coletiva global permanece exigida pelo Cron automatico.
   const report = buildReport(rec, appts, from, to, kind, hol, true, clients);
   const tickets = ticketAlerts(rec, await ticketSource());
+  const quality = await supportRatingCache()(rec, from, to);
   // Mesmo com zero apontamentos, o teste manual verifica o envio e informa a ausencia no corpo.
   const partial = !checkpoint.completed || !coverage.ready;
   const empty = !report.metrics.appointments;
   // Prévia de auditoria não cria disparos, não acessa o Gmail e não muda agendamentos.
   if (previewOnly) return json({ok:true,preview:true,release:RELEASE_ID,
     recipient:target,kind,from,to,partial,empty,
-    metrics:report.metrics,ticketMetrics:tickets.metrics,
+    metrics:report.metrics,ticketMetrics:tickets.metrics,superadores:quality.metric,
     // Até cinco exemplos por categoria para conferência sem expor todos os dados.
     ticketPreview:tickets.preview
   });
@@ -753,14 +902,14 @@ async function manualOfficial(payload: R) {
     '\nEste e-mail verifica o recebimento e não é um relatório definitivo.'+
     (partial?'\nATENÇÃO: sincronização incompleta; indicadores parciais.':'')+
     (empty?'\nSEM APONTAMENTOS IMPORTADOS: não é possível concluir ausência de trabalho.':'')+
-    '\nDestinatário: '+safe(rec.email)+'\n\n'+report.text+'\n\n'+tickets.text;
+    '\nDestinatário: '+safe(rec.email)+'\n\n'+report.text+quality.text+'\n\n'+tickets.text;
   const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
     method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
     body: JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:kind,period_from:from,period_to:to,status:'processing'})
   });
   if (!inserted?.length) return json({ ok: true, skipped: 'Relatorio ja reservado para envio' });
   try {
-    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html,report.detailsHtml),
+    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html,report.detailsHtml+quality.html),
       reportPacket(rec,report,tickets,from,to,kind,partial,checkpoint.completed!==true,clients));
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
@@ -788,6 +937,7 @@ async function dispatchWeeklyPreliminary() {
   const recipients=(await recipientList()).filter(r=>r.weekly_enabled===true);
   if(!recipients.length) return json({ok:false,error:'Sem destinatários semanais ativos'},409);
   const [appts,allTickets,clients]=await Promise.all([source(from,to),ticketSource(),clientSource()]);
+  const getQuality = supportRatingCache();
   const results:R[]=[];
   for(const r of recipients){
     const id=String(r.id);
@@ -797,6 +947,7 @@ async function dispatchWeeklyPreliminary() {
       if(exists.length){results.push({recipientId:id,status:'skipped',reason:'Envio preliminar já registrado'});continue;}
       const report=buildReport(r,appts,from,to,'weekly',hol,false,clients);
       const alerts=ticketAlerts(r,allTickets);
+      const quality = await getQuality(r, from, to);
       const empty=!report.metrics.appointments;
       const subject='[BALANCETE PRELIMINAR - DADOS PARCIAIS] Central de Auditoria - Semana 02 a 08/11/2026'+(empty?' [SEM APONTAMENTOS]':'');
       const disclaimer='BALANCETE SEMANAL PRELIMINAR — 02 A 08/11/2026\n'+
@@ -804,7 +955,7 @@ async function dispatchWeeklyPreliminary() {
         '02/11: FINADOS (FERIADO). DIAS ÚTEIS: 03, 04, 05 E 06/11.\n'+
         'HORAS E DIFERENÇAS PARA METAS PODEM MUDAR APÓS A CONCILIAÇÃO.\n'+
         'NÃO USAR ESTE DOCUMENTO PARA AVALIAÇÃO DEFINITIVA DE JORNADA OU PRODUTIVIDADE.\n\n';
-      const html=reportEmailHtml(r,report,from,to,'weekly',true,true,alerts.html,report.detailsHtml);
+      const html=reportEmailHtml(r,report,from,to,'weekly',true,true,alerts.html,report.detailsHtml+quality.html);
       const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
         method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
         body:JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:'weekly',
@@ -812,7 +963,7 @@ async function dispatchWeeklyPreliminary() {
       });
       if(!inserted?.length){results.push({recipientId:id,status:'skipped',reason:'Outra execução reservou o envio'});continue;}
       try{
-        await sendMail(String(r.email),subject,disclaimer+report.text+'\n\n'+alerts.text,html,
+        await sendMail(String(r.email),subject,disclaimer+report.text+quality.text+'\n\n'+alerts.text,html,
           reportPacket(r,report,alerts,from,to,'weekly',true,true,clients));
         await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
           method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
@@ -866,6 +1017,7 @@ async function dispatch() {
   const coverage = await recentCoverage(from,to);
   if (!coverage.ready) return json({ok:true,skipped:'Conciliação incompleta ou desatualizada para o período; próximo agendamento fará nova tentativa',from,to,coverage});
   const [appts,allTickets,clients]=await Promise.all([source(from,to),ticketSource(),clientSource()]);
+  const getQuality = supportRatingCache();
   const results: R[] = [];
   for (const t of tasks) {
     const id = String(t.r.id);
@@ -876,6 +1028,7 @@ async function dispatch() {
       const report = buildReport(t.r, appts, t.from, t.to, t.kind, hol, false, clients);
       const tickets = ticketAlerts(t.r, allTickets);
       if (!report.metrics.appointments) { results.push({ recipientId: id, kind: t.kind, skipped: 'Sem apontamentos; envio suspenso' }); continue; }
+      const quality = await getQuality(t.r, t.from, t.to);
       const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
         method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
         body: JSON.stringify({ dispatch_key: key, recipient_id: id, report_kind: t.kind,
@@ -883,8 +1036,8 @@ async function dispatch() {
       });
       if (!inserted?.length) continue;
       try {
-        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text+'\n\n'+tickets.text,
-          reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml),
+        await sendMail(String(t.r.email), `Central de Auditoria - ${t.kind === 'daily' ? 'Diario' : 'Semanal'} - ${t.from}`, report.text+quality.text+'\n\n'+tickets.text,
+          reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml+quality.html),
           reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients));
         await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH', body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString(), provider_id: 'gmail-apps-script' }) });
@@ -904,10 +1057,11 @@ async function handleRequest(req: Request): Promise<Response> {
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if (action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health') {
+    if (action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
       return action === 'manual_official' ? await manualOfficial(payload)
         : action === 'preview_audit' ? await manualOfficial({...payload,previewOnly:true})
+        : action === 'support_quality_metrics' ? await supportQualityMetrics(payload)
         : await adminAction(payload);
     }
     if (action !== 'dispatch' && action !== 'dispatch_weekly_preliminary') return json({ error: 'Acao desconhecida' }, 400);
