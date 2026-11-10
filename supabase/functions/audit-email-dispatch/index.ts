@@ -1327,7 +1327,7 @@ async function prepareReports() {
     // os limites de execucao das Edge Functions em janelas concorridas.
     const existing=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
       '&select=dispatch_key,reconciliation_success_at,expires_at&limit=1');
-    if(existing.length && String(existing[0].reconciliation_success_at)===String(coverage.lastSuccess) &&
+    if(existing.length && Date.parse(String(existing[0].reconciliation_success_at))===Date.parse(String(coverage.lastSuccess)) &&
       Date.parse(String(existing[0].expires_at))>Date.now()+5*60000){
       results.push({key,skipped:'Conteudo ja preparado'});continue;
     }
@@ -1369,7 +1369,7 @@ async function cachedReport(t:ScheduledReport) {
     '&status=eq.ready&select=subject,body_text,body_html,report_data,reconciliation_success_at,expires_at&limit=1');
   if(!rows.length||Date.parse(String(rows[0].expires_at))<=Date.now())return null;
   const coverage=await recentCoverage(t.from,t.to);
-  if(!coverage.ready||String(coverage.lastSuccess)!==String(rows[0].reconciliation_success_at))return null;
+  if(!coverage.ready||Date.parse(String(coverage.lastSuccess))!==Date.parse(String(rows[0].reconciliation_success_at)))return null;
   return rows[0] as R;
 }
 async function dispatch() {
