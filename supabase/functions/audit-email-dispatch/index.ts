@@ -1591,6 +1591,10 @@ async function ticketChargeAiDraft(payload:R):Promise<Response>{
   const tone=String(payload.tone||'cordial');
   if(!Object.prototype.hasOwnProperty.call(tones,tone))
     return json({ok:false,error:'Modelo de comunicacao invalido.'},400);
+  if(E('GEMINI_AI_DRAFT_ENABLED')!=='true')
+    return json({ok:false,error:'Dicas do Manager com Gemini ainda nao habilitado pelo administrador. As orientacoes baseadas nos chamados continuam disponiveis na previa.'},503);
+  if(payload.externalAiConsent!==true)
+    return json({ok:false,error:'Para usar a IA, confirme o processamento externo de dados resumidos dos chamados.'},400);
   const apiKey=E('GEMINI_API_KEY');
   if(!apiKey)return json({ok:false,error:'IA nao configurada no servidor. Utilize Gerar texto ate ativar a integracao Gemini.'},503);
   const found=await chargeTicketLookup(ids,db);
