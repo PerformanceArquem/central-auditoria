@@ -1636,6 +1636,11 @@
                             <pre id="alarmEmailPreviewText" style="font-family:inherit;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto"></pre>
                           </div>
                         </div>
+                        <div class="row noprint" style="gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0">
+                          <span class="subtle" id="alarmColumnFilterCount" role="status">Nenhum filtro de coluna ativo.</span>
+                          <button type="button" class="s" onclick="alarmClearColumnFilters()">Limpar filtros das colunas</button>
+                        </div>
+                        <p class="subtle hide" id="alarmColumnFilterEmpty" role="status">Nenhum chamado corresponde aos nomes selecionados. Use <b>Limpar filtros das colunas</b> para exibir os demais chamados.</p>
                         <div class="tw"><table><thead><tr><th class="noprint">Sel.</th><th>Chamado</th><th>Setor</th><th>Cliente</th><th>Assunto</th><th>Responsável</th><th>Status</th><th>Aberto em</th><th>Última atualização</th><th>Dias parado</th><th>Dias aberto</th><th>Abrir</th></tr></thead><tbody id="tAlarmOldest"></tbody></table></div>
                         <div class="card" id="alarmEmailHistoryCard" style="margin-top:16px;border:1px solid #d4e3f2">
                           <div class="row" style="align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
@@ -3948,13 +3953,13 @@ function enhanceTables(){
     if(st) sortTable(t,st.c,st.d);
     ths.forEach((h,i)=>{h.querySelector('.ar').textContent=st&&st.c===i?(st.d>0?'▲':'▼'):''});
     const hid=saved[key]||DEFHID[key]||[];
-    applyHid(t,names.map(n=>hid.includes(n)));applyRowFilter(t,key);
+    applyHid(t,names.map(n=>hid.includes(n)));
     if(!document.getElementById('cc_'+key)){
       const box=document.createElement('details');box.id='cc_'+key;box.className='colbtn noprint';
       box.innerHTML='<summary>Colunas ▾</summary><div class="colbox">'+names.map((n,i)=>`<label><input type="checkbox" ${hid.includes(n)?'':'checked'} onchange="toggleCol('${key}',${i},this.checked)"> ${esc(n)}</label>`).join('')+'<button class="s" type="button" onclick="resetCols(\''+key+'\')">Restaurar ordem e largura</button></div>';
       t.closest('.tw').before(box);
     }
-    ORD[key]=orderFor(names,key);applyW(t,names,key);perm(t,ORD[key]);
+    ORD[key]=orderFor(names,key);applyW(t,names,key);perm(t,ORD[key]);applyRowFilter(t,key);
   });
 }
 /* ---------- colunas: arrastar para mudar a ordem e puxar a borda para mudar a largura ---------- */
@@ -4003,9 +4008,37 @@ $('app').addEventListener('dragend',()=>{DR=null;clrDov()});
 const CFLT={};let FP=null;
 const cellTxt=c=>{const i=c.querySelector('input');return (i?i.value:c.textContent).trim()};
 function applyRowFilter(t,key){
-  const f=CFLT[key]||{},n=t.tHead.rows[0].cells.length,idx=Object.keys(f).filter(i=>f[i].size);
-  [...t.tBodies[0].rows].forEach(r=>{if(r.cells.length===n) r.style.display=idx.every(i=>f[i].has(cellTxt(r.cells[i])))?'':'none'});
-  [...t.tHead.rows[0].cells].forEach((h,i)=>{const b=h.querySelector('.fb');if(b) b.classList.toggle('on',!!(f[i]&&f[i].size))});
+  // A tabela pode ter colunas arrastadas. O filtro pertence à coluna original
+  // (data-i), mas a célula deve ser lida na posição visual atual.
+  const f=CFLT[key]||{},headers=[...t.tHead.rows[0].cells],n=headers.length;
+  const filters=Object.entries(f).filter(([,values])=>values instanceof Set&&values.size).map(([logical,values])=>({
+    index:headers.findIndex(h=>String(h.dataset.i)===String(logical)),values
+  }));
+  const rows=[...t.tBodies[0].rows];
+  let visible=0;
+  rows.forEach(r=>{
+    if(r.cells.length!==n)return;
+    const show=filters.every(({index,values})=>index>=0&&values.has(cellTxt(r.cells[index])));
+    r.style.display=show?'':'none';
+    if(show)visible++;
+  });
+  headers.forEach(h=>{
+    const b=h.querySelector('.fb'),logical=String(h.dataset.i);
+    if(b)b.classList.toggle('on',!!(f[logical]&&f[logical].size));
+  });
+  if(key==='tAlarmOldest'){
+    const count=document.getElementById('alarmColumnFilterCount');
+    if(count)count.textContent=filters.length?
+      visible+' de '+rows.filter(r=>r.cells.length===n).length+' chamado(s) visível(is) após os filtros de colunas.':
+      'Nenhum filtro de coluna ativo.';
+    const empty=document.getElementById('alarmColumnFilterEmpty');
+    if(empty)empty.classList.toggle('hide',!filters.length||visible>0);
+  }
+}
+function alarmClearColumnFilters(){
+  const key='tAlarmOldest';
+  CFLT[key]={};
+  closeFP();enhanceTables();
 }
 function closeFP(){if(FP){FP.remove();FP=null}}
 function openFilter(btn){
