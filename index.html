@@ -1934,7 +1934,7 @@
                 <div id="t-proj" class="hide">
                     <div class="card">
                         <h3>Projetos: horas por dia × meta</h3>
-                        <p style="color:var(--muted);margin:0 0 10px">Soma de todos os colaboradores no projeto, dia a dia, dentro do período filtrado. Tolerância de 15 min em torno da meta.</p>
+                        <p style="color:var(--muted);margin:0 0 10px">Reconhecimento por categoria, serviço e assunto do Movidesk, além dos IDs informados. A categoria Melhoria e expressões de desenvolvimento indicam candidatos a projeto, sujeitos a validação. Soma dos apontamentos por dia dentro do período filtrado; tolerância de 15 min em torno da meta.</p>
                         <div class="tw">
                             <table>
                                 <thead>
@@ -1942,6 +1942,7 @@
                                         <th>Ticket</th>
                                         <th>Assunto</th>
                                         <th>Cliente</th>
+                                        <th>Identificação Movidesk</th>
                                         <th>Dias com apontamento</th>
                                         <th>Total (HHhMM)</th>
                                         <th>Média por dia (HHhMM)</th>
@@ -1986,7 +1987,7 @@
                             <div class="fg">
                                 <label>Mostrar</label>
                                 <select id="bScope" onchange="render()">
-                                    <option value="p">Somente projetos (regra acima)</option>
+                                    <option value="p">Projetos e melhorias identificados (regra acima)</option>
                                     <option value="a">Todos os chamados</option>
                                 </select>
                             </div>
@@ -3225,9 +3226,24 @@ async function findProjectTicket() {
     // A busca na tabela de horas continua independente da existência do cadastro.
   }catch(e){if(request===remoteProjectRequest)console.warn('Consulta individual de chamado:',e)}
 }
+// Classificacao assistida pelos campos efetivamente importados do Movidesk.
+// "Melhoria" isolada e apenas um candidato; nunca afirmar que e projeto confirmado.
+const projectClassification=r=>{
+  const normalize=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  const category=normalize(r.category),subject=normalize(r.subject);
+  const service=normalize(r.service_name);
+  if(/\bprojetos?\b/.test(category))return {name:'Projeto',reason:'Categoria Movidesk',level:'confirmado'};
+  if(/\bprojetos?\b/.test(service))return {name:'Projeto',reason:'Serviço Movidesk',level:'confirmado'};
+  if(/\bprojetos?\b/.test(subject))return {name:'Projeto provável',reason:'Assunto do chamado',level:'avaliar'};
+  if(/\b(desenvolver|desenvolvimento|implementar|implementacao|integracao|implantacao)\b/.test(subject))
+    return {name:'Desenvolvimento / integração',reason:'Assunto do chamado',level:'avaliar'};
+  if(/\bmelhoria\b/.test(category))return {name:'Melhoria',reason:'Categoria Movidesk',level:'avaliar'};
+  return {name:'Classificação a confirmar',reason:'Sem marcador explícito',level:'indefinido'};
+};
 const isProj=(r,c)=>c.ids.includes(String(r.ticket_id))||
   (projRequestedTicket()===String(r.ticket_id))||
-  (c.kw&&String(r[c.fld]||'').toLowerCase().includes(c.kw));
+  (c.kw&&String(r[c.fld]||'').toLowerCase().includes(c.kw))||
+  projectClassification(r).level!=='indefinido';
 const bizDays=(a,b)=>{let n=0;for(let d=new Date(a+'T12:00:00'),e=new Date(b+'T12:00:00');d<=e;d.setDate(d.getDate()+1)){const w=d.getDay();if(w&&w<6)n++}return n};
 const nf=(v,d=2)=>v.toFixed(d).replace('.',',');
 // Durações em horas decimais nos cálculos; exibição HHhMM (com segundos somente quando existentes, inclusive >24h).
@@ -3244,13 +3260,14 @@ const H=v=>{
 const dEq=(h,c)=>{const n=Math.abs(h)/c.jor;return n>=0.5?` (≈ ${nf(n,1)} ${n===1?'dia':'dias'} de ${c.jor} h)`:''};
 // diferença escrita por extenso: "Faltam 2,00 h (≈ 0,3 dia de 8 h)" ou "Passou 3,00 h"
 const gapTxt=(h,ref,c,low,high)=>{const d=h-ref;return Math.abs(d)<0.005?'Exato':d<0?`${low} ${H(-d)}${dEq(-d,c)}`:`${high} ${H(d)}${dEq(d,c)}`};
-const empty=n=>`<tr><td colspan="${n}" style="color:var(--muted)">Nenhum projeto encontrado. Ajuste "Projeto identificado por" e o texto, ou informe os números dos tickets.</td></tr>`;
+const empty=n=>`<tr><td colspan="${n}" style="color:var(--muted)">Nenhum projeto ou melhoria identificado. Ajuste a regra ou pesquise diretamente pelo número do chamado.</td></tr>`;
 
 function renderProj(c){
   const kd=mk(c),P={},tol=0.25,det=[];
   const searched=projRequestedTicket();
   rows.filter(r=>(searched?String(r.ticket_id)===searched:isProj(r,c))&&r.date).forEach(r=>{
-    const p=P[r.ticket_id]??={id:r.ticket_id,subject:r.subject,client:r.client_name,d:{}};
+    const p=P[r.ticket_id]??={id:r.ticket_id,subject:r.subject,client:r.client_name,
+      category:r.category,service_name:r.service_name,d:{}};
     const d=p.d[r.date]??={h:0,a:new Set()};d.h+=r.hours;d.a.add(r.owner_name);
   });
   // Se o chamado existe no cache mas nao ha apontamentos no periodo,
@@ -3261,7 +3278,8 @@ function renderProj(c){
     if(t||remote){
       const client=(t?.clients||[])[0];
       P[searchedId]={id:searchedId,subject:String(remote?.subject||t?.subject||'Sem assunto'),
-        client:String(remote?.client||nm(client?.organization)||nm(client)||'Não informado'),d:{}};
+        client:String(remote?.client||nm(client?.organization)||nm(client)||'Não informado'),
+        category:remote?.category||t?.category||'',service_name:remote?.service_name||t?.serviceFirstLevel||'',d:{}};
     }
   }
   const st=h=>h<c.meta-tol?'low':h>c.meta+tol?'high':'ok';
@@ -3269,8 +3287,11 @@ function renderProj(c){
     const ds=Object.entries(p.d);let lo=0,ok=0,hi=0,tot=0;
     ds.forEach(([dt,v])=>{const s=st(v.h);if(s==='low')lo++;else if(s==='ok')ok++;else hi++;tot+=v.h;det.push({p,dt,v,s})});
     const avg=ds.length?tot/ds.length:0,s=st(avg);
-    return `<tr><td>${alarmCellTicket(p.id)}</td><td>${esc(p.subject)}</td><td>${esc(p.client)}</td><td>${ds.length}</td><td><b>${ds.length?H(tot):'Sem apontamentos no período'}</b></td><td><span class="pill ${s==='ok'?'ok':s==='high'?'bad':'warn'}">${ds.length?H(avg):'—'}</span></td><td>${lo}</td><td>${ok}</td><td>${hi?`<span class="pill bad">${hi}</span>`:0}</td></tr>`;
-  }).join('')||empty(9);
+    const classification=projectClassification(p);
+    const classificationLabel=classification.name+' · '+classification.reason+
+      (classification.level==='confirmado'?'':' (validar)');
+    return `<tr><td>${alarmCellTicket(p.id)}</td><td>${esc(p.subject)}</td><td>${esc(p.client)}</td><td><span class="pill ${classification.level==='confirmado'?'ok':'warn'}">${esc(classificationLabel)}</span></td><td>${ds.length}</td><td><b>${ds.length?H(tot):'Sem apontamentos no período'}</b></td><td><span class="pill ${s==='ok'?'ok':s==='high'?'bad':'warn'}">${ds.length?H(avg):'—'}</span></td><td>${lo}</td><td>${ok}</td><td>${hi?`<span class="pill bad">${hi}</span>`:0}</td></tr>`;
+  }).join('')||empty(10);
   det.sort((a,b)=>b.dt.localeCompare(a.dt));
   $('tProjDay').innerHTML=det.slice(0,1000).map(({p,dt,v,s})=>{
     return `<tr><td>#${esc(p.id)}</td><td>${esc(p.subject)}</td><td>${fmtDate(dt)} ${tag(kd(dt))}</td><td>${[...v.a].map(esc).join(', ')}</td><td><b>${H(v.h)}</b></td><td data-v="${(v.h-c.meta).toFixed(2)}">${gapTxt(v.h,c.meta,c,'Faltaram','Passou')}</td><td><span class="pill ${s==='ok'?'ok':s==='high'?'bad':'warn'}">${s==='ok'?'Meta cumprida':s==='high'?'Estourou':'Abaixo da meta'}</span></td></tr>`;
