@@ -1,0 +1,23 @@
+name: Validate executive forecast email
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/audit-email-dispatch/**'
+      - 'tests/forecast-email.test.ts'
+      - '.github/workflows/validate-forecast-email.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deno:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check edge function and forecast module
+        run: deno check supabase/functions/audit-email-dispatch/index.ts
+      - name: Test forecast email scoping and escaping
+        run: deno test tests/forecast-email.test.ts
