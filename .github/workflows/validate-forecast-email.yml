@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - main
-      - fix/director-executive-preview-action-20261110
   pull_request:
     paths:
       - 'supabase/functions/audit-email-dispatch/**'
