@@ -1499,7 +1499,7 @@
                     </div>
                     <div id="iaMsg"></div>
                     <p style="color:var(--muted);margin:10px 0 0">
-                        Só entram chamados sem previsão digitada, sem campo personalizado e sem previsão lida pelo robô de regras. Cada chamado é analisado uma vez (de novo só se o texto mudar) e o resultado fica salvo neste navegador. <b>O assunto e a descrição dos chamados são enviados ao provedor de IA configurado na função.</b>
+                        Só entram chamados sem previsão digitada, sem campo personalizado e sem previsão lida pelo robô de regras. Cada chamado é analisado uma vez (de novo só se o texto mudar) e o resultado fica salvo neste navegador. <b>Quando o Gemini estiver configurado, o assunto e a descrição serão enviados ao provedor de IA. Sem essa integração, o robô local analisa apenas estimativas explicitamente descritas; não envia textos ao Gemini.</b>
                     </p>
                 </div>
             </div>
@@ -2973,7 +2973,7 @@ function budgetData(c,mode){
     let pl=+bud[p.id]||0,src=pl?'Digitada aqui':'';
     if(!pl&&p.r.planned){pl=p.r.planned;src='Campo personalizado do Movidesk'}
     if(!pl&&p.r.est){const e=p.r.est;pl=e.u==='d'?e.v*c.jor:e.v;src=`Robô leu no chamado (${e.src}): “${e.snip}”`+(e.u==='d'?` → ${e.v} dia(s) × ${c.jor} h`:'')}
-    if(!pl){const ia=IA[p.id];if(ia&&ia.horas>0&&p.r.txt&&ia.h===hash(p.r.txt)){pl=ia.horas;src=`IA leu (confiança ${ia.conf}): “${ia.trecho||'sem trecho'}” → ${nf(ia.horas,1)} h`}}
+    if(!pl){const ia=IA[p.id];if(ia&&ia.horas>0&&p.r.txt&&ia.h===hash(p.r.txt)){pl=ia.horas;src=`${ia.origem==='regras'?'Robô de regras':'IA Gemini'} (confiança ${ia.conf}): “${ia.trecho||'sem trecho'}” → ${nf(ia.horas,1)} h`}}
     return {...p,pl,src,ds:[...p.days].sort(),pct:pl?p.h/pl:0,per:inP[p.id]||0};
   });
 }
@@ -3728,7 +3728,7 @@ async function iaRun(auto){
     todo.push({id:r.ticket_id,h,texto:r.txt});
   });
   if(!todo.length) return auto?0:iaLog('Nada novo para analisar.','okc');
-  const MAXRUN=400,LOTE=8,fila=todo.slice(0,MAXRUN);let ok=0;
+  const MAXRUN=400,LOTE=8,fila=todo.slice(0,MAXRUN);let ok=0,modo='ia';
   iaBusy=true;
   try{
     for(let i=0;i<fila.length;i+=LOTE){
@@ -3737,12 +3737,13 @@ async function iaRun(auto){
       const r=await fetch('/api/estimar',{method:'POST',headers:{'Content-Type':'application/json','x-access-key':key},body:JSON.stringify({jornada:c.jor,tickets:lote.map(t=>({id:t.id,texto:t.texto}))})});
       const j=await r.json().catch(()=>({}));
       if(!r.ok) throw new Error(j.erro||('erro '+r.status));
-      (j.resultados||[]).forEach(x=>{const t=lote.find(l=>l.id===String(x.id));if(t){const horas=Number(x.horas??x.hours),conf=x.confianca??x.confidence,trecho=x.trecho??x.excerpt;if(Number.isFinite(horas)&&horas>0){IA[t.id]={h:t.h,horas,conf:conf==null?'':String(conf),trecho:trecho==null?'':String(trecho)};ok++}}});
+      modo=j.modo==='regras'?'regras':'ia';
+      (j.resultados||[]).forEach(x=>{const t=lote.find(l=>l.id===String(x.id));if(t){const horas=Number(x.horas??x.hours),conf=x.confianca??x.confidence,trecho=x.trecho??x.excerpt;if(Number.isFinite(horas)&&horas>0){IA[t.id]={h:t.h,horas,conf:conf==null?'':String(conf),trecho:trecho==null?'':String(trecho),origem:modo};ok++}}});
       try{localStorage.setItem('md_ia',JSON.stringify(IA))}catch(e){}
       render();
       if(i+LOTE<fila.length) await sleep(900); // intervalo curto para reduzir risco de limite de requisições
     }
-    iaLog(`IA: ${ok} chamado(s) analisado(s)`+(todo.length>fila.length?`; faltam ${todo.length-fila.length} (serão retomados na próxima sincronização ou em "Analisar agora").`:'.'),'okc');
+    iaLog(`${modo==='regras'?'Robô de regras (Gemini não configurado)':'IA Gemini'}: ${ok} previsão(ões) explícita(s) encontrada(s)`+(todo.length>fila.length?`; faltam ${todo.length-fila.length} (serão retomados na próxima sincronização ou em "Analisar agora").`:'.')+(modo==='regras'?' Nenhum texto foi enviado ao Gemini.':''),'okc');
   }catch(e){
     iaLog('IA: '+e.message+(e instanceof TypeError?' (a função /api/estimar não respondeu; ela só existe depois de publicar na Vercel)':''),'err');
   }finally{iaBusy=false}
