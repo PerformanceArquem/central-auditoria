@@ -28,3 +28,5 @@ jobs:
         run: deno test tests/dashboard-report.test.ts
       - name: Test selected-ticket email safety
         run: deno test tests/ticket-charge.test.ts
+      - name: Test fallback ticket sources and missing IDs
+        run: deno test tests/ticket-charge-lookup.test.ts

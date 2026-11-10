@@ -1627,9 +1627,10 @@
                           <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">
                             <button type="button" class="s" onclick="alarmEmailDraft()">Gerar texto</button>
                             <button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
-                            <button type="button" class="b" id="alarmEmailSend" onclick="alarmEmailSend()" disabled>Confirmar e enviar</button>
+                            <button type="button" class="b" id="alarmEmailSend" onclick="alarmEmailSend()" disabled title="Disponível somente depois de visualizar e conferir a prévia">Confirmar e enviar</button><style>#alarmEmailSend:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}</style>
                           </div>
                           <p id="alarmEmailStatus" role="status" class="subtle">Selecione os chamados e gere a prévia para liberar o envio.</p>
+                          <button type="button" class="s hide noprint" id="alarmEmailRemoveMissing" onclick="alarmRemoveMissingTickets()">Desmarcar os chamados não sincronizados</button>
                           <div id="alarmEmailPreviewArea" class="hide" style="border:1px solid #dce5f0;border-radius:9px;background:white;padding:14px;margin-top:10px">
                             <strong id="alarmEmailPreviewSubject"></strong>
                             <pre id="alarmEmailPreviewText" style="font-family:inherit;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto"></pre>
@@ -2902,6 +2903,7 @@ function alarmEmailTicketBadge(id){
 
 const alarmSelected=new Set();
 let alarmEmailApproved='',alarmEmailSending=false;
+let alarmEmailMissingIds=[];
 const alarmSelectionSignature=()=>{
  const ids=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
  return JSON.stringify({ids,recipient:alarmRecipientEmail(),
@@ -2911,7 +2913,8 @@ function alarmUpdateSelectedCount(){
  if($('alarmSelectedCount'))$('alarmSelectedCount').textContent=alarmSelected.size+' chamado(s) selecionado(s) · limite de 20';
 }
 function alarmEmailInvalidate(){
- alarmEmailApproved='';alarmEmailRequestId='';
+ alarmEmailApproved='';alarmEmailRequestId='';alarmEmailMissingIds=[];
+ $('alarmEmailRemoveMissing')?.classList.add('hide');
  const button=$('alarmEmailSend');if(button)button.disabled=true;
  $('alarmEmailPreviewArea')?.classList.add('hide');
 }
@@ -2963,11 +2966,26 @@ async function alarmEmailCall(action,confirmed=false){
  });
  if(error){
   let detail=error.message||'Falha no serviço de e-mail.';
-  try{const e=await error.context?.json?.();if(e?.error)detail=e.error}catch(_){}
-  throw Error(detail);
+  let missingIds=[];
+  try{
+    const e=await error.context?.json?.();
+    if(e?.error)detail=e.error;
+    if(Array.isArray(e?.missingIds))missingIds=e.missingIds.map(String).filter(x=>/^\d{1,12}$/.test(x));
+  }catch(_){}
+  const issue=new Error(detail);
+  issue.missingIds=missingIds;
+  throw issue;
  }
  if(!data?.ok)throw Error(data?.error||'Operação não concluída.');
  return data;
+}
+function alarmRemoveMissingTickets(){
+ if(!alarmEmailMissingIds.length)return;
+ const list=alarmEmailMissingIds.map(id=>'#'+id).join(', ');
+ if(!window.confirm('Desmarcar os chamados não encontrados ('+list+')? Os demais continuarão selecionados. Nenhum e-mail será enviado.'))return;
+ for(const id of alarmEmailMissingIds)alarmSelected.delete(id);
+ renderAlerts();alarmEmailInvalidate();
+ $('alarmEmailStatus').textContent='Chamados ausentes desmarcados. Confira a seleção e clique em Visualizar e-mail novamente.';
 }
 async function alarmEmailPreview(){
  if(alarmEmailSending)return;
@@ -2982,7 +3000,13 @@ async function alarmEmailPreview(){
   alarmEmailRequestId=crypto.randomUUID();
   button.disabled=false;
   $('alarmEmailStatus').textContent='Prévia pronta. Confira destinatário, números e texto antes de confirmar o envio.';
- }catch(e){alarmEmailApproved='';$('alarmEmailStatus').textContent='Erro na prévia: '+(e.message||e)}
+ }catch(e){
+  alarmEmailApproved='';
+  alarmEmailMissingIds=Array.isArray(e.missingIds)?e.missingIds:[];
+  $('alarmEmailRemoveMissing')?.classList.toggle('hide',!alarmEmailMissingIds.length);
+  $('alarmEmailStatus').textContent='Não foi possível liberar o envio: '+(e.message||e)+
+   (alarmEmailMissingIds.length?' Você pode desmarcar somente os números ausentes e gerar uma nova prévia.':'');
+ }
 }
 async function alarmEmailSend(){
  if(alarmEmailSending||!alarmEmailApproved||alarmEmailApproved!==alarmSelectionSignature()){

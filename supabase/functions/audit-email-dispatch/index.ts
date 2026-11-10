@@ -1,6 +1,7 @@
 import {forecastSection} from "./forecast-variance.ts";
 import {dashboardReport} from "./dashboard-report.ts";
 import {composeTicketCharge} from "./ticket-charge.ts";
+import {chargeTicketLookup} from "./ticket-charge-lookup.ts";
 // Central de Auditoria — Supabase direto -> Google Apps Script/Gmail
 // Compatível com as ações existentes: status e test (admin JWT).
 // NUNCA colocar credenciais no HTML. Nenhum disparo automático sem flags explícitas.
@@ -1596,12 +1597,11 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   const existing=await db('audit_ticket_charge_history?select=id,status,recipient,created_at&request_id=eq.'+requestId+'&limit=1') as R[];
   if(existing.length)return json({ok:false,error:'Esta solicitação já foi registrada ('+existing[0].status+'). Consulte o histórico antes de reenviar.',requestId},409);
  }
- const records=await db('audit_direct_tickets?select=ticket_id,payload,created_at_source,last_update_source&ticket_id=in.('+ids.join(',')+')&limit=20') as R[];
- if(!Array.isArray(records)||records.length!==ids.length)
-  return json({ok:false,error:'Alguns chamados não estão sincronizados na Central. Atualize e selecione novamente.'},409);
- const lookup=new Map(records.map((x:R)=>[String(x.ticket_id),x]));
- const ordered=ids.map(id=>{const record=lookup.get(id);if(!record)throw Error('Chamado não encontrado: #'+id);return record;});
- const draft=composeTicketCharge(ordered,recipient,message);
+ const found=await chargeTicketLookup(ids,db);
+ if(found.missingIds.length)
+  return json({ok:false,error:'Não foi possível localizar os chamados: '+found.missingIds.map(id=>'#'+id).join(', ')+'. Atualize a sincronização ou remova esses números antes de gerar a prévia.',
+   missingIds:found.missingIds,availableIds:found.records.map(x=>String(x.ticket_id)),sources:found.sources},409);
+ const draft=composeTicketCharge(found.records,recipient,message);
  if(action==='ticket_charge_preview')
   return json({ok:true,preview:true,recipient,subject:draft.subject,text:draft.text,
     html:draft.html,ticketCount:draft.tickets.length,ids});

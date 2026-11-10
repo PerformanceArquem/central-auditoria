@@ -53,3 +53,14 @@ test('ranking mostra situação de e-mail e relatório com exportação',()=>{
  assert.match(source,/✉ E-mail enviado/);
  assert.match(source,/✉ Verificar envio/);
 });
+
+test('cobrança informa chamados não sincronizados e bloqueia envio antes da prévia',()=>{
+ const source=extract('tm-application-source');
+ assert.doesNotThrow(()=>new Function(source));
+ assert.match(html,/id="alarmEmailRemoveMissing"/);
+ assert.match(html,/id="alarmEmailSend"[^>]*disabled/);
+ assert.match(source,/alarmEmailMissingIds/);
+ assert.match(source,/e\.missingIds/);
+ assert.match(source,/function alarmRemoveMissingTickets\(\)/);
+ assert.match(source,/alarmEmailApproved=alarmSelectionSignature\(\)/);
+});
