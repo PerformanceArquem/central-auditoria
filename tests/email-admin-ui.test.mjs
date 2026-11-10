@@ -38,3 +38,18 @@ test('cobrança permite selecionar os e-mails corporativos cadastrados',()=>{
  assert.match(source,/const recipient=alarmRecipientEmail\(\)/);
  assert.match(source,/alarmEmailInvalidate\(\)/);
 });
+
+test('ranking mostra situação de e-mail e relatório com exportação',()=>{
+ const source=extract('tm-application-source');
+ assert.doesNotThrow(()=>new Function(source));
+ for(const name of ['alarmEmailTicketBadge','alarmEmailHistoryLoad','alarmEmailHistoryExport','alarmEmailHistoryRender']){
+  assert.ok(source.includes('function '+name+'(')||source.includes('async function '+name+'('),name+' ausente');
+ }
+ assert.match(html,/id="alarmEmailHistoryRows"/);
+ assert.match(html,/id="alarmEmailHistoryFilter"/);
+ assert.match(source,/ticket_charge_history/);
+ assert.match(source,/alarmEmailRequestId=crypto\.randomUUID\(\)/);
+ assert.match(source,/requestId:alarmEmailRequestId/);
+ assert.match(source,/✉ E-mail enviado/);
+ assert.match(source,/✉ Verificar envio/);
+});
