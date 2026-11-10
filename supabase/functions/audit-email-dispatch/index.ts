@@ -1,3 +1,4 @@
+import {forecastSection} from "./forecast-variance.ts";
 // Central de Auditoria — Supabase direto -> Google Apps Script/Gmail
 // Compatível com as ações existentes: status e test (admin JWT).
 // NUNCA colocar credenciais no HTML. Nenhum disparo automático sem flags explícitas.
@@ -254,6 +255,12 @@ function supportRatingCache() {
   };
 }
 
+// Resiliência: falhas do módulo de previsões não bloqueiam relatórios oficiais.
+async function optionalForecast(rec:R){
+ try{return await forecastSection(rec,{db,norm,duration,emailEsc});}
+ catch(e){console.error('Bloco de previsões indisponível:',err(e));
+  return {text:'',html:'',rows:[]};}
+}
 // Snapshot atual de chamados importados do Movidesk. Não confundir com horas do período.
 async function clientSource() {
  return list('audit_ticket_client_summary','?select=ticket_id,client_name');
@@ -540,7 +547,7 @@ function workdays(from: string, to: string, ignored: Set<string>) {
 
 const emailEsc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]||ch));
 const displayDate=(d:string)=>/^\d{4}-\d{2}-\d{2}$/.test(d)?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):d;
-function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:ReportKind,partial:boolean,manual:boolean,alertsHtml='',detailsHtml='',executiveHtml=''){
+function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:ReportKind,partial:boolean,manual:boolean,alertsHtml='',detailsHtml='',executiveHtml='',forecastHtml=''){
  const m=report.metrics;
  const targetPerDay=Number(rec.daily_target_minutes??480);
  const minPercent=Number(rec.minimum_percent??80);
@@ -584,7 +591,7 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metri
  tile('Horas apontadas',duration(m.minutes))+tile('Apontamentos',String(m.appointments))+'</tr><tr>'+
  tile('Chamados com horas',String(m.tickets))+tile('Dias úteis de referência',String(m.days))+'</tr></table>'+
  warning+
- executiveHtml+
+ executiveHtml+forecastHtml+
  (report.teamJourneyHtml||
    '<div style="font-size:15px;color:#18385e;font-weight:700;margin:23px 0 6px">Referências de jornada</div>'+missingMetrics)+
  (report.teamJourneyHtml?'':'<div style="font-size:15px;color:#18385e;font-weight:700;margin:24px 0 12px">'+
@@ -813,7 +820,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
   return { text: lines.join('\n'), detailsHtml, teamJourneyHtml, teamJourney:journey, exportData,
     metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
 }
-function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:ReportKind,partial:boolean,historicalIncomplete:boolean,clients:R[]):R {
+function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:ReportKind,partial:boolean,historicalIncomplete:boolean,clients:R[],forecastRows:unknown[]=[]):R {
  const data=report.exportData as R;
  const clientNames=new Map(clients.map(x=>[String(x.ticket_id),String(x.client_name||'')]));
  return {
@@ -825,7 +832,7 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
    customers:data.customers||[],
    tickets:(Array.isArray(tickets.attachmentTickets)?tickets.attachmentTickets:[])
      .map(x=>({...x,client:clientNames.get(String(x.id))||'Não identificado'})),
-   activities:data.activities||[]
+   activities:data.activities||[],forecastVariances:forecastRows
  };
 }
 async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R) {
@@ -1110,6 +1117,7 @@ async function manualOfficial(payload: R) {
   const tickets = ticketAlerts(rec, await ticketSource());
   const quality = await supportRatingCache()(rec, from, to);
   const overview = await directionOverviewCache()(rec, from, to, tickets.activeTickets,kind);
+  const forecast=await optionalForecast(rec);
   // Mesmo com zero apontamentos, o teste manual verifica o envio e informa a ausencia no corpo.
   const partial = !checkpoint.completed || !coverage.ready;
   const empty = !report.metrics.appointments;
@@ -1117,7 +1125,7 @@ async function manualOfficial(payload: R) {
   if (previewOnly) return json({ok:true,preview:true,release:RELEASE_ID,
     recipient:target,kind,from,to,partial,empty,
     metrics:report.metrics,ticketMetrics:tickets.metrics,superadores:quality.metric,teamJourney:report.teamJourney,
-    directionOverview:overview.metrics,
+    directionOverview:overview.metrics,forecastPreview:forecast.rows,
     // Até cinco exemplos por categoria para conferência sem expor todos os dados.
     ticketPreview:tickets.preview
   });
@@ -1127,15 +1135,15 @@ async function manualOfficial(payload: R) {
     '\nEste e-mail verifica o recebimento e não é um relatório definitivo.'+
     (partial?'\nATENÇÃO: sincronização incompleta; indicadores parciais.':'')+
     (empty?'\nSEM APONTAMENTOS IMPORTADOS: não é possível concluir ausência de trabalho.':'')+
-    '\nDestinatário: '+safe(rec.email)+'\n\n'+report.text+overview.text+quality.text+'\n\n'+tickets.text;
+    '\nDestinatário: '+safe(rec.email)+'\n\n'+report.text+overview.text+quality.text+'\n\n'+tickets.text+forecast.text;
   const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
     method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
     body: JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:kind,period_from:from,period_to:to,status:'processing'})
   });
   if (!inserted?.length) return json({ ok: true, skipped: 'Relatorio ja reservado para envio' });
   try {
-    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html,report.detailsHtml+quality.html,overview.html),
-      reportPacket(rec,report,tickets,from,to,kind,partial,checkpoint.completed!==true,clients));
+    await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html,report.detailsHtml+quality.html,overview.html,forecast.html),
+      reportPacket(rec,report,tickets,from,to,kind,partial,checkpoint.completed!==true,clients,forecast.rows));
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -1264,6 +1272,117 @@ function annualHighlights(task:ScheduledReport, report:ReportTotals, previous:Re
   };
 }
 
+// Relatorio preliminar independente da conclusao da conciliacao recente.
+// Nunca substitui o envio oficial: usa chave separada e banner inequivoco.
+async function dispatchPreliminary(t:ScheduledReport,hol:Set<string>,clientsAndTickets:()=>Promise<[R[],R[]]>) {
+  if (E('REPORT_PRELIMINARY_SEND_ENABLED')!=='true' || !['daily','weekly'].includes(t.kind))
+    return {recipientId:String(t.r.id),kind:t.kind,skipped:'Aguardando conciliação do período'};
+  const id=String(t.r.id);
+  const key='preliminary:'+id+':'+t.kind+':'+t.from+':'+t.to;
+  const existing=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=dispatch_key,status&limit=1');
+  if(existing.length)return {recipientId:id,kind:t.kind,skipped:'Preliminar ja registrado'};
+  const [allTickets,clients]=await clientsAndTickets();
+  const appts=await source(t.from,t.to);
+  const report=buildReport(t.r,appts,t.from,t.to,t.kind,hol,false,clients);
+  const alerts=ticketAlerts(t.r,allTickets);
+  const quality=await supportRatingCache()(t.r,t.from,t.to);
+  const overview=await directionOverviewCache()(t.r,t.from,t.to,alerts.activeTickets,t.kind);
+  const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
+    method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
+    body:JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:t.kind,
+      period_from:t.from,period_to:t.to,status:'processing'})
+  });
+  if(!inserted?.length)return {recipientId:id,kind:t.kind,skipped:'Preliminar reservado por outra execução'};
+  try{
+    const notice='RELATORIO PRELIMINAR - CONCILIACAO MOVIDESK EM ANDAMENTO. Os totais ainda podem mudar. Este documento NAO substitui o fechamento oficial.\\n\\n';
+    await sendMail(String(t.r.email),'[PRELIMINAR - DADOS PARCIAIS] Central de Auditoria - '+REPORT_LABEL[t.kind]+' - '+t.from,
+      notice+report.text+overview.text+quality.text+'\\n\\n'+alerts.text,
+      reportEmailHtml(t.r,report,t.from,t.to,t.kind,true,true,alerts.html,report.detailsHtml+quality.html,overview.html),
+      reportPacket(t.r,report,alerts,t.from,t.to,t.kind,true,true,clients));
+    await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+      method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
+    });
+    return {recipientId:id,kind:t.kind,status:'sent_preliminary',appointments:report.metrics.appointments};
+  }catch(ex){
+    // Uma mensagem pode ter sido aceita pelo provedor antes da falha no checkpoint.
+    // Bloquear nova tentativa automatica evita envio duplicado sem reconciliar o provedor.
+    await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+      method:'PATCH',body:JSON.stringify({status:'failed',error_message:err(ex).slice(0,300)})
+    }).catch(()=>{});
+    return {recipientId:id,kind:t.kind,status:'failed',error:err(ex)};
+  }
+}
+// Preparar o email oficial sem enviar mensagens. Cache privado e descartavel.
+async function prepareReports() {
+  const today=dateBR();
+  const [hol, recipients]=await Promise.all([holidays(),recipientList()]);
+  const tasks=scheduledReports(today,hol,recipients).filter(t=>t.kind==='daily'||t.kind==='weekly');
+  const getQuality=supportRatingCache(),getOverview=directionOverviewCache();
+  const periodData=new Map<string,Promise<R[]>>();
+  let reference:Promise<[R[],R[]]>|undefined;
+  const results:R[]=[];
+  for(const t of tasks){
+    const key=String(t.r.id)+':'+t.kind+':'+t.from+':'+t.to;
+    const previouslySent=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=status&limit=1');
+    if(previouslySent.length){results.push({key,skipped:'Envio ja registrado'});continue;}
+    const coverage=await recentCoverage(t.from,t.to);
+    if(!coverage.ready){results.push({key,skipped:'Conciliação recente incompleta'});continue;}
+    const checkpoint=await state();
+    if(checkpoint.completed!==true||checkpoint.last_error){
+      results.push({key,skipped:'Historico incompleto'});continue;
+    }
+    // Cada tentativa prepara no maximo 2 destinatarios, para nao ultrapassar
+    // os limites de execucao das Edge Functions em janelas concorridas.
+    const existing=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
+      '&select=dispatch_key,reconciliation_success_at,expires_at,report_data&limit=1');
+    if(existing.length && Date.parse(String(existing[0].reconciliation_success_at))===Date.parse(String(coverage.lastSuccess)) &&
+      Date.parse(String(existing[0].expires_at))>Date.now()+5*60000 &&
+      Array.isArray(existing[0].report_data?.forecastVariances)){
+      results.push({key,skipped:'Conteudo ja preparado'});continue;
+    }
+    if(results.filter(x=>x.status==='prepared').length>=2)break;
+    let appts=periodData.get(t.from+':'+t.to);
+    if(!appts){appts=source(t.from,t.to);periodData.set(t.from+':'+t.to,appts);}
+    reference ??= Promise.all([ticketSource(),clientSource()]);
+    const [allTickets,clients]=await reference;
+    const report=buildReport(t.r,await appts,t.from,t.to,t.kind,hol,false,clients);
+    if(!report.metrics.appointments){
+      results.push({key,skipped:'Nenhum apontamento importado'});continue;
+    }
+    const tickets=ticketAlerts(t.r,allTickets);
+    const quality=await getQuality(t.r,t.from,t.to);
+    const overview=await getOverview(t.r,t.from,t.to,tickets.activeTickets,t.kind);
+    const forecast=await optionalForecast(t.r);
+    const packet=reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows);
+    const subject='Central de Auditoria - '+REPORT_LABEL[t.kind]+' - '+t.from;
+    const bodyText=report.text+overview.text+quality.text+'\n\n'+tickets.text+forecast.text;
+    const bodyHtml=reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,
+      tickets.html,report.detailsHtml+quality.html,overview.html,forecast.html);
+    // O cache expira antes do dia seguinte. A rotina de envio valida a cobertura novamente.
+    const expires=new Date(Date.now()+90*60000).toISOString();
+    await db('audit_email_prepared_reports?on_conflict=dispatch_key',{
+      method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},
+      body:JSON.stringify({dispatch_key:key,recipient_id:t.r.id,report_kind:t.kind,
+        period_from:t.from,period_to:t.to,subject,body_text:bodyText,body_html:bodyHtml,
+        report_data:packet,reconciliation_success_at:coverage.lastSuccess,
+        prepared_at:new Date().toISOString(),expires_at:expires,status:'ready'})
+    });
+    results.push({key,status:'prepared',appointments:report.metrics.appointments,minutes:report.metrics.minutes});
+  }
+  return json({ok:true,mode:'prepare_only',date:today,prepared:results.filter(x=>x.status==='prepared').length,
+    pending:results.filter(x=>x.skipped).length,results});
+}
+async function cachedReport(t:ScheduledReport) {
+  if(t.kind!=='daily'&&t.kind!=='weekly')return null;
+  const key=String(t.r.id)+':'+t.kind+':'+t.from+':'+t.to;
+  const rows=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
+    '&status=eq.ready&select=subject,body_text,body_html,report_data,reconciliation_success_at,expires_at&limit=1');
+  if(!rows.length||Date.parse(String(rows[0].expires_at))<=Date.now()||
+    !Array.isArray(rows[0].report_data?.forecastVariances))return null;
+  const coverage=await recentCoverage(t.from,t.to);
+  if(!coverage.ready||Date.parse(String(coverage.lastSuccess))!==Date.parse(String(rows[0].reconciliation_success_at)))return null;
+  return rows[0] as R;
+}
 async function dispatch() {
   if (E('REPORT_EMAIL_SEND_ENABLED') !== 'true') return json({ ok: true, skipped: 'Envio automatico desativado' });
   const today = dateBR();
@@ -1304,9 +1423,36 @@ async function dispatch() {
     try {
       const exists = await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}&select=dispatch_key,status&limit=1`);
       if (exists.length) { results.push({ recipientId: id, kind: t.kind, skipped: 'Ja registrado; revisar status antes de retentar' }); continue; }
+      // Conteudo pronto evita recalcular HTML e dados dos anexos as 9h.
+      // O snapshot so pode ser usado se a conciliacao ainda estiver valida.
+      const prepared=await cachedReport(t);
+      if(prepared){
+        const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
+          method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
+          body:JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:t.kind,
+            period_from:t.from,period_to:t.to,status:'processing'})
+        });
+        if(!inserted?.length)continue;
+        try{
+          await sendMail(String(t.r.email),String(prepared.subject),String(prepared.body_text),
+            String(prepared.body_html),prepared.report_data as R);
+          await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+            method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),
+              provider_id:'gmail-apps-script'})
+          });
+          results.push({recipientId:id,kind:t.kind,status:'sent',source:'prepared_8h'});
+        }catch(ex){
+          await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+            method:'PATCH',body:JSON.stringify({status:'failed',error_message:err(ex).slice(0,300)})
+          }).catch(()=>{});
+          results.push({recipientId:id,kind:t.kind,status:'failed',error:err(ex)});
+        }
+        continue;
+      }
       const appts = await readPeriod(t);
       if (!appts) {
-        results.push({recipientId:id,kind:t.kind,skipped:'Aguardando conciliação do período'});
+        referenceData ??= Promise.all([ticketSource(),clientSource()]);
+        results.push(await dispatchPreliminary(t,hol,()=>referenceData!));
         continue;
       }
       referenceData ??= Promise.all([ticketSource(),clientSource()]);
@@ -1316,6 +1462,7 @@ async function dispatch() {
       if (!report.metrics.appointments && (t.kind==='daily'||t.kind==='weekly')) { results.push({ recipientId: id, kind: t.kind, skipped: 'Sem apontamentos; envio suspenso' }); continue; }
       const quality = await getQuality(t.r, t.from, t.to);
       const overview = await getOverview(t.r, t.from, t.to, tickets.activeTickets,t.kind);
+      const forecast=await optionalForecast(t.r);
       let annual = {text:'',html:''};
       if (t.kind==='annual') {
         const year = t.from.slice(0,4), prior = String(Number(year)-1);
@@ -1323,7 +1470,7 @@ async function dispatch() {
         const december = t.includeDecember
           ? buildReport(t.r,appts.filter(x=>String(x.appointment_date).startsWith(year+'-12-')),year+'-12-01',t.to,'monthly',hol,false,clients).metrics
           : null;
-        annual = annualHighlights(t,report.metrics,previous.metrics,december,overview.metrics&&'monthly' in overview.metrics?overview.metrics.monthly:[]);
+        annual = annualHighlights(t,report.metrics,previous.metrics,december,overview.metrics&&'monthly' in overview.metrics?(overview.metrics.monthly||[]):[]);
       }
       const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
         method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
@@ -1333,9 +1480,9 @@ async function dispatch() {
       if (!inserted?.length) continue;
       try {
         const label = t.includeDecember?'Anual e fechamento de dezembro':REPORT_LABEL[t.kind];
-        await sendMail(String(t.r.email), `Central de Auditoria - ${label} - ${t.from}`, report.text+annual.text+overview.text+quality.text+'\n\n'+tickets.text,
-          reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml+quality.html,annual.html+overview.html),
-          reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients));
+        await sendMail(String(t.r.email), `Central de Auditoria - ${label} - ${t.from}`, report.text+annual.text+overview.text+quality.text+'\n\n'+tickets.text+forecast.text,
+          reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml+quality.html,annual.html+overview.html,forecast.html),
+          reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows));
         await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH', body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString(), provider_id: 'gmail-apps-script' }) });
         results.push({ recipientId: id, kind: t.kind, status: 'sent', ...report.metrics });
@@ -1361,10 +1508,10 @@ async function handleRequest(req: Request): Promise<Response> {
         : action === 'support_quality_metrics' ? await supportQualityMetrics(payload)
         : await adminAction(payload);
     }
-    if (action !== 'dispatch' && action !== 'dispatch_weekly_preliminary') return json({ error: 'Acao desconhecida' }, 400);
+    if (action !== 'dispatch' && action !== 'dispatch_weekly_preliminary' && action !== 'prepare' && action !== 'attachment_probe') return json({ error: 'Acao desconhecida' }, 400);
     const expected = E('REPORT_CRON_SECRET');
     if (!expected || req.headers.get('x-report-secret') !== expected) return json({ error: 'Cron nao autorizado' }, 401);
-    return action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch();
+    return action === 'attachment_probe' ? await adminAction({action:'attachment_health'}) : action === 'prepare' ? await prepareReports() : action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch();
   } catch (ex) { console.error('audit-email-dispatch:', err(ex)); return json({ ok: false, error: err(ex), release: RELEASE_ID }, 500); }
 }
 
