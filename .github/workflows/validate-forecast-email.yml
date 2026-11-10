@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - feat/alert-ticket-email-composer-20261110
   pull_request:
     paths:
       - 'supabase/functions/audit-email-dispatch/**'
@@ -26,3 +27,5 @@ jobs:
         run: deno test tests/forecast-email.test.ts
       - name: Test collaborator preview and period validation
         run: deno test tests/dashboard-report.test.ts
+      - name: Test selected-ticket email safety
+        run: deno test tests/ticket-charge.test.ts
