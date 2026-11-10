@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - main
-      - fix/dashboard-report-collaborators-20261110
   pull_request:
     paths:
       - 'supabase/functions/audit-email-dispatch/**'
