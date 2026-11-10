@@ -1,4 +1,4 @@
-// Leitura protegida dos mesmos tickets salvos pelo backend da Vercel.
+// Leitura protegida da fonte consolidada do Movidesk usada pelos relatórios de e-mail.
 // Não envia e-mails e não altera tabelas.
 const env = name => process.env[name] || '';
 const json = (res, code, data) => { res.setHeader('Cache-Control','no-store'); return res.status(code).json(data); };
@@ -39,14 +39,14 @@ export default async function handler(req,res){
   const offset=Math.max(0,Number.parseInt(req.query.offset,10)||0);
   const limit=100;
   if(offset>50000||offset%limit!==0)return json(res,400,{error:'Offset inválido'});
-  const source=await fetch(`${url}/rest/v1/ticket_manager_tickets?select=payload&order=ticket_id.asc&limit=${limit}&offset=${offset}`,{
+  const source=await fetch(`${url}/rest/v1/audit_direct_tickets?select=payload&order=ticket_id.asc&limit=${limit}&offset=${offset}`,{
    headers:{apikey:key,Authorization:`Bearer ${key}`},signal:AbortSignal.timeout(18000)});
   if(!source.ok)return json(res,502,{error:`Falha ao consultar tickets na fonte Vercel: HTTP ${source.status}`});
   const data=await source.json();const tickets=[],appts=[];
   for(const row of data){const t=row?.payload;if(!t||typeof t!=='object'||Array.isArray(t))continue;
    const x=normalTicket(t);if(!x.ticket_id)continue;tickets.push(x);appts.push(...appointments(t));}
   return json(res,200,{ok:true,tickets,appointments:appts,count:data.length,hasMore:data.length===limit,
-   source:'vercel-ticket_manager_tickets',generatedAt:new Date().toISOString()});
+   source:'supabase-audit_direct_tickets',generatedAt:new Date().toISOString()});
  }catch(e){return json(res,500,{error:String(e?.message||e).slice(0,250)});}
 }
 

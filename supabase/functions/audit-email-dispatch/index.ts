@@ -1264,6 +1264,114 @@ function annualHighlights(task:ScheduledReport, report:ReportTotals, previous:Re
   };
 }
 
+// Relatorio preliminar independente da conclusao da conciliacao recente.
+// Nunca substitui o envio oficial: usa chave separada e banner inequivoco.
+async function dispatchPreliminary(t:ScheduledReport,hol:Set<string>,clientsAndTickets:()=>Promise<[R[],R[]]>) {
+  if (E('REPORT_PRELIMINARY_SEND_ENABLED')!=='true' || !['daily','weekly'].includes(t.kind))
+    return {recipientId:String(t.r.id),kind:t.kind,skipped:'Aguardando conciliação do período'};
+  const id=String(t.r.id);
+  const key='preliminary:'+id+':'+t.kind+':'+t.from+':'+t.to;
+  const existing=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=dispatch_key,status&limit=1');
+  if(existing.length)return {recipientId:id,kind:t.kind,skipped:'Preliminar ja registrado'};
+  const [allTickets,clients]=await clientsAndTickets();
+  const appts=await source(t.from,t.to);
+  const report=buildReport(t.r,appts,t.from,t.to,t.kind,hol,false,clients);
+  const alerts=ticketAlerts(t.r,allTickets);
+  const quality=await supportRatingCache()(t.r,t.from,t.to);
+  const overview=await directionOverviewCache()(t.r,t.from,t.to,alerts.activeTickets,t.kind);
+  const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
+    method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
+    body:JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:t.kind,
+      period_from:t.from,period_to:t.to,status:'processing'})
+  });
+  if(!inserted?.length)return {recipientId:id,kind:t.kind,skipped:'Preliminar reservado por outra execução'};
+  try{
+    const notice='RELATORIO PRELIMINAR - CONCILIACAO MOVIDESK EM ANDAMENTO. Os totais ainda podem mudar. Este documento NAO substitui o fechamento oficial.\\n\\n';
+    await sendMail(String(t.r.email),'[PRELIMINAR - DADOS PARCIAIS] Central de Auditoria - '+REPORT_LABEL[t.kind]+' - '+t.from,
+      notice+report.text+overview.text+quality.text+'\\n\\n'+alerts.text,
+      reportEmailHtml(t.r,report,t.from,t.to,t.kind,true,true,alerts.html,report.detailsHtml+quality.html,overview.html),
+      reportPacket(t.r,report,alerts,t.from,t.to,t.kind,true,true,clients));
+    await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+      method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
+    });
+    return {recipientId:id,kind:t.kind,status:'sent_preliminary',appointments:report.metrics.appointments};
+  }catch(ex){
+    // Uma mensagem pode ter sido aceita pelo provedor antes da falha no checkpoint.
+    // Bloquear nova tentativa automatica evita envio duplicado sem reconciliar o provedor.
+    await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+      method:'PATCH',body:JSON.stringify({status:'failed',error_message:err(ex).slice(0,300)})
+    }).catch(()=>{});
+    return {recipientId:id,kind:t.kind,status:'failed',error:err(ex)};
+  }
+}
+// Preparar o email oficial sem enviar mensagens. Cache privado e descartavel.
+async function prepareReports() {
+  const today=dateBR();
+  const [hol, recipients]=await Promise.all([holidays(),recipientList()]);
+  const tasks=scheduledReports(today,hol,recipients).filter(t=>t.kind==='daily'||t.kind==='weekly');
+  const getQuality=supportRatingCache(),getOverview=directionOverviewCache();
+  const periodData=new Map<string,Promise<R[]>>();
+  let reference:Promise<[R[],R[]]>|undefined;
+  const results:R[]=[];
+  for(const t of tasks){
+    const key=String(t.r.id)+':'+t.kind+':'+t.from+':'+t.to;
+    const previouslySent=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=status&limit=1');
+    if(previouslySent.length){results.push({key,skipped:'Envio ja registrado'});continue;}
+    const coverage=await recentCoverage(t.from,t.to);
+    if(!coverage.ready){results.push({key,skipped:'Conciliação recente incompleta'});continue;}
+    const checkpoint=await state();
+    if(checkpoint.completed!==true||checkpoint.last_error){
+      results.push({key,skipped:'Historico incompleto'});continue;
+    }
+    // Cada tentativa prepara no maximo 2 destinatarios, para nao ultrapassar
+    // os limites de execucao das Edge Functions em janelas concorridas.
+    const existing=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
+      '&select=dispatch_key,reconciliation_success_at,expires_at&limit=1');
+    if(existing.length && Date.parse(String(existing[0].reconciliation_success_at))===Date.parse(String(coverage.lastSuccess)) &&
+      Date.parse(String(existing[0].expires_at))>Date.now()+5*60000){
+      results.push({key,skipped:'Conteudo ja preparado'});continue;
+    }
+    if(results.filter(x=>x.status==='prepared').length>=2)break;
+    let appts=periodData.get(t.from+':'+t.to);
+    if(!appts){appts=source(t.from,t.to);periodData.set(t.from+':'+t.to,appts);}
+    reference ??= Promise.all([ticketSource(),clientSource()]);
+    const [allTickets,clients]=await reference;
+    const report=buildReport(t.r,await appts,t.from,t.to,t.kind,hol,false,clients);
+    if(!report.metrics.appointments){
+      results.push({key,skipped:'Nenhum apontamento importado'});continue;
+    }
+    const tickets=ticketAlerts(t.r,allTickets);
+    const quality=await getQuality(t.r,t.from,t.to);
+    const overview=await getOverview(t.r,t.from,t.to,tickets.activeTickets,t.kind);
+    const packet=reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients);
+    const subject='Central de Auditoria - '+REPORT_LABEL[t.kind]+' - '+t.from;
+    const bodyText=report.text+overview.text+quality.text+'\n\n'+tickets.text;
+    const bodyHtml=reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,
+      tickets.html,report.detailsHtml+quality.html,overview.html);
+    // O cache expira antes do dia seguinte. A rotina de envio valida a cobertura novamente.
+    const expires=new Date(Date.now()+90*60000).toISOString();
+    await db('audit_email_prepared_reports?on_conflict=dispatch_key',{
+      method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},
+      body:JSON.stringify({dispatch_key:key,recipient_id:t.r.id,report_kind:t.kind,
+        period_from:t.from,period_to:t.to,subject,body_text:bodyText,body_html:bodyHtml,
+        report_data:packet,reconciliation_success_at:coverage.lastSuccess,
+        prepared_at:new Date().toISOString(),expires_at:expires,status:'ready'})
+    });
+    results.push({key,status:'prepared',appointments:report.metrics.appointments,minutes:report.metrics.minutes});
+  }
+  return json({ok:true,mode:'prepare_only',date:today,prepared:results.filter(x=>x.status==='prepared').length,
+    pending:results.filter(x=>x.skipped).length,results});
+}
+async function cachedReport(t:ScheduledReport) {
+  if(t.kind!=='daily'&&t.kind!=='weekly')return null;
+  const key=String(t.r.id)+':'+t.kind+':'+t.from+':'+t.to;
+  const rows=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
+    '&status=eq.ready&select=subject,body_text,body_html,report_data,reconciliation_success_at,expires_at&limit=1');
+  if(!rows.length||Date.parse(String(rows[0].expires_at))<=Date.now())return null;
+  const coverage=await recentCoverage(t.from,t.to);
+  if(!coverage.ready||Date.parse(String(coverage.lastSuccess))!==Date.parse(String(rows[0].reconciliation_success_at)))return null;
+  return rows[0] as R;
+}
 async function dispatch() {
   if (E('REPORT_EMAIL_SEND_ENABLED') !== 'true') return json({ ok: true, skipped: 'Envio automatico desativado' });
   const today = dateBR();
@@ -1304,9 +1412,36 @@ async function dispatch() {
     try {
       const exists = await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}&select=dispatch_key,status&limit=1`);
       if (exists.length) { results.push({ recipientId: id, kind: t.kind, skipped: 'Ja registrado; revisar status antes de retentar' }); continue; }
+      // Conteudo pronto evita recalcular HTML e dados dos anexos as 9h.
+      // O snapshot so pode ser usado se a conciliacao ainda estiver valida.
+      const prepared=await cachedReport(t);
+      if(prepared){
+        const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
+          method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
+          body:JSON.stringify({dispatch_key:key,recipient_id:id,report_kind:t.kind,
+            period_from:t.from,period_to:t.to,status:'processing'})
+        });
+        if(!inserted?.length)continue;
+        try{
+          await sendMail(String(t.r.email),String(prepared.subject),String(prepared.body_text),
+            String(prepared.body_html),prepared.report_data as R);
+          await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+            method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),
+              provider_id:'gmail-apps-script'})
+          });
+          results.push({recipientId:id,kind:t.kind,status:'sent',source:'prepared_8h'});
+        }catch(ex){
+          await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+            method:'PATCH',body:JSON.stringify({status:'failed',error_message:err(ex).slice(0,300)})
+          }).catch(()=>{});
+          results.push({recipientId:id,kind:t.kind,status:'failed',error:err(ex)});
+        }
+        continue;
+      }
       const appts = await readPeriod(t);
       if (!appts) {
-        results.push({recipientId:id,kind:t.kind,skipped:'Aguardando conciliação do período'});
+        referenceData ??= Promise.all([ticketSource(),clientSource()]);
+        results.push(await dispatchPreliminary(t,hol,()=>referenceData!));
         continue;
       }
       referenceData ??= Promise.all([ticketSource(),clientSource()]);
@@ -1323,7 +1458,7 @@ async function dispatch() {
         const december = t.includeDecember
           ? buildReport(t.r,appts.filter(x=>String(x.appointment_date).startsWith(year+'-12-')),year+'-12-01',t.to,'monthly',hol,false,clients).metrics
           : null;
-        annual = annualHighlights(t,report.metrics,previous.metrics,december,overview.metrics&&'monthly' in overview.metrics?overview.metrics.monthly:[]);
+        annual = annualHighlights(t,report.metrics,previous.metrics,december,overview.metrics&&'monthly' in overview.metrics?(overview.metrics.monthly||[]):[]);
       }
       const inserted = await db('audit_email_sector_dispatches?on_conflict=dispatch_key', {
         method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
@@ -1361,10 +1496,10 @@ async function handleRequest(req: Request): Promise<Response> {
         : action === 'support_quality_metrics' ? await supportQualityMetrics(payload)
         : await adminAction(payload);
     }
-    if (action !== 'dispatch' && action !== 'dispatch_weekly_preliminary') return json({ error: 'Acao desconhecida' }, 400);
+    if (action !== 'dispatch' && action !== 'dispatch_weekly_preliminary' && action !== 'prepare' && action !== 'attachment_probe') return json({ error: 'Acao desconhecida' }, 400);
     const expected = E('REPORT_CRON_SECRET');
     if (!expected || req.headers.get('x-report-secret') !== expected) return json({ error: 'Cron nao autorizado' }, 401);
-    return action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch();
+    return action === 'attachment_probe' ? await adminAction({action:'attachment_health'}) : action === 'prepare' ? await prepareReports() : action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch();
   } catch (ex) { console.error('audit-email-dispatch:', err(ex)); return json({ ok: false, error: err(ex), release: RELEASE_ID }, 500); }
 }
 
