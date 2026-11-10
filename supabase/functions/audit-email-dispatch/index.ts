@@ -1674,10 +1674,11 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  if(found.missingIds.length)
   return json({ok:false,error:'Não foi possível localizar os chamados: '+found.missingIds.map(id=>'#'+id).join(', ')+'. Atualize a sincronização ou remova esses números antes de gerar a prévia.',
    missingIds:found.missingIds,availableIds:found.records.map(x=>String(x.ticket_id)),sources:found.sources},409);
- const draft=composeTicketCharge(found.records,recipient,message);
+ const includeGuidance=payload.includeGuidance===true;
+ const draft=composeTicketCharge(found.records,recipient,message,{includeGuidance});
  if(action==='ticket_charge_preview')
   return json({ok:true,preview:true,recipient,subject:draft.subject,text:draft.text,
-    html:draft.html,ticketCount:draft.tickets.length,ids});
+    html:draft.html,ticketCount:draft.tickets.length,ids,guidance:draft.guidance});
  if(action!=='ticket_charge_send')return json({ok:false,error:'Ação não autorizada.'},400);
  const sender=await ticketChargeAdminUser(req);
  const snapshot=draft.tickets.map(x=>({id:x.id,subject:x.subject,client:x.client,sector:x.sector,
