@@ -872,6 +872,29 @@
 @media(prefers-reduced-motion:reduce){#tabs .nav-chevron{transition:none}}
 @media print{#tabs{display:none!important}}
 </style>
+<style id="audit-executive-refresh-style">
+/* Modernização progressiva, sem interferir em gráficos, filtros ou valores de indicadores. */
+:root{--audit-surface:#fff;--audit-outline:#e0e8f4;--audit-soft-shadow:0 5px 18px rgba(25,45,81,.055)}
+main .card{background:var(--audit-surface);border:1px solid var(--audit-outline);box-shadow:var(--audit-soft-shadow);transition:box-shadow .2s ease,border-color .2s ease}
+main .card:hover{box-shadow:0 9px 25px rgba(25,45,81,.09);border-color:#cadbf0}
+main .card .card{box-shadow:none}
+main .kpis .card{position:relative;overflow:hidden;background:linear-gradient(135deg,#fff 60%,#f4f8ff);border-left:3px solid #4f79c9}
+main .kpis .card b{letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+main .mh{margin-bottom:20px}
+main .mh h2{color:#142b50}
+main .row.noprint button,main .card button{transition:background-color .17s ease,box-shadow .17s ease}
+main button:focus-visible,main select:focus-visible,main input:focus-visible{outline:2px solid #2765dc;outline-offset:2px}
+#t-email-admin>.mh{padding:8px 0 4px}
+#t-email-admin #emailAdminCard{background:linear-gradient(155deg,#fff,#f9fbff);border-top:3px solid #2765dc}
+#t-mgmt #mgKpi .card{min-height:90px}
+@media(max-width:900px){
+  main .card{border-radius:12px}
+  main .kpis{grid-template-columns:repeat(auto-fit,minmax(145px,1fr))}
+  #t-email-admin .email-admin-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media(prefers-reduced-motion:reduce){main .card,main .row.noprint button,main .card button{transition:none}}
+@media print{main .card{box-shadow:none!important;border:1px solid #d1d5db!important;background:#fff!important}}
+</style>
 </head>
     <body class="tm-locked">
         <form id="tm-login" class="card" hidden>
