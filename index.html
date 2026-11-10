@@ -2831,6 +2831,25 @@ function period(c){
 // nao contenha a palavra-chave usada para classificar projetos automaticamente.
 const projRequestedTicket=()=>ACT==='proj'&&/^#?\d+$/.test(String(Q.proj||'').trim())
   ?String(Q.proj).trim().replace(/^#/,''):null;
+let remoteProjectTicket=null,remoteProjectRequest=0;
+async function findProjectTicket() {
+  const id=projRequestedTicket(),request=++remoteProjectRequest;
+  remoteProjectTicket=null;
+  if(!id)return;
+  try {
+    const session=await window.tmAuth?.getSession?.();
+    if(!session?.access_token)return;
+    const response=await fetch('/api/audit-ticket-lookup?id='+encodeURIComponent(id),{
+      method:'GET',cache:'no-store',credentials:'same-origin',
+      headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'}
+    });
+    const result=await response.json().catch(()=>({}));
+    if(request!==remoteProjectRequest||projRequestedTicket()!==id)return;
+    if(response.ok&&result.found&&result.ticket?.id===id)remoteProjectTicket=result.ticket;
+    renderProj(R());
+    // A busca na tabela de horas continua independente da existência do cadastro.
+  }catch(e){if(request===remoteProjectRequest)console.warn('Consulta individual de chamado:',e)}
+}
 const isProj=(r,c)=>c.ids.includes(String(r.ticket_id))||
   (projRequestedTicket()===String(r.ticket_id))||
   (c.kw&&String(r[c.fld]||'').toLowerCase().includes(c.kw));
@@ -2854,7 +2873,8 @@ const empty=n=>`<tr><td colspan="${n}" style="color:var(--muted)">Nenhum projeto
 
 function renderProj(c){
   const kd=mk(c),P={},tol=0.25,det=[];
-  rows.filter(r=>isProj(r,c)&&r.date).forEach(r=>{
+  const searched=projRequestedTicket();
+  rows.filter(r=>(searched?String(r.ticket_id)===searched:isProj(r,c))&&r.date).forEach(r=>{
     const p=P[r.ticket_id]??={id:r.ticket_id,subject:r.subject,client:r.client_name,d:{}};
     const d=p.d[r.date]??={h:0,a:new Set()};d.h+=r.hours;d.a.add(r.owner_name);
   });
@@ -2862,11 +2882,11 @@ function renderProj(c){
   // exibir seu cadastro sem inventar horas ou colaboradores.
   const searchedId=projRequestedTicket();
   if(searchedId&&!P[searchedId]){
-    const t=TK.get(searchedId);
-    if(t){
-      const client=(t.clients||[])[0];
-      P[searchedId]={id:searchedId,subject:String(t.subject||'Sem assunto'),
-        client:nm(client?.organization)||nm(client)||'Não informado',d:{}};
+    const t=TK.get(searchedId),remote=remoteProjectTicket?.id===searchedId?remoteProjectTicket:null;
+    if(t||remote){
+      const client=(t?.clients||[])[0];
+      P[searchedId]={id:searchedId,subject:String(remote?.subject||t?.subject||'Sem assunto'),
+        client:String(remote?.client||nm(client?.organization)||nm(client)||'Não informado'),d:{}};
     }
   }
   const st=h=>h<c.meta-tol?'low':h>c.meta+tol?'high':'ok';
@@ -3595,6 +3615,7 @@ function doSearch(t){
   if(t==='diag') return renderDiag();
   if(t==='alerts'){renderAlerts();return}
   if(raw.length) applyFilters();
+  if(t==='proj')findProjectTicket();
 }
 function clearSearch(t){$('q_'+t).value='';doSearch(t)}
 const MODS={alerts:['Alertas e pendências','Monitoramento de chamados abertos, com ranking dos mais antigos em todos os setores.'],live:['Tempo real','Alterações de previsão, status e atualização dos chamados, detectadas a cada sincronização.'],cfg:['Configurações','Regras de cálculo, lista de clientes VIP e leitura por IA.'],mgmt:['Visão geral','Sobrecarga, estouros de previsão e empresas que mais consomem, para a direção.'],vip:['Clientes VIP','Quanto da carga da equipe vai para os clientes prioritários.'],charts:['Gráficos comparativos','Comparativo mensal e anual, evolução diária, semanas, empresas, colaboradores e atividades.'],entries:['Lançamentos','Cada apontamento de tempo, com data, cliente, colaborador e horas.'],pivot:['Tabela dinâmica','Cruze linhas e colunas e some horas, lançamentos, chamados ou pessoas.'],proj:['Projetos','Horas por dia contra a meta e previsto contra apontado por chamado.'],occ:['Colaboradores','Horas apontadas e jornada de cada pessoa, dia a dia.'],diag:['Diagnóstico','O que a API devolveu e de onde veio o nome de cada colaborador.']};
