@@ -1,0 +1,33 @@
+name: Validate audit report preparation
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/audit-email-dispatch/**'
+      - 'supabase/functions/movidesk-incremental-sync/**'
+      - 'supabase/functions/movidesk-recent-appointments/**'
+      - '.github/workflows/validate-audit-email.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deno-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Typecheck report dispatcher
+        run: deno check supabase/functions/audit-email-dispatch/index.ts
+      - name: Typecheck Movidesk incremental sync
+        run: deno check supabase/functions/movidesk-incremental-sync/index.ts
+      - name: Typecheck recent appointment reconciliation
+        run: deno check supabase/functions/movidesk-recent-appointments/index.ts
