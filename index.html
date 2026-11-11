@@ -5153,7 +5153,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   function adicionarControles(){
     document.querySelectorAll(areaSel).forEach(area=>{
       area.querySelectorAll('.card').forEach(card=>{
-        if(card.classList.contains('filters')||card.closest('.filters')||card.id==='rules'||card.querySelector(':scope > .aud-print-toolbar')) return;
+        if(card.closest('#pfKpis')||card.classList.contains('filters')||card.closest('.filters')||card.id==='rules'||card.querySelector(':scope > .aud-print-toolbar')) return;
         const toolbar=document.createElement('div');
         toolbar.className='aud-print-toolbar noprint';
         const btn=document.createElement('button');
