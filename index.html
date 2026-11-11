@@ -1394,7 +1394,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
   <div id="emailReportReleasePanel" class="hide" style="margin-top:16px;border:1px solid #d6e1f0;border-radius:12px;padding:16px">
     <div class="row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div><h3 style="margin:0">Liberação de relatórios para envio</h3><p class="subtle" style="margin:4px 0">Autorize ou suspenda categorias por destinatário, sem alterar e-mails, setores ou frequências. Nenhuma mensagem é disparada ao salvar.</p></div>
-      <button type="button" class="s" id="emailReleaseRefresh">↻ Atualizar permissões</button>
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center"><input type="search" id="emailReleaseSearch" placeholder="Buscar nome, e-mail ou setor" aria-label="Buscar destinatários" style="min-width:240px;max-width:100%"><select id="emailReleaseFilter" aria-label="Filtrar destinatários"><option value="all">Todos</option><option value="active">Ativos</option><option value="inactive">Inativos</option><option value="blocked">Sem relatórios gerenciais</option></select><button type="button" class="s" id="emailReleaseRefresh">↻ Atualizar permissões</button></div>
     </div>
     <p class="coverage-note" id="emailReleaseStatus" role="status">Abra o módulo para consultar as autorizações.</p>
     <div class="tw" style="max-height:520px;overflow:auto">
@@ -5234,9 +5234,20 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   // Módulo de liberação: altera somente allowed_report_types após validação de administrador.
   const releaseSay=message=>{$('emailReleaseStatus').textContent=message};
   const flowRecipientId='a5329710-dd63-4bfd-bbd3-dc23e0efc8f0';
+  const recipientAllowsInRelease=x=>x.allowed_report_types==null||(Array.isArray(x.allowed_report_types)&&x.allowed_report_types.includes('general'));
   function renderReportRelease(){
     const active=records.filter(x=>x.active).length;
-    $('emailReleaseRows').innerHTML=records.map(x=>{
+    const search=String($('emailReleaseSearch')?.value||'').trim().toLocaleLowerCase('pt-BR');
+    const filter=String($('emailReleaseFilter')?.value||'all');
+    const visible=records.filter(x=>{
+      const allowed=recipientAllowsInRelease(x);
+      if(filter==='active'&&!x.active)return false;
+      if(filter==='inactive'&&x.active)return false;
+      if(filter==='blocked'&&allowed)return false;
+      const haystack=[x.name,x.email,x.sector,...(Array.isArray(x.sectors)?x.sectors:[])].join(' ').toLocaleLowerCase('pt-BR');
+      return !search||haystack.includes(search);
+    });
+    $('emailReleaseRows').innerHTML=visible.map(x=>{
       const rules=x.allowed_report_types;
       const legacy=rules==null;
       const general=legacy||Array.isArray(rules)&&rules.includes('general');
@@ -5252,7 +5263,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         '<td>'+(x.active?'Ativo':'Inativo')+(legacy?' · regras anteriores':' · personalizado')+'</td>'+
         '<td><button type="button" class="s" data-release-save="'+id+'" '+(!x.active?'disabled':'')+'>Salvar liberação</button></td></tr>';
     }).join('')||'<tr><td colspan="7">Nenhum destinatário cadastrado.</td></tr>';
-    releaseSay(records.length+' destinatários cadastrados; '+active+' ativos. Alterações são individuais e exigem salvar.');
+    releaseSay(visible.length+' exibidos de '+records.length+' destinatários cadastrados; '+active+' ativos. Alterações são individuais e exigem salvar.');
   }
   $('emailReportReleaseOpen').addEventListener('click',async()=>{
     const panel=$('emailReportReleasePanel'),open=panel.classList.contains('hide');
@@ -5261,6 +5272,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     if(open){panel.scrollIntoView({behavior:'smooth',block:'nearest'});await reload();}
   });
   $('emailReleaseRefresh').addEventListener('click',reload);
+  $('emailReleaseSearch').addEventListener('input',renderReportRelease);
+  $('emailReleaseFilter').addEventListener('change',renderReportRelease);
   $('emailReleaseRows').addEventListener('click',async event=>{
     const btn=event.target.closest('[data-release-save]');
     if(!btn)return;
