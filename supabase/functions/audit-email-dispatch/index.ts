@@ -2,6 +2,7 @@ import {forecastSection} from "./forecast-variance.ts";
 import {dashboardReport} from "./dashboard-report.ts";
 import {composeTicketCharge} from "./ticket-charge.ts";
 import {chargeTicketLookup} from "./ticket-charge-lookup.ts";
+import {corporateCopy,corporatePacket,corporateFallbackHtml,assertCorporateCopy} from "./corporate-mail-policy.ts";
 // Central de Auditoria — Supabase direto -> Google Apps Script/Gmail
 // Compatível com as ações existentes: status e test (admin JWT).
 // NUNCA colocar credenciais no HTML. Nenhum disparo automático sem flags explícitas.
@@ -841,7 +842,13 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
 async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R) {
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
   if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
-  const withAttachments=E('REPORT_ATTACHMENTS_ENABLED')==='true' && !!reportData;
+  // Regra obrigatoria no ultimo ponto de envio, inclusive para relatorios previamente preparados.
+  const cleanSubject=corporateCopy(subject);
+  const cleanText=corporateCopy(text);
+  const cleanHtml=corporateCopy(html||corporateFallbackHtml(cleanSubject,cleanText));
+  const cleanReportData=reportData?corporatePacket(reportData):undefined;
+  assertCorporateCopy({cleanSubject,cleanText,cleanHtml,cleanReportData});
+  const withAttachments=E('REPORT_ATTACHMENTS_ENABLED')==='true' && !!cleanReportData;
   const endpoint=validUrl();
   if(withAttachments) {
     // Exigir gerador validado e modelo timbrado antes de tentar um envio com anexos.
@@ -859,9 +866,9 @@ async function sendMail(email: string, subject: string, text: string, html?: str
   }
   const res = await fetch(endpoint, {
     method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ token: E('GMAIL_MAIL_SECRET'), email, assunto: subject,
-      texto: text, html: html || undefined,
-      ...(withAttachments?{reportData}:{}) }),
+    body: JSON.stringify({ token: E('GMAIL_MAIL_SECRET'), email, assunto: cleanSubject,
+      texto: cleanText, html: cleanHtml,
+      ...(withAttachments?{reportData:cleanReportData}:{}) }),
     signal: AbortSignal.timeout(60000)
   });
   if (!res.ok) throw new Error(`Apps Script HTTP ${res.status}`);
@@ -1547,7 +1554,7 @@ async function directorPreview(payload:R):Promise<Response>{
   ticketMetrics:tickets.metrics,sectorRows,collaboratorRows,dailyRows,
   alerts:{overdue:tickets.preview.overdue,stalled:tickets.preview.stalled},
   impact:{customersByHours:report.exportData?.customers||[],activities:report.exportData?.activities||[]},
-  forecastVariances:forecast.rows,emailHtml:html
+  forecastVariances:forecast.rows,emailHtml:corporateCopy(html)
  });
 }
 // Interface de colaboradores: somente leitura, dados e permissões existentes.
@@ -1681,8 +1688,8 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  const includeGuidance=payload.includeGuidance===true;
  const draft=composeTicketCharge(found.records,recipient,message,{includeGuidance});
  if(action==='ticket_charge_preview')
-  return json({ok:true,preview:true,recipient,subject:draft.subject,text:draft.text,
-    html:draft.html,ticketCount:draft.tickets.length,ids,guidance:draft.guidance});
+  return json({ok:true,preview:true,recipient,subject:corporateCopy(draft.subject),text:corporateCopy(draft.text),
+    html:corporateCopy(draft.html),ticketCount:draft.tickets.length,ids,guidance:draft.guidance});
  if(action!=='ticket_charge_send')return json({ok:false,error:'Ação não autorizada.'},400);
  const sender=await ticketChargeAdminUser(req);
  const snapshot=draft.tickets.map(x=>({id:x.id,subject:x.subject,client:x.client,sector:x.sector,
