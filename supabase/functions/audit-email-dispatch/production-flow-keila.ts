@@ -105,7 +105,7 @@ export function keilaProductionReport(
   (limited?'<p><b>Detalhamento limitado a 450 eventos; totais completos.</b></p>':'')+
   staffHtml+
   '<h3>Chamados e movimentações</h3><table width="100%" style="font-size:12px;border-collapse:collapse"><tr style="background:#edf3fb"><th>Chamado</th><th>Movimento</th><th>Data</th><th>Origem / destino</th><th>Responsável</th></tr>'+table+'</table>'+
-  '</td></tr><tr><td style="background:#f5f8fc;padding:18px;color:#60748c;font-size:11px">ARQUEM SISTEMAS · Gestão de Qualidade</td></tr></table></td></tr></table></body></html>';
+  '</td></tr><tr><td style="background:#f5f8fc;padding:18px;color:#60748c;font-size:11px">ARQUEM SISTEMAS · Gestão da Produção</td></tr></table></td></tr></table></body></html>';
  const packet={schema:'arquem-mail-v1',title,from:data.from,to:data.to,partial:false,historicalIncomplete:false,
   metrics:{tickets:new Set(data.movements.map(m=>m.id)).size,appointments:workload.reduce((n,p)=>n+p.appointments,0),
    minutes:workload.reduce((n,p)=>n+p.hoursMinutes,0),entered:data.entered,exited:data.exited,entryMovements:data.entryMovements,exitMovements:data.exitMovements},
