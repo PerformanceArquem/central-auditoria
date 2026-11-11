@@ -1739,6 +1739,80 @@ async function ticketChargeHistory():Promise<Response>{
  return json({ok:true,items:Array.isArray(records)?records:[],
   note:'Enviado = aceite confirmado pelo serviço de e-mail; não implica leitura pelo destinatário.'});
 }
+/**
+ * Prévia de reiteração: nunca envia e-mail. Reconsulta o snapshot de cada chamado,
+ * inclui somente casos ainda abertos e sem atualização de previsão/andamento
+ * desde a cobrança anterior. Uma incerteza de envio bloqueia reiteração.
+ */
+async function ticketFollowupReview():Promise<Response>{
+ const [policyRows,history]=await Promise.all([
+  db('audit_ticket_followup_policy?select=interval_days,max_reminders,auto_enabled&id=eq.1&limit=1'),
+  db('audit_ticket_charge_history?select=recipient,ticket_ids,status,created_at,sent_at,updated_at,ticket_snapshot&order=created_at.desc&limit=1000')
+ ]) as [R[],R[]];
+ const policy=policyRows[0]||{interval_days:5,max_reminders:3,auto_enabled:false};
+ const days=Math.max(4,Math.min(30,Number(policy.interval_days)||5));
+ const max=Math.max(1,Math.min(3,Number(policy.max_reminders)||3));
+ const pairs=new Map<string,{id:string;recipient:string;history:R[]}>();
+ for(const row of history){
+  const email=String(row.recipient||'').toLowerCase();
+  if(!isEmail(email))continue;
+  for(const raw of Array.isArray(row.ticket_ids)?row.ticket_ids:[]){
+   const id=String(raw);
+   if(!/^\d{1,12}$/.test(id))continue;
+   const key=id+'|'+email;
+   if(!pairs.has(key))pairs.set(key,{id,recipient:email,history:[]});
+   pairs.get(key)!.history.push(row);
+  }
+ }
+ const review:R[]=[];
+ // Carga deliberadamente limitada, para não pressionar a API/MOVIDESK.
+ for(const pair of [...pairs.values()].slice(0,80)){
+  const sorted=pair.history.sort((a,b)=>Date.parse(String(a.sent_at||a.created_at||0))-Date.parse(String(b.sent_at||b.created_at||0)));
+  const sent=sorted.filter(h=>h.status==='sent');
+  const pending=sorted.some(h=>h.status!=='sent');
+  if(!sent.length)continue;
+  const latest=sent[sent.length-1];
+  const prior=Date.parse(String(latest.sent_at||latest.created_at||''));
+  const next=Number.isFinite(prior)?new Date(prior+days*86400000).toISOString():null;
+  const count=sent.length;
+  const snapshot=Array.isArray(latest.ticket_snapshot)?
+    latest.ticket_snapshot.find((r:R)=>String(r.id)===pair.id) as R|undefined:undefined;
+  let state='waiting',detail='Aguardando prazo mínimo',current:R|null=null;
+  if(pending){state='uncertain';detail='Existe tentativa sem confirmação: conferência obrigatória';}
+  else if(count>=max+1){state='limit';detail='Limite de reiterações atingido';}
+  else if(!next||Date.now()<Date.parse(next)){state='waiting';}
+  else {
+   try{
+    const found=await chargeTicketLookup([pair.id],db);
+    if(found.missingIds.length){state='unknown';detail='Chamado não localizado na sincronização';}
+    else {
+     const row=found.records[0],p=(row.payload||{}) as R;
+     const status=norm(p.status);
+     const last=Date.parse(String(p.lastUpdate||row.last_update_source||''));
+     if(/^(fechad|conclu|resolvid|encerrad|finalizad|cancelad)/.test(status)){
+      state='resolved';detail='Chamado encerrado ou resolvido';
+     }else if(!Number.isFinite(last)){
+      state='unknown';detail='Data de última atualização indisponível';
+     }else if(last>prior){
+      state='updated';detail='Movimentado após a última cobrança: verificar andamento';
+     }else {
+      state='review';detail='Sem atualização desde a cobrança; revisar SLA e previsão';
+      current={status:String(p.status||''),ownerTeam:String(p.ownerTeam||''),
+       lastUpdate:String(p.lastUpdate||''),subject:String(p.subject||'')};
+     }
+    }
+   }catch(e){state='unknown';detail='Consulta indisponível: '+err(e).slice(0,100);}
+  }
+  review.push({
+   id:pair.id,recipient:pair.recipient,charged:count,reminders:Math.max(0,count-1),
+   sentAt:latest.sent_at||latest.created_at,nextReviewAt:next,state,detail,
+   formerStatus:snapshot?.status||null, current
+  });
+ }
+ return json({ok:true,generatedAt:new Date().toISOString(),policy:{intervalDays:days,maxReminders:max,automatic:false},
+  items:review,note:'Prévia administrativa: nenhum e-mail foi enviado. A elegibilidade requer confirmação humana de SLA e previsão.'});
+}
+
 async function ticketChargeAdminUser(req:Request):Promise<string>{
  const token=/^Bearer\s+(.+)$/i.exec(req.headers.get('authorization')||'')?.[1];
  if(!token)throw Error('Sessão administrativa ausente.');
@@ -1831,6 +1905,7 @@ async function ticketChargeAiDraft(payload:R):Promise<Response>{
 async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  const action=String(payload.action||'');
  if(action==='ticket_charge_history')return ticketChargeHistory();
+ if(action==='ticket_followup_review')return ticketFollowupReview();
  const ids=Array.isArray(payload.ticketIds)?payload.ticketIds.map((x:unknown)=>String(x)):[];
  if(ids.length<1||ids.length>20||ids.some(x=>!/^\d{1,12}$/.test(x))||
     new Set(ids).size!==ids.length)
@@ -1909,11 +1984,11 @@ async function handleRequest(req: Request): Promise<Response> {
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if (action === 'ticket_charge_capabilities' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
+    if (action === 'ticket_charge_capabilities' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
       return action === 'ticket_charge_capabilities' ? json({ok:true,aiAvailable:E('GEMINI_AI_DRAFT_ENABLED')==='true'&&!!E('GEMINI_API_KEY'),guidanceAvailable:true})
         : action === 'ticket_charge_ai_draft' ? await ticketChargeAiDraft(payload)
-        : (action === 'ticket_charge_history' || action === 'ticket_charge_preview' || action === 'ticket_charge_send') ? await ticketChargeAction(payload,req)
+        : (action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_send') ? await ticketChargeAction(payload,req)
         : action === 'dashboard_report' ? await dashboardReportAction(payload)
         : action === 'director_preview' ? await directorPreview(payload)
         : action === 'manual_official' ? await manualOfficial(payload)
