@@ -1,3 +1,4 @@
+import {corporateCopy} from "./corporate-mail-policy.ts";
 // Composição segura de cobranças de chamados abertos, sem envio automático.
 type TicketRow=Record<string,any>;
 export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:string,options:{includeGuidance?:boolean}={}){
@@ -120,5 +121,5 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  '<p style="max-width:780px;margin:13px auto 0;text-align:center;font-size:10px;color:#7b8ea6">ARQUEM SISTEMAS · Gestão de Qualidade · Acompanhamento de demandas</p>'+
  '</body></html>';
 
- return {subject,text,html,tickets:normalized,guidance:includeGuidance?guidance:[]};
+ return {subject:corporateCopy(subject),text:corporateCopy(text),html:corporateCopy(html),tickets:normalized,guidance:includeGuidance?guidance.map(g=>({evidence:corporateCopy(g.evidence),action:corporateCopy(g.action)})):[]};
 }
