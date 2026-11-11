@@ -917,7 +917,8 @@ async function adminAction(payload: R) {
       const ready=capabilities?.sucesso===true &&
         formats.includes('pdf') && formats.includes('xlsx') &&
         capabilities.paperTemplateConfigured===true;
-      return json({ok:true,enabled:flag,ready,
+      const keilaGeneratorReady=ready&&capabilities?.attachmentsVersion==='arquem-3-keila-quality';
+      return json({ok:true,enabled:flag,ready,keilaGeneratorReady,
         templateConfigured:capabilities?.paperTemplateConfigured===true,
         formats:formats.filter(x=>x==='pdf'||x==='xlsx'),
         status:ready?(flag?'PDF/XLSX habilitados; validar entrega real em teste autorizado.':
@@ -1323,6 +1324,27 @@ async function keilaQualityForPeriod(rec:R,from:string,to:string) {
  }));
 }
 
+// Bloqueio específico: o envio da Keila requer o Apps Script com suporte
+// comprovado a produção + qualidade. Não afeta os demais relatórios.
+async function requireKeilaGeneratorReady() {
+ if(E('REPORT_ATTACHMENTS_ENABLED')!=='true')
+  throw new Error('Envio Keila bloqueado: PDF e Excel não habilitados');
+ const endpoint=validUrl();
+ const res=await fetch(endpoint,{
+  method:'POST',redirect:'follow',
+  headers:{'Content-Type':'text/plain;charset=utf-8'},
+  body:JSON.stringify({token:E('GMAIL_MAIL_SECRET'),action:'capabilities'}),
+  signal:AbortSignal.timeout(12000)
+ });
+ if(!res.ok)throw new Error('Gerador da Keila indisponível');
+ const capability=await res.json().catch(()=>null) as R|null;
+ const formats=Array.isArray(capability?.formats)?capability.formats:[];
+ if(capability?.sucesso!==true || capability?.paperTemplateConfigured!==true ||
+    capability?.attachmentsVersion!=='arquem-3-keila-quality' ||
+    !formats.includes('pdf') || !formats.includes('xlsx'))
+  throw new Error('Envio Keila bloqueado: versão PDF/Excel com Qualidade ainda não homologada');
+}
+
 async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipients:R[]) {
  if(E('PRODUCTION_FLOW_KEILA_ENABLED')!=='true')return [];
  const matches=recipients.filter(r=>r.id===KEILA_PRODUCTION_FLOW_RECIPIENT_ID&&r.active===true&&norm(r.name)==='keila'&&
@@ -1347,6 +1369,7 @@ async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipien
    const coverage=await recentCoverage(checkFrom,task.to);
    if(!coverage.ready){results.push({recipient:'Keila',kind:task.kind,skipped:'Conciliação do período incompleta'});continue;}
    rows ??= await list('audit_direct_tickets','?select=ticket_id,subject:payload->>subject,ownerHistories:payload->ownerHistories,clients:payload->clients');
+   await requireKeilaGeneratorReady();
    const data=buildKeilaProductionFlow(rows,task.from,task.to);
    const quality=await keilaQualityForPeriod(rec,task.from,task.to);
    const content=keilaProductionReport(data,task.kind,quality);
