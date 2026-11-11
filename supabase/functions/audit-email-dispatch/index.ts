@@ -1163,7 +1163,7 @@ async function manualOfficial(payload: R) {
   // A permissao coletiva global permanece exigida pelo Cron automatico.
   const report = buildReport(rec, appts, from, to, kind, hol, true, clients);
   const tickets = ticketAlerts(rec, await ticketSource());
-  const quality = await supportRatingCache()(rec, from, to);
+  const quality = await recipientQuality(rec, from, to, supportRatingCache());
   const overview = await directionOverviewCache()(rec, from, to, tickets.activeTickets,kind);
   const forecast=await optionalForecast(rec);
   // Mesmo com zero apontamentos, o teste manual verifica o envio e informa a ausencia no corpo.
@@ -1230,7 +1230,7 @@ async function dispatchWeeklyPreliminary() {
       if(exists.length){results.push({recipientId:id,status:'skipped',reason:'Envio preliminar já registrado'});continue;}
       const report=buildReport(r,appts,from,to,'weekly',hol,false,clients);
       const alerts=ticketAlerts(r,allTickets);
-      const quality = await getQuality(r, from, to);
+      const quality = await recipientQuality(r, from, to, getQuality);
       const overview = await getOverview(r, from, to, alerts.activeTickets);
       const empty=!report.metrics.appointments;
       const subject='[BALANCETE PRELIMINAR - DADOS PARCIAIS] Central de Auditoria - Semana 02 a 08/11/2026'+(empty?' [SEM APONTAMENTOS]':'');
@@ -1373,9 +1373,9 @@ async function requireKeilaGeneratorReady() {
  const formats=Array.isArray(capability?.formats)?capability.formats:[];
  if(capability?.sucesso!==true || capability?.paperTemplateConfigured!==true ||
     !['arquem-3-keila-quality','arquem-4-report-sections'].includes(String(capability?.attachmentsVersion||'')) ||
-    capability?.keilaQualityReady!==true ||
+    false ||
     !formats.includes('pdf') || !formats.includes('xlsx'))
-  throw new Error('Envio Keila bloqueado: versão PDF/Excel com Qualidade ainda não homologada');
+  throw new Error('Envio Keila bloqueado: gerador PDF/Excel de Produção ainda não homologado');
 }
 
 async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipients:R[]) {
@@ -1404,8 +1404,8 @@ async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipien
    rows ??= await list('audit_direct_tickets','?select=ticket_id,subject:payload->>subject,ownerHistories:payload->ownerHistories,clients:payload->clients');
    await requireKeilaGeneratorReady();
    const data=buildKeilaProductionFlow(rows,task.from,task.to);
-   const quality=await keilaQualityForPeriod(rec,task.from,task.to);
-   const content=keilaProductionReport(data,task.kind,quality);
+   const workload=await keilaWorkloadForPeriod(rec,task.from,task.to);
+   const content=keilaProductionReport(data,task.kind,workload);
    const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
     method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
     body:JSON.stringify({dispatch_key:key,recipient_id:rec.id,report_kind:task.kind,
@@ -1465,7 +1465,7 @@ async function dispatchPreliminary(t:ScheduledReport,hol:Set<string>,clientsAndT
   const appts=await source(t.from,t.to);
   const report=buildReport(t.r,appts,t.from,t.to,t.kind,hol,false,clients);
   const alerts=ticketAlerts(t.r,allTickets);
-  const quality=await supportRatingCache()(t.r,t.from,t.to);
+  const quality=await recipientQuality(t.r,t.from,t.to,supportRatingCache());
   const overview=await directionOverviewCache()(t.r,t.from,t.to,alerts.activeTickets,t.kind);
   const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
     method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
