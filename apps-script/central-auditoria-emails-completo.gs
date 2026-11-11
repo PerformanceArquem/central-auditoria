@@ -159,7 +159,7 @@ function arquemCapacidadesAnexos_() {
         checkedAt>=file.getLastUpdated().getTime();
     }catch(_){ready=false;}
   }
-  return {sucesso:true,attachmentsVersion:'arquem-2',formats:['pdf','xlsx'],
+  return {sucesso:true,attachmentsVersion:'arquem-3-keila-quality',formats:['pdf','xlsx'],
     paperTemplateConfigured:ready};
 }
 
