@@ -1,16 +1,8 @@
 name: Publicar Central de Auditoria pela Vercel CLI
 
+# Publicação única e controlada: somente acionamento manual na main.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'index.html'
-      - 'api/**'
-      - 'lib/**'
-      - 'auth.js'
-      - 'production-flow.js'
-      - '.github/workflows/vercel-cli-production.yml'
 
 permissions:
   contents: read
