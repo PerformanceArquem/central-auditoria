@@ -3113,13 +3113,11 @@ async function emailAttachmentCheck(){
    if(!data?.ok)throw Error(data?.error||'Resposta inválida do serviço de anexos.');
    const formats=Array.isArray(data.formats)?data.formats.filter(x=>x==='pdf'||x==='xlsx'):[];
    const ready=data.ready===true,enabled=data.enabled===true;
-   status.textContent=ready&&enabled?
-     'Gerador informa PDF e Excel disponíveis e ativados. A entrega real em e-mail ainda requer validação autorizada.':
-     ready?
-     'Modelo timbrado e formatos PDF/Excel anunciados pelo gerador, mas anexos ainda estão desativados no sistema.':
-     'Anexos não homologados: '+String(data.status||'verifique a publicação do gerador e o modelo timbrado')+
-     (formats.length?' · Formatos anunciados: '+formats.join(' e '):'');
-   status.style.color=ready&&enabled?'#167052':'#936018';
+   const keilaReady=data.keilaGeneratorReady===true;
+   const general=ready&&enabled?'PDF e Excel corporativos: gerador ativo.':ready?'PDF e Excel corporativos: homologados, mas o envio de anexos está desativado.':'PDF e Excel corporativos: pendentes — '+String(data.status||'revisar o serviço e o papel timbrado')+'.';
+   const specific=keilaReady?'Relatório Keila: versão com qualidade homologada.':'Relatório Keila: a homologação específica de qualidade ainda não foi confirmada pelo Web App.';
+   status.textContent=general+' '+specific+' Consulta sem envio de e-mails.'+(formats.length?' Formatos: '+formats.join(' e ')+'.':'');
+   status.style.color=keilaReady&&ready&&enabled?'#167052':'#936018';
  }catch(e){
    status.textContent='Não foi possível validar os anexos: '+String(e?.message||e)+'. Nenhum e-mail foi enviado.';
    status.style.color='#a23737';
