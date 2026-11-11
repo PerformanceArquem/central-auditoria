@@ -1,0 +1,65 @@
+name: Publicar versao Keila no Web App existente
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-keila-webapp.yml'
+permissions:
+  contents: read
+concurrency:
+  group: keila-webapp-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar codigo e testes
+        run: |
+          node --check < apps-script/central-auditoria-emails-completo.gs
+          node --test tests/appsscript-complete-integration.test.mjs tests/appsscript-keila-dry-run.test.mjs
+      - name: Instalar CLI
+        run: npm install --no-save @google/clasp@3
+      - name: Autenticacao temporaria
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLASPRC_JSON" || { echo "::error::CLASPRC_JSON ausente"; exit 1; }
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+      - name: Atualizar somente implantacao de anexos existente
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/keila-publish"
+          cd "$RUNNER_TEMP/keila-publish"
+          printf '%s' '{"scriptId":"1WUhIenOGO-B_jAkYgECmpBq-jMeeFrTghwElVyBdKLTTICWnFzgkWmm8"}' > .clasp.json
+          CLI="$GITHUB_WORKSPACE/node_modules/.bin/clasp"
+          "$CLI" pull
+          test -f "Código.js"
+          test -f "arquem-relatorios-anexos.gs.js"
+          grep -q 'function arquemHomologarKeilaSemEnvio' "arquem-relatorios-anexos.gs.js"
+          grep -q 'arquem-3-keila-quality' "arquem-relatorios-anexos.gs.js"
+          test "$(grep -hF 'function doPost(' -- *.js | wc -l)" -eq 1
+          DEPLOYMENT='AKfycbxneXcD3j5v3_UL7AnlweC6wo7pTfXzYxSMsDwHkvz9JtCpRbmRa3C9HC22JSjZ0Mus'
+          "$CLI" deployments > "$RUNNER_TEMP/keila-deployments-before"
+          grep -Fq "$DEPLOYMENT" "$RUNNER_TEMP/keila-deployments-before" || {
+            echo '::error::Implantação de anexos não localizada; nada foi modificado.'
+            exit 1
+          }
+          "$CLI" deploy --deploymentId "$DEPLOYMENT" --description "PDF Excel Qualidade Keila 2026-11-11"
+          "$CLI" deployments > "$RUNNER_TEMP/keila-deployments-after"
+          grep -F "$DEPLOYMENT" "$RUNNER_TEMP/keila-deployments-after" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo 'A mesma implantação foi atualizada. Nenhum e-mail foi enviado e nenhuma flag de disparo foi ativada.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Descartar credencial
+        if: always()
+        run: rm -f "$HOME/.clasprc.json"
