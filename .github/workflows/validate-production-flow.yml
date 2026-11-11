@@ -1,0 +1,23 @@
+name: Validate production ticket traceability
+on:
+  pull_request:
+    paths:
+      - 'api/audit-production-flow.js'
+      - 'lib/production-flow.cjs'
+      - 'production-flow.js'
+      - 'index.html'
+      - 'tests/production-flow*.test.mjs'
+      - '.github/workflows/validate-production-flow.yml'
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --input-type=module --check < api/audit-production-flow.js
+      - run: node --check production-flow.js
+      - run: node --test tests/production-flow.test.mjs tests/production-flow-api.test.mjs
+

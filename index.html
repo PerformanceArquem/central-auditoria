@@ -1129,6 +1129,37 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    <p class="subtle">Origem: apontamentos e tickets já sincronizados no Movidesk. O período pode estar parcialmente conciliado. Nenhum e-mail é enviado.</p>
  </div>
  <div id="pdKpis" class="kpis" style="margin-top:12px"></div>
+ <section class="card" aria-labelledby="pfTitle" style="border-top:4px solid #2765dc">
+  <h3 id="pfTitle">Rastreabilidade dos chamados da Produção</h3>
+  <p>Entradas, saídas, devoluções ao autor da abertura e finalizações. Cada chamado conta uma vez nos totais de chamados; as movimentações mostram todas as passagens pela equipe.</p>
+  <div class="row noprint" style="align-items:flex-end;flex-wrap:wrap">
+   <div class="fg"><label for="pfFrom">De</label><input id="pfFrom" type="date"></div>
+   <div class="fg"><label for="pfTo">Até</label><input id="pfTo" type="date"></div>
+   <button type="button" class="b" id="pfLoad">Atualizar rastreabilidade</button>
+   <button type="button" class="s" id="pfExport" disabled>Exportar chamados (CSV)</button>
+   <button type="button" class="s" id="pfEventsExport" disabled>Exportar movimentações (CSV)</button>
+  </div>
+  <p id="pfStatus" class="subtle" role="status">Selecione o período para consultar.</p>
+  <div id="pfKpis" class="kpis"></div>
+  <h4>Fluxo diário — movimentações</h4>
+  <p class="subtle">Azul: entradas · verde: saídas por transferência · cinza: finalizações · vermelho: alertas. Finalizações e alertas podem se sobrepor; as séries não devem ser somadas. Uma resolução seguida de fechamento conta como uma finalização, até que o chamado seja reaberto.</p>
+  <div id="pfChart" role="img" aria-label="Gráfico diário de entradas, saídas, finalizações e alertas" style="display:grid;gap:12px;max-height:440px;overflow:auto"></div>
+  <details><summary>Ver números do gráfico</summary><div class="tw"><table id="pfDaily"><thead><tr><th>Dia</th><th>Entradas</th><th>Saídas por transferência</th><th>Finalizações</th><th>Alertas</th></tr></thead><tbody></tbody></table></div></details>
+  <div class="row noprint" style="align-items:flex-end;flex-wrap:wrap;margin-top:20px">
+   <div class="fg"><label for="pfFilter">Exibir chamados</label><select id="pfFilter">
+    <option value="all">Todos os chamados do relatório</option><option value="alert">Encerrados pela Produção sem devolução</option>
+    <option value="review">Autoria ou sequência a conferir</option><option value="own">Abertos pela própria Produção</option>
+    <option value="ownClosed">Abertos e finalizados pela Produção</option><option value="returned">Devolvidos ao autor da abertura</option>
+    <option value="entry">Entradas no período</option><option value="exit">Saídas por transferência no período</option><option value="backlog">Em Produção ao final do período</option>
+   </select></div>
+   <div class="fg"><label for="pfSearch">Buscar chamado, assunto ou pessoa</label><input id="pfSearch" type="search" maxlength="160"></div>
+  </div>
+  <p id="pfCount" class="subtle"></p>
+  <div class="tw"><table id="pfTickets"><thead><tr><th>Chamado / histórico</th><th>Assunto / cliente</th><th>Quem abriu</th><th>Origem</th><th>Última finalização no período</th><th>Responsável / equipe atuais</th><th>Conferência</th></tr></thead><tbody></tbody></table></div>
+  <div class="row noprint"><button type="button" id="pfPrevious" class="s" disabled>Anterior</button><span id="pfPage" aria-live="polite"></span><button type="button" id="pfNext" class="s" disabled>Próxima</button></div>
+  <p class="subtle"><b>Regra de devolução:</b> transferir para uma equipe diferente não basta. O histórico precisa mostrar o autor da abertura como responsável. Chamados abertos pela própria Produção são contados separadamente. “Saída” é transferência de responsabilidade; encerramentos são exibidos à parte. Esta tela audita os registros e não bloqueia nem altera chamados no Movidesk.</p>
+  <div id="pfWarnings" class="subtle"></div>
+ </section>
  <div class="card">
   <h3>Comparativo entre períodos</h3>
   <div class="tw"><table id="pdCompare"><thead><tr><th>Indicador</th><th>Período atual</th><th>Período anterior</th><th>Variação</th></tr></thead><tbody></tbody></table></div>
@@ -5394,6 +5425,7 @@ async function load(){
   }
 }
 window.productionAuditInit=()=>{
+  window.productionFlowInit?.();
   if(!started){
     started=true;
     el('pdRefresh').addEventListener('click',load);
@@ -5601,5 +5633,6 @@ window.clientImpactInit=()=>{
 })();
 </script>
 
+<script src="/production-flow.js"></script>
 </body>
 </html>
