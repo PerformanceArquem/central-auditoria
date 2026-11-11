@@ -137,10 +137,33 @@ function arquemValidarPublicacaoSemEnvio() {
   if(result.ok!==true || result.sent!==false || result.files.length!==2)
     throw new Error('Os anexos nao passaram na validacao sem envio.');
   props.setProperties({
+    ARQUEM_ATTACHMENTS_VALIDATED:'true',
     ARQUEM_ATTACHMENTS_VALIDATED_AT:new Date().toISOString(),
     ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID:id
   },false);
   return {ok:true,sent:false,template:'Modelo corporativo validado',files:result.files};
+}
+/**
+ * Homologação completa e independente para o relatório da Keila.
+ * Deve ser executada manualmente no editor Apps Script com a conta autorizada.
+ * Não chama qualquer serviço de envio de e-mail.
+ * Só grava confirmação após PDF e XLSX reais terem sido gerados.
+ */
+function arquemHomologarKeilaSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const base=arquemValidarPublicacaoSemEnvio();
+  if(base.ok!==true || base.sent!==false)throw new Error('Validação corporativa não confirmada');
+  const keila=arquemTesteKeilaSemEnvio();
+  if(keila.ok!==true || keila.sent!==false || !Array.isArray(keila.files) ||
+     keila.files.length!==2 || keila.hasProductionFlow!==true ||
+     keila.hasProductionQuality!==true)
+    throw new Error('Relatório da Keila não passou na homologação PDF/XLSX');
+  props.setProperties({
+    ARQUEM_KEILA_QUALITY_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_KEILA_QUALITY_VALIDATED_TEMPLATE_ID:props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID') || '',
+    ARQUEM_KEILA_QUALITY_VALIDATED_VERSION:'arquem-3-keila-quality'
+  },false);
+  return {ok:true,sent:false,qualityReady:true,files:keila.files};
 }
 /**
  * Retornado pelo doPost apos a validacao do segredo existente.
@@ -160,7 +183,12 @@ function arquemCapacidadesAnexos_() {
     }catch(_){ready=false;}
   }
   return {sucesso:true,attachmentsVersion:'arquem-3-keila-quality',formats:['pdf','xlsx'],
-    paperTemplateConfigured:ready};
+    paperTemplateConfigured:ready,
+    keilaQualityReady:ready &&
+      props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_VERSION')==='arquem-3-keila-quality' &&
+      props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_TEMPLATE_ID')===id &&
+      Number.isFinite(Date.parse(props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_AT')||'')) &&
+      Date.parse(props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime()};
 }
 
 /**
