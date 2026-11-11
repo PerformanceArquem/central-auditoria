@@ -25,7 +25,7 @@
   $('pfKpis').innerHTML=cards.map(c=>'<button type="button" class="card" data-flow-filter="'+c.filter+'" style="width:100%;text-align:left;cursor:pointer;color:inherit"><div class="subtle">'+esc(c.label)+'</div><h3>'+esc(c.value)+'</h3><span class="subtle">'+esc(c.detail)+' · Clique para detalhar</span></button>').join('');
   const series=[['entries','Entradas','#2765dc'],['exits','Saídas por transferência','#16866c']],max=Math.max(1,...report.daily.flatMap(r=>series.map(([k])=>r[k])));
   $('pfChart').innerHTML=report.daily.map(r=>'<div style="display:grid;grid-template-columns:85px 1fr;gap:8px"><b>'+esc(r.date.split('-').reverse().join('/'))+'</b><div>'+series.map(([k,label,color])=>'<div style="display:grid;grid-template-columns:85px 1fr 36px;gap:8px;align-items:center;font-size:12px;margin-bottom:3px"><span>'+label+'</span><div style="background:#edf1f7;height:10px;border-radius:3px"><div style="background:'+color+';height:100%;width:'+r[k]/max*100+'%"></div></div><b>'+esc(r[k])+'</b></div>').join('')+'</div></div>').join('')||'<p>Sem movimentações no período.</p>';
-  $('pfDaily').querySelector('tbody').innerHTML=report.daily.map(r=>'<tr>'+[r.date,r.entries,r.exits,r.closures,r.alerts].map(x=>'<td>'+esc(x)+'</td>').join('')+'</tr>').join('');
+  $('pfDaily').querySelector('tbody').innerHTML=report.daily.map(r=>'<tr>'+[r.date,r.entries,r.exits].map(x=>'<td>'+esc(x)+'</td>').join('')+'</tr>').join('');
   $('pfWarnings').innerHTML='<p><b>Cobertura:</b> '+esc(report.coverage.scanned)+' chamados consultados. Última sincronização de chamado: '+esc(date(report.coverage.latestSync))+'.</p>'+report.warnings.map(w=>'<p>'+esc(w)+'</p>').join('');
   page=0;renderRows();$('pfExport').disabled=false;$('pfEventsExport').disabled=false;
  }
