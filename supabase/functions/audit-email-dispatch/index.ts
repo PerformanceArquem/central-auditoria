@@ -1294,7 +1294,7 @@ async function keilaQualityForPeriod(rec:R,from:string,to:string) {
    source(from,to),
    list('audit_movidesk_survey_responses',
     '?select=owner_name,owner_team,score,response_date&response_date=gte.'+from+
-    '&response_date=lte.'+to+'&score=gte.0&score=lte.10')
+    '&response_date=lte.'+to+'&score=gte.1&score=lte.10')
  ]);
  const names=new Map<string,{name:string;hoursMinutes:number;appointments:number;ratings:number;excellent:number;sum:number}>();
  const keys=new Set(selected.map(norm));
@@ -1314,7 +1314,7 @@ async function keilaQualityForPeriod(rec:R,from:string,to:string) {
  for(const a of surveys){
   if(!accepted(a.owner_name,a.owner_team))continue;
   const score=Number(a.score);
-  if(!Number.isFinite(score)||score<0||score>10)continue;
+  if(!Number.isFinite(score)||score<1||score>10)continue;
   const row=ensure(String(a.owner_name));
   row.ratings++;row.sum+=score;if(score>=8)row.excellent++;
  }
