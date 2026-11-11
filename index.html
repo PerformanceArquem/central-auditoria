@@ -1813,6 +1813,10 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                             <div class="fg"><label for="alarmEmailHistoryFilter">Situação</label><select id="alarmEmailHistoryFilter" onchange="alarmEmailHistoryRender()"><option value="all">Todos os registros</option><option value="sent">Enviados (confirmados)</option><option value="uncertain">Verificação necessária</option></select></div>
                             <div class="fg" style="flex:1;min-width:180px"><label for="alarmEmailHistorySearch">Buscar chamado ou destinatário</label><input id="alarmEmailHistorySearch" oninput="alarmEmailHistoryRender()" placeholder="Número do chamado ou e-mail"></div>
                           </div>
+                          <div class="row noprint" style="gap:8px;align-items:center;margin:12px 0"><button type="button" class="s" id="alarmReviewRecheck" onclick="alarmReviewRecheck()">↻ Rechecar chamados cobrados</button><span class="subtle" id="alarmReviewStatus">Consulta sob demanda. Nenhum e-mail é enviado.</span></div>
+                          <div id="alarmReviewResults" class="tw hide" style="max-height:420px;overflow:auto">
+                            <table><thead><tr><th>Chamado</th><th>Destinatário</th><th>Cobranças</th><th>Último envio</th><th>Próxima revisão</th><th>Situação atual</th><th>Prévia</th></tr></thead><tbody id="alarmReviewRows"></tbody></table>
+                          </div>
                           <div id="alarmEmailHistorySummary" class="subtle"></div>
                           <div class="tw"><table><thead><tr><th>Data e hora (Brasília)</th><th>Destinatário</th><th>Situação</th><th>Chamados incluídos</th><th>Quantidade</th><th>Reiteração</th><th>Protocolo</th></tr></thead><tbody id="alarmEmailHistoryRows"><tr><td colspan="7">Carregando...</td></tr></tbody></table></div>
                         </div>
@@ -2983,6 +2987,47 @@ async function alarmLoadRegisteredRecipients(){
 // Histórico centralizado de cobranças; não confundir aceite do gateway com entrega/leitura.
 let alarmEmailHistory=[],alarmEmailHistoryLoading=false,alarmEmailHistoryLoaded=false,alarmEmailRequestId='';
 let alarmReminderPolicy={interval_days:5,max_reminders:3};
+
+async function alarmReviewRecheck(){
+ const button=$('alarmReviewRecheck'),status=$('alarmReviewStatus'),section=$('alarmReviewResults'),body=$('alarmReviewRows');
+ button.disabled=true;status.textContent='Rechecando o histórico e os chamados sincronizados...';
+ try{
+  const client=window.tmEmailAdminClient;
+  if(!client)throw Error('Faça login para consultar.');
+  const {data,error}=await client.functions.invoke('audit-email-dispatch',{body:{action:'ticket_followup_review'}});
+  if(error){let detail=error.message||'Consulta indisponível';try{const e=await error.context?.json?.();if(e?.error)detail=e.error}catch{}throw Error(detail)}
+  if(!data?.ok||!Array.isArray(data.items))throw Error(data?.error||'Resposta inválida');
+  const items=data.items;
+  body.innerHTML=items.map(x=>{
+   const ready=x.state==='review',label=x.state==='review'?'Reiterar após conferir':'Revisar';
+   return '<tr><td><a target="_blank" rel="noopener noreferrer" href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(x.id)+'">#'+esc(x.id)+'</a></td>'+
+    '<td>'+esc(x.recipient)+'</td><td>'+esc(String(x.charged))+'</td><td>'+esc(alarmEmailTime(x.sentAt))+'</td>'+
+    '<td>'+esc(x.nextReviewAt?alarmEmailTime(x.nextReviewAt):'—')+'</td>'+
+    '<td>'+esc(x.detail)+'</td><td>'+(ready?'<button type="button" class="s" data-review-id="'+esc(x.id)+'" data-review-email="'+esc(x.recipient)+'">'+label+'</button>':'—')+'</td></tr>';
+  }).join('')||'<tr><td colspan="7">Ainda não existem cobranças registradas para revisar.</td></tr>';
+  section.classList.remove('hide');
+  const ready=items.filter(x=>x.state==='review').length;
+  status.textContent=ready+' chamado(s) requerem revisão humana; '+items.length+' cobranças analisadas. Nenhum e-mail enviado.';
+ }catch(e){status.textContent='Falha ao rechecar: '+(e.message||e)}
+ finally{button.disabled=false}
+}
+document.getElementById('alarmReviewRows')?.addEventListener('click',async event=>{
+ const b=event.target.closest('[data-review-id]');if(!b)return;
+ const id=b.dataset.reviewId,email=b.dataset.reviewEmail;
+ if(!/^\d{1,12}$/.test(id))return;
+ alarmSelected.clear();alarmSelected.add(id);
+ alarmUpdateSelectedCount();renderAlerts();alarmEmailInvalidate();
+ $('alarmEmailPanel').classList.remove('hide');
+ await alarmLoadRegisteredRecipients();
+ const select=$('alarmEmailRecipient');
+ if([...select.options].some(o=>o.value===email)){select.value=email;$('alarmEmailRecipientOther').classList.add('hide')}
+ else{select.value=alarmRecipientOtherChoice;$('alarmEmailRecipientOther').value=email;$('alarmEmailRecipientOther').classList.remove('hide')}
+ $('alarmEmailMessage').value='Atenção novamente.\n\nO chamado #'+id+' já foi objeto de cobrança anterior e ainda necessita de revisão de andamento. Solicito verificar a situação atual no Movidesk, confirmar a previsão de conclusão quando aplicável e indicar o próximo encaminhamento.\n\nEsta mensagem é uma prévia: confirme as informações antes do envio.';
+ alarmEmailInvalidate();
+ $('alarmEmailPanel').scrollIntoView({behavior:'smooth',block:'center'});
+ $('alarmEmailStatus').textContent='Reiteração preparada, ainda NÃO enviada. Confira o chamado, atualize a prévia e confirme o envio, se necessário.';
+});
+
 function alarmReminderStatusForTicket(id) {
  const sent=alarmEmailHistory.filter(r=>r.status==='sent'&&(r.ticket_ids||[]).map(String).includes(String(id))).sort((a,b)=>Date.parse(a.sent_at||a.created_at)-Date.parse(b.sent_at||b.created_at));
  const uncertain=alarmEmailHistory.some(r=>r.status!=='sent'&&(r.ticket_ids||[]).map(String).includes(String(id)));
