@@ -57,6 +57,11 @@ Deno.test('individual report only includes tickets owned by the selected collabo
  assert(result.rows.length===2,'expected two tickets for selected collaborator');
  assert(result.rows.every(x=>x.owner==='Alan Reis'),'owner scoping failed');
 });
+Deno.test('selected group excludes ticket owners omitted from recipient list',async()=>{
+ const {requested,...d}=deps();
+ const result=await forecastSection({scope:'management',sectors:[],collaborator_names:['Guilherme Bonato','Laís Lot']},d);
+ assert(result.rows.length===1&&result.rows[0].owner==='Guilherme Bonato','unselected owner leaked into group forecast');
+});
 Deno.test('stale snapshots are hidden, without disguising old data as current',async()=>{
  const old=sample.map(x=>({...x,updated_at:'2020-01-01T00:00:00Z'}));
  const {requested,...d}=deps(old);
@@ -70,3 +75,4 @@ Deno.test('escape untrusted client names in corporate HTML',async()=>{
  assert(!result.html.includes('<img'),'unsafe HTML was not escaped');
  assert(result.html.includes('&lt;img'),'escaped text missing');
 });
+
