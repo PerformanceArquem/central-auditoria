@@ -377,6 +377,7 @@ function arquemPdf_(p, keep) {
   if ((p.tickets||[]).length){
     arquemAddHeading_(body,p.productionFlow?'Chamados movimentados na Produção':'Chamados que exigem atenção');
     const ticketRows=p.tickets.slice(0,65);
+    if(p.productionFlow && p.tickets.length>65)body.appendParagraph('PDF: os primeiros 65 eventos aparecem abaixo. O Excel contém até 450 movimentações; os totais consolidados consideram todo o período.');
     const ticketTable=body.appendTable([['Chamado','Cliente','Responsável','Status','Tempo']].concat(
       ticketRows.map(x=>[
         '#'+String(x.id||''),String(x.client||''),String(x.owner||''),
