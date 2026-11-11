@@ -1,9 +1,9 @@
 /**
- * Central de Auditoria — arquivo completo para instalação manual no Apps Script.
+ * Central de Auditoria — pacote único e completo para instalação no Apps Script.
  * Este arquivo NÃO é uma implantação. Não colar junto a outro doPost sem
  * remover/substituir a função antiga; preservar MAIL_SECRET no Script Properties.
- * Anexos só serão enviados após ativação da flag no backend e confirmação
- * da propriedade ARQUEM_ATTACHMENTS_VALIDATED=true após teste visual.
+ * Anexos somente após validação de PDF e XLSX sem envio, homologação do modelo
+ * e habilitação explícita pelo backend. Preserve MAIL_SECRET ao publicar.
  */
 function doPost(e) {
   try {
@@ -14,22 +14,8 @@ function doPost(e) {
     if (dados.token !== segredo) throw new Error('Acesso não autorizado');
 
     if (dados.action === 'capabilities') {
-      const generatorPresent = typeof arquemCreateReportAttachments_ === 'function';
-      const templateId = props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID');
-      const approved = props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED') === 'true';
-      let templateAvailable = false;
-      if (templateId && generatorPresent) {
-        try {
-          templateAvailable = DriveApp.getFileById(templateId).getMimeType() === MimeType.GOOGLE_DOCS;
-        } catch (ex) {
-          console.error('Modelo não acessível: ' + ex.message);
-        }
-      }
-      return resposta({
-        sucesso: true, attachmentsVersion: 'arquem-1',
-        formats: generatorPresent ? ['pdf','xlsx'] : [],
-        paperTemplateConfigured: templateAvailable && approved
-      });
+      // Verificação apenas de leitura, protegida pelo mesmo segredo do envio.
+      return resposta(arquemCapacidadesAnexos_());
     }
 
     const email = String(dados.email || '').trim();
@@ -43,11 +29,9 @@ function doPost(e) {
 
     let anexos = [];
     if (dados.reportData !== undefined) {
-      if (props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED') !== 'true') {
-        throw new Error('Anexos ainda não validados no Apps Script');
-      }
-      if (!props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')) {
-        throw new Error('Modelo timbrado não configurado');
+      if (props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED') !== 'true' ||
+          !arquemCapacidadesAnexos_().paperTemplateConfigured) {
+        throw new Error('Anexos não homologados: execute a validação sem envio e confirme o modelo.');
       }
       if (typeof arquemCreateReportAttachments_ !== 'function' ||
           !dados.reportData || dados.reportData.schema !== 'arquem-mail-v1') {
@@ -82,7 +66,8 @@ function testarCapacidadesSemEnvio() {
   return r;
 }
 
-// A extensão abaixo contém arquemCreateReportAttachments_ e teste sem envio.
+
+// Gerador PDF/XLSX corporativo integrado: fonte única sincronizada com arquem-relatorios-anexos.gs.
 
 /**
  * ARQUEM · Extensão para o Apps Script atual de envio Gmail.
@@ -92,12 +77,9 @@ function testarCapacidadesSemEnvio() {
  *
  * 1) Em seu doPost(e), DEPOIS de validar o token atual, acrescente:
  *    if (dados.action === 'capabilities') {
- *      const templateId=PropertiesService.getScriptProperties()
- *        .getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID');
- *      return ContentService.createTextOutput(JSON.stringify({
- *        sucesso: true, attachmentsVersion: 'arquem-1', formats: ['pdf','xlsx'],
- *        paperTemplateConfigured: Boolean(templateId)
- *      })).setMimeType(ContentService.MimeType.JSON);
+ *      return ContentService.createTextOutput(
+ *        JSON.stringify(arquemCapacidadesAnexos_())
+ *      ).setMimeType(ContentService.MimeType.JSON);
  *    }
  *
  * 2) Na mesma rotina, depois de autenticar e antes de enviar:
@@ -113,9 +95,11 @@ function testarCapacidadesSemEnvio() {
  *    referência possuir logotipo/marca d'água, a cópia preservará a arte.
  *    O modelo deve ser acessível à conta executora do Apps Script.
  *
- * 5) Habilite scopes Drive, Docs, Sheets e UrlFetchApp. Deploy nova versão
- *    do Web App e faça verificação de capabilities antes de ativar a flag
- *    REPORT_ATTACHMENTS_ENABLED=true no Supabase.
+ * 5) Configure ARQUEM_PAPEL_TIMBRADO_DOC_ID no Script Properties,
+ *    rode arquemValidarPublicacaoSemEnvio() no editor (sem disparos);
+ *    depois configure doPost conforme exemplo e publique nova versão do Web App.
+ * 6) Faça verificação de capabilities antes de habilitar anexos no backend.
+ *    Scopes necessários: Drive, Docs, Sheets e UrlFetchApp.
  *
  * ATENÇÃO: sem template, o PDF contém cabeçalho estilizado, mas NÃO
  * uma marca d'água gráfica. Nunca afirmar que a marca d'água foi aplicada
@@ -135,6 +119,51 @@ function testarCapacidadesSemEnvio() {
  * Só anuncie o recurso "capabilities" depois deste teste passar e depois
  * de validar a opção attachments no fluxo real de envio com um teste autorizado.
  */
+/**
+ * Executar manualmente no editor Apps Script antes de habilitar anexos.
+ * Valida o modelo timbrado, gera PDF/Excel de exemplo e NAO envia e-mails.
+ * O registro de aprovacao perde validade se o modelo for editado depois.
+ */
+function arquemValidarPublicacaoSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const id=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
+  if(!id)throw new Error('Configure ARQUEM_PAPEL_TIMBRADO_DOC_ID antes de validar o papel timbrado.');
+  const file=DriveApp.getFileById(id);
+  if(file.getMimeType()!==MimeType.GOOGLE_DOCS)
+    throw new Error('O modelo de papel timbrado precisa ser um Google Docs acessivel.');
+  const doc=DocumentApp.openById(id);
+  if(!doc.getBody())throw new Error('Nao foi possivel ler o corpo do modelo de papel timbrado.');
+  const result=arquemTesteAnexosSemEnvio();
+  if(result.ok!==true || result.sent!==false || result.files.length!==2)
+    throw new Error('Os anexos nao passaram na validacao sem envio.');
+  props.setProperties({
+    ARQUEM_ATTACHMENTS_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID:id,
+    ARQUEM_ATTACHMENTS_VALIDATED:'true'
+  },false);
+  return {ok:true,sent:false,template:'Modelo corporativo validado',files:result.files};
+}
+/**
+ * Retornado pelo doPost apos a validacao do segredo existente.
+ * Nao anuncia anexos como prontos so porque o ID do modelo existe.
+ */
+function arquemCapacidadesAnexos_() {
+  const props=PropertiesService.getScriptProperties();
+  const id=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
+  const checkedId=props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID');
+  const checkedAt=Date.parse(props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED_AT')||'');
+  let ready=false;
+  if(id && checkedId===id && Number.isFinite(checkedAt)){
+    try{
+      const file=DriveApp.getFileById(id);
+      ready=file.getMimeType()===MimeType.GOOGLE_DOCS &&
+        checkedAt>=file.getLastUpdated().getTime();
+    }catch(_){ready=false;}
+  }
+  return {sucesso:true,attachmentsVersion:'arquem-2',formats:['pdf','xlsx'],
+    paperTemplateConfigured:ready};
+}
+
 function arquemTesteAnexosSemEnvio() {
   const packet={
     schema:'arquem-mail-v1',title:'Relatório de validação — Produção',
@@ -175,8 +204,7 @@ function arquemTesteAnexosSemEnvio() {
  * const data=JSON.parse(e.postData.contents);
  * if(!validarTokenDoProjeto_(data.token)) return respostaDeErroExistente_();
  * if(data.action==='capabilities') return ContentService.createTextOutput(
- *   JSON.stringify({sucesso:true,attachmentsVersion:'arquem-1',formats:['pdf','xlsx'],
- *     paperTemplateConfigured:Boolean(PropertiesService.getScriptProperties().getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID'))})
+ *   JSON.stringify(arquemCapacidadesAnexos_())
  * ).setMimeType(ContentService.MimeType.JSON);
  *
  * // Depois, no bloco de envio já autorizado:
@@ -191,8 +219,21 @@ function arquemTesteAnexosSemEnvio() {
  * Reutilize a validação de token e o tratamento de erros do seu doPost atual.
  * Não copie funções de autenticação fictícias deste comentário.
  */
+// Politica corporativa: retirar identificadores tecnicos antes de criar anexos.
+function arquemSanearPacote_(value) {
+  if(typeof value==='string')
+    return value.replace(/\b(?:supabase|vercel|google\s+apps\s+script|postgresql|postgres)\b/gi,'plataforma interna');
+  if(Array.isArray(value))return value.map(arquemSanearPacote_);
+  if(value && typeof value==='object'){
+    const safe={};
+    Object.keys(value).forEach(k=>safe[k]=arquemSanearPacote_(value[k]));
+    return safe;
+  }
+  return value;
+}
 function arquemCreateReportAttachments_(packet) {
   if (!packet || packet.schema !== 'arquem-mail-v1') throw new Error('Pacote de relatório inválido');
+  packet=arquemSanearPacote_(packet);
   const title = String(packet.title || 'Relatório gerencial').slice(0,120);
   const from = String(packet.from || ''), to = String(packet.to || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) ||
@@ -249,6 +290,22 @@ function arquemAddHeading_(body, str, style) {
   p.editAsText().setForegroundColor('#173b65');
   return p;
 }
+// Papel timbrado: tabelas legiveis em impressao e na tela.
+function arquemEstilizarTabelaPdf_(table) {
+  const rows=table.getNumRows();
+  for(let i=0;i<rows;i++){
+    const row=table.getRow(i);
+    for(let j=0;j<row.getNumCells();j++){
+      const cell=row.getCell(j);
+      cell.setBackgroundColor(i===0?'#173b65':(i%2===0?'#f3f7fc':'#ffffff'));
+      const text=cell.editAsText();
+      text.setFontSize(9);
+      if(i===0)text.setForegroundColor('#ffffff').setBold(true);
+      else text.setForegroundColor('#263d59');
+    }
+  }
+  return table;
+}
 function arquemPdf_(p, keep) {
   const prop=PropertiesService.getScriptProperties().getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID');
   let file;
@@ -280,7 +337,7 @@ function arquemPdf_(p, keep) {
     p.collaborators.slice(0,70).forEach(x=>lines.push([
       String(x.name||''),String(x.sector||''),arquemH_(x.minutes),arquemH_(x.minimumMinutes),
       arquemH_(x.targetMinutes),arquemH_(x.minimumGap),arquemH_(x.targetGap)]));
-    body.appendTable(lines);
+    arquemEstilizarTabelaPdf_(body.appendTable(lines));
   }
   if ((p.daily||[]).length) {
     arquemAddHeading_(body,'Horas por colaborador · dia a dia');
@@ -289,13 +346,13 @@ function arquemPdf_(p, keep) {
       String(x.date||''),String(x.person||''),String(x.sector||''),
       arquemH_(x.minutes),arquemH_(x.referenceMinutes),arquemH_(x.minimumMinutes)
     ]));
-    body.appendTable(rows);
+    arquemEstilizarTabelaPdf_(body.appendTable(rows));
     if(p.daily.length>90)body.appendParagraph('Exibindo os primeiros 90 de '+p.daily.length+' registros diários agrupados.');
   }
   if ((p.customers||[]).length){
     arquemAddHeading_(body,'Empresas que mais consomem tempo');
-    body.appendTable([['Empresa','Horas','Chamados']].concat(
-      p.customers.slice(0,30).map(x=>[String(x.name||''),arquemH_(x.minutes),String(x.tickets||0)])));
+    arquemEstilizarTabelaPdf_(body.appendTable([['Empresa','Horas','Chamados']].concat(
+      p.customers.slice(0,30).map(x=>[String(x.name||''),arquemH_(x.minutes),String(x.tickets||0)]))));
   }
   if ((p.tickets||[]).length){
     arquemAddHeading_(body,'Chamados que exigem atenção');
@@ -305,6 +362,7 @@ function arquemPdf_(p, keep) {
         '#'+String(x.id||''),String(x.client||''),String(x.owner||''),
         String(x.status||''),String(x.ageDays==null?'—':x.ageDays+' dias')
       ])));
+    arquemEstilizarTabelaPdf_(ticketTable);
     ticketRows.forEach((x,i)=>{
       const id=String(x.id||'');
       if(/^\d+$/.test(id)){
@@ -401,13 +459,22 @@ function arquemSheet_(sh,headers,rows){
   const head=headers.map(arquemCell_);
   sh.getRange(1,1,1,head.length).setValues([head]);
   sh.getRange(1,1,1,head.length).setBackground('#173b65')
-    .setFontColor('#ffffff').setFontWeight('bold');
+    .setFontColor('#ffffff').setFontWeight('bold').setFontSize(11);
+  sh.setRowHeight(1,34);
+  sh.setHiddenGridlines(true);
   sh.setFrozenRows(1);
   if(rows.length){
     const data=rows.map(r=>headers.map((_,i)=>typeof r[i]==='number'?r[i]:arquemCell_(r[i])));
     sh.getRange(2,1,data.length,headers.length).setValues(data);
-    sh.getRange(2,1,data.length,headers.length).setBackground('#f7f9fc');
+    sh.getRange(2,1,data.length,headers.length)
+      .setBackgrounds(data.map((_,i)=>Array(headers.length).fill(i%2===0?'#f2f6fc':'#ffffff')))
+      .setVerticalAlignment('middle').setFontSize(10);
+    // Filtros para localizar chamados, setores, colaboradores e atividades rapidamente.
+    sh.getRange(1,1,data.length+1,headers.length).createFilter();
   }
   sh.autoResizeColumns(1,Math.min(headers.length,8));
+  for(let i=1;i<=Math.min(headers.length,12);i++){
+    if(sh.getColumnWidth(i)>360)sh.setColumnWidth(i,360);
+  }
   return sh;
 }

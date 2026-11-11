@@ -1,0 +1,20 @@
+name: Validate complete Apps Script package
+on:
+  pull_request:
+    paths:
+      - 'apps-script/central-auditoria-emails-completo.gs'
+      - 'tests/appsscript-complete-integration.test.mjs'
+      - '.github/workflows/validate-appsscript-complete.yml'
+  workflow_dispatch:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check full Apps Script syntax
+        run: node --check < apps-script/central-auditoria-emails-completo.gs
+      - name: Validate authenticated capabilities and dry run without Gmail
+        run: node --test tests/appsscript-complete-integration.test.mjs
