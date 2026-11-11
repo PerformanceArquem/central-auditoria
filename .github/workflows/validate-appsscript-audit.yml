@@ -1,0 +1,17 @@
+name: Validate Apps Script audit safety
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/audit-appsscript-installation.yml'
+      - '.github/workflows/validate-appsscript-audit.yml'
+      - 'scripts/audit-appsscript-project.mjs'
+      - 'tests/appsscript-audit-safety.test.mjs'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/appsscript-audit-safety.test.mjs
