@@ -74,3 +74,9 @@ test('prévia da cobrança usa o mesmo HTML enviado, com isolamento e texto opci
  assert.match(app,/if\(typeof data\.html!=='string'/);
  assert.match(app,/frame\.removeAttribute\('srcdoc'\)/);
 });
+
+test('a Direção pode habilitar o relatório diário no cadastro',()=>{
+ const source=extract('emailAdminIntegratedScript');
+ assert.match(source,/\$\('emailDaily'\)\.disabled=false/);
+ assert.doesNotMatch(source,/if\(directionForm\(\)\)data\.daily_enabled=false/);
+});
