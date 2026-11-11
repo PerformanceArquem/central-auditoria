@@ -753,17 +753,17 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
       '<p style="font-size:12px">Sem apontamentos importados nos setores vinculados.</p>'):'';
   const emailDailyLimit=12;
   const detailsHtml='<div style="margin-top:24px;border-top:2px solid #dce6f4;padding-top:12px">'+
-    '<h3 style="color:#17345d;font-size:15px">Horas por colaborador, dia a dia</h3>'+
+    (reportSectionOn(rec,'daily_detail')?'<h3 style="color:#17345d;font-size:15px">Horas por colaborador, dia a dia</h3>'+ 
     (daily.length?(scopedManagement?
       detailTable(['Colaborador','Data','Horas','Jornada','%','Falta jornada','Situação'],dailyJourney.slice(0,emailDailyLimit).map(x=>
         [x.name,displayDate(x.day),duration(x.minutes),x.referenceMinutes?duration(x.referenceMinutes):'—',
           showJourneyPercent(x.percent),x.referenceMinutes?duration(x.targetGap):'—',x.status])):
       detailTable(['Colaborador','Data','Horas'],daily.slice(0,emailDailyLimit).map(x=>[x.name,displayDate(x.day),duration(x.minutes)]))):
       '<p style="font-size:12px">Sem apontamentos importados.</p>')+
-    (daily.length>emailDailyLimit?'<p style="font-size:12px">Resumo no e-mail: '+emailDailyLimit+' de '+daily.length+' linhas. Consulte o Excel, quando disponível, para mais detalhes.</p>':'')+
-    '<h3 style="color:#17345d;font-size:15px;margin-top:24px">Empresas com maior consumo de horas</h3>'+
+    (daily.length>emailDailyLimit?'<p style="font-size:12px">Resumo no e-mail: '+emailDailyLimit+' de '+daily.length+' linhas. Consulte o Excel, quando disponível, para mais detalhes.</p>':''):'')+
+    (reportSectionOn(rec,'customers')?'<h3 style="color:#17345d;font-size:15px;margin-top:24px">Empresas com maior consumo de horas</h3>'+ 
     (companies.length?detailTable(['Empresa','Tempo','Chamados'],companies.map(x=>[x.name,duration(x.minutes),String(x.tickets)])):
-      '<p style="font-size:12px">Sem empresas identificadas.</p>')+
+      '<p style="font-size:12px">Sem empresas identificadas.</p>'):'')+
     '<p style="font-size:11px;color:#64748b">Somente horas importadas do Movidesk; ausência de lançamento não comprova falta de trabalho.</p></div>';
   const title = `${kind==='monthly'||kind==='annual'?'Balancete':'Relatório'} ${REPORT_LABEL[kind].toLowerCase()} - ${scope === 'management' ? 'Gestao / ' + (sectorLabels.join(' + ') || 'Todos os setores') : sectorLabels.join(' + ')}${person ? ' / ' + safe(rec.collaborator_name) : ''}`;
   const details = person ? selected.slice(0, 100).map(a =>
@@ -806,15 +806,11 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     '────────────────────────────────────────',
     ...(details.length ? details : ['Nenhum registro importado para o período.']),
     '',
-    'HORAS POR COLABORADOR E DIA',
-    '────────────────────────────────────────',
+    ...(reportSectionOn(rec,'daily_detail')?['HORAS POR COLABORADOR E DIA','────────────────────────────────────────',
     ...dailyJourney.slice(0,emailDailyLimit).map(x=>'- '+safe(x.name)+' | '+displayDate(x.day)+' | '+duration(x.minutes)+
-      (scopedManagement?' | '+(x.referenceMinutes?duration(x.referenceMinutes)+' de jornada | '+showJourneyPercent(x.percent)+' | ':'')+x.status:'')),
-    '',
-    'EMPRESAS QUE MAIS CONSUMIRAM TEMPO',
-    '────────────────────────────────────────',
-    ...companies.map(x=>'- '+safe(x.name)+' | '+duration(x.minutes)+' | '+x.tickets+' chamados'),
-    '',
+      (scopedManagement?' | '+(x.referenceMinutes?duration(x.referenceMinutes)+' de jornada | '+showJourneyPercent(x.percent)+' | ':'')+x.status:'')),'']:[]),
+    ...(reportSectionOn(rec,'customers')?['EMPRESAS QUE MAIS CONSUMIRAM TEMPO','────────────────────────────────────────',
+    ...companies.map(x=>'- '+safe(x.name)+' | '+duration(x.minutes)+' | '+x.tickets+' chamados'),'']:[]),
     'INFORMAÇÃO IMPORTANTE',
     '────────────────────────────────────────',
     'Este relatório considera somente apontamentos importados do Movidesk.',
@@ -838,16 +834,22 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
         minutes,minimumMinutes:days.length*targetPerDay*minimumPercent/100,
         targetMinutes:days.length*targetPerDay,minimumGap:Math.max(0,days.length*targetPerDay*minimumPercent/100-minutes),
         targetGap:Math.max(0,days.length*targetPerDay-minutes),ruleSource:'Referência padrão; não é controle de ponto'})),
-    daily:dailyJourney.slice(0,90).map(x=>({date:x.day,person:x.name,
+    daily:(reportSectionOn(rec,'daily_detail')?dailyJourney:[]).slice(0,90).map(x=>({date:x.day,person:x.name,
       sector:scopedManagement?x.sector:
         scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
       minutes:x.minutes,referenceMinutes:x.referenceMinutes,minimumMinutes:x.minimumMinutes,
       status:scopedManagement?x.status:'Apontamento importado'})),
-    customers:companies.map(x=>({name:x.name,minutes:x.minutes,tickets:x.tickets,appointments:0})),
-    activities:[...byActivity].sort((a,b)=>b[1]-a[1]).slice(0,30).map(([name,minutes])=>({name,minutes}))
+    customers:(reportSectionOn(rec,'customers')?companies:[]).map(x=>({name:x.name,minutes:x.minutes,tickets:x.tickets,appointments:0})), 
+    activities:(reportSectionOn(rec,'activities')?[...byActivity]:[]).sort((a,b)=>b[1]-a[1]).slice(0,30).map(([name,minutes])=>({name,minutes}))
   };
   return { text: lines.join('\n'), detailsHtml, teamJourneyHtml, teamJourney:journey, exportData,
     metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
+}
+// Optional per-recipient controls. NULL/missing switches preserve existing reports.
+function reportSectionOn(rec:R,key:'daily_detail'|'customers'|'activities'):boolean {
+  const sections=rec.report_sections;
+  return !sections || typeof sections!=='object' || Array.isArray(sections) ||
+    (sections as R)[key]!==false;
 }
 function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:ReportKind,partial:boolean,historicalIncomplete:boolean,clients:R[],forecastRows:unknown[]=[]):R {
  const data=report.exportData as R;
@@ -857,11 +859,11 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
    title:(kind==='monthly'||kind==='annual'?'Balancete ':'Relatório ')+REPORT_LABEL[kind].toLowerCase()+' - '+safe(rec.name||rec.sector||'Gestão'),
    from,to,partial,historicalIncomplete,
    metrics:report.metrics,
-   collaborators:data.collaborators||[],daily:data.daily||[],
-   customers:data.customers||[],
+   collaborators:data.collaborators||[],daily:reportSectionOn(rec,'daily_detail')?(data.daily||[]):[],
+   customers:reportSectionOn(rec,'customers')?(data.customers||[]):[],
    tickets:(Array.isArray(tickets.attachmentTickets)?tickets.attachmentTickets:[])
      .map(x=>({...x,client:clientNames.get(String(x.id))||'Não identificado'})),
-   activities:data.activities||[],forecastVariances:forecastRows
+   activities:reportSectionOn(rec,'activities')?(data.activities||[]):[],forecastVariances:forecastRows
  };
 }
 async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R) {
@@ -1520,7 +1522,7 @@ async function prepareReports() {
     // os limites de execucao das Edge Functions em janelas concorridas.
     const existing=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
       '&select=dispatch_key,reconciliation_success_at,expires_at,report_data&limit=1');
-    if(existing.length && Date.parse(String(existing[0].reconciliation_success_at))===Date.parse(String(coverage.lastSuccess)) &&
+    if(t.r.report_sections==null && existing.length && Date.parse(String(existing[0].reconciliation_success_at))===Date.parse(String(coverage.lastSuccess)) &&
       Date.parse(String(existing[0].expires_at))>Date.now()+5*60000 &&
       Array.isArray(existing[0].report_data?.forecastVariances)){
       results.push({key,skipped:'Conteudo ja preparado'});continue;
@@ -1558,6 +1560,8 @@ async function prepareReports() {
     pending:results.filter(x=>x.skipped).length,results});
 }
 async function cachedReport(t:ScheduledReport) {
+  // Never send an outdated prepared report after a recipient opts into custom content controls.
+  if(t.r.report_sections!=null)return null;
   if(t.kind!=='daily'&&t.kind!=='weekly')return null;
   const key=String(t.r.id)+':'+t.kind+':'+t.from+':'+t.to;
   const rows=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
