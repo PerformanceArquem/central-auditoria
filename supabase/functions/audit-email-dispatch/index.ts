@@ -537,7 +537,29 @@ function directionTicketOverview(history:R[]|null, open:TicketAlert[], allowed:S
   };
 }
 async function recipientList() {
-  return (await list('audit_email_recipients', '?select=*')).filter(r => r.active === true);
+  const active=(await list('audit_email_recipients','?select=*')).filter(r=>r.active===true);
+  // Cadastros antigos sem vínculo continuam operando. Com vínculo explícito, confirmar
+  // conta ativa e e-mail correspondente antes de incluir nos disparos automáticos.
+  const checked=await Promise.all(active.map(async r=>{
+    if(!r.linked_user_id)return r;
+    const uid=String(r.linked_user_id);
+    if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(uid))return null;
+    try{
+      const current=await db('audit_users?select=user_id&user_id=eq.'+encodeURIComponent(uid)+'&is_active=eq.true&limit=1');
+      if(!current.length)return null;
+      const base=E('SUPABASE_URL').replace(/\\/$/,'');
+      const key=E('SUPABASE_SERVICE_ROLE_KEY');
+      const auth=await fetch(base+'/auth/v1/admin/users/'+encodeURIComponent(uid),{
+        headers:{apikey:key,Authorization:'Bearer '+key},
+        signal:AbortSignal.timeout(12000)
+      });
+      if(!auth.ok)return null;
+      const user=await auth.json();
+      if(norm(user.email)!==norm(r.email))return null;
+      return r;
+    }catch(e){console.error('Vínculo de destinatário indisponível:',err(e));return null;}
+  }));
+  return checked.filter((r):r is R=>r!==null);
 }
 async function holidays() {
   return new Set((await list('audit_email_holidays', '?select=holiday_date,affects_delivery'))
