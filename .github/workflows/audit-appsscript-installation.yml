@@ -1,12 +1,6 @@
 name: Auditar instalacao Google Apps Script sem envio
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'apps-script/central-auditoria-emails-completo.gs'
-      - 'scripts/audit-appsscript-project.mjs'
-      - '.github/workflows/audit-appsscript-installation.yml'
 
 permissions:
   contents: read
