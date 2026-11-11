@@ -111,7 +111,8 @@ function arquemCapacidadesAnexos_() {
         checkedAt>=file.getLastUpdated().getTime();
     }catch(_){ready=false;}
   }
-  return {sucesso:true,attachmentsVersion:'arquem-3-keila-quality',formats:['pdf','xlsx'],
+  return {sucesso:true,attachmentsVersion:'arquem-4-report-sections',formats:['pdf','xlsx'],
+    sectionPermissionsSupported:true,
     paperTemplateConfigured:ready,
     keilaQualityReady:ready &&
       props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_VERSION')==='arquem-3-keila-quality' &&
