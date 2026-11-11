@@ -90,7 +90,7 @@ test('módulo de liberação usa autorização de administrador e preserva demai
  assert.match(source,/data-release-save/);
  assert.match(source,/await verify\(\)/);
  assert.match(source,/allowed_report_types:codes/);
- assert.match(source,/original\.filter\(v=>v!=='general'&&v!=='production_flow'\)/);
+ assert.match(source,/original===null\?\['ticket_followup'\]:original/);
  assert.match(source,/\.eq\('active',true\)/);
  assert.match(source,/Nenhum e-mail enviado/);
 });
