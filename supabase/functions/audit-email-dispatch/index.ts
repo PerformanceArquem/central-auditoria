@@ -1170,6 +1170,7 @@ async function manualOfficial(payload: R) {
   // Prévia de auditoria não cria disparos, não acessa o Gmail e não muda agendamentos.
   if (previewOnly) return json({ok:true,preview:true,release:RELEASE_ID,
     recipient:target,kind,from,to,partial,empty,
+    reportSections:{daily_detail:reportSectionOn(rec,'daily_detail'),customers:reportSectionOn(rec,'customers'),activities:reportSectionOn(rec,'activities')},
     metrics:report.metrics,ticketMetrics:tickets.metrics,superadores:quality.metric,teamJourney:report.teamJourney,
     directionOverview:overview.metrics,forecastPreview:forecast.rows,
     // Até cinco exemplos por categoria para conferência sem expor todos os dados.
