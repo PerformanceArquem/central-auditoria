@@ -889,6 +889,12 @@ async function sendMail(email: string, subject: string, text: string, html?: str
        !capabilities.formats.includes('pdf') || !capabilities.formats.includes('xlsx') ||
        capabilities.paperTemplateConfigured!==true)
       throw new Error('PDF/XLSX ainda não validados no Apps Script com papel timbrado');
+    const sections=cleanReportData?.reportSections as R|undefined;
+    const customSections=sections && typeof sections==='object' &&
+      ['daily_detail','customers','activities'].some(k=>sections[k]===false);
+    // Do not send restricted data through a legacy attachment generator.
+    if(customSections && capabilities.sectionPermissionsSupported!==true)
+      throw new Error('Envio bloqueado: Apps Script instalado não confirma suporte às seções personalizadas. Atualize e homologue os anexos.');
   }
   const res = await fetch(endpoint, {
     method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
