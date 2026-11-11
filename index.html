@@ -5019,8 +5019,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     const direction=directionForm();
     $('emailMonthlyBox').classList.remove('hide');
     $('emailAnnualBox').classList.remove('hide');
-    $('emailDaily').disabled=direction;
-    if(direction)$('emailDaily').checked=false;
+    // A Direção também pode optar por receber o relatório diário.
+    $('emailDaily').disabled=false;
   };
   const allowedReportInputs=()=>[...document.querySelectorAll('[data-report-access]')];
   const refreshReportAccess=()=>$('emailReportAccessOptions').classList.toggle('hide',$('emailReportLegacy').checked);
@@ -5328,7 +5328,6 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       }
       data.monthly_enabled=$('emailMonthly').checked;
       data.annual_enabled=$('emailAnnual').checked;
-      if(directionForm())data.daily_enabled=false;
       if(!data.daily_enabled&&!data.weekly_enabled&&!data.monthly_enabled&&!data.annual_enabled)throw Error('Marque ao menos uma frequência.');
       if((data.monthly_enabled||data.annual_enabled)&&!data.sectors.length)throw Error('Selecione os setores do fechamento.');
       if(data.scope==='sector'&&!data.sectors.length)throw Error('Selecione pelo menos um setor.');
