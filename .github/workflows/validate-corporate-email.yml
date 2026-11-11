@@ -20,5 +20,5 @@ jobs:
       - name: Validate content policy and HTML layout
         run: deno test tests/corporate-email-policy.test.ts
       - name: Validate Apps Script JavaScript syntax
-        run: node --check <(sed 's/\\r$//' apps-script/arquem-relatorios-anexos.gs)
+        run: node --check < apps-script/arquem-relatorios-anexos.gs
         shell: bash
