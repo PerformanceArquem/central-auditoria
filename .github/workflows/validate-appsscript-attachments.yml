@@ -1,0 +1,20 @@
+name: Validate Apps Script attachment readiness
+on:
+  pull_request:
+    paths:
+      - 'apps-script/arquem-relatorios-anexos.gs'
+      - 'tests/appsscript-attachment-readiness.test.mjs'
+      - '.github/workflows/validate-appsscript-attachments.yml'
+  workflow_dispatch:
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check script syntax
+        run: node --check < apps-script/arquem-relatorios-anexos.gs
+      - name: Check attachments activation policy with mocked services
+        run: node --test tests/appsscript-attachment-readiness.test.mjs
