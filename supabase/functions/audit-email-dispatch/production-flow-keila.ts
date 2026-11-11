@@ -26,7 +26,7 @@ export function buildKeilaProductionFlow(rows:Row[],from:string,to:string){
   const id=String(r.ticket_id||'');
   if(!/^\d{1,12}$/.test(id))continue;
   const raw=(Array.isArray(r.ownerHistories)?r.ownerHistories:[]) as Row[];
-  const ordered=raw.map((h,i)=>({...h,at:iso(h.changedDate),order:i}))
+  const ordered=raw.map((h,i)=>({...h,ownerTeam:h.ownerTeam,owner:h.owner,changedBy:h.changedBy,at:iso(h.changedDate),order:i}))
    .filter(h=>h.at).sort((a,b)=>String(a.at).localeCompare(String(b.at))||a.order-b.order);
   let previous:Row|null=null;
   for(const h of ordered){
