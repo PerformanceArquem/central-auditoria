@@ -1399,11 +1399,11 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
     <p class="coverage-note" id="emailReleaseStatus" role="status">Abra o módulo para consultar as autorizações.</p>
     <div class="tw" style="max-height:520px;overflow:auto">
       <table>
-        <thead><tr><th>Destinatário</th><th>Escopo</th><th>Gerenciais / setoriais</th><th>Fluxo da Produção</th><th>Situação</th><th>Liberação</th></tr></thead>
-        <tbody id="emailReleaseRows"><tr><td colspan="6">Nenhum cadastro carregado.</td></tr></tbody>
+        <thead><tr><th>Destinatário</th><th>Escopo</th><th>Periodicidade</th><th>Gerenciais / setoriais</th><th>Fluxo da Produção</th><th>Situação</th><th>Liberação</th></tr></thead>
+        <tbody id="emailReleaseRows"><tr><td colspan="7">Nenhum cadastro carregado.</td></tr></tbody>
       </table>
     </div>
-    <p class="subtle" style="margin-top:10px">Entradas e saídas da Produção: liberação exclusiva para o cadastro da Keila e dependente das validações do relatório. Cobranças recorrentes não são habilitadas neste módulo.</p>
+    <details style="margin-top:12px;padding:12px;border:1px solid #d6e1f0;border-radius:10px;background:#f8faff"><summary style="cursor:pointer;font-weight:600">O que está incluído nos relatórios existentes?</summary><div style="padding:10px 0 0;line-height:1.7"><p><b>Gerenciais e setoriais:</b> consolidados por setor, chamados, apontamentos, produtividade, atrasos, comparativos e indicadores que o gerador oficial disponibiliza conforme o perfil do destinatário.</p><p><b>Fluxo da Produção:</b> entradas e saídas, horas e qualidade, restrito ao cadastro autorizado.</p><p><b>PDF, Excel e gráficos:</b> fazem parte da composição do relatório oficial. Ainda não há controle independente de cada gráfico nesta versão; desabilitar uma categoria bloqueia essa categoria inteira.</p><p><b>Segurança:</b> esta tela administra o cadastro de permissões. A aplicação efetiva no envio automático e manual depende também da validação da Edge Function.</p></div></details><p class="subtle" style="margin-top:10px">Entradas e saídas da Produção: liberação exclusiva para o cadastro da Keila e dependente das validações do relatório. Cobranças recorrentes não são habilitadas neste módulo.</p>
   </div>
   <div id="emailAdminPanel" class="hide">
     <p id="emailAdminStatus" role="status" class="coverage-note">Aguardando abertura.</p>
@@ -5245,12 +5245,13 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const id=esc(x.id);
       return '<tr data-release-recipient="'+id+'">'+
         '<td><strong>'+esc(x.name)+'</strong><small style="display:block;color:var(--muted)">'+esc(x.email)+'</small></td>'+
-        '<td>'+esc(x.scope==='management'?'Gestão':'Setorial')+'</td>'+
+        '<td>'+esc(x.scope==='management'?'Gestão':'Setorial')+'</td>'+ 
+         '<td>'+esc([[x.daily_enabled,'Diário'],[x.weekly_enabled,'Semanal'],[x.monthly_enabled,'Mensal'],[x.annual_enabled,'Anual']].filter(v=>v[0]).map(v=>v[1]).join(' · ')||'Manual / sem agenda')+'</td>'+ 
         '<td><label><input type="checkbox" data-release-code="general" '+(general?'checked ':'')+(!x.active?'disabled ':'')+'> Liberado</label></td>'+
         '<td>'+(flowEligible?'<label><input type="checkbox" data-release-code="production_flow" '+(flow?'checked ':'')+(!x.active?'disabled ':'')+'> Liberado</label>':'Exclusivo Keila')+'</td>'+
         '<td>'+(x.active?'Ativo':'Inativo')+(legacy?' · regras anteriores':' · personalizado')+'</td>'+
         '<td><button type="button" class="s" data-release-save="'+id+'" '+(!x.active?'disabled':'')+'>Salvar liberação</button></td></tr>';
-    }).join('')||'<tr><td colspan="6">Nenhum destinatário cadastrado.</td></tr>';
+    }).join('')||'<tr><td colspan="7">Nenhum destinatário cadastrado.</td></tr>';
     releaseSay(records.length+' destinatários cadastrados; '+active+' ativos. Alterações são individuais e exigem salvar.');
   }
   $('emailReportReleaseOpen').addEventListener('click',async()=>{
