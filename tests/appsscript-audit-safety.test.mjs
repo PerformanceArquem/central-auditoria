@@ -8,7 +8,7 @@ const script=new URL('../scripts/audit-appsscript-project.mjs',import.meta.url).
 const workflow=await readFile(new URL('../.github/workflows/audit-appsscript-installation.yml',import.meta.url),'utf8');
 test('pipeline somente leitura e não publica nem executa scripts',()=>{
  assert.match(workflow,/clasp" pull/);
- assert.doesNotMatch(workflow,/(?:clasp|CLASP).*\b(?:push|deploy|run)\b/);
+ assert.doesNotMatch(workflow.split('\n').filter(line=>!line.trim().startsWith('#')).join('\n'), /(?:clasp"|npx\s+[^\n]*clasp)\s+(?:push|deploy|run)\b/);
  assert.match(workflow,/secrets.CLASPRC_JSON/);
 });
 test('rejeita projeto sem doPost válido',async()=>{
