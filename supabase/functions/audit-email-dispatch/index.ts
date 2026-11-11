@@ -1301,7 +1301,10 @@ async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipien
    const existing=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=status&limit=1');
    if(existing.length){results.push({recipient:'Keila',kind:task.kind,skipped:'Já registrado'});continue;}
    await requireProductionReady();
-   const coverage=await recentCoverage(task.from,task.to);
+   // Fechamento mensal exige histórico concluído e conciliação da última semana,
+   // como os relatórios corporativos existentes; não exigir janela incremental de 31 dias.
+   const checkFrom=task.kind==='monthly'&&shift(task.to,-6)>task.from?shift(task.to,-6):task.from;
+   const coverage=await recentCoverage(checkFrom,task.to);
    if(!coverage.ready){results.push({recipient:'Keila',kind:task.kind,skipped:'Conciliação do período incompleta'});continue;}
    rows ??= await list('audit_direct_tickets','?select=ticket_id,subject:payload->>subject,ownerHistories:payload->ownerHistories,clients:payload->clients');
    const data=buildKeilaProductionFlow(rows,task.from,task.to);
