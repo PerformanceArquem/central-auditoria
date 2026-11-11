@@ -80,3 +80,17 @@ test('a Direção pode habilitar o relatório diário no cadastro',()=>{
  assert.match(source,/\$\('emailDaily'\)\.disabled=false/);
  assert.doesNotMatch(source,/if\(directionForm\(\)\)data\.daily_enabled=false/);
 });
+
+test('módulo de liberação usa autorização de administrador e preserva demais cadastros',()=>{
+ const source=extract('emailAdminIntegratedScript');
+ assert.doesNotThrow(()=>new Function(source));
+ for(const id of ['emailReportReleaseOpen','emailReportReleasePanel','emailReleaseRows','emailReleaseStatus','emailReleaseRefresh']) assert.match(html,new RegExp('id="'+id+'"'));
+ assert.match(source,/async function verify\(\)/);
+ assert.match(source,/function renderReportRelease\(\)/);
+ assert.match(source,/data-release-save/);
+ assert.match(source,/await verify\(\)/);
+ assert.match(source,/allowed_report_types:codes/);
+ assert.match(source,/original\.filter\(v=>v!=='general'&&v!=='production_flow'\)/);
+ assert.match(source,/\.eq\('active',true\)/);
+ assert.match(source,/Nenhum e-mail enviado/);
+});
