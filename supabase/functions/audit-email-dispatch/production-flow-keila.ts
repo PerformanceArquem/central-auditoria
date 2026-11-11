@@ -66,7 +66,7 @@ export function keilaProductionReport(
   data:ReturnType<typeof buildKeilaProductionFlow>,
   kind:'daily'|'weekly'|'monthly'
 ) {
-  const title='Produção — Entradas e Saídas — '+({daily:'Diário',weekly:'Semanal',monthly:'Mensal'}[kind]);
+  const title='Rastreabilidade dos chamados da Produção — '+({daily:'Diário',weekly:'Semanal',monthly:'Mensal'}[kind]);
   const period=data.from.split('-').reverse().join('/')+' a '+data.to.split('-').reverse().join('/');
   const entered=data.entered,exited=data.exited;
   const scale=Math.max(entered,exited,1);
@@ -81,7 +81,7 @@ export function keilaProductionReport(
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">'+
     '<table width="100%" style="max-width:640px;background:#fff;border-collapse:collapse">'+
     '<tr><td style="background:#142f50;color:#fff;padding:24px"><small>ARQUEM SISTEMAS · CENTRAL DE AUDITORIA</small>'+
-    '<h1 style="font-size:22px;margin:8px 0 0">Entradas e Saídas da Produção</h1>'+
+    '<h1 style="font-size:22px;margin:8px 0 0">Rastreabilidade dos chamados da Produção</h1>'+
     '<p style="font-size:13px;margin-bottom:0">Período: '+esc(period)+'</p></td></tr>'+
     '<tr><td style="padding:28px">'+
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'+
