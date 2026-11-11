@@ -547,7 +547,7 @@ async function recipientList() {
     try{
       const current=await db('audit_users?select=user_id&user_id=eq.'+encodeURIComponent(uid)+'&is_active=eq.true&limit=1');
       if(!current.length)return null;
-      const base=E('SUPABASE_URL').replace(/\\/$/,'');
+      const base=E('SUPABASE_URL').replace(/\/$/,'');
       const key=E('SUPABASE_SERVICE_ROLE_KEY');
       const auth=await fetch(base+'/auth/v1/admin/users/'+encodeURIComponent(uid),{
         headers:{apikey:key,Authorization:'Bearer '+key},
