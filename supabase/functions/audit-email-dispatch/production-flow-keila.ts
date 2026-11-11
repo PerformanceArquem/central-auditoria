@@ -80,6 +80,7 @@ export function keilaProductionReport(
    '<table width="100%" style="font-size:12px;border-collapse:collapse"><tr style="background:#edf3fb"><th>Colaborador</th><th>Horas</th><th>Apontamentos</th><th>Avaliações</th><th>Excelentes</th><th>Média</th></tr>'+
    quality.map(q=>'<tr><td>'+esc(q.name)+'</td><td>'+hh(q.hoursMinutes)+'</td><td>'+q.appointments+'</td><td>'+q.ratings+'</td><td>'+q.excellent+'</td><td>'+(q.average===null?'Sem avaliações':q.average.toFixed(2))+'</td></tr>').join('')+'</table>';
 
+ const count=data.movements.length;
  const detail=data.movements.slice(0,450);
  const limited=count>450;
  const lines=[
