@@ -3100,7 +3100,7 @@ async function alarmEmailHistoryLoad(){
 function alarmEmailTicketBadge(id){
  const relevant=alarmEmailHistory.filter(r=>(r.ticket_ids||[]).map(String).includes(String(id)));
  const sent=relevant.find(r=>r.status==='sent');
- if(sent){const review=alarmReminderStatusForTicket(id);return ' <span class="pill ok" title="'+esc('Aceite pelo Gmail em '+alarmEmailTime(sent.sent_at||sent.created_at)+' · '+review.label)+'">✉ Cobrado '+review.count+'x</span>';}
+ if(sent){const review=alarmReminderStatusForTicket(id);return ' <span class="pill ok" title="'+esc('Aceite pelo Gmail em '+alarmEmailTime(sent.sent_at||sent.created_at)+' · '+review.label)+'">✉ E-mail enviado · '+review.count+' cobrança(s)</span>';}
  if(relevant.length)return ' <span class="pill alert-warn" title="Envio não confirmado: consulte o relatório de e-mails.">✉ Verificar envio</span>';
  return '';
 }
