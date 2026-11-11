@@ -3138,6 +3138,8 @@ async function alarmEmailHistoryLoad(){
   await alarmReminderPolicyLoad();
   status.textContent='Histórico atualizado às '+alarmEmailTime(new Date().toISOString())+'.';
   alarmEmailHistoryRender();renderAlerts();
+  // Revalidação ao abrir o histórico: consulta apenas, não envia mensagens.
+  await alarmReviewRecheck();
  }catch(e){
   status.textContent='Não foi possível carregar o histórico: '+(e.message||e);
  }finally{alarmEmailHistoryLoading=false}
