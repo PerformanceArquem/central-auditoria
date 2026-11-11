@@ -1,0 +1,27 @@
+name: Validar permissões de relatórios
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/audit-email-dispatch/**'
+      - '.github/workflows/report-sections-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report-sections:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check section permission tests
+        run: deno check supabase/functions/audit-email-dispatch/report-sections_test.ts
+      - name: Run all 8 combinations and legacy cases
+        run: deno test --no-check supabase/functions/audit-email-dispatch/report-sections_test.ts
