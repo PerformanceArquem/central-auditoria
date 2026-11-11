@@ -1801,12 +1801,19 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                             </div>
                           </div>
                           <p id="alarmEmailHistoryStatus" role="status" class="subtle">Carregando histórico de e-mails...</p>
+                          <div class="row noprint" style="align-items:flex-end;gap:12px;flex-wrap:wrap;margin:10px 0;padding:10px;border:1px solid #dce8f5;border-radius:8px">
+                            <div><strong>Reiteração de cobranças (prévia, sem envio automático)</strong><small class="subtle" style="display:block">Após a cobrança inicial, até 3 lembretes se o chamado continuar pendente; sempre revalidar status, SLA e previsão no Movidesk antes de enviar.</small></div>
+                            <div class="fg"><label for="alarmReminderDays">Intervalo mínimo</label><select id="alarmReminderDays"><option value="4">4 dias</option><option value="5" selected>5 dias</option><option value="7">7 dias</option><option value="10">10 dias</option></select></div>
+                            <div class="fg"><label for="alarmReminderMax">Máximo de reiterações</label><select id="alarmReminderMax"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option></select></div>
+                            <button type="button" class="s" id="alarmReminderSave" onclick="alarmReminderSave()">Salvar configuração</button>
+                            <span id="alarmReminderStatus" class="subtle">Envio recorrente automático desativado.</span>
+                          </div>
                           <div class="row noprint" style="gap:10px;margin:12px 0;flex-wrap:wrap">
                             <div class="fg"><label for="alarmEmailHistoryFilter">Situação</label><select id="alarmEmailHistoryFilter" onchange="alarmEmailHistoryRender()"><option value="all">Todos os registros</option><option value="sent">Enviados (confirmados)</option><option value="uncertain">Verificação necessária</option></select></div>
                             <div class="fg" style="flex:1;min-width:180px"><label for="alarmEmailHistorySearch">Buscar chamado ou destinatário</label><input id="alarmEmailHistorySearch" oninput="alarmEmailHistoryRender()" placeholder="Número do chamado ou e-mail"></div>
                           </div>
                           <div id="alarmEmailHistorySummary" class="subtle"></div>
-                          <div class="tw"><table><thead><tr><th>Data e hora (Brasília)</th><th>Destinatário</th><th>Situação</th><th>Chamados incluídos</th><th>Quantidade</th><th>Protocolo</th></tr></thead><tbody id="alarmEmailHistoryRows"><tr><td colspan="6">Carregando...</td></tr></tbody></table></div>
+                          <div class="tw"><table><thead><tr><th>Data e hora (Brasília)</th><th>Destinatário</th><th>Situação</th><th>Chamados incluídos</th><th>Quantidade</th><th>Reiteração</th><th>Protocolo</th></tr></thead><tbody id="alarmEmailHistoryRows"><tr><td colspan="7">Carregando...</td></tr></tbody></table></div>
                         </div>
                     </div>
                 </div>
@@ -2974,6 +2981,49 @@ async function alarmLoadRegisteredRecipients(){
 
 // Histórico centralizado de cobranças; não confundir aceite do gateway com entrega/leitura.
 let alarmEmailHistory=[],alarmEmailHistoryLoading=false,alarmEmailHistoryLoaded=false,alarmEmailRequestId='';
+let alarmReminderPolicy={interval_days:5,max_reminders:3};
+function alarmReminderStatusForTicket(id) {
+ const sent=alarmEmailHistory.filter(r=>r.status==='sent'&&(r.ticket_ids||[]).map(String).includes(String(id))).sort((a,b)=>Date.parse(a.sent_at||a.created_at)-Date.parse(b.sent_at||b.created_at));
+ const uncertain=alarmEmailHistory.some(r=>r.status!=='sent'&&(r.ticket_ids||[]).map(String).includes(String(id)));
+ if(uncertain)return {label:'Verificar envio anterior',eligible:false,count:sent.length};
+ if(!sent.length)return {label:'Sem cobrança confirmada',eligible:false,count:0};
+ const last=sent[sent.length-1],at=Date.parse(last.sent_at||last.created_at);
+ const days=Number(alarmReminderPolicy.interval_days||5),limit=Number(alarmReminderPolicy.max_reminders||3);
+ if(sent.length>=limit+1)return {label:'Limite de '+limit+' reiterações atingido',eligible:false,count:sent.length};
+ if(!Number.isFinite(at))return {label:'Revisar data da última cobrança',eligible:false,count:sent.length};
+ const due=new Date(at+days*86400000);
+ if(Date.now()<due.getTime())return {label:'Próxima revisão: '+alarmEmailTime(due.toISOString()),eligible:false,count:sent.length};
+ return {label:'Elegível para revisão humana · '+sent.length+'ª cobrança registrada',eligible:true,count:sent.length};
+}
+async function alarmReminderPolicyLoad() {
+ const client=window.tmEmailAdminClient;
+ if(!client)return;
+ const r=await client.from('audit_ticket_followup_policy').select('interval_days,max_reminders,auto_enabled').eq('id',1).maybeSingle();
+ if(r.error){$('alarmReminderStatus').textContent='Configuração indisponível: '+r.error.message;return}
+ if(!r.data)return;
+ alarmReminderPolicy={interval_days:r.data.interval_days,max_reminders:r.data.max_reminders};
+ $('alarmReminderDays').value=String(r.data.interval_days);
+ $('alarmReminderMax').value=String(r.data.max_reminders);
+ $('alarmReminderStatus').textContent='Regra compartilhada salva · cobrança automática desativada.';
+ alarmEmailHistoryRender();
+}
+async function alarmReminderSave() {
+ const button=$('alarmReminderSave');button.disabled=true;
+ try {
+  const client=window.tmEmailAdminClient;
+  if(!client)throw Error('Faça login como administrador.');
+  const {data:{user},error:authError}=await client.auth.getUser();
+  if(authError||!user)throw Error('Sessão inválida.');
+  const interval_days=Number($('alarmReminderDays').value),max_reminders=Number($('alarmReminderMax').value);
+  const {error}=await client.from('audit_ticket_followup_policy').update({interval_days,max_reminders,updated_at:new Date().toISOString()}).eq('id',1);
+  if(error)throw error;
+  alarmReminderPolicy={interval_days,max_reminders};
+  $('alarmReminderStatus').textContent='Configuração salva para todos os computadores. Nenhum envio ativado.';
+  alarmEmailHistoryRender();
+ }catch(e){$('alarmReminderStatus').textContent='Não foi possível salvar: '+(e.message||e)}
+ finally{button.disabled=false}
+}
+
 const alarmEmailTime=(stamp)=>{
  const d=new Date(stamp||0);
  return Number.isFinite(d.getTime())?
@@ -3002,8 +3052,8 @@ function alarmEmailHistoryRender(){
   const state=r.status==='sent'?'ok':r.status==='uncertain'?'alert-warn':'alert-warn';
   return '<tr><td>'+esc(alarmEmailTime(sentDate))+'</td><td>'+esc(r.recipient)+'</td>'+
     '<td><span class="pill '+state+'">'+esc(alarmEmailHistoryStatus(r.status))+'</span></td>'+
-    '<td>'+links+'</td><td>'+ids.length+'</td><td title="'+esc(r.id||'')+'">'+esc(String(r.request_id||r.id||'').slice(0,8))+'</td></tr>';
- }).join('')||'<tr><td colspan="6">Nenhum registro corresponde ao filtro.</td></tr>';
+    '<td>'+links+'</td><td>'+ids.length+'</td><td>'+esc(ids.map(id=>'#'+id+': '+alarmReminderStatusForTicket(id).label).join(' · '))+'</td><td title="'+esc(r.id||'')+'">'+esc(String(r.request_id||r.id||'').slice(0,8))+'</td></tr>';
+ }).join('')||'<tr><td colspan="7">Nenhum registro corresponde ao filtro.</td></tr>';
 }
 function alarmEmailHistoryExport(){
  const filter=$('alarmEmailHistoryFilter')?.value||'all';
@@ -3039,6 +3089,7 @@ async function alarmEmailHistoryLoad(){
   }
   if(!data?.ok||!Array.isArray(data.items))throw Error(data?.error||'Resposta inválida');
   alarmEmailHistory=data.items;alarmEmailHistoryLoaded=true;
+  await alarmReminderPolicyLoad();
   status.textContent='Histórico atualizado às '+alarmEmailTime(new Date().toISOString())+'.';
   alarmEmailHistoryRender();renderAlerts();
  }catch(e){
@@ -3048,7 +3099,7 @@ async function alarmEmailHistoryLoad(){
 function alarmEmailTicketBadge(id){
  const relevant=alarmEmailHistory.filter(r=>(r.ticket_ids||[]).map(String).includes(String(id)));
  const sent=relevant.find(r=>r.status==='sent');
- if(sent)return ' <span class="pill ok" title="'+esc('Aceite pelo Gmail em '+alarmEmailTime(sent.sent_at||sent.created_at)+' · Para: '+sent.recipient)+'">✉ E-mail enviado</span>';
+ if(sent){const review=alarmReminderStatusForTicket(id);return ' <span class="pill ok" title="'+esc('Aceite pelo Gmail em '+alarmEmailTime(sent.sent_at||sent.created_at)+' · '+review.label)+'">✉ Cobrado '+review.count+'x</span>';}
  if(relevant.length)return ' <span class="pill alert-warn" title="Envio não confirmado: consulte o relatório de e-mails.">✉ Verificar envio</span>';
  return '';
 }
