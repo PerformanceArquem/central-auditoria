@@ -67,6 +67,8 @@ function testarCapacidadesSemEnvio() {
 }
 
 
+
+
 // Gerador PDF/XLSX corporativo integrado: fonte única sincronizada com arquem-relatorios-anexos.gs.
 
 /**
@@ -138,8 +140,7 @@ function arquemValidarPublicacaoSemEnvio() {
     throw new Error('Os anexos nao passaram na validacao sem envio.');
   props.setProperties({
     ARQUEM_ATTACHMENTS_VALIDATED_AT:new Date().toISOString(),
-    ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID:id,
-    ARQUEM_ATTACHMENTS_VALIDATED:'true'
+    ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID:id
   },false);
   return {ok:true,sent:false,template:'Modelo corporativo validado',files:result.files};
 }
@@ -164,7 +165,7 @@ function arquemCapacidadesAnexos_() {
     paperTemplateConfigured:ready};
 }
 
-function arquemTesteAnexosSemEnvio() {
+function arquemTesteAnexosSemEnvio(salvarPrevia) {
   const packet={
     schema:'arquem-mail-v1',title:'Relatório de validação — Produção',
     from:'2026-11-02',to:'2026-11-08',partial:true,historicalIncomplete:true,
@@ -189,7 +190,13 @@ function arquemTesteAnexosSemEnvio() {
   const xlsx=files.find(b=>b.getName().endsWith('.xlsx'));
   if(!pdf||!xlsx||pdf.getBytes().length<2000||xlsx.getBytes().length<1500)
     throw new Error('Arquivo inválido ou vazio: confira permissões e exportações');
-  const result={ok:true,sent:false,files:files.map(b=>({
+  let previewFolderUrl;
+  if(salvarPrevia === true){
+    const folder=DriveApp.createFolder('ARQUEM - Validacao sem envio - '+new Date().toISOString());
+    files.forEach(blob=>folder.createFile(blob));
+    previewFolderUrl=folder.getUrl();
+  }
+  const result={ok:true,sent:false,previewFolderUrl:previewFolderUrl,files:files.map(b=>({
     name:b.getName(),type:b.getContentType(),bytes:b.getBytes().length
   }))};
   console.log(JSON.stringify(result));
@@ -375,7 +382,7 @@ function arquemPdf_(p, keep) {
   }
   arquemAddHeading_(body,'Observações metodológicas');
   body.appendParagraph('Dados da Central de Auditoria/Movidesk sincronizados. Horas apontadas não são controle de ponto. '+
-    'A ausência de registros não comprova ausência de trabalho. Categorias de risco podem se sobrepor.');
+    'A ausência de registros não comprova ausência de trabalho. Categorias de risco podem se sobrepor.').editAsText().setFontSize(9);
   doc.saveAndClose();
   return DriveApp.getFileById(file.getId()).getAs(MimeType.PDF);
 }
@@ -391,7 +398,7 @@ function arquemXlsx_(p, keep) {
      ['Chamados trabalhados',Number(p.metrics&&p.metrics.tickets)||0],
      ['Conciliação',p.partial?'Dados parciais':'Dados disponíveis'],
      ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]);
-  first.getRange('B4').setNumberFormat('[h]:mm:ss');
+  first.getRange('B5').setNumberFormat('[h]:mm:ss');
   const people=arquemCreateSheet_(ss,'Colaboradores',
     ['Colaborador','Setor','Horas','Mínimo','Jornada','Falta mínimo','Falta jornada','Origem'],
     (p.collaborators||[]).map(x=>[x.name,x.sector,arquemExcelHora_(x.minutes),arquemExcelHora_(x.minimumMinutes),
@@ -478,3 +485,5 @@ function arquemSheet_(sh,headers,rows){
   }
   return sh;
 }
+
+
