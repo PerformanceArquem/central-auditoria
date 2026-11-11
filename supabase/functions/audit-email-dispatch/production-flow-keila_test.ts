@@ -1,13 +1,17 @@
 import {buildKeilaProductionFlow,keilaProductionReport} from './production-flow-keila.ts';
-function ok(value:boolean,message:string){if(!value)throw new Error(message);}
-Deno.test('Keila sees hours and flow but no scores in email or attachments',()=>{
- const data=buildKeilaProductionFlow([], '2026-11-02','2026-11-08');
- const report=keilaProductionReport(data,'weekly',[{name:'Exemplo A',hoursMinutes:480,appointments:3}]);
- const all=[report.text,report.html,JSON.stringify(report.packet)].join(' ').toLowerCase();
- for(const forbidden of ['csat','índice de qualidade','notas excelentes','avaliações','productionquality','ratings','excellent','average','qualityhtml']){
-   ok(!all.includes(forbidden),'Keila contains forbidden quality field: '+forbidden);
- }
- ok(report.text.includes('Exemplo A')&&report.text.includes('08:00'),'Workload summary absent');
- ok(Array.isArray(report.packet.productionWorkload),'Staff hours missing in attachment');
- ok(!Object.hasOwn(report.packet,'productionQuality'),'Ratings must not be in attachment packet');
+function check(value:boolean,message:string){if(!value)throw new Error(message);}
+
+Deno.test('Keila: somente rastreabilidade de entradas e saídas',()=>{
+  const data=buildKeilaProductionFlow([], '2026-11-02','2026-11-08');
+  const report=keilaProductionReport({...data,entered:14,exited:9},'weekly');
+  const text=report.text.toLowerCase();
+  const html=report.html.toLowerCase();
+  const packet=JSON.stringify(report.packet).toLowerCase();
+  check(text.includes('entradas: 14')&&text.includes('saídas: 9'),'Text must include both counts');
+  check(html.includes('entradas')&&html.includes('saídas'),'Email must include chart labels');
+  check(report.packet.productionFlow.entered===14 && report.packet.productionFlow.exited===9,'Packet counts must match');
+  for(const forbidden of ['horas','apontamentos','colaborador','qualidade','csat','avaliaç','média','notas','responsável','origem','destino','movimentaç','productionworkload','productionquality','tickets":[{']){
+    check(![text,html,packet].some(p=>p.includes(forbidden)),'Disallowed Keila content: '+forbidden);
+  }
+  check(Array.isArray(report.packet.tickets) && report.packet.tickets.length===0,'No tickets in Keila email attachment');
 });
