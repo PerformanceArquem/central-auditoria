@@ -265,7 +265,22 @@ function arquemPdf_(p, keep) {
     const warning=body.appendParagraph('ATENÇÃO: histórico do Movidesk em importação. Comparativos anuais são preliminares.');
     warning.editAsText().setForegroundColor('#a36618').setBold(true);
   }
-  if ((p.collaborators||[]).length) {
+  if(p.productionQuality){
+    arquemAddHeading_(body,'Qualidade dos colaboradores');
+    const qs=p.productionQuality;
+    const ratings=qs.reduce((sum,x)=>sum+Number(x.ratings||0),0);
+    const excellent=qs.reduce((sum,x)=>sum+Number(x.excellent||0),0);
+    body.appendParagraph('Avaliações: '+ratings+' | Notas excelentes (8–10): '+excellent+
+      ' | Índice de qualidade: '+(ratings?(excellent/ratings*100).toFixed(2)+'%':'Sem avaliações'));
+    body.appendParagraph('Notas 1–7: abaixo do padrão; 8–10: excelente. Sem avaliações não representa nota zero.');
+    const lines=[['Colaborador','Horas','Apontamentos','Avaliações','Excelentes','Média']];
+    qs.slice(0,100).forEach(x=>lines.push([
+      String(x.name||''),arquemH_(x.hoursMinutes),String(x.appointments||0),
+      String(x.ratings||0),String(x.excellent||0),
+      x.average==null?'Sem avaliações':Number(x.average).toFixed(2)
+    ]));
+    arquemEstilizarTabelaPdf_(body.appendTable(lines));
+  } else if ((p.collaborators||[]).length) {
     arquemAddHeading_(body,'Colaboradores · horas e jornada');
     const lines=[['Colaborador','Setor','Horas','Meta mínima','Jornada','Falta mínimo','Falta jornada']];
     p.collaborators.slice(0,70).forEach(x=>lines.push([
@@ -334,11 +349,24 @@ function arquemXlsx_(p, keep) {
      ['Conciliação',p.partial?'Dados parciais':'Dados disponíveis'],
      ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]));
   if(!p.productionFlow)first.getRange('B4').setNumberFormat('[h]:mm:ss');
+  if(p.productionQuality){
+    const qs=p.productionQuality;
+    const quality=arquemCreateSheet_(ss,'Qualidade',
+      ['Colaborador','Horas apontadas','Apontamentos','Avaliações','Notas excelentes (8–10)','Média','Índice qualidade'],
+      qs.map(x=>[x.name,arquemExcelHora_(x.hoursMinutes),Number(x.appointments)||0,
+        Number(x.ratings)||0,Number(x.excellent)||0,
+        x.average==null?'Sem avaliações':Number(x.average),
+        Number(x.ratings)>0?Number(x.excellent)/Number(x.ratings):'Sem avaliações']));
+    if(qs.length){
+      quality.getRange(2,2,qs.length,1).setNumberFormat('[h]:mm:ss');
+      quality.getRange(2,7,qs.length,1).setNumberFormat('0.00%');
+    }
+  }
   const people=arquemCreateSheet_(ss,'Colaboradores',
     ['Colaborador','Setor','Horas','Mínimo','Jornada','Falta mínimo','Falta jornada','Origem'],
-    (p.collaborators||[]).map(x=>[x.name,x.sector,arquemExcelHora_(x.minutes),arquemExcelHora_(x.minimumMinutes),
+    (p.productionQuality?[]:(p.collaborators||[])).map(x=>[x.name,x.sector,arquemExcelHora_(x.minutes),arquemExcelHora_(x.minimumMinutes),
      arquemExcelHora_(x.targetMinutes),arquemExcelHora_(x.minimumGap),arquemExcelHora_(x.targetGap),x.ruleSource||'Padrão']));
-  arquemFormatarHoras_(people,[3,4,5,6,7],(p.collaborators||[]).length);
+  arquemFormatarHoras_(people,[3,4,5,6,7],p.productionQuality?0:(p.collaborators||[]).length);
   const daySheet=arquemCreateSheet_(ss,'Dia a dia',
     ['Data','Colaborador','Setor','Horas','Jornada','Mínimo','Situação'],
     (p.daily||[]).map(x=>[x.date,x.person,x.sector,arquemExcelHora_(x.minutes),
