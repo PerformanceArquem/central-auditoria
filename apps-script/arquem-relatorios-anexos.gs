@@ -95,6 +95,44 @@ function arquemHomologarKeilaSemEnvio() {
   return {ok:true,sent:false,qualityReady:true,files:keila.files};
 }
 /**
+ * Homologacao das permissoes individuais SEM envio de e-mail.
+ * Execute uma vez depois de instalar a versao 4 e de validar o modelo timbrado.
+ * O gerador recusa abas vedadas e verifica PDF/XLSX antes de liberar o recurso.
+ */
+function arquemHomologarSecoesSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const template=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
+  if(!template)throw new Error('Modelo timbrado obrigatorio para homologar as secoes.');
+  const approved=arquemValidarPublicacaoSemEnvio();
+  if(approved.ok!==true || approved.sent!==false)
+    throw new Error('Anexos corporativos ainda nao homologados.');
+  const packet={
+    schema:'arquem-mail-v1',title:'TESTE SEM ENVIO - Permissoes individuais',
+    from:'2026-11-02',to:'2026-11-08',
+    partial:false,historicalIncomplete:false,
+    metrics:{minutes:480,appointments:1,tickets:1},
+    reportSections:{daily_detail:false,customers:false,activities:false},
+    collaborators:[],
+    daily:[{date:'2026-11-05',person:'Colaborador demonstrativo',sector:'Suporte',minutes:480}],
+    customers:[{name:'Empresa demonstrativa',minutes:480,tickets:1}],
+    activities:[{name:'Atividade demonstrativa',minutes:480}],
+    tickets:[]
+  };
+  const files=arquemCreateReportAttachments_(packet);
+  if(!Array.isArray(files)||files.length!==2)throw new Error('Anexos personalizados incompletos.');
+  const pdf=files.find(x=>x.getContentType()==='application/pdf');
+  const excel=files.find(x=>String(x.getName()).endsWith('.xlsx'));
+  if(!pdf||!excel||pdf.getBytes().length<2000||excel.getBytes().length<1500)
+    throw new Error('PDF ou Excel personalizado invalido.');
+  props.setProperties({
+    ARQUEM_SECTIONS_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_SECTIONS_VALIDATED_TEMPLATE_ID:template,
+    ARQUEM_SECTIONS_VALIDATED_VERSION:'arquem-4-report-sections'
+  },false);
+  return {ok:true,sent:false,sectionPermissionsSupported:true,
+    files:files.map(x=>({name:x.getName(),bytes:x.getBytes().length}))};
+}
+/**
  * Retornado pelo doPost apos a validacao do segredo existente.
  * Nao anuncia anexos como prontos so porque o ID do modelo existe.
  */
@@ -111,8 +149,14 @@ function arquemCapacidadesAnexos_() {
         checkedAt>=file.getLastUpdated().getTime();
     }catch(_){ready=false;}
   }
+  const sectionsAt=Date.parse(props.getProperty('ARQUEM_SECTIONS_VALIDATED_AT')||'');
+  const sectionPermissionsSupported=ready &&
+    props.getProperty('ARQUEM_SECTIONS_VALIDATED_VERSION')==='arquem-4-report-sections' &&
+    props.getProperty('ARQUEM_SECTIONS_VALIDATED_TEMPLATE_ID')===id &&
+    Number.isFinite(sectionsAt) &&
+    sectionsAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
   return {sucesso:true,attachmentsVersion:'arquem-4-report-sections',formats:['pdf','xlsx'],
-    sectionPermissionsSupported:true,
+    sectionPermissionsSupported,
     paperTemplateConfigured:ready,
     keilaQualityReady:ready &&
       props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_VERSION')==='arquem-3-keila-quality' &&
