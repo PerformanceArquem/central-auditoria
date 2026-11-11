@@ -1,9 +1,16 @@
 name: Validate complete Apps Script package
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps-script/central-auditoria-emails-completo.gs'
+      - 'tests/appsscript-keila-dry-run.test.mjs'
+      - 'tests/appsscript-complete-integration.test.mjs'
   pull_request:
     paths:
       - 'apps-script/central-auditoria-emails-completo.gs'
       - 'tests/appsscript-complete-integration.test.mjs'
+      - 'tests/appsscript-keila-dry-run.test.mjs'
       - '.github/workflows/validate-appsscript-complete.yml'
   workflow_dispatch:
 jobs:
@@ -17,4 +24,4 @@ jobs:
       - name: Check full Apps Script syntax
         run: node --check < apps-script/central-auditoria-emails-completo.gs
       - name: Validate authenticated capabilities and dry run without Gmail
-        run: node --test tests/appsscript-complete-integration.test.mjs
+        run: node --test tests/appsscript-complete-integration.test.mjs tests/appsscript-keila-dry-run.test.mjs
