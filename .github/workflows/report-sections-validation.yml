@@ -25,6 +25,8 @@ jobs:
         run: deno check supabase/functions/audit-email-dispatch/report-sections_test.ts
       - name: Check full Edge Function and imports
         run: deno check supabase/functions/audit-email-dispatch/index.ts
+      - name: Verify jornada gap calculations
+        run: deno test supabase/functions/audit-email-dispatch/journey-gaps_test.ts
       - name: Run all 8 combinations and legacy cases
         run: deno test supabase/functions/audit-email-dispatch/report-sections_test.ts
       - name: Verify Keila contains no ratings or CSAT
