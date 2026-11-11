@@ -5348,6 +5348,13 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       if(error)throw error;
       if(!data?.ok)throw Error(data?.error||'Não foi possível consultar a prévia.');
       const m=data.metrics||{},t=data.ticketMetrics||{},p=data.ticketPreview||{};
+      const sectionNames={daily_detail:'Dia a dia',customers:'Empresas por horas',activities:'Atividades / Excel'};
+      const sections=data.reportSections||{};
+      const sectionSummary='<p style="margin:8px 0"><strong>Conteúdo autorizado:</strong> '+
+        Object.entries(sectionNames).map(([key,label])=>
+          '<span style="display:inline-block;margin:3px 5px 3px 0;padding:4px 8px;border-radius:6px;background:'+
+          (sections[key]===false?'#fff1f0':'#eef7f1')+'">'+esc(label)+': '+(sections[key]===false?'Bloqueado':'Liberado')+'</span>'
+        ).join('')+'</p>';
       const forecast=Array.isArray(data.forecastPreview)?data.forecastPreview:[];
       const hh=v=>{const n=Math.max(0,Math.round(Number(v)||0));return Math.floor(n/60)+'h'+String(n%60).padStart(2,'0')};
       const forecastSection=forecast.length?
@@ -5359,7 +5366,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
 
       const line=(item,category)=>'<tr><td style="padding:7px;border-bottom:1px solid #e5edf7"><a href="'+esc(item.url)+'" target="_blank" rel="noopener noreferrer">#'+esc(item.id)+'</a></td><td style="padding:7px;border-bottom:1px solid #e5edf7">'+esc(item.subject)+'</td><td style="padding:7px;border-bottom:1px solid #e5edf7">'+esc(item.owner)+' · '+esc(item.sector)+'</td><td style="padding:7px;border-bottom:1px solid #e5edf7">'+esc(category==='sla'?item.sla:(item.days+' dias'))+'</td></tr>';
       const examples=[...(p.overdue||[]).map(x=>line(x,'sla')),...(p.stalled||[]).map(x=>line(x,'stalled'))];
-      area.innerHTML='<strong>Prévia — '+esc(data.from)+' a '+esc(data.to)+'</strong>'+
+      area.innerHTML='<strong>Prévia — '+esc(data.from)+' a '+esc(data.to)+'</strong>'+sectionSummary+
         '<p style="margin:8px 0">Horas: '+esc(String(m.minutes??0))+' minutos · Apontamentos: '+esc(String(m.appointments??0))+
         ' · Chamados com horas: '+esc(String(m.tickets??0))+'</p>'+
         '<p>Em aberto: '+esc(String(t.open??0))+' · SLA vencido: '+esc(String(t.overdue??0))+
