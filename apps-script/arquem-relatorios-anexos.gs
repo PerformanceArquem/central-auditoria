@@ -92,6 +92,44 @@ function arquemCapacidadesAnexos_() {
     paperTemplateConfigured:ready};
 }
 
+/**
+ * Homologação específica do relatório da Keila.
+ * Usa dados fictícios e nunca chama doPost, MailApp ou GmailApp.
+ * Gera PDF e XLSX temporários, confere os arquivos e os descarta.
+ */
+function arquemTesteKeilaSemEnvio() {
+  const packet={
+    schema:'arquem-mail-v1',
+    title:'Homologação — Entradas e Saídas da Produção — Keila',
+    from:'2026-11-02',to:'2026-11-08',
+    partial:false,historicalIncomplete:false,
+    metrics:{tickets:2,appointments:0,minutes:0},
+    productionFlow:{entered:2,exited:1,entryMovements:3,exitMovements:1},
+    productionQuality:[
+      {name:'Colaborador de teste A',hoursMinutes:3964,appointments:20,ratings:5,excellent:4,average:8.8},
+      {name:'Colaborador de teste B',hoursMinutes:480,appointments:5,ratings:0,excellent:0,average:null}
+    ],
+    collaborators:[],daily:[],customers:[],activities:[],forecastVariances:[],
+    tickets:[
+      {id:'100769',client:'Empresa demonstrativa',owner:'Responsável demonstrativo',
+        status:'Entrada · Suporte → Produção',ageDays:0,url:'https://arquem.movidesk.com/Ticket/Edit/100769'},
+      {id:'100769',client:'Empresa demonstrativa',owner:'Responsável demonstrativo',
+        status:'Saída · Produção → Suporte',ageDays:0,url:'https://arquem.movidesk.com/Ticket/Edit/100769'}
+    ]
+  };
+  const attachments=arquemCreateReportAttachments_(packet);
+  if(!Array.isArray(attachments)||attachments.length!==2)throw new Error('O teste Keila deve criar PDF e XLSX.');
+  const pdf=attachments.find(b=>b.getContentType()==='application/pdf');
+  const xlsx=attachments.find(b=>b.getName().endsWith('.xlsx'));
+  if(!pdf||!xlsx||pdf.getBytes().length<2000||xlsx.getBytes().length<1500)
+    throw new Error('Homologação Keila: PDF ou Excel ausente/vazio.');
+  const outcome={ok:true,sent:false,report:'Keila - qualidade e movimentações',
+    hasProductionFlow:true,hasProductionQuality:true,
+    files:attachments.map(b=>({name:b.getName(),type:b.getContentType(),bytes:b.getBytes().length}))};
+  console.log(JSON.stringify(outcome));
+  return outcome;
+}
+
 function arquemTesteAnexosSemEnvio() {
   const packet={
     schema:'arquem-mail-v1',title:'Relatório de validação — Produção',
