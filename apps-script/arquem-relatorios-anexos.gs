@@ -105,8 +105,21 @@ function arquemTesteAnexosSemEnvio() {
  * Reutilize a validação de token e o tratamento de erros do seu doPost atual.
  * Não copie funções de autenticação fictícias deste comentário.
  */
+// Politica corporativa: retirar identificadores tecnicos antes de criar anexos.
+function arquemSanearPacote_(value) {
+  if(typeof value==='string')
+    return value.replace(/\b(?:supabase|vercel|google\s+apps\s+script|postgresql|postgres)\b/gi,'plataforma interna');
+  if(Array.isArray(value))return value.map(arquemSanearPacote_);
+  if(value && typeof value==='object'){
+    const safe={};
+    Object.keys(value).forEach(k=>safe[k]=arquemSanearPacote_(value[k]));
+    return safe;
+  }
+  return value;
+}
 function arquemCreateReportAttachments_(packet) {
   if (!packet || packet.schema !== 'arquem-mail-v1') throw new Error('Pacote de relatório inválido');
+  packet=arquemSanearPacote_(packet);
   const title = String(packet.title || 'Relatório gerencial').slice(0,120);
   const from = String(packet.from || ''), to = String(packet.to || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) ||
@@ -163,6 +176,22 @@ function arquemAddHeading_(body, str, style) {
   p.editAsText().setForegroundColor('#173b65');
   return p;
 }
+// Papel timbrado: tabelas legiveis em impressao e na tela.
+function arquemEstilizarTabelaPdf_(table) {
+  const rows=table.getNumRows();
+  for(let i=0;i<rows;i++){
+    const row=table.getRow(i);
+    for(let j=0;j<row.getNumCells();j++){
+      const cell=row.getCell(j);
+      cell.setBackgroundColor(i===0?'#173b65':(i%2===0?'#f3f7fc':'#ffffff'));
+      const text=cell.editAsText();
+      text.setFontSize(9);
+      if(i===0)text.setForegroundColor('#ffffff').setBold(true);
+      else text.setForegroundColor('#263d59');
+    }
+  }
+  return table;
+}
 function arquemPdf_(p, keep) {
   const prop=PropertiesService.getScriptProperties().getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID');
   let file;
@@ -194,7 +223,7 @@ function arquemPdf_(p, keep) {
     p.collaborators.slice(0,70).forEach(x=>lines.push([
       String(x.name||''),String(x.sector||''),arquemH_(x.minutes),arquemH_(x.minimumMinutes),
       arquemH_(x.targetMinutes),arquemH_(x.minimumGap),arquemH_(x.targetGap)]));
-    body.appendTable(lines);
+    arquemEstilizarTabelaPdf_(body.appendTable(lines));
   }
   if ((p.daily||[]).length) {
     arquemAddHeading_(body,'Horas por colaborador · dia a dia');
@@ -203,13 +232,13 @@ function arquemPdf_(p, keep) {
       String(x.date||''),String(x.person||''),String(x.sector||''),
       arquemH_(x.minutes),arquemH_(x.referenceMinutes),arquemH_(x.minimumMinutes)
     ]));
-    body.appendTable(rows);
+    arquemEstilizarTabelaPdf_(body.appendTable(rows));
     if(p.daily.length>90)body.appendParagraph('Exibindo os primeiros 90 de '+p.daily.length+' registros diários agrupados.');
   }
   if ((p.customers||[]).length){
     arquemAddHeading_(body,'Empresas que mais consomem tempo');
-    body.appendTable([['Empresa','Horas','Chamados']].concat(
-      p.customers.slice(0,30).map(x=>[String(x.name||''),arquemH_(x.minutes),String(x.tickets||0)])));
+    arquemEstilizarTabelaPdf_(body.appendTable([['Empresa','Horas','Chamados']].concat(
+      p.customers.slice(0,30).map(x=>[String(x.name||''),arquemH_(x.minutes),String(x.tickets||0)]))));
   }
   if ((p.tickets||[]).length){
     arquemAddHeading_(body,'Chamados que exigem atenção');
@@ -219,6 +248,7 @@ function arquemPdf_(p, keep) {
         '#'+String(x.id||''),String(x.client||''),String(x.owner||''),
         String(x.status||''),String(x.ageDays==null?'—':x.ageDays+' dias')
       ])));
+    arquemEstilizarTabelaPdf_(ticketTable);
     ticketRows.forEach((x,i)=>{
       const id=String(x.id||'');
       if(/^\d+$/.test(id)){
@@ -315,13 +345,22 @@ function arquemSheet_(sh,headers,rows){
   const head=headers.map(arquemCell_);
   sh.getRange(1,1,1,head.length).setValues([head]);
   sh.getRange(1,1,1,head.length).setBackground('#173b65')
-    .setFontColor('#ffffff').setFontWeight('bold');
+    .setFontColor('#ffffff').setFontWeight('bold').setFontSize(11);
+  sh.setRowHeight(1,34);
+  sh.setHiddenGridlines(true);
   sh.setFrozenRows(1);
   if(rows.length){
     const data=rows.map(r=>headers.map((_,i)=>typeof r[i]==='number'?r[i]:arquemCell_(r[i])));
     sh.getRange(2,1,data.length,headers.length).setValues(data);
-    sh.getRange(2,1,data.length,headers.length).setBackground('#f7f9fc');
+    sh.getRange(2,1,data.length,headers.length)
+      .setBackgrounds(data.map((_,i)=>Array(headers.length).fill(i%2===0?'#f2f6fc':'#ffffff')))
+      .setVerticalAlignment('middle').setFontSize(10);
+    // Filtros para localizar chamados, setores, colaboradores e atividades rapidamente.
+    sh.getRange(1,1,data.length+1,headers.length).createFilter();
   }
   sh.autoResizeColumns(1,Math.min(headers.length,8));
+  for(let i=1;i<=Math.min(headers.length,12);i++){
+    if(sh.getColumnWidth(i)>360)sh.setColumnWidth(i,360);
+  }
   return sh;
 }
