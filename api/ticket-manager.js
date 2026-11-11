@@ -48,10 +48,18 @@ async function db(path, { method = 'GET', body, prefer } = {}) {
 
   if (prefer) headers.Prefer = prefer;
 
+  const serialized = body === undefined ? undefined : JSON.stringify(body);
+  if (body !== undefined && (!serialized || !serialized.trim())) {
+    throw Object.assign(new Error('JSON de sincronização não serializável'), { status: 400 });
+  }
+  const bodyBytes = serialized === undefined ? 0 : Buffer.byteLength(serialized, 'utf8');
+  if (bodyBytes > 250000) {
+    throw Object.assign(new Error('Lote de sincronização excede o limite do servidor; tente lotes menores'), { status: 413 });
+  }
   const r = await fetch(`${urlBase}/rest/v1/${path}`, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: serialized,
     signal: AbortSignal.timeout(25000)
   });
 
@@ -65,6 +73,15 @@ async function db(path, { method = 'GET', body, prefer } = {}) {
   }
 
   if (!r.ok) {
+    // Diagnóstico sem payload, identidade, token ou conteúdo de tickets.
+    console.error('ticket-manager upstream', {
+      operation: path.split('?')[0],
+      method,
+      upstreamStatus: r.status,
+      requestBytes: bodyBytes,
+      contentType: r.headers.get('content-type')?.split(';')[0] || 'unknown',
+      responseIsJson: raw ? (() => { try { JSON.parse(raw); return true; } catch { return false; } })() : false
+    });
     throw Object.assign(
       new Error(result?.message || result?.error || `Supabase HTTP ${r.status}`),
       { status: 502 }
@@ -284,13 +301,14 @@ export default async function handler(req, res) {
     });
 
   } catch (e) {
+    // Nunca registrar bearer token nem corpo das requisicoes.
     console.error('ticket-manager:', e.message);
 
     return reply(
       res,
-      e.status === 400 ? 400 : 502,
+      [400, 413].includes(e.status) ? e.status : 502,
       {
-        error: e.status === 400
+        error: [400, 413].includes(e.status)
           ? e.message
           : 'Falha ao acessar os dados compartilhados'
       }
