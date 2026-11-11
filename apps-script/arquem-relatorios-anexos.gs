@@ -273,6 +273,14 @@ function arquemSanearPacote_(value) {
 function arquemCreateReportAttachments_(packet) {
   if (!packet || packet.schema !== 'arquem-mail-v1') throw new Error('Pacote de relatório inválido');
   packet=arquemSanearPacote_(packet);
+  // Defense in depth: even a stale or malformed sender must not leak revoked
+  // sections in PDF tables, Excel tabs, charts, or serialized attachments.
+  const permissions=packet.reportSections||{};
+  if(permissions && typeof permissions==='object'){
+    if(permissions.daily_detail===false)packet.daily=[];
+    if(permissions.customers===false)packet.customers=[];
+    if(permissions.activities===false)packet.activities=[];
+  }
   const title = String(packet.title || 'Relatório gerencial').slice(0,120);
   const from = String(packet.from || ''), to = String(packet.to || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) ||
