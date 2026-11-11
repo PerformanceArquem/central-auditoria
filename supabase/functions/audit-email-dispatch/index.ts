@@ -1124,6 +1124,7 @@ async function manualOfficial(payload: R) {
   const recipients = await db(`audit_email_recipients?id=eq.${encodeURIComponent(id)}&active=eq.true&select=*&limit=1`);
   if (!recipients.length) return json({ error: 'Destinatario nao cadastrado ou inativo' }, 404);
   const rec = recipients[0] as R;
+  if(isKeilaRecipient(rec)) return json({ok:false,error:'Keila recebe exclusivamente Rastreabilidade dos chamados da Producao (entradas e saidas).'},403);
   // Reutilizar no envio manual a mesma permissao de relatorio aplicada ao Cron.
   // A autorizacao de administrador no endpoint nao substitui a permissao do destinatario.
   if (!recipientAllows(rec,'general'))
@@ -1216,7 +1217,7 @@ async function dispatchWeeklyPreliminary() {
   const hol=await holidays();
   if(!hol.has('2026-11-02')) return json({ok:false,error:'Feriado de Finados não cadastrado: corrigir antes do envio'},409);
   const coverage=await recentCoverage(from,to);
-  const recipients=(await recipientList()).filter(r=>r.weekly_enabled===true&&recipientAllows(r,'general'));
+  const recipients=(await recipientList()).filter(r=>!isKeilaRecipient(r)&&r.weekly_enabled===true&&recipientAllows(r,'general'));
   if(!recipients.length) return json({ok:false,error:'Sem destinatários semanais ativos'},409);
   const [appts,allTickets,clients]=await Promise.all([source(from,to),ticketSource(),clientSource()]);
   const getQuality = supportRatingCache();
@@ -1288,7 +1289,7 @@ function scheduledReports(today:string, hol:Set<string>, recipients:R[]):Schedul
   const isMonthCloseDay=businessDay&&today===firstBusinessDay;
   const tasks:ScheduledReport[] = [];
   for (const r of recipients) {
-    if(!recipientAllows(r,'general'))continue;
+    if(isKeilaRecipient(r)||!recipientAllows(r,'general'))continue;
     if (businessDay && r.daily_enabled===true)
       tasks.push({r,kind:'daily',from:prev,to:prev});
     if (dow===1 && r.weekly_enabled===true)
@@ -1328,28 +1329,6 @@ function keilaFlowPeriods(today:string,hol:Set<string>) {
   tasks.push({kind:'monthly',from:end.slice(0,7)+'-01',to:end});
  }
  return tasks;
-}
-// Fluxo de Keila: somente horas e apontamentos dos colaboradores selecionados.
-// Notas, avaliações e CSAT são indicadores de outros gestores (Cássio e Carla).
-async function keilaWorkloadForPeriod(rec:R,from:string,to:string) {
- const selected=(Array.isArray(rec.production_flow_collaborators)?rec.production_flow_collaborators:[])
-   .map(x=>String(x).trim()).filter(Boolean);
- const sectors=(Array.isArray(rec.sectors)&&rec.sectors.length?rec.sectors:[rec.sector])
-   .map(norm).filter(Boolean);
- const appts=await source(from,to);
- const keys=new Set(selected.map(norm));
- const accepted=(name:unknown,team:unknown)=>selected.length?keys.has(norm(name)):sectors.includes(norm(team));
- const names=new Map<string,{name:string;hoursMinutes:number;appointments:number}>();
- if(selected.length)for(const name of selected)names.set(norm(name),{name,hoursMinutes:0,appointments:0});
- for(const a of appts){
-   if(!accepted(a.collaborator_name,a.sector))continue;
-   const name=String(a.collaborator_name||'Não identificado'),key=norm(name);
-   if(!names.has(key))names.set(key,{name,hoursMinutes:0,appointments:0});
-   const row=names.get(key)!;
-   row.hoursMinutes+=Math.max(0,Number(a.duration_minutes)||0);
-   row.appointments++;
- }
- return [...names.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
 }
 // O cadastro exclusivo de Keila nunca recebe indicadores de satisfação.
 const isKeilaRecipient=(r:R)=>String(r.id||'')===KEILA_PRODUCTION_FLOW_RECIPIENT_ID;
@@ -1404,8 +1383,7 @@ async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipien
    rows ??= await list('audit_direct_tickets','?select=ticket_id,subject:payload->>subject,ownerHistories:payload->ownerHistories,clients:payload->clients');
    await requireKeilaGeneratorReady();
    const data=buildKeilaProductionFlow(rows,task.from,task.to);
-   const workload=await keilaWorkloadForPeriod(rec,task.from,task.to);
-   const content=keilaProductionReport(data,task.kind,workload);
+   const content=keilaProductionReport(data,task.kind);
    const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
     method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
     body:JSON.stringify({dispatch_key:key,recipient_id:rec.id,report_kind:task.kind,
