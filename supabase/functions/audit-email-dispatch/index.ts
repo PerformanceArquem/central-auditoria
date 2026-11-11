@@ -1228,6 +1228,11 @@ async function dispatchWeeklyPreliminary() {
   return json({ok:!results.some(x=>x.status==='failed'),preliminary:true,period:{from,to},
     coverageComplete:coverage.ready,results});
 }
+// NULL preserva os cadastros legados; uma lista explícita restringe relatórios.
+function recipientAllows(r:R, report:'general'|'production_flow'|'ticket_followup') {
+ const codes=r.allowed_report_types;
+ return codes==null || (Array.isArray(codes)&&codes.includes(report));
+}
 function scheduledReports(today:string, hol:Set<string>, recipients:R[]):ScheduledReport[] {
   const dow = weekday(today);
   const businessDay = ![0,6].includes(dow) && !hol.has(today);
@@ -1243,6 +1248,7 @@ function scheduledReports(today:string, hol:Set<string>, recipients:R[]):Schedul
   const january = today.slice(5,7)==='01';
   const tasks:ScheduledReport[] = [];
   for (const r of recipients) {
+    if(!recipientAllows(r,'general'))continue;
     const director = directionRecipient(r);
     if (businessDay && !director && r.daily_enabled===true)
       tasks.push({r,kind:'daily',from:prev,to:prev});
@@ -1348,7 +1354,7 @@ async function requireKeilaGeneratorReady() {
 
 async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipients:R[]) {
  if(E('PRODUCTION_FLOW_KEILA_ENABLED')!=='true')return [];
- const matches=recipients.filter(r=>r.id===KEILA_PRODUCTION_FLOW_RECIPIENT_ID&&r.active===true&&norm(r.name)==='keila'&&
+ const matches=recipients.filter(r=>recipientAllows(r,'production_flow')&&r.id===KEILA_PRODUCTION_FLOW_RECIPIENT_ID&&r.active===true&&norm(r.name)==='keila'&&
   r.scope==='management'&&norm(r.email)==='inteligencia.gerencia@arquem.com.br');
  if(matches.length!==1)throw new Error('Relatório de Produção: cadastro exclusivo de Keila não validado');
  if(E('REPORT_ATTACHMENTS_ENABLED')!=='true')throw new Error('Relatório de Produção exige PDF e Excel habilitados');
