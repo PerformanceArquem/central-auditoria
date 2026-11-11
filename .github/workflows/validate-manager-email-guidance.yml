@@ -1,0 +1,21 @@
+name: Validate Manager email guidance
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/audit-email-dispatch/ticket-charge.ts'
+      - 'supabase/functions/audit-email-dispatch/index.ts'
+      - 'tests/ticket-charge-guidance.test.ts'
+      - '.github/workflows/validate-manager-email-guidance.yml'
+  workflow_dispatch:
+jobs:
+  guidance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Validate TypeScript
+        run: deno check supabase/functions/audit-email-dispatch/index.ts
+      - name: Test manual email guidance safely without sending email
+        run: deno test tests/ticket-charge-guidance.test.ts

@@ -1701,13 +1701,22 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                           </div>
                           <div class="fg" style="margin-top:10px"><label for="alarmEmailMessage">Texto de abertura (editável)</label><textarea id="alarmEmailMessage" rows="7" style="width:100%" oninput="alarmEmailInvalidate()"></textarea></div>
                           <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">
-                            <button type="button" class="s" onclick="alarmEmailDraft()">Gerar texto</button>
+                            <button type="button" class="s" onclick="alarmEmailDraft()">Gerar texto padrão</button>
+                            <button type="button" class="s" id="alarmEmailAiDraft" onclick="alarmEmailAiDraft()" disabled title="Verificando disponibilidade do Gemini..." style="border-color:#b8c7e9;background:#eef4ff;color:#1b4da0;font-weight:700">✦ Dicas do Manager</button>
+                            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="alarmEmailExternalAiConsent"> Autorizo enviar dados resumidos dos chamados ao Gemini para gerar sugestões</label>
+                            <label style="display:inline-flex;align-items:center;gap:7px;padding:9px 12px;background:#f2f6fd;border:1px solid #d5e2f5;border-radius:9px;font-size:12px;cursor:pointer"><input type="checkbox" id="alarmEmailIncludeGuidance" checked onchange="alarmEmailInvalidate()"> Incluir orientações práticas no rodapé do e-mail</label>
                             <button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
                             <button type="button" class="b" id="alarmEmailSend" onclick="alarmEmailSend()" disabled title="Disponível somente depois de visualizar e conferir a prévia">Confirmar e enviar</button><style>#alarmEmailSend:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}</style>
                           </div>
+                          <p class="subtle" style="margin:0 0 10px;color:#596c86">O Dicas do Manager pode sugerir o texto inicial com Gemini mediante autorização. O diagnóstico operacional e as orientações no rodapé são gerados pelas regras do sistema, sem enviar dados ao Gemini. Revise a sugestão antes de enviar. Os dados dos chamados selecionados poderão ser processados pelo Gemini.</p>
                           <p id="alarmEmailStatus" role="status" class="subtle">Selecione os chamados e gere a prévia para liberar o envio.</p>
                           <button type="button" class="s hide noprint" id="alarmEmailRemoveMissing" onclick="alarmRemoveMissingTickets()">Desmarcar os chamados não sincronizados</button>
-                          <div id="alarmEmailPreviewArea" class="hide" style="border:1px solid #dce5f0;border-radius:9px;background:#fff;padding:14px;margin-top:10px">
+                          <div id="alarmEmailManagerDiagnosis" class="hide" style="margin-top:12px;padding:14px;border-radius:12px;border:1px solid #c7d9ee;background:#f6faff">
+                              <h4 style="margin:0 0 6px;color:#183956">✦ Dicas do Manager · Diagnóstico antes do envio</h4>
+                              <p class="subtle" style="margin:0 0 8px">Indicadores objetivos dos chamados selecionados. Hipóteses e orientações precisam ser confirmadas com a equipe; não representam avaliação de pessoas.</p>
+                              <div id="alarmEmailDiagnosisList"></div>
+                            </div>
+                            <div id="alarmEmailPreviewArea" class="hide" style="border:1px solid #dce5f0;border-radius:9px;background:#fff;padding:14px;margin-top:10px">
                             <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px">
                               <strong id="alarmEmailPreviewSubject"></strong>
                               <span class="subtle" style="font-size:11px">Prévia real do HTML · Nenhum e-mail enviado</span>
@@ -2994,7 +3003,7 @@ let alarmEmailMissingIds=[];
 const alarmSelectionSignature=()=>{
  const ids=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
  return JSON.stringify({ids,recipient:alarmRecipientEmail(),
-   message:$('alarmEmailMessage')?.value||''});
+   message:$('alarmEmailMessage')?.value||'',includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked});
 };
 function alarmUpdateSelectedCount(){
  if($('alarmSelectedCount'))$('alarmSelectedCount').textContent=alarmSelected.size+' chamado(s) selecionado(s) · limite de 20';
@@ -3004,6 +3013,8 @@ function alarmEmailInvalidate(){
  $('alarmEmailRemoveMissing')?.classList.add('hide');
  const button=$('alarmEmailSend');if(button)button.disabled=true;
  $('alarmEmailPreviewArea')?.classList.add('hide');
+ $('alarmEmailManagerDiagnosis')?.classList.add('hide');
+ $('alarmEmailDiagnosisList')?.replaceChildren();
  const frame=$('alarmEmailPreviewFrame');if(frame)frame.removeAttribute('srcdoc');
 }
 function alarmSelectionToggle(checkbox){
@@ -3028,6 +3039,7 @@ function alarmOpenComposer(){
  if(!alarmSelected.size){alert('Selecione pelo menos um chamado no ranking.');return}
  $('alarmEmailPanel').classList.remove('hide');
  alarmLoadRegisteredRecipients();
+ alarmEmailAiAvailability();
  if(!$('alarmEmailMessage').value.trim())alarmEmailDraft();
  $('alarmEmailPanel').scrollIntoView({behavior:'smooth',block:'center'});
 }
@@ -3042,6 +3054,65 @@ function alarmEmailDraft(){
  $('alarmEmailMessage').value=templates[tone]||templates.cordial;
  alarmEmailInvalidate();
 }
+async function alarmEmailAiAvailability(){
+ const btn=$('alarmEmailAiDraft');
+ if(!btn)return;
+ btn.disabled=true;btn.title='Consultando disponibilidade do Gemini...';
+ try{
+  const client=window.tmEmailAdminClient;
+  if(!client)throw Error('Acesso administrativo necessario.');
+  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
+    body:{action:'ticket_charge_capabilities'}
+  });
+  if(error||!data?.ok)throw Error('Nao foi possivel confirmar a disponibilidade da IA.');
+  btn.disabled=data.aiAvailable!==true;
+  btn.title=data.aiAvailable===true?'Requer autorizacao explicita para enviar dados resumidos ao Gemini.':
+    'Gemini ainda nao habilitado pelo administrador. Use a previa para orientacoes operacionais sem IA externa.';
+ }catch(e){
+  btn.disabled=true;btn.title='IA indisponivel: '+String(e.message||e);
+ }
+}
+// Gera somente rascunho, nunca libera o botao de enviar.
+async function alarmEmailAiDraft(){
+ const btn=$('alarmEmailAiDraft');
+ if(alarmEmailSending||btn?.disabled)return;
+ if(!alarmSelected.size){$('alarmEmailStatus').textContent='Selecione um ou mais chamados antes de gerar com IA.';return}
+ if(!$('alarmEmailExternalAiConsent')?.checked){
+  $('alarmEmailStatus').textContent='Marque a autorizacao de processamento com Gemini antes de gerar sugestoes.';
+  return;
+ }
+ const client=window.tmEmailAdminClient;
+ if(!client){$('alarmEmailStatus').textContent='Acesso autenticado necessario para utilizar a IA.';return}
+ const ids=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
+ const tone=$('alarmEmailTone').value;
+ const initialMessage=$('alarmEmailMessage').value;
+ if(btn)btn.disabled=true;
+ $('alarmEmailStatus').textContent='Gerando sugestao a partir dos chamados sincronizados. Nenhum e-mail sera enviado...';
+ try{
+  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
+   body:{action:'ticket_charge_ai_draft',ticketIds:ids,tone,externalAiConsent:true}
+  });
+  if(error){
+   let detail=error.message||'A IA nao respondeu.';
+   try{const e=await error.context?.json?.();if(e?.error)detail=e.error}catch(_){}
+   throw Error(detail);
+  }
+  if(!data?.ok||typeof data.message!=='string'||!data.message.trim())
+   throw Error(data?.error||'A IA nao retornou rascunho valido.');
+  const currentIds=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
+  if(JSON.stringify(ids)!==JSON.stringify(currentIds)||
+     tone!==$('alarmEmailTone').value||initialMessage!==$('alarmEmailMessage').value){
+   $('alarmEmailStatus').textContent='Selecao, modelo ou texto alterado durante a geracao; nada foi substituido. Gere novamente.';
+   return;
+  }
+  $('alarmEmailMessage').value=data.message.trim();
+  alarmEmailInvalidate();
+  $('alarmEmailStatus').textContent='✦ Dicas do Manager: sugestão pronta. Revise as informacoes e clique em Visualizar e-mail antes do envio.';
+ }catch(e){
+  $('alarmEmailStatus').textContent='IA indisponivel: '+(e?.message||String(e))+'. O texto foi mantido; Gerar texto padrao continua disponivel.';
+ }finally{if(btn)btn.disabled=false}
+}
+
 async function alarmEmailCall(action,confirmed=false){
  const client=window.tmEmailAdminClient;
  if(!client)throw Error('Acesso administrativo necessário. Entre novamente na Central.');
@@ -3050,7 +3121,7 @@ async function alarmEmailCall(action,confirmed=false){
  const recipient=alarmRecipientEmail();
  if(!/^[^@\s]+@arquem\.com\.br$/.test(recipient))throw Error('Informe um destinatário @arquem.com.br.');
  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
-  body:{action,ticketIds:ids,recipient,message:$('alarmEmailMessage').value,confirmed,requestId:alarmEmailRequestId}
+  body:{action,ticketIds:ids,recipient,message:$('alarmEmailMessage').value,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,requestId:alarmEmailRequestId}
  });
  if(error){
   let detail=error.message||'Falha no serviço de e-mail.';
@@ -3085,11 +3156,28 @@ async function alarmEmailPreview(){
   $('alarmEmailPreviewSubject').textContent='Assunto: '+data.subject;
   $('alarmEmailPreviewText').textContent=data.text||'';
   $('alarmEmailPreviewFrame').srcdoc=data.html;
+  const diagnosis=$('alarmEmailDiagnosisList'),diagBox=$('alarmEmailManagerDiagnosis');
+  if(diagnosis&&diagBox){
+   diagnosis.replaceChildren();
+   const guidance=Array.isArray(data.guidance)?data.guidance:[];
+   for(const entry of guidance){
+    const card=document.createElement('div');card.style.cssText='margin:8px 0;padding:11px;background:#fff;border:1px solid #dfe8f5;border-radius:9px';
+    const evidence=document.createElement('p'),action=document.createElement('p');
+    evidence.style.margin='0 0 6px';action.style.margin='0';
+    const evidenceTitle=document.createElement('strong'),actionTitle=document.createElement('strong');
+    evidenceTitle.textContent='Evidência: ';actionTitle.textContent='Próxima ação: ';
+    evidence.append(evidenceTitle,document.createTextNode(String(entry.evidence||'Não disponível')));
+    action.append(actionTitle,document.createTextNode(String(entry.action||'Revisar com a equipe')));
+    card.append(evidence,action);diagnosis.append(card);
+   }
+   diagBox.classList.toggle('hide',!$('alarmEmailIncludeGuidance')?.checked||!guidance.length);
+  }
+
   $('alarmEmailPreviewArea').classList.remove('hide');
   alarmEmailApproved=alarmSelectionSignature();
   alarmEmailRequestId=crypto.randomUUID();
   button.disabled=false;
-  $('alarmEmailStatus').textContent='Prévia pronta. Confira destinatário, números e texto antes de confirmar o envio.';
+  $('alarmEmailStatus').textContent='Prévia pronta. Confira destinatário, chamados, texto e orientações antes de confirmar o envio.';
  }catch(e){
   alarmEmailApproved='';
   alarmEmailMissingIds=Array.isArray(e.missingIds)?e.missingIds:[];
