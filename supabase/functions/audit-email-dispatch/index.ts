@@ -1998,6 +1998,120 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   ticketCount:draft.tickets.length,ids,sentAt:new Date().toISOString(),
   info:'Aceite confirmado pelo serviço Gmail. A entrega/leitura na caixa postal não foi verificada.'});
 }
+// Relatório do meio-dia: duas mensagens parciais (Inteligência e equipe da Keila).
+// Usa o horário do apontamento original Movidesk; nunca mistura relatórios das 09h.
+async function dispatchNoonPartial() {
+ const now=new Date();
+ const time=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(now);
+ if(time<'12:00'||time>'12:09')return json({ok:true,skipped:'Fora da janela de envio do meio-dia',time});
+ const today=dateBR(now);
+ if([0,6].includes(weekday(today)))return json({ok:true,skipped:'Fim de semana',today});
+ const hol=await holidays();
+ if(hol.has(today))return json({ok:true,skipped:'Feriado',today});
+ // Evitar remessa de snapshot antigo caso a sincronização direta pare.
+ const last=await db('audit_direct_tickets?select=source_synced_at&order=source_synced_at.desc&limit=1');
+ const latest=String(last?.[0]?.source_synced_at||'');
+ if(!Number.isFinite(Date.parse(latest))||now.getTime()-Date.parse(latest)>20*60000)
+   return json({ok:false,skipped:'Sincronização direta sem atualização recente',latest},503);
+ const sourceRows=await db('rpc/audit_noon_window_rows',{
+   method:'POST',body:JSON.stringify({p_day:today})
+ });
+ if(!Array.isArray(sourceRows))throw new Error('Janela 09h-11h50 indisponível');
+ const recipients=await recipientList();
+ const specifications=[
+  {code:'inteligencia',id:'ba07a7f7-6b33-4788-8a05-a5fd6e899387',
+   title:'Inteligência',expectedScope:'sector',sectors:['Inteligência']},
+  {code:'keila-equipe',id:'a5329710-dd63-4bfd-bbd3-dc23e0efc8f0',
+   title:'Equipe da Keila',expectedScope:'management',
+   sectors:['Treinamento','Testes (QA)','Sucesso do Cliente','Implantação','Qualidade']}
+ ];
+ const results:R[]=[];
+ for(const spec of specifications){
+  const rec=recipients.find(r=>String(r.id)===spec.id);
+  if(!rec||rec.active!==true||rec.scope!==spec.expectedScope||
+     norm(rec.name)!=='keila'||norm(rec.email)!=='inteligencia.gerencia@arquem.com.br'){
+    results.push({report:spec.code,status:'blocked',error:'Cadastro destinatário não validado'});continue;
+  }
+  if(spec.code==='keila-equipe'){
+    const configured=(Array.isArray(rec.sectors)?rec.sectors:[]).map(norm);
+    if(spec.sectors.some(x=>!configured.includes(norm(x)))){
+      results.push({report:spec.code,status:'blocked',error:'Setores do cadastro divergentes'});continue;
+    }
+  }
+  const key='partial-noon:'+spec.code+':'+today+':09:00-11:50';
+  const prev=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=status&limit=1');
+  if(prev.length){results.push({report:spec.code,status:'skipped',reason:'Já registrado, evitar duplicidade'});continue;}
+  const picked=sourceRows.filter((row:R)=>spec.sectors.some(sector=>norm(sector)===norm(row.sector)));
+  const persons=new Map<string,{name:string;sector:string;minutes:number;appointments:number;tickets:Set<string>}>();
+  const tickets=new Set<string>();
+  let minutes=0;
+  for(const row of picked){
+    const name=safe(row.collaborator_name)||'Não identificado';
+    const sector=safe(row.sector);
+    const m=Math.max(0,Math.min(170,Number(row.minutes)||0));
+    if(!m)continue;
+    const id=String(row.ticket_id||'');
+    const key=norm(name)+'|'+norm(sector);
+    if(!persons.has(key))persons.set(key,{name,sector,minutes:0,appointments:0,tickets:new Set()});
+    const person=persons.get(key)!;
+    person.minutes+=m;person.appointments++;
+    if(id){person.tickets.add(id);tickets.add(id);}
+    minutes+=m;
+  }
+  const team=[...persons.values()].sort((a,b)=>b.minutes-a.minutes||a.name.localeCompare(b.name,'pt-BR'));
+  const hh=(n:number)=>duration(n);
+  const formatDay=today.slice(8,10)+'/'+today.slice(5,7)+'/'+today.slice(0,4);
+  const subject='[PARCIAL 12H] Central de Auditoria - '+spec.title+' - '+formatDay;
+  const intro='Dados parciais do dia '+formatDay+' | Janela 09h00-11h50. Atualização da fonte: '+latest+'.';
+  const textBody=[
+   'ARQUEM SISTEMAS — CENTRAL DE AUDITORIA',subject,intro,
+   'Horas apontadas na janela: '+hh(minutes),
+   'Apontamentos: '+picked.length,
+   'Chamados distintos: '+tickets.size,
+   '',...team.map(x=>x.name+' | '+x.sector+' | '+hh(x.minutes)+' | '+x.appointments+' apontamentos | '+x.tickets.size+' chamados'),
+   'PARCIAL: dados sincronizados do Movidesk, sujeitos a atualização. Não é controle de ponto.'
+  ].join('\n');
+  const rows=team.map(x=>'<tr><td>'+emailEsc(x.name)+'</td><td>'+emailEsc(x.sector)+'</td><td>'+hh(x.minutes)+'</td><td>'+x.appointments+'</td><td>'+x.tickets.size+'</td></tr>').join('');
+  const html='<!doctype html><html lang="pt-BR"><body style="font-family:Arial,sans-serif;background:#edf3fa;color:#173453;padding:20px">'+
+    '<table role="presentation" style="max-width:700px;margin:auto;background:#fff;width:100%;border-collapse:collapse">'+
+    '<tr><td style="background:#142f50;color:#fff;padding:22px"><small>ARQUEM SISTEMAS · CENTRAL DE AUDITORIA</small><h2>Parcial das 12h — '+emailEsc(spec.title)+'</h2><p>'+formatDay+' · 09h00 a 11h50</p></td></tr>'+
+    '<tr><td style="padding:24px"><table width="100%" cellpadding="10"><tr><td style="background:#edf4ff"><b>Horas apontadas</b><h2>'+hh(minutes)+'</h2></td><td style="background:#e9f8f1"><b>Apontamentos</b><h2>'+picked.length+'</h2></td><td style="background:#f2f4ff"><b>Chamados</b><h2>'+tickets.size+'</h2></td></tr></table>'+
+    '<h3>Colaboradores</h3><table width="100%" cellpadding="7" cellspacing="0" style="border-collapse:collapse;font-size:12px"><tr style="background:#edf3fb"><th align="left">Colaborador</th><th align="left">Setor</th><th>Horas</th><th>Apontamentos</th><th>Chamados</th></tr>'+
+    (rows||'<tr><td colspan="5">Sem apontamentos identificados na janela.</td></tr>')+'</table>'+
+    '<p style="color:#60748c;font-size:12px">Parcial, sujeito a atualização. Não é controle de ponto. Última sincronização: '+emailEsc(latest)+'.</p>'+
+    '</td></tr></table></body></html>';
+  const packet:R={schema:'arquem-mail-v1',title:'Parcial 12h - '+spec.title,from:today,to:today,
+    partial:true,historicalIncomplete:false,
+    metrics:{tickets:tickets.size,appointments:picked.length,minutes,days:1},
+    collaborators:team.map(x=>({name:x.name,sector:x.sector,minutes:x.minutes,
+      minimumMinutes:0,targetMinutes:0,minimumGap:0,targetGap:0,
+      ruleSource:'Janela parcial 09h00-11h50, sem jornada de referência'})),
+    daily:[],customers:[],activities:[],tickets:[],forecastVariances:[]};
+  const reserved=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
+    method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
+    body:JSON.stringify({dispatch_key:key,recipient_id:rec.id,report_kind:'daily',
+      period_from:today,period_to:today,status:'processing'})
+  });
+  if(!Array.isArray(reserved)||!reserved.length){
+   results.push({report:spec.code,status:'skipped',reason:'Reserva existente'});continue;
+  }
+  try{
+    await sendMail(String(rec.email),subject,textBody,html,packet);
+    await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+      method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
+    });
+    results.push({report:spec.code,status:'sent',appointments:picked.length,minutes});
+  }catch(ex){
+    // Envio pode ter sido aceito pelo provedor: não reexecutar automaticamente.
+    await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+      method:'PATCH',body:JSON.stringify({status:'failed',error_message:err(ex).slice(0,300)})
+    }).catch(()=>{});
+    results.push({report:spec.code,status:'failed',error:err(ex)});
+  }
+ }
+ return json({ok:results.every(x=>x.status!=='failed'&&x.status!=='blocked'),kind:'noon_partial',day:today,window:'09:00-11:50',latest,results});
+}
+
 async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'Apenas POST' }, 405);
   let payload: R = {};
@@ -2016,10 +2130,10 @@ async function handleRequest(req: Request): Promise<Response> {
         : action === 'support_quality_metrics' ? await supportQualityMetrics(payload)
         : await adminAction(payload);
     }
-    if (action !== 'dispatch' && action !== 'dispatch_weekly_preliminary' && action !== 'prepare' && action !== 'attachment_probe') return json({ error: 'Acao desconhecida' }, 400);
+    if (action !== 'dispatch' && action !== 'dispatch_noon_partial' && action !== 'dispatch_weekly_preliminary' && action !== 'prepare' && action !== 'attachment_probe') return json({ error: 'Acao desconhecida' }, 400);
     const expected = E('REPORT_CRON_SECRET');
     if (!expected || req.headers.get('x-report-secret') !== expected) return json({ error: 'Cron nao autorizado' }, 401);
-    return action === 'attachment_probe' ? await adminAction({action:'attachment_health'}) : action === 'prepare' ? await prepareReports() : action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch();
+    return action === 'dispatch_noon_partial' ? await dispatchNoonPartial() : action === 'attachment_probe' ? await adminAction({action:'attachment_health'}) : action === 'prepare' ? await prepareReports() : action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch();
   } catch (ex) { console.error('audit-email-dispatch:', err(ex)); return json({ ok: false, error: err(ex), release: RELEASE_ID }, 500); }
 }
 
