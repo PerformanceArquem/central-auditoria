@@ -917,7 +917,7 @@ async function adminAction(payload: R) {
       const ready=capabilities?.sucesso===true &&
         formats.includes('pdf') && formats.includes('xlsx') &&
         capabilities.paperTemplateConfigured===true;
-      const keilaGeneratorReady=ready&&capabilities?.attachmentsVersion==='arquem-3-keila-quality';
+      const keilaGeneratorReady=ready&&capabilities?.attachmentsVersion==='arquem-3-keila-quality'&&capabilities?.keilaQualityReady===true;
       return json({ok:true,enabled:flag,ready,keilaGeneratorReady,
         templateConfigured:capabilities?.paperTemplateConfigured===true,
         formats:formats.filter(x=>x==='pdf'||x==='xlsx'),
@@ -1341,6 +1341,7 @@ async function requireKeilaGeneratorReady() {
  const formats=Array.isArray(capability?.formats)?capability.formats:[];
  if(capability?.sucesso!==true || capability?.paperTemplateConfigured!==true ||
     capability?.attachmentsVersion!=='arquem-3-keila-quality' ||
+    capability?.keilaQualityReady!==true ||
     !formats.includes('pdf') || !formats.includes('xlsx'))
   throw new Error('Envio Keila bloqueado: versão PDF/Excel com Qualidade ainda não homologada');
 }
