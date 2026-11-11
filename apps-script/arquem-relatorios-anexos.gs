@@ -85,14 +85,14 @@ function arquemHomologarKeilaSemEnvio() {
   const keila=arquemTesteKeilaSemEnvio();
   if(keila.ok!==true || keila.sent!==false || !Array.isArray(keila.files) ||
      keila.files.length!==2 || keila.hasProductionFlow!==true ||
-     keila.hasProductionQuality!==true)
+     keila.hasProductionWorkload!==true)
     throw new Error('Relatório da Keila não passou na homologação PDF/XLSX');
   props.setProperties({
-    ARQUEM_KEILA_QUALITY_VALIDATED_AT:new Date().toISOString(),
-    ARQUEM_KEILA_QUALITY_VALIDATED_TEMPLATE_ID:props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID') || '',
-    ARQUEM_KEILA_QUALITY_VALIDATED_VERSION:'arquem-3-keila-quality'
+    ARQUEM_KEILA_FLOW_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_KEILA_FLOW_VALIDATED_TEMPLATE_ID:props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID') || '',
+    ARQUEM_KEILA_FLOW_VALIDATED_VERSION:'arquem-5-keila-workload'
   },false);
-  return {ok:true,sent:false,qualityReady:true,files:keila.files};
+  return {ok:true,sent:false,productionReady:true,files:keila.files};
 }
 /**
  * Homologacao das permissoes individuais SEM envio de e-mail.
@@ -155,14 +155,14 @@ function arquemCapacidadesAnexos_() {
     props.getProperty('ARQUEM_SECTIONS_VALIDATED_TEMPLATE_ID')===id &&
     Number.isFinite(sectionsAt) &&
     sectionsAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
-  return {sucesso:true,attachmentsVersion:'arquem-4-report-sections',formats:['pdf','xlsx'],
+  return {sucesso:true,attachmentsVersion:'arquem-5-keila-workload',formats:['pdf','xlsx'],
     sectionPermissionsSupported,
     paperTemplateConfigured:ready,
-    keilaQualityReady:ready &&
-      props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_VERSION')==='arquem-3-keila-quality' &&
-      props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_TEMPLATE_ID')===id &&
-      Number.isFinite(Date.parse(props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_AT')||'')) &&
-      Date.parse(props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime()};
+    keilaProductionReady:ready &&
+      props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_VERSION')==='arquem-5-keila-workload' &&
+      props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_TEMPLATE_ID')===id &&
+      Number.isFinite(Date.parse(props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_AT')||'')) &&
+      Date.parse(props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime()};
 }
 
 /**
@@ -178,9 +178,9 @@ function arquemTesteKeilaSemEnvio() {
     partial:false,historicalIncomplete:false,
     metrics:{tickets:2,appointments:0,minutes:0},
     productionFlow:{entered:2,exited:1,entryMovements:3,exitMovements:1},
-    productionQuality:[
-      {name:'Colaborador de teste A',hoursMinutes:3964,appointments:20,ratings:5,excellent:4,average:8.8},
-      {name:'Colaborador de teste B',hoursMinutes:480,appointments:5,ratings:0,excellent:0,average:null}
+    productionWorkload:[
+      {name:'Colaborador de teste A',hoursMinutes:3964,appointments:20},
+      {name:'Colaborador de teste B',hoursMinutes:480,appointments:5}
     ],
     collaborators:[],daily:[],customers:[],activities:[],forecastVariances:[],
     tickets:[
@@ -196,8 +196,8 @@ function arquemTesteKeilaSemEnvio() {
   const xlsx=attachments.find(b=>b.getName().endsWith('.xlsx'));
   if(!pdf||!xlsx||pdf.getBytes().length<2000||xlsx.getBytes().length<1500)
     throw new Error('Homologação Keila: PDF ou Excel ausente/vazio.');
-  const outcome={ok:true,sent:false,report:'Keila - qualidade e movimentações',
-    hasProductionFlow:true,hasProductionQuality:true,
+  const outcome={ok:true,sent:false,report:'Keila - horas e movimentações',
+    hasProductionFlow:true,hasProductionWorkload:true,
     files:attachments.map(b=>({name:b.getName(),type:b.getContentType(),bytes:b.getBytes().length}))};
   console.log(JSON.stringify(outcome));
   return outcome;
@@ -384,7 +384,13 @@ function arquemPdf_(p, keep) {
     const warning=body.appendParagraph('ATENÇÃO: histórico do Movidesk em importação. Comparativos anuais são preliminares.');
     warning.editAsText().setForegroundColor('#a36618').setBold(true);
   }
-  if(p.productionQuality){
+  if(p.productionFlow && Array.isArray(p.productionWorkload)){
+    arquemAddHeading_(body,'Equipe · horas e apontamentos');
+    const lines=[['Colaborador','Horas','Apontamentos']];
+    p.productionWorkload.slice(0,100).forEach(x=>lines.push([
+      String(x.name||''),arquemH_(x.hoursMinutes),String(x.appointments||0)]));
+    arquemEstilizarTabelaPdf_(body.appendTable(lines));
+  } else if(p.productionQuality){
     arquemAddHeading_(body,'Qualidade dos colaboradores');
     const qs=p.productionQuality;
     const ratings=qs.reduce((sum,x)=>sum+Number(x.ratings||0),0);
@@ -469,6 +475,12 @@ function arquemXlsx_(p, keep) {
      ['Conciliação',p.partial?'Dados parciais':'Dados disponíveis'],
      ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]));
   if(!p.productionFlow)first.getRange('B4').setNumberFormat('[h]:mm:ss');
+  if(p.productionFlow && Array.isArray(p.productionWorkload)){
+    const work=arquemCreateSheet_(ss,'Equipe Produção',
+      ['Colaborador','Horas apontadas','Apontamentos'],
+      p.productionWorkload.map(x=>[x.name,arquemExcelHora_(x.hoursMinutes),Number(x.appointments)||0]));
+    arquemFormatarHoras_(work,[2],p.productionWorkload.length);
+  }
   if(p.productionQuality){
     const qs=p.productionQuality;
     const quality=arquemCreateSheet_(ss,'Qualidade',
