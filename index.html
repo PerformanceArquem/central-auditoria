@@ -1390,7 +1390,21 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
             <div id="t-email-admin" class="hide">
                 <div class="mh"><div><div class="eyebrow">RELATÓRIOS · ADMINISTRAÇÃO</div><h2>Central de e-mails e destinatários</h2><p>Gerencie relatórios automáticos, testes individuais e histórico de envio sem misturar com as configurações técnicas.</p></div></div>
                 <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
-  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><button type="button" class="b" id="emailAdminOpen">Gerenciar destinatários</button></div>
+  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="b" id="emailReportReleaseOpen">Liberar relatórios</button><button type="button" class="s" id="emailAdminOpen">Gerenciar destinatários</button></div></div>
+  <div id="emailReportReleasePanel" class="hide" style="margin-top:16px;border:1px solid #d6e1f0;border-radius:12px;padding:16px">
+    <div class="row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div><h3 style="margin:0">Liberação de relatórios para envio</h3><p class="subtle" style="margin:4px 0">Autorize ou suspenda categorias por destinatário, sem alterar e-mails, setores ou frequências. Nenhuma mensagem é disparada ao salvar.</p></div>
+      <button type="button" class="s" id="emailReleaseRefresh">↻ Atualizar permissões</button>
+    </div>
+    <p class="coverage-note" id="emailReleaseStatus" role="status">Abra o módulo para consultar as autorizações.</p>
+    <div class="tw" style="max-height:520px;overflow:auto">
+      <table>
+        <thead><tr><th>Destinatário</th><th>Escopo</th><th>Gerenciais / setoriais</th><th>Fluxo da Produção</th><th>Situação</th><th>Liberação</th></tr></thead>
+        <tbody id="emailReleaseRows"><tr><td colspan="6">Nenhum cadastro carregado.</td></tr></tbody>
+      </table>
+    </div>
+    <p class="subtle" style="margin-top:10px">Entradas e saídas da Produção: liberação exclusiva para o cadastro da Keila e dependente das validações do relatório. Cobranças recorrentes não são habilitadas neste módulo.</p>
+  </div>
   <div id="emailAdminPanel" class="hide">
     <p id="emailAdminStatus" role="status" class="coverage-note">Aguardando abertura.</p>
     <form id="emailAdminForm"><input id="emailRecordId" type="hidden">
@@ -5176,6 +5190,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const r=await client.from('audit_email_recipients').select('*').order('name');
       if(r.error)throw r.error;
       records=r.data||[];
+      if(!$('emailReportReleasePanel').classList.contains('hide'))renderReportRelease();
       try{await loadEmailSystemUsers()}catch(e){say('Destinatários carregados, mas o vínculo com usuários está indisponível: '+(e.message||e))}
       const manualSelect=$('emailOfficialRecipient');
       if(manualSelect){
@@ -5216,6 +5231,64 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       try{await loadMovideskDirectory(true)}catch(err){console.warn('Diretório do Movidesk indisponível:',err)}
     }catch(e){say('Não foi possível carregar: '+e.message)}finally{loading=false}
   }
+  // Módulo de liberação: altera somente allowed_report_types após validação de administrador.
+  const releaseSay=message=>{$('emailReleaseStatus').textContent=message};
+  const flowRecipientId='a5329710-dd63-4bfd-bbd3-dc23e0efc8f0';
+  function renderReportRelease(){
+    const active=records.filter(x=>x.active).length;
+    $('emailReleaseRows').innerHTML=records.map(x=>{
+      const rules=x.allowed_report_types;
+      const legacy=rules==null;
+      const general=legacy||Array.isArray(rules)&&rules.includes('general');
+      const flowEligible=String(x.id)===flowRecipientId && String(x.email||'').toLowerCase()==='inteligencia.gerencia@arquem.com.br';
+      const flow=flowEligible&&(legacy||Array.isArray(rules)&&rules.includes('production_flow'));
+      const id=esc(x.id);
+      return '<tr data-release-recipient="'+id+'">'+
+        '<td><strong>'+esc(x.name)+'</strong><small style="display:block;color:var(--muted)">'+esc(x.email)+'</small></td>'+
+        '<td>'+esc(x.scope==='management'?'Gestão':'Setorial')+'</td>'+
+        '<td><label><input type="checkbox" data-release-code="general" '+(general?'checked ':'')+(!x.active?'disabled ':'')+'> Liberado</label></td>'+
+        '<td>'+(flowEligible?'<label><input type="checkbox" data-release-code="production_flow" '+(flow?'checked ':'')+(!x.active?'disabled ':'')+'> Liberado</label>':'Exclusivo Keila')+'</td>'+
+        '<td>'+(x.active?'Ativo':'Inativo')+(legacy?' · regras anteriores':' · personalizado')+'</td>'+
+        '<td><button type="button" class="s" data-release-save="'+id+'" '+(!x.active?'disabled':'')+'>Salvar liberação</button></td></tr>';
+    }).join('')||'<tr><td colspan="6">Nenhum destinatário cadastrado.</td></tr>';
+    releaseSay(records.length+' destinatários cadastrados; '+active+' ativos. Alterações são individuais e exigem salvar.');
+  }
+  $('emailReportReleaseOpen').addEventListener('click',async()=>{
+    const panel=$('emailReportReleasePanel'),open=panel.classList.contains('hide');
+    panel.classList.toggle('hide',!open);
+    $('emailReportReleaseOpen').textContent=open?'Fechar liberações':'Liberar relatórios';
+    if(open){panel.scrollIntoView({behavior:'smooth',block:'nearest'});await reload();}
+  });
+  $('emailReleaseRefresh').addEventListener('click',reload);
+  $('emailReleaseRows').addEventListener('click',async event=>{
+    const btn=event.target.closest('[data-release-save]');
+    if(!btn)return;
+    const row=btn.closest('[data-release-recipient]');
+    const id=btn.getAttribute('data-release-save');
+    const current=records.find(x=>String(x.id)===id);
+    if(!current||!row||!current.active){releaseSay('Destinatário indisponível. Atualize a lista.');return;}
+    btn.disabled=true;
+    try{
+      await verify();
+      // Não modificar outras autorizações (ex.: cobrança), nem o modo de agendamento.
+      const original=Array.isArray(current.allowed_report_types)?current.allowed_report_types:[];
+      const preserve=original.filter(v=>v!=='general'&&v!=='production_flow');
+      const codes=[
+        ...preserve,
+        ...[...row.querySelectorAll('[data-release-code]:checked')].map(el=>el.getAttribute('data-release-code'))
+      ];
+      let request=client.from('audit_email_recipients')
+        .update({allowed_report_types:codes,updated_at:new Date().toISOString()})
+        .eq('id',id).eq('active',true);
+      if(current.updated_at)request=request.eq('updated_at',current.updated_at);
+      const result=await request.select('id,allowed_report_types,updated_at').maybeSingle();
+      if(result.error)throw result.error;
+      if(!result.data)throw Error('Cadastro alterado em outra sessão. Atualize a lista antes de salvar.');
+      releaseSay('Permissões salvas para '+current.email+'. Nenhum e-mail enviado.');
+      await reload();
+    }catch(error){releaseSay('Não foi possível salvar: '+(error.message||error))}
+    finally{btn.disabled=false}
+  });
   $('emailAdminOpen').addEventListener('click',()=>{
     const panel=$('emailAdminPanel'),show=panel.classList.contains('hide');panel.classList.toggle('hide',!show);
     $('emailAdminOpen').textContent=show?'Fechar destinatários':'Gerenciar destinatários';
