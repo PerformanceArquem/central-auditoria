@@ -85,7 +85,7 @@ function arquemHomologarKeilaSemEnvio() {
   const keila=arquemTesteKeilaSemEnvio();
   if(keila.ok!==true || keila.sent!==false || !Array.isArray(keila.files) ||
      keila.files.length!==2 || keila.hasProductionFlow!==true ||
-     keila.hasProductionWorkload!==true)
+     keila.entradasSaidasOnly!==true)
     throw new Error('Relatório da Keila não passou na homologação PDF/XLSX');
   props.setProperties({
     ARQUEM_KEILA_FLOW_VALIDATED_AT:new Date().toISOString(),
@@ -176,19 +176,9 @@ function arquemTesteKeilaSemEnvio() {
     title:'Homologação — Entradas e Saídas da Produção — Keila',
     from:'2026-11-02',to:'2026-11-08',
     partial:false,historicalIncomplete:false,
-    metrics:{tickets:2,appointments:0,minutes:0},
-    productionFlow:{entered:2,exited:1,entryMovements:3,exitMovements:1},
-    productionWorkload:[
-      {name:'Colaborador de teste A',hoursMinutes:3964,appointments:20},
-      {name:'Colaborador de teste B',hoursMinutes:480,appointments:5}
-    ],
-    collaborators:[],daily:[],customers:[],activities:[],forecastVariances:[],
-    tickets:[
-      {id:'100769',client:'Empresa demonstrativa',owner:'Responsável demonstrativo',
-        status:'Entrada · Suporte → Produção',ageDays:0,url:'https://arquem.movidesk.com/Ticket/Edit/100769'},
-      {id:'100769',client:'Empresa demonstrativa',owner:'Responsável demonstrativo',
-        status:'Saída · Produção → Suporte',ageDays:0,url:'https://arquem.movidesk.com/Ticket/Edit/100769'}
-    ]
+    metrics:{entered:2,exited:1},
+    productionFlow:{entered:2,exited:1},
+    collaborators:[],daily:[],customers:[],activities:[],forecastVariances:[],tickets:[]
   };
   const attachments=arquemCreateReportAttachments_(packet);
   if(!Array.isArray(attachments)||attachments.length!==2)throw new Error('O teste Keila deve criar PDF e XLSX.');
@@ -196,8 +186,8 @@ function arquemTesteKeilaSemEnvio() {
   const xlsx=attachments.find(b=>b.getName().endsWith('.xlsx'));
   if(!pdf||!xlsx||pdf.getBytes().length<2000||xlsx.getBytes().length<1500)
     throw new Error('Homologação Keila: PDF ou Excel ausente/vazio.');
-  const outcome={ok:true,sent:false,report:'Keila - horas e movimentações',
-    hasProductionFlow:true,hasProductionWorkload:true,
+  const outcome={ok:true,sent:false,report:'Keila - Rastreabilidade da Produção',
+    hasProductionFlow:true,entradasSaidasOnly:true,
     files:attachments.map(b=>({name:b.getName(),type:b.getContentType(),bytes:b.getBytes().length}))};
   console.log(JSON.stringify(outcome));
   return outcome;
@@ -280,6 +270,14 @@ function arquemCreateReportAttachments_(packet) {
     if(permissions.daily_detail===false)packet.daily=[];
     if(permissions.customers===false)packet.customers=[];
     if(permissions.activities===false)packet.activities=[];
+  }
+  if(packet.productionFlow){
+    // Defesa adicional: anexos da Keila restritos aos dois valores de fluxo.
+    packet.productionFlow={entered:Number(packet.productionFlow.entered)||0,
+                           exited:Number(packet.productionFlow.exited)||0};
+    packet.metrics={entered:packet.productionFlow.entered,exited:packet.productionFlow.exited};
+    ['productionWorkload','productionQuality','collaborators','daily','tickets',
+     'customers','activities','forecastVariances'].forEach(key=>{packet[key]=[];});
   }
   const title = String(packet.title || 'Relatório gerencial').slice(0,120);
   const from = String(packet.from || ''), to = String(packet.to || '');
@@ -374,8 +372,12 @@ function arquemPdf_(p, keep) {
   arquemAddHeading_(body,'Resumo executivo');
   if(p.productionFlow){
     const flow=p.productionFlow;
-    body.appendParagraph('Entraram na Produção: '+Number(flow.entered||0)+' chamados  |  Saíram por transferência: '+Number(flow.exited||0)+' chamados');
-    body.appendParagraph('Movimentações: '+Number(flow.entryMovements||0)+' entradas e '+Number(flow.exitMovements||0)+' saídas. Encerramentos não são contabilizados como saídas.');
+    arquemEstilizarTabelaPdf_(body.appendTable([
+      ['ENTRADAS','SAÍDAS'],
+      [String(Number(flow.entered)||0),String(Number(flow.exited)||0)]
+    ]));
+    doc.saveAndClose();
+    return DriveApp.getFileById(file.getId()).getAs(MimeType.PDF);
   }else{
     body.appendParagraph('Horas apontadas: '+arquemH_(m.minutes)+'  |  Apontamentos: '+
       (m.appointments||0)+'  |  Chamados trabalhados: '+(m.tickets||0));
@@ -463,11 +465,8 @@ function arquemXlsx_(p, keep) {
     ['Indicador','Resultado'],
     (p.productionFlow?[
       ['Relatório',p.title],['Início',p.from],['Fim',p.to],
-      ['Entraram na Produção',Number(p.productionFlow.entered)||0],
-      ['Saíram por transferência',Number(p.productionFlow.exited)||0],
-      ['Movimentações de entrada',Number(p.productionFlow.entryMovements)||0],
-      ['Movimentações de saída',Number(p.productionFlow.exitMovements)||0],
-      ['Critério','Chamados distintos; finalizações excluídas das saídas']
+      ['Entradas',Number(p.productionFlow.entered)||0],
+      ['Saídas',Number(p.productionFlow.exited)||0]
     ]:[['Relatório',p.title],['Início',p.from],['Fim',p.to],
      ['Horas apontadas',arquemExcelHora_(p.metrics&&p.metrics.minutes)],
      ['Apontamentos',Number(p.metrics&&p.metrics.appointments)||0],
@@ -475,6 +474,14 @@ function arquemXlsx_(p, keep) {
      ['Conciliação',p.partial?'Dados parciais':'Dados disponíveis'],
      ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]));
   if(!p.productionFlow)first.getRange('B4').setNumberFormat('[h]:mm:ss');
+  if(p.productionFlow){
+    const chart=first.newChart().setChartType(Charts.ChartType.BAR)
+      .addRange(first.getRange(5,1,2,2)).setPosition(9,4,0,0)
+      .setOption('title','Entradas x Saídas da Produção')
+      .setOption('legend',{position:'none'}).build();
+    first.insertChart(chart);
+  }
+  if(!p.productionFlow){
   if(p.productionFlow && Array.isArray(p.productionWorkload)){
     const work=arquemCreateSheet_(ss,'Equipe Produção',
       ['Colaborador','Horas apontadas','Apontamentos'],
@@ -561,6 +568,7 @@ function arquemXlsx_(p, keep) {
       if(p.reportSections[key]===false && ss.getSheetByName(sheet))
         throw new Error('Exportação bloqueada: aba não autorizada '+sheet);
     });
+  }
   }
   SpreadsheetApp.flush();
   const url='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(ss.getId())+
