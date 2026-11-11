@@ -1554,7 +1554,8 @@ async function prepareReports() {
 }
 async function cachedReport(t:ScheduledReport) {
   // Never send an outdated prepared report after a recipient opts into custom content controls.
-  if(t.r.report_sections!=null)return null;
+  // Keila must never receive a previously prepared document containing quality indicators.
+  if(isKeilaRecipient(t.r)||t.r.report_sections!=null)return null;
   if(t.kind!=='daily'&&t.kind!=='weekly')return null;
   const key=String(t.r.id)+':'+t.kind+':'+t.from+':'+t.to;
   const rows=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
