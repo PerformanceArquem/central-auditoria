@@ -1116,6 +1116,10 @@ async function manualOfficial(payload: R) {
   const recipients = await db(`audit_email_recipients?id=eq.${encodeURIComponent(id)}&active=eq.true&select=*&limit=1`);
   if (!recipients.length) return json({ error: 'Destinatario nao cadastrado ou inativo' }, 404);
   const rec = recipients[0] as R;
+  // Reutilizar no envio manual a mesma permissao de relatorio aplicada ao Cron.
+  // A autorizacao de administrador no endpoint nao substitui a permissao do destinatario.
+  if (!recipientAllows(rec,'general'))
+    return json({ok:false,error:'Relatorios gerenciais/setoriais nao liberados para este destinatario. Autorize no modulo de liberacao antes de gerar previa ou enviar.'},403);
   // Testes manuais somente para destinatarios ativos cadastrados e dominios corporativos.
   // Selecao individual explicita por admin; nao ha disparo em massa.
   const target = String(rec.email || '').trim().toLowerCase();
@@ -1203,7 +1207,7 @@ async function dispatchWeeklyPreliminary() {
   const hol=await holidays();
   if(!hol.has('2026-11-02')) return json({ok:false,error:'Feriado de Finados não cadastrado: corrigir antes do envio'},409);
   const coverage=await recentCoverage(from,to);
-  const recipients=(await recipientList()).filter(r=>r.weekly_enabled===true);
+  const recipients=(await recipientList()).filter(r=>r.weekly_enabled===true&&recipientAllows(r,'general'));
   if(!recipients.length) return json({ok:false,error:'Sem destinatários semanais ativos'},409);
   const [appts,allTickets,clients]=await Promise.all([source(from,to),ticketSource(),clientSource()]);
   const getQuality = supportRatingCache();
