@@ -49,6 +49,7 @@ jobs:
           node --check auth.js
           node --check production-flow.js
 
+      # Este job só executa com VERCEL_CLI_ENABLED=true e ambiente production aprovado.
       - name: Validar autenticação e projeto de destino
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
