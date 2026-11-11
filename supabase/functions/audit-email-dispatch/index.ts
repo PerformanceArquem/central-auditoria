@@ -1329,49 +1329,35 @@ function keilaFlowPeriods(today:string,hol:Set<string>) {
  }
  return tasks;
 }
-// Só considerar indicadores existentes de colaboradores explicitamente selecionados
-// ou vinculados aos setores do cadastro da Keila. Sem avaliações = sem dados.
-async function keilaQualityForPeriod(rec:R,from:string,to:string) {
+// Fluxo de Keila: somente horas e apontamentos dos colaboradores selecionados.
+// Notas, avaliações e CSAT são indicadores de outros gestores (Cássio e Carla).
+async function keilaWorkloadForPeriod(rec:R,from:string,to:string) {
  const selected=(Array.isArray(rec.production_flow_collaborators)?rec.production_flow_collaborators:[])
-  .map(x=>String(x).trim()).filter(Boolean);
+   .map(x=>String(x).trim()).filter(Boolean);
  const sectors=(Array.isArray(rec.sectors)&&rec.sectors.length?rec.sectors:[rec.sector])
-  .map(norm).filter(Boolean);
- const [appts,surveys]=await Promise.all([
-   source(from,to),
-   list('audit_movidesk_survey_responses',
-    '?select=owner_name,owner_team,score,response_date&response_date=gte.'+from+
-    '&response_date=lte.'+to+'&score=gte.1&score=lte.10')
- ]);
- const names=new Map<string,{name:string;hoursMinutes:number;appointments:number;ratings:number;excellent:number;sum:number}>();
+   .map(norm).filter(Boolean);
+ const appts=await source(from,to);
  const keys=new Set(selected.map(norm));
  const accepted=(name:unknown,team:unknown)=>selected.length?keys.has(norm(name)):sectors.includes(norm(team));
- const ensure=(name:string)=>{
-  const key=norm(name);
-  if(!names.has(key))names.set(key,{name,hoursMinutes:0,appointments:0,ratings:0,excellent:0,sum:0});
-  return names.get(key)!;
- };
- if(selected.length)for(const name of selected)ensure(name);
+ const names=new Map<string,{name:string;hoursMinutes:number;appointments:number}>();
+ if(selected.length)for(const name of selected)names.set(norm(name),{name,hoursMinutes:0,appointments:0});
  for(const a of appts){
-  if(!accepted(a.collaborator_name,a.sector))continue;
-  const row=ensure(String(a.collaborator_name));
-  row.hoursMinutes+=Math.max(0,Number(a.duration_minutes)||0);
-  row.appointments++;
+   if(!accepted(a.collaborator_name,a.sector))continue;
+   const name=String(a.collaborator_name||'Não identificado'),key=norm(name);
+   if(!names.has(key))names.set(key,{name,hoursMinutes:0,appointments:0});
+   const row=names.get(key)!;
+   row.hoursMinutes+=Math.max(0,Number(a.duration_minutes)||0);
+   row.appointments++;
  }
- for(const a of surveys){
-  if(!accepted(a.owner_name,a.owner_team))continue;
-  const score=Number(a.score);
-  if(!Number.isFinite(score)||score<1||score>10)continue;
-  const row=ensure(String(a.owner_name));
-  row.ratings++;row.sum+=score;if(score>=8)row.excellent++;
- }
- return [...names.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')).map(x=>({
-  name:x.name,hoursMinutes:x.hoursMinutes,appointments:x.appointments,ratings:x.ratings,
-  excellent:x.excellent,average:x.ratings?x.sum/x.ratings:null
- }));
+ return [...names.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
 }
+// O cadastro exclusivo de Keila nunca recebe indicadores de satisfação.
+const isKeilaRecipient=(r:R)=>String(r.id||'')===KEILA_PRODUCTION_FLOW_RECIPIENT_ID;
+const recipientQuality=async(r:R,from:string,to:string,getQuality:ReturnType<typeof supportRatingCache>)=>
+ isKeilaRecipient(r)?{text:'',html:'',metric:null}:getQuality(r,from,to);
 
-// Bloqueio específico: o envio da Keila requer o Apps Script com suporte
-// comprovado a produção + qualidade. Não afeta os demais relatórios.
+// O envio exclusivo de Keila exige gerador de fluxo de Produção validado;
+// nunca depende de indicadores de satisfação ou avaliação de qualidade.
 async function requireKeilaGeneratorReady() {
  if(E('REPORT_ATTACHMENTS_ENABLED')!=='true')
   throw new Error('Envio Keila bloqueado: PDF e Excel não habilitados');
@@ -1544,7 +1530,7 @@ async function prepareReports() {
       results.push({key,skipped:'Nenhum apontamento importado'});continue;
     }
     const tickets=ticketAlerts(t.r,allTickets);
-    const quality=await getQuality(t.r,t.from,t.to);
+    const quality=await recipientQuality(t.r,t.from,t.to,getQuality);
     const overview=await getOverview(t.r,t.from,t.to,tickets.activeTickets,t.kind);
     const forecast=await optionalForecast(t.r);
     const packet=reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows);
@@ -1657,7 +1643,7 @@ async function dispatch() {
       const report = buildReport(t.r, appts, t.from, t.to, t.kind, hol, false, clients);
       const tickets = ticketAlerts(t.r, allTickets);
       if (!report.metrics.appointments && (t.kind==='daily'||t.kind==='weekly')) { results.push({ recipientId: id, kind: t.kind, skipped: 'Sem apontamentos; envio suspenso' }); continue; }
-      const quality = await getQuality(t.r, t.from, t.to);
+      const quality = await recipientQuality(t.r, t.from, t.to, getQuality);
       const overview = await getOverview(t.r, t.from, t.to, tickets.activeTickets,t.kind);
       const forecast=await optionalForecast(t.r);
       let annual = {text:'',html:''};
