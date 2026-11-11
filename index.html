@@ -1390,6 +1390,14 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
           <tbody id="emailCoverageRows"><tr><td colspan="5">Consultando Supabase...</td></tr></tbody></table>
       </div>
     </div>
+    <div class="card noprint" id="emailAttachmentReadinessCard" style="margin-top:16px;border-left:4px solid #218c89;background:#f7fbfa">
+      <div class="row" style="align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div><h3 style="margin:0 0 5px">PDF e Excel · validação dos anexos</h3>
+          <p class="subtle" style="margin:0">Consulta segura ao gerador oficial para verificar se o modelo timbrado e os formatos PDF/XLSX foram homologados. Não gera anexos nem envia e-mails.</p></div>
+        <button type="button" class="s" id="emailAttachmentCheckButton" onclick="emailAttachmentCheck()">Verificar disponibilidade</button>
+      </div>
+      <p id="emailAttachmentCheckStatus" class="coverage-note" role="status">Verificação ainda não executada nesta sessão.</p>
+    </div>
     <div class="card" id="emailOfficialManualPanel" style="margin-top:16px;border-left:4px solid #2457d6;background:#f8faff">
       <h3>Enviar relatório manual de teste</h3>
       <p class="subtle">Selecione um dos <strong>colaboradores individuais ativos cadastrados</strong> para testar o envio ao seu e-mail corporativo. Pode enviar mesmo com dados incompletos ou sem apontamentos. Cada teste exige confirmação e não altera os envios automáticos.</p>
@@ -3054,6 +3062,38 @@ function alarmEmailDraft(){
  $('alarmEmailMessage').value=templates[tone]||templates.cordial;
  alarmEmailInvalidate();
 }
+async function emailAttachmentCheck(){
+ const status=$('emailAttachmentCheckStatus'),button=$('emailAttachmentCheckButton');
+ if(!status||!button)return;
+ button.disabled=true;
+ status.textContent='Conferindo o serviço de anexos autenticado. Nenhum e-mail será enviado...';
+ try{
+   const client=window.tmEmailAdminClient;
+   if(!client)throw Error('É necessário entrar com perfil de administrador.');
+   const {data,error}=await client.functions.invoke('audit-email-dispatch',{
+     body:{action:'attachment_health'}
+   });
+   if(error){
+     let detail=error.message||'Consulta indisponível';
+     try{const server=await error.context?.json?.();if(server?.error)detail=server.error}catch(_){}
+     throw Error(detail);
+   }
+   if(!data?.ok)throw Error(data?.error||'Resposta inválida do serviço de anexos.');
+   const formats=Array.isArray(data.formats)?data.formats.filter(x=>x==='pdf'||x==='xlsx'):[];
+   const ready=data.ready===true,enabled=data.enabled===true;
+   status.textContent=ready&&enabled?
+     'Gerador informa PDF e Excel disponíveis e ativados. A entrega real em e-mail ainda requer validação autorizada.':
+     ready?
+     'Modelo timbrado e formatos PDF/Excel anunciados pelo gerador, mas anexos ainda estão desativados no sistema.':
+     'Anexos não homologados: '+String(data.status||'verifique a publicação do gerador e o modelo timbrado')+
+     (formats.length?' · Formatos anunciados: '+formats.join(' e '):'');
+   status.style.color=ready&&enabled?'#167052':'#936018';
+ }catch(e){
+   status.textContent='Não foi possível validar os anexos: '+String(e?.message||e)+'. Nenhum e-mail foi enviado.';
+   status.style.color='#a23737';
+ }finally{button.disabled=false}
+}
+
 async function alarmEmailAiAvailability(){
  const btn=$('alarmEmailAiDraft');
  if(!btn)return;
