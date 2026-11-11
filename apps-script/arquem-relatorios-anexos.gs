@@ -90,7 +90,7 @@ function arquemHomologarKeilaSemEnvio() {
   props.setProperties({
     ARQUEM_KEILA_FLOW_VALIDATED_AT:new Date().toISOString(),
     ARQUEM_KEILA_FLOW_VALIDATED_TEMPLATE_ID:props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID') || '',
-    ARQUEM_KEILA_FLOW_VALIDATED_VERSION:'arquem-5-keila-workload'
+    ARQUEM_KEILA_FLOW_VALIDATED_VERSION:'arquem-6-keila-flow-only'
   },false);
   return {ok:true,sent:false,productionReady:true,files:keila.files};
 }
@@ -155,11 +155,11 @@ function arquemCapacidadesAnexos_() {
     props.getProperty('ARQUEM_SECTIONS_VALIDATED_TEMPLATE_ID')===id &&
     Number.isFinite(sectionsAt) &&
     sectionsAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
-  return {sucesso:true,attachmentsVersion:'arquem-5-keila-workload',formats:['pdf','xlsx'],
+  return {sucesso:true,attachmentsVersion:'arquem-6-keila-flow-only',formats:['pdf','xlsx'],
     sectionPermissionsSupported,
     paperTemplateConfigured:ready,
     keilaProductionReady:ready &&
-      props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_VERSION')==='arquem-5-keila-workload' &&
+      props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_VERSION')==='arquem-6-keila-flow-only' &&
       props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_TEMPLATE_ID')===id &&
       Number.isFinite(Date.parse(props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_AT')||'')) &&
       Date.parse(props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime()};
