@@ -47,7 +47,7 @@ jobs:
           test -f "arquem-relatorios-anexos.gs.js"
           test -f "Código.js"
           test -f "validacao-sem-envio.js"
-          test "$(grep -h -E -c '^function doPost\\(' -- *.js | awk -F: '{sum+=$1} END {print sum+0}')" -eq 1
+          test "$(grep -hE 'function[[:space:]]+doPost[[:space:]]*\\(' -- *.js | wc -l)" -eq 1
           sha256sum "Código.js" "validacao-sem-envio.js" > "$RUNNER_TEMP/keila-original-sha"
           cp "$GITHUB_WORKSPACE/apps-script/arquem-relatorios-anexos.gs" "arquem-relatorios-anexos.gs.js"
           "$GITHUB_WORKSPACE/node_modules/.bin/clasp" push --force
