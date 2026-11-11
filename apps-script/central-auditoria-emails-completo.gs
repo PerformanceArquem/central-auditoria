@@ -138,8 +138,7 @@ function arquemValidarPublicacaoSemEnvio() {
     throw new Error('Os anexos nao passaram na validacao sem envio.');
   props.setProperties({
     ARQUEM_ATTACHMENTS_VALIDATED_AT:new Date().toISOString(),
-    ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID:id,
-    ARQUEM_ATTACHMENTS_VALIDATED:'true'
+    ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID:id
   },false);
   return {ok:true,sent:false,template:'Modelo corporativo validado',files:result.files};
 }
@@ -325,13 +324,34 @@ function arquemPdf_(p, keep) {
     (p.partial?'  |  DADOS PARCIAIS — sincronização em andamento':''));
   const m=p.metrics||{};
   arquemAddHeading_(body,'Resumo executivo');
-  body.appendParagraph('Horas apontadas: '+arquemH_(m.minutes)+'  |  Apontamentos: '+
-    (m.appointments||0)+'  |  Chamados trabalhados: '+(m.tickets||0));
+  if(p.productionFlow){
+    const flow=p.productionFlow;
+    body.appendParagraph('Entraram na Produção: '+Number(flow.entered||0)+' chamados  |  Saíram por transferência: '+Number(flow.exited||0)+' chamados');
+    body.appendParagraph('Movimentações: '+Number(flow.entryMovements||0)+' entradas e '+Number(flow.exitMovements||0)+' saídas. Encerramentos não são contabilizados como saídas.');
+  }else{
+    body.appendParagraph('Horas apontadas: '+arquemH_(m.minutes)+'  |  Apontamentos: '+
+      (m.appointments||0)+'  |  Chamados trabalhados: '+(m.tickets||0));
+  }
   if(p.historicalIncomplete){
     const warning=body.appendParagraph('ATENÇÃO: histórico do Movidesk em importação. Comparativos anuais são preliminares.');
     warning.editAsText().setForegroundColor('#a36618').setBold(true);
   }
-  if ((p.collaborators||[]).length) {
+  if(p.productionQuality){
+    arquemAddHeading_(body,'Qualidade dos colaboradores');
+    const qs=p.productionQuality;
+    const ratings=qs.reduce((sum,x)=>sum+Number(x.ratings||0),0);
+    const excellent=qs.reduce((sum,x)=>sum+Number(x.excellent||0),0);
+    body.appendParagraph('Avaliações: '+ratings+' | Notas excelentes (8–10): '+excellent+
+      ' | Índice de qualidade: '+(ratings?(excellent/ratings*100).toFixed(2)+'%':'Sem avaliações'));
+    body.appendParagraph('Notas 1–7: abaixo do padrão; 8–10: excelente. Sem avaliações não representa nota zero.');
+    const lines=[['Colaborador','Horas','Apontamentos','Avaliações','Excelentes','Média']];
+    qs.slice(0,100).forEach(x=>lines.push([
+      String(x.name||''),arquemH_(x.hoursMinutes),String(x.appointments||0),
+      String(x.ratings||0),String(x.excellent||0),
+      x.average==null?'Sem avaliações':Number(x.average).toFixed(2)
+    ]));
+    arquemEstilizarTabelaPdf_(body.appendTable(lines));
+  } else if ((p.collaborators||[]).length) {
     arquemAddHeading_(body,'Colaboradores · horas e jornada');
     const lines=[['Colaborador','Setor','Horas','Meta mínima','Jornada','Falta mínimo','Falta jornada']];
     p.collaborators.slice(0,70).forEach(x=>lines.push([
@@ -355,7 +375,7 @@ function arquemPdf_(p, keep) {
       p.customers.slice(0,30).map(x=>[String(x.name||''),arquemH_(x.minutes),String(x.tickets||0)]))));
   }
   if ((p.tickets||[]).length){
-    arquemAddHeading_(body,'Chamados que exigem atenção');
+    arquemAddHeading_(body,p.productionFlow?'Chamados movimentados na Produção':'Chamados que exigem atenção');
     const ticketRows=p.tickets.slice(0,65);
     const ticketTable=body.appendTable([['Chamado','Cliente','Responsável','Status','Tempo']].concat(
       ticketRows.map(x=>[
@@ -374,8 +394,9 @@ function arquemPdf_(p, keep) {
     body.appendParagraph('Clique no número do chamado no PDF para abrir o Movidesk.');
   }
   arquemAddHeading_(body,'Observações metodológicas');
-  body.appendParagraph('Dados da Central de Auditoria/Movidesk sincronizados. Horas apontadas não são controle de ponto. '+
-    'A ausência de registros não comprova ausência de trabalho. Categorias de risco podem se sobrepor.');
+  body.appendParagraph(p.productionFlow?
+    'Contagens de chamados distintos por direção; um chamado pode entrar e sair no mesmo período. Finalizações não são transferências. Verifique a cobertura da sincronização.':
+    'Dados da Central de Auditoria/Movidesk sincronizados. Horas apontadas não são controle de ponto. A ausência de registros não comprova ausência de trabalho. Categorias de risco podem se sobrepor.');
   doc.saveAndClose();
   return DriveApp.getFileById(file.getId()).getAs(MimeType.PDF);
 }
@@ -385,18 +406,38 @@ function arquemXlsx_(p, keep) {
   const first=ss.getSheets()[0]; first.setName('Resumo');
   arquemSheet_(first,
     ['Indicador','Resultado'],
-    [['Relatório',p.title],['Início',p.from],['Fim',p.to],
+    (p.productionFlow?[
+      ['Relatório',p.title],['Início',p.from],['Fim',p.to],
+      ['Entraram na Produção',Number(p.productionFlow.entered)||0],
+      ['Saíram por transferência',Number(p.productionFlow.exited)||0],
+      ['Movimentações de entrada',Number(p.productionFlow.entryMovements)||0],
+      ['Movimentações de saída',Number(p.productionFlow.exitMovements)||0],
+      ['Critério','Chamados distintos; finalizações excluídas das saídas']
+    ]:[['Relatório',p.title],['Início',p.from],['Fim',p.to],
      ['Horas apontadas',arquemExcelHora_(p.metrics&&p.metrics.minutes)],
      ['Apontamentos',Number(p.metrics&&p.metrics.appointments)||0],
      ['Chamados trabalhados',Number(p.metrics&&p.metrics.tickets)||0],
      ['Conciliação',p.partial?'Dados parciais':'Dados disponíveis'],
-     ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]);
-  first.getRange('B4').setNumberFormat('[h]:mm:ss');
+     ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]));
+  if(!p.productionFlow)first.getRange('B4').setNumberFormat('[h]:mm:ss');
+  if(p.productionQuality){
+    const qs=p.productionQuality;
+    const quality=arquemCreateSheet_(ss,'Qualidade',
+      ['Colaborador','Horas apontadas','Apontamentos','Avaliações','Notas excelentes (8–10)','Média','Índice qualidade'],
+      qs.map(x=>[x.name,arquemExcelHora_(x.hoursMinutes),Number(x.appointments)||0,
+        Number(x.ratings)||0,Number(x.excellent)||0,
+        x.average==null?'Sem avaliações':Number(x.average),
+        Number(x.ratings)>0?Number(x.excellent)/Number(x.ratings):'Sem avaliações']));
+    if(qs.length){
+      quality.getRange(2,2,qs.length,1).setNumberFormat('[h]:mm:ss');
+      quality.getRange(2,7,qs.length,1).setNumberFormat('0.00%');
+    }
+  }
   const people=arquemCreateSheet_(ss,'Colaboradores',
     ['Colaborador','Setor','Horas','Mínimo','Jornada','Falta mínimo','Falta jornada','Origem'],
-    (p.collaborators||[]).map(x=>[x.name,x.sector,arquemExcelHora_(x.minutes),arquemExcelHora_(x.minimumMinutes),
+    (p.productionQuality?[]:(p.collaborators||[])).map(x=>[x.name,x.sector,arquemExcelHora_(x.minutes),arquemExcelHora_(x.minimumMinutes),
      arquemExcelHora_(x.targetMinutes),arquemExcelHora_(x.minimumGap),arquemExcelHora_(x.targetGap),x.ruleSource||'Padrão']));
-  arquemFormatarHoras_(people,[3,4,5,6,7],(p.collaborators||[]).length);
+  arquemFormatarHoras_(people,[3,4,5,6,7],p.productionQuality?0:(p.collaborators||[]).length);
   const daySheet=arquemCreateSheet_(ss,'Dia a dia',
     ['Data','Colaborador','Setor','Horas','Jornada','Mínimo','Situação'],
     (p.daily||[]).map(x=>[x.date,x.person,x.sector,arquemExcelHora_(x.minutes),
