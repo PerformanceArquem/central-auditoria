@@ -1266,10 +1266,9 @@ function scheduledReports(today:string, hol:Set<string>, recipients:R[]):Schedul
 function keilaFlowPeriods(today:string,hol:Set<string>) {
  const dow=weekday(today);
  const business=![0,6].includes(dow)&&!hol.has(today);
- if(!business)return [] as {kind:'daily'|'weekly'|'monthly';from:string;to:string}[];
  const tasks:{kind:'daily'|'weekly'|'monthly';from:string;to:string}[]=[];
  const yesterday=shift(today,-1);
- tasks.push({kind:'daily',from:yesterday,to:yesterday});
+ if(business)tasks.push({kind:'daily',from:yesterday,to:yesterday});
  if(dow===1){
   const start=shift(today,-7),end=shift(today,-1);
   tasks.push({kind:'weekly',from:start,to:end});
@@ -1277,7 +1276,7 @@ function keilaFlowPeriods(today:string,hol:Set<string>) {
  const first=today.slice(0,7)+'-01';
  let firstBusiness=first;
  while([0,6].includes(weekday(firstBusiness))||hol.has(firstBusiness))firstBusiness=shift(firstBusiness,1);
- if(today===firstBusiness&&today>=FIRST_MONTHLY_RUN){
+ if(business&&today===firstBusiness&&today>=FIRST_MONTHLY_RUN){
   const end=shift(first,-1);
   tasks.push({kind:'monthly',from:end.slice(0,7)+'-01',to:end});
  }
