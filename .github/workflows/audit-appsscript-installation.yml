@@ -43,7 +43,7 @@ jobs:
           cd "$RUNNER_TEMP/apps-script-audit"
           printf '%s' '{"scriptId":"1WUhIenOGO-B_jAkYgECmpBq-jMeeFrTghwElVyBdKLTTICWnFzgkWmm8"}' > .clasp.json
           "$GITHUB_WORKSPACE/node_modules/.bin/clasp" pull
-          node "$GITHUB_WORKSPACE/scripts/audit-appsscript-project.mjs" "$PWD" "$GITHUB_WORKSPACE/apps-script/central-auditoria-emails-completo.gs" >> "$GITHUB_STEP_SUMMARY"
+          node "$GITHUB_WORKSPACE/scripts/audit-appsscript-project.mjs" "$PWD" "$GITHUB_WORKSPACE/apps-script/central-auditoria-emails-completo.gs" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Descartar credenciais locais
         if: always()
         run: rm -f "$HOME/.clasprc.json"
