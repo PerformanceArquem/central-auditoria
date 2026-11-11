@@ -876,7 +876,10 @@ async function sendMail(email: string, subject: string, text: string, html?: str
   const cleanHtml=corporateCopy(html||corporateFallbackHtml(cleanSubject,cleanText));
   const cleanReportData=reportData?corporatePacket(reportData):undefined;
   assertCorporateCopy({cleanSubject,cleanText,cleanHtml,cleanReportData});
-  const withAttachments=E('REPORT_ATTACHMENTS_ENABLED')==='true' && !!cleanReportData;
+  // Relatórios oficiais jamais podem sair sem os dois anexos exigidos. Testes de integração sem pacote permanecem separados.
+  if(cleanReportData && E('REPORT_ATTACHMENTS_ENABLED')!=='true')
+    throw new Error('Envio bloqueado: PDF e Excel obrigatórios; habilite e valide os anexos no servidor.');
+  const withAttachments=!!cleanReportData;
   const endpoint=validUrl();
   if(withAttachments) {
     // Exigir gerador validado e modelo timbrado antes de tentar um envio com anexos.
