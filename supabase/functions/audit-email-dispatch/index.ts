@@ -282,7 +282,7 @@ type TicketAlert = {
 };
 function ticketAlerts(rec:R,records:R[]) {
   const scope=String(rec.scope||'sector');
-  const person=norm(rec.collaborator_name);
+  const people=new Set((Array.isArray(rec.collaborator_names)&&rec.collaborator_names.length?rec.collaborator_names:(rec.collaborator_name?[rec.collaborator_name]:[])).map(norm).filter(Boolean));
   const sectorNames=Array.isArray(rec.sectors)&&rec.sectors.length
     ?rec.sectors.map((s:unknown)=>norm(s)).filter(Boolean)
     :[norm(rec.sector)].filter(Boolean);
@@ -308,11 +308,12 @@ function ticketAlerts(rec:R,records:R[]) {
     const sector=String(t.ownerTeam||'Sem setor');
     if(scope==='management'){
       if(sectorNames.length&&!matchesSector(sector))continue;
+      if(people.size&&!people.has(norm(owner)))continue;
     }else{
       if(!matchesSector(sector))continue;
       // Relatório individual: somente tickets atualmente atribuídos à pessoa,
       // não todos os tickets nos quais ela já apontou horas.
-      if(person&&norm(owner)!==person)continue;
+      if(people.size&&!people.has(norm(owner)))continue;
     }
     const id=String(r.ticket_id||t.id||'');
     if(!/^\d+$/.test(id))continue;
@@ -633,13 +634,14 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metri
 function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportKind, hol: Set<string>, authorizedSingleManual = false, clients: R[] = []) {
   const scope = String(rec.scope || 'sector');
   if (!['sector', 'management'].includes(scope)) throw new Error('Escopo de destinatario nao reconhecido');
-  const person = norm(rec.collaborator_name);
+  const selectedPeople = new Set((Array.isArray(rec.collaborator_names)&&rec.collaborator_names.length?rec.collaborator_names:(rec.collaborator_name?[rec.collaborator_name]:[])).map(norm).filter(Boolean));
+  const person = selectedPeople.size===1?[...selectedPeople][0]:'';
   // Compatibilidade: cadastros antigos usam sector, novos podem ter varios sectors.
   const sectorLabels = (Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors : [rec.sector]).map(safe).filter(Boolean);
   const selectedSectors = [...new Set(sectorLabels.map(norm))];
   const scopedManagement = scope === 'management' && selectedSectors.length > 0;
   if (scope === 'sector' && !selectedSectors.length) throw new Error('Destinatario setorial sem setor');
-  if (scope === 'sector' && !person && !authorizedSingleManual && E('REPORT_ALLOW_SECTOR_EMAIL') !== 'true')
+  if (scope === 'sector' && selectedPeople.size===0 && !authorizedSingleManual && E('REPORT_ALLOW_SECTOR_EMAIL') !== 'true')
     throw new Error('Envio setorial coletivo exige REPORT_ALLOW_SECTOR_EMAIL=true e autorizacao da supervisao');
   // O Movidesk utiliza "Sucesso do Cliente", enquanto cadastros antigos usam "Sucesso".
   // Manter o alias restrito, sem misturar setores distintos.
@@ -650,7 +652,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
   };
   const selected = appts.filter(a =>
     ((scope === 'management' && !selectedSectors.length) || sameSector(a.sector)) &&
-    (!person || norm(a.collaborator_name) === person));
+    (!selectedPeople.size || selectedPeople.has(norm(a.collaborator_name))));
   const minutes = selected.reduce((s, a) => s + Number(a.duration_minutes || 0), 0);
   const days = workdays(from, to, hol);
   const targetPerDay = Number(rec.daily_target_minutes ?? 480);
@@ -1268,21 +1270,25 @@ function scheduledReports(today:string, hol:Set<string>, recipients:R[]):Schedul
   const priorYear = prevMonthEnd.slice(0,4);
   const periodic = monthStart >= FIRST_MONTHLY_RUN;
   const january = today.slice(5,7)==='01';
+  let firstBusinessDay=monthStart;
+  while([0,6].includes(weekday(firstBusinessDay))||hol.has(firstBusinessDay)) firstBusinessDay=shift(firstBusinessDay,1);
+  const isMonthCloseDay=businessDay&&today===firstBusinessDay;
   const tasks:ScheduledReport[] = [];
   for (const r of recipients) {
     if(!recipientAllows(r,'general'))continue;
     const director = directionRecipient(r);
     if (businessDay && !director && r.daily_enabled===true)
       tasks.push({r,kind:'daily',from:prev,to:prev});
-    if ((businessDay || (director && dow===1)) && r.weekly_enabled===true)
+    if (dow===1 && r.weekly_enabled===true)
       tasks.push({r,kind:'weekly',from:prevMonday,to:prevSunday});
     const linked = (Array.isArray(r.sectors)&&r.sectors.length?r.sectors:[r.sector]).some(x=>norm(x));
-    if (!periodic || r.scope!=='management' || !linked) continue;
-    if (director && january && r.annual_enabled===true) {
-      tasks.push({r,kind:'annual',from:priorYear+'-01-01',to:priorYear+'-12-31',includeDecember:r.monthly_enabled===true});
-    } else if (r.monthly_enabled===true) {
+    // Fechamentos mensais e anuais agora também podem ser setoriais e individuais.
+    // Executar apenas no primeiro dia útil, evitando disparos antes do mês fechar.
+    if(!periodic || !linked || !isMonthCloseDay)continue;
+    if(january && r.annual_enabled===true)
+      tasks.push({r,kind:'annual',from:priorYear+'-01-01',to:priorYear+'-12-31',includeDecember:false});
+    if(r.monthly_enabled===true)
       tasks.push({r,kind:'monthly',from:prevMonthEnd.slice(0,7)+'-01',to:prevMonthEnd});
-    }
   }
   // Primeiro os fechamentos de período e os relatórios da Direção; nenhuma chave é
   // repetida se o agendamento precisar aguardar a conciliação.
