@@ -253,8 +253,14 @@ function arquemPdf_(p, keep) {
     (p.partial?'  |  DADOS PARCIAIS — sincronização em andamento':''));
   const m=p.metrics||{};
   arquemAddHeading_(body,'Resumo executivo');
-  body.appendParagraph('Horas apontadas: '+arquemH_(m.minutes)+'  |  Apontamentos: '+
-    (m.appointments||0)+'  |  Chamados trabalhados: '+(m.tickets||0));
+  if(p.productionFlow){
+    const flow=p.productionFlow;
+    body.appendParagraph('Entraram na Produção: '+Number(flow.entered||0)+' chamados  |  Saíram por transferência: '+Number(flow.exited||0)+' chamados');
+    body.appendParagraph('Movimentações: '+Number(flow.entryMovements||0)+' entradas e '+Number(flow.exitMovements||0)+' saídas. Encerramentos não são contabilizados como saídas.');
+  }else{
+    body.appendParagraph('Horas apontadas: '+arquemH_(m.minutes)+'  |  Apontamentos: '+
+      (m.appointments||0)+'  |  Chamados trabalhados: '+(m.tickets||0));
+  }
   if(p.historicalIncomplete){
     const warning=body.appendParagraph('ATENÇÃO: histórico do Movidesk em importação. Comparativos anuais são preliminares.');
     warning.editAsText().setForegroundColor('#a36618').setBold(true);
@@ -283,7 +289,7 @@ function arquemPdf_(p, keep) {
       p.customers.slice(0,30).map(x=>[String(x.name||''),arquemH_(x.minutes),String(x.tickets||0)]))));
   }
   if ((p.tickets||[]).length){
-    arquemAddHeading_(body,'Chamados que exigem atenção');
+    arquemAddHeading_(body,p.productionFlow?'Chamados movimentados na Produção':'Chamados que exigem atenção');
     const ticketRows=p.tickets.slice(0,65);
     const ticketTable=body.appendTable([['Chamado','Cliente','Responsável','Status','Tempo']].concat(
       ticketRows.map(x=>[
@@ -302,8 +308,9 @@ function arquemPdf_(p, keep) {
     body.appendParagraph('Clique no número do chamado no PDF para abrir o Movidesk.');
   }
   arquemAddHeading_(body,'Observações metodológicas');
-  body.appendParagraph('Dados da Central de Auditoria/Movidesk sincronizados. Horas apontadas não são controle de ponto. '+
-    'A ausência de registros não comprova ausência de trabalho. Categorias de risco podem se sobrepor.');
+  body.appendParagraph(p.productionFlow?
+    'Contagens de chamados distintos por direção; um chamado pode entrar e sair no mesmo período. Finalizações não são transferências. Verifique a cobertura da sincronização.':
+    'Dados da Central de Auditoria/Movidesk sincronizados. Horas apontadas não são controle de ponto. A ausência de registros não comprova ausência de trabalho. Categorias de risco podem se sobrepor.');
   doc.saveAndClose();
   return DriveApp.getFileById(file.getId()).getAs(MimeType.PDF);
 }
@@ -313,13 +320,20 @@ function arquemXlsx_(p, keep) {
   const first=ss.getSheets()[0]; first.setName('Resumo');
   arquemSheet_(first,
     ['Indicador','Resultado'],
-    [['Relatório',p.title],['Início',p.from],['Fim',p.to],
+    (p.productionFlow?[
+      ['Relatório',p.title],['Início',p.from],['Fim',p.to],
+      ['Entraram na Produção',Number(p.productionFlow.entered)||0],
+      ['Saíram por transferência',Number(p.productionFlow.exited)||0],
+      ['Movimentações de entrada',Number(p.productionFlow.entryMovements)||0],
+      ['Movimentações de saída',Number(p.productionFlow.exitMovements)||0],
+      ['Critério','Chamados distintos; finalizações excluídas das saídas']
+    ]:[['Relatório',p.title],['Início',p.from],['Fim',p.to],
      ['Horas apontadas',arquemExcelHora_(p.metrics&&p.metrics.minutes)],
      ['Apontamentos',Number(p.metrics&&p.metrics.appointments)||0],
      ['Chamados trabalhados',Number(p.metrics&&p.metrics.tickets)||0],
      ['Conciliação',p.partial?'Dados parciais':'Dados disponíveis'],
-     ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]);
-  first.getRange('B4').setNumberFormat('[h]:mm:ss');
+     ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]));
+  if(!p.productionFlow)first.getRange('B4').setNumberFormat('[h]:mm:ss');
   const people=arquemCreateSheet_(ss,'Colaboradores',
     ['Colaborador','Setor','Horas','Mínimo','Jornada','Falta mínimo','Falta jornada','Origem'],
     (p.collaborators||[]).map(x=>[x.name,x.sector,arquemExcelHora_(x.minutes),arquemExcelHora_(x.minimumMinutes),
