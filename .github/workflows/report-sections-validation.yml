@@ -23,5 +23,11 @@ jobs:
           deno-version: v2.x
       - name: Check section permission tests
         run: deno check supabase/functions/audit-email-dispatch/report-sections_test.ts
+      - name: Check full Edge Function and imports
+        run: deno check supabase/functions/audit-email-dispatch/index.ts
       - name: Run all 8 combinations and legacy cases
-        run: deno test --no-check supabase/functions/audit-email-dispatch/report-sections_test.ts
+        run: deno test supabase/functions/audit-email-dispatch/report-sections_test.ts
+      - name: Check Apps Script JavaScript syntax
+        run: |
+          cp apps-script/arquem-relatorios-anexos.gs /tmp/arquem-relatorios-anexos.js
+          node --check /tmp/arquem-relatorios-anexos.js
