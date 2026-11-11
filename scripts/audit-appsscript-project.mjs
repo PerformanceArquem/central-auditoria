@@ -12,12 +12,18 @@ const proposedCode=await readFile(proposed,'utf8');
 const proposedDoPost=occurrences(proposedCode,'doPost');
 const proposedGenerator=occurrences(proposedCode,'arquemCreateReportAttachments_');
 const risk=doPostCount!==1||proposedDoPost!==1||proposedGenerator!==1;
+const installedCode=data.join('\n');
+const keilaVersionInstalled=installedCode.includes('arquem-3-keila-quality')&&
+  occurrences(installedCode,'arquemTesteKeilaSemEnvio')===1&&
+  installedCode.includes('productionQuality');
 console.log('## Auditoria da instalação original');
 console.log('- Arquivos de script existentes: '+scripts.length);
 console.log('- Funções doPost no original: '+doPostCount);
 console.log('- Geradores de anexos no original: '+currentGenerator);
+console.log('- Pacote da Keila com Qualidade instalado: '+(keilaVersionInstalled?'SIM':'NÃO'));
 console.log('- Funções doPost no pacote proposto: '+proposedDoPost);
 console.log('- Geradores de anexos no pacote proposto: '+proposedGenerator);
 console.log('- Status: '+(risk?'REVISÃO NECESSÁRIA: não substituir automaticamente.':'Estrutura básica compatível; revisão de diferenças ainda obrigatória.'));
 console.log('- Nenhum arquivo remoto foi modificado e nenhum e-mail foi enviado.');
 if(risk)process.exitCode=2;
+else if(!keilaVersionInstalled)process.exitCode=3;
