@@ -1,0 +1,58 @@
+name: Homologar PDF e Excel real da Keila sem email
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/test-keila-real.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar CLI oficial
+        run: npm install --no-save @google/clasp@3
+      - name: Autenticar sem exibir credencial
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "$CLASPRC_JSON"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+      - name: Executar homologacao REAL no HEAD do Apps Script sem envio
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/keila-test"
+          cd "$RUNNER_TEMP/keila-test"
+          printf '%s' '{"scriptId":"1WUhIenOGO-B_jAkYgECmpBq-jMeeFrTghwElVyBdKLTTICWnFzgkWmm8"}' > .clasp.json
+          "$GITHUB_WORKSPACE/node_modules/.bin/clasp" pull
+          grep -q 'arquem-3-keila-quality' "arquem-relatorios-anexos.gs.js"
+          result="$("$GITHUB_WORKSPACE/node_modules/.bin/clasp" run arquemTesteKeilaSemEnvio --dev 2>&1)" || {
+            printf '%s\n' "$result"
+            exit 1
+          }
+          printf '%s\n' "$result"
+          if printf '%s\n' "$result" | grep -Eqi 'Exception:|Error:|NOT_FOUND|PERMISSION_DENIED'; then
+            echo "::error::A execução remota retornou uma exceção."
+            exit 1
+          fi
+          printf '%s\n' "$result" | grep -q 'sent.*false' || {
+            echo "::error::Não foi possível comprovar sent:false."
+            exit 1
+          }
+          printf '%s\n' "$result" | grep -qi 'pdf' || exit 1
+          printf '%s\n' "$result" | grep -qi 'xlsx' || exit 1
+          echo 'PDF e XLSX de homologação Keila confirmados sem envio de e-mail.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Apagar credencial temporaria
+        if: always()
+        run: rm -f "$HOME/.clasprc.json"
