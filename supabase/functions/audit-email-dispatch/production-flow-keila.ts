@@ -57,62 +57,50 @@ export function buildKeilaProductionFlow(rows:Row[],from:string,to:string){
  return {from,to,entered:unique(entries),exited:unique(exits),
   entryMovements:entries.length,exitMovements:exits.length,movements};
 }
-export type KeilaWorkloadRow={name:string;hoursMinutes:number;appointments:number};
-
 /**
- * Exclusively operational report for Keila.
- * Quality scores, CSAT, rating averages and survey responses belong to
- * the separate reporting channel for Cassio and Carla, not Keila.
+ * Email da Keila: somente duas métricas de fluxo.
+ * A rastreabilidade completa permanece na fonte de dados do sistema,
+ * nunca no e-mail ou nos anexos deste relatório.
  */
 export function keilaProductionReport(
- data:ReturnType<typeof buildKeilaProductionFlow>,
- kind:'daily'|'weekly'|'monthly',
- workload:KeilaWorkloadRow[]=[]
-){
- const title='Entradas e Saídas da Produção — '+({daily:'Diário',weekly:'Semanal',monthly:'Mensal'}[kind]);
- const period=data.from.split('-').reverse().join('/')+' a '+data.to.split('-').reverse().join('/');
- const hh=(minutes:number)=>String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');
- const staffLines=['','HORAS E APONTAMENTOS POR COLABORADOR',
-   ...workload.map(p=>p.name+' | Horas: '+hh(p.hoursMinutes)+' | Apontamentos: '+p.appointments)];
- const staffHtml='<h3 style="margin-top:24px">Equipe — horas e apontamentos</h3>'+
-   '<table width="100%" style="font-size:12px;border-collapse:collapse"><tr style="background:#edf3fb"><th>Colaborador</th><th>Horas</th><th>Apontamentos</th></tr>'+
-   workload.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+hh(p.hoursMinutes)+'</td><td>'+p.appointments+'</td></tr>').join('')+'</table>';
- const count=data.movements.length;
- const detail=data.movements.slice(0,450);
- const limited=count>450;
- const lines=[
-   'ARQUEM SISTEMAS · CENTRAL DE AUDITORIA',title,'Período: '+period,
-   'Entraram na Produção: '+data.entered+' chamados distintos',
-   'Saíram da Produção: '+data.exited+' chamados distintos por transferência',
-   'Movimentações registradas: '+data.entryMovements+' entradas / '+data.exitMovements+' saídas.',
-   'Finalizações não são contabilizadas como saídas.',
-   'Um chamado pode aparecer nos dois indicadores ou ser movimentado mais de uma vez.',
-   limited?'Atenção: detalhes limitados aos 450 primeiros eventos; totais completos.':'',
-   ...staffLines,
-   'DETALHAMENTO',
-   ...detail.map(m=>['#'+m.id,m.direction==='entry'?'Entrada':'Saída',fmt(m.at),m.fromTeam+' → '+m.toTeam,'Responsável: '+m.responsible,'Movimentado por: '+m.actor,m.url].join(' | '))
- ].filter(Boolean);
- const table=detail.map(m=>'<tr><td style="padding:8px;border-bottom:1px solid #e5edf5"><a href="'+m.url+'">#'+esc(m.id)+'</a></td>'+
-   '<td style="padding:8px;border-bottom:1px solid #e5edf5">'+(m.direction==='entry'?'Entrada':'Saída')+'</td>'+
-   '<td style="padding:8px;border-bottom:1px solid #e5edf5">'+esc(fmt(m.at))+'</td>'+
-   '<td style="padding:8px;border-bottom:1px solid #e5edf5">'+esc(m.fromTeam)+' → '+esc(m.toTeam)+'</td>'+
-   '<td style="padding:8px;border-bottom:1px solid #e5edf5">'+esc(m.responsible)+'</td></tr>').join('');
- const html='<!doctype html><html lang="pt-BR"><body style="margin:0;background:#edf3fa;font-family:Arial,sans-serif;color:#173453">'+
-  '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px"><table width="100%" style="max-width:760px;background:#fff;border-collapse:collapse">'+
-  '<tr><td style="background:#142f50;color:#fff;padding:25px"><small>ARQUEM SISTEMAS · CENTRAL DE AUDITORIA</small><h1 style="font-size:22px;margin:10px 0 0">'+esc(title)+'</h1><p>Período: '+esc(period)+'</p></td></tr>'+
-  '<tr><td style="padding:24px"><table role="presentation" width="100%"><tr><td style="background:#eef5ff;padding:20px"><b>ENTRARAM</b><h2>'+data.entered+'</h2></td><td style="background:#e8f7ef;padding:20px"><b>SAÍRAM POR TRANSFERÊNCIA</b><h2>'+data.exited+'</h2></td></tr></table>'+
-  '<p style="font-size:12px;color:#53647c">Contagens de chamados distintos. Encerramentos não entram nas saídas. '+data.entryMovements+' movimentações de entrada e '+data.exitMovements+' de saída.</p>'+
-  (limited?'<p><b>Detalhamento limitado a 450 eventos; totais completos.</b></p>':'')+
-  staffHtml+
-  '<h3>Chamados e movimentações</h3><table width="100%" style="font-size:12px;border-collapse:collapse"><tr style="background:#edf3fb"><th>Chamado</th><th>Movimento</th><th>Data</th><th>Origem / destino</th><th>Responsável</th></tr>'+table+'</table>'+
-  '</td></tr><tr><td style="background:#f5f8fc;padding:18px;color:#60748c;font-size:11px">ARQUEM SISTEMAS · Gestão da Produção</td></tr></table></td></tr></table></body></html>';
- const packet={schema:'arquem-mail-v1',title,from:data.from,to:data.to,partial:false,historicalIncomplete:false,
-  metrics:{tickets:new Set(data.movements.map(m=>m.id)).size,appointments:workload.reduce((n,p)=>n+p.appointments,0),
-   minutes:workload.reduce((n,p)=>n+p.hoursMinutes,0),entered:data.entered,exited:data.exited,entryMovements:data.entryMovements,exitMovements:data.exitMovements},
-  collaborators:[],customers:[],activities:[],daily:[],
-  productionWorkload:workload.map(p=>({name:p.name,hoursMinutes:p.hoursMinutes,appointments:p.appointments})),
-  productionFlow:{entered:data.entered,exited:data.exited,entryMovements:data.entryMovements,exitMovements:data.exitMovements},
-  tickets:detail.map(m=>({id:m.id,client:m.client,owner:m.responsible,status:(m.direction==='entry'?'Entrada':'Saída')+' · '+fmt(m.at)+' · '+m.fromTeam+' → '+m.toTeam,ageDays:0,url:m.url})),
-  forecastVariances:[]};
- return {title,text:lines.join('\n'),html,packet,limited};
+  data:ReturnType<typeof buildKeilaProductionFlow>,
+  kind:'daily'|'weekly'|'monthly'
+) {
+  const title='Produção — Entradas e Saídas — '+({daily:'Diário',weekly:'Semanal',monthly:'Mensal'}[kind]);
+  const period=data.from.split('-').reverse().join('/')+' a '+data.to.split('-').reverse().join('/');
+  const entered=data.entered,exited=data.exited;
+  const scale=Math.max(entered,exited,1);
+  const width=(n:number)=>Math.round(n/scale*100);
+  const text=[
+    'ARQUEM SISTEMAS · CENTRAL DE AUDITORIA',
+    title,'Período: '+period,
+    'ENTRADAS: '+entered,
+    'SAÍDAS: '+exited
+  ].join('\n');
+  const html='<!doctype html><html lang="pt-BR"><body style="margin:0;background:#edf3fa;font-family:Arial,sans-serif;color:#173453">'+
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">'+
+    '<table width="100%" style="max-width:640px;background:#fff;border-collapse:collapse">'+
+    '<tr><td style="background:#142f50;color:#fff;padding:24px"><small>ARQUEM SISTEMAS · CENTRAL DE AUDITORIA</small>'+
+    '<h1 style="font-size:22px;margin:8px 0 0">Entradas e Saídas da Produção</h1>'+
+    '<p style="font-size:13px;margin-bottom:0">Período: '+esc(period)+'</p></td></tr>'+
+    '<tr><td style="padding:28px">'+
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'+
+    '<td style="width:50%;background:#edf4ff;padding:18px"><b>ENTRADAS</b><h2 style="font-size:36px;margin:10px 0">'+entered+'</h2></td>'+
+    '<td style="width:50%;background:#e9f8f1;padding:18px"><b>SAÍDAS</b><h2 style="font-size:36px;margin:10px 0">'+exited+'</h2></td>'+
+    '</tr></table>'+
+    '<h3 style="margin:24px 0 14px;font-size:16px">Comparativo</h3>'+
+    '<table role="presentation" width="100%" cellpadding="6" cellspacing="0">'+
+    '<tr><td width="82">Entradas</td><td><div style="height:22px;background:#e5ebf2">'+
+    '<div style="height:22px;width:'+width(entered)+'%;background:#2b64b6"></div></div></td><td width="48" align="right"><b>'+entered+'</b></td></tr>'+
+    '<tr><td>Saídas</td><td><div style="height:22px;background:#e5ebf2">'+
+    '<div style="height:22px;width:'+width(exited)+'%;background:#21886b"></div></div></td><td align="right"><b>'+exited+'</b></td></tr>'+
+    '</table></td></tr></table></td></tr></table></body></html>';
+  const packet={
+    schema:'arquem-mail-v1',
+    title,from:data.from,to:data.to,partial:false,historicalIncomplete:false,
+    metrics:{entered,exited},
+    productionFlow:{entered,exited},
+    collaborators:[],customers:[],activities:[],daily:[],tickets:[],forecastVariances:[]
+  };
+  return {title,text,html,packet,limited:false};
 }
