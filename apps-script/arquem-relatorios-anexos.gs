@@ -6,12 +6,9 @@
  *
  * 1) Em seu doPost(e), DEPOIS de validar o token atual, acrescente:
  *    if (dados.action === 'capabilities') {
- *      const templateId=PropertiesService.getScriptProperties()
- *        .getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID');
- *      return ContentService.createTextOutput(JSON.stringify({
- *        sucesso: true, attachmentsVersion: 'arquem-1', formats: ['pdf','xlsx'],
- *        paperTemplateConfigured: Boolean(templateId)
- *      })).setMimeType(ContentService.MimeType.JSON);
+ *      return ContentService.createTextOutput(
+ *        JSON.stringify(arquemCapacidadesAnexos_())
+ *      ).setMimeType(ContentService.MimeType.JSON);
  *    }
  *
  * 2) Na mesma rotina, depois de autenticar e antes de enviar:
@@ -27,9 +24,11 @@
  *    referência possuir logotipo/marca d'água, a cópia preservará a arte.
  *    O modelo deve ser acessível à conta executora do Apps Script.
  *
- * 5) Habilite scopes Drive, Docs, Sheets e UrlFetchApp. Deploy nova versão
- *    do Web App e faça verificação de capabilities antes de ativar a flag
- *    REPORT_ATTACHMENTS_ENABLED=true no Supabase.
+ * 5) Configure ARQUEM_PAPEL_TIMBRADO_DOC_ID no Script Properties,
+ *    rode arquemValidarPublicacaoSemEnvio() no editor (sem disparos);
+ *    depois configure doPost conforme exemplo e publique nova versão do Web App.
+ * 6) Faça verificação de capabilities antes de habilitar anexos no backend.
+ *    Scopes necessários: Drive, Docs, Sheets e UrlFetchApp.
  *
  * ATENÇÃO: sem template, o PDF contém cabeçalho estilizado, mas NÃO
  * uma marca d'água gráfica. Nunca afirmar que a marca d'água foi aplicada
@@ -49,6 +48,50 @@
  * Só anuncie o recurso "capabilities" depois deste teste passar e depois
  * de validar a opção attachments no fluxo real de envio com um teste autorizado.
  */
+/**
+ * Executar manualmente no editor Apps Script antes de habilitar anexos.
+ * Valida o modelo timbrado, gera PDF/Excel de exemplo e NAO envia e-mails.
+ * O registro de aprovacao perde validade se o modelo for editado depois.
+ */
+function arquemValidarPublicacaoSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const id=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
+  if(!id)throw new Error('Configure ARQUEM_PAPEL_TIMBRADO_DOC_ID antes de validar o papel timbrado.');
+  const file=DriveApp.getFileById(id);
+  if(file.getMimeType()!==MimeType.GOOGLE_DOCS)
+    throw new Error('O modelo de papel timbrado precisa ser um Google Docs acessivel.');
+  const doc=DocumentApp.openById(id);
+  if(!doc.getBody())throw new Error('Nao foi possivel ler o corpo do modelo de papel timbrado.');
+  const result=arquemTesteAnexosSemEnvio();
+  if(result.ok!==true || result.sent!==false || result.files.length!==2)
+    throw new Error('Os anexos nao passaram na validacao sem envio.');
+  props.setProperties({
+    ARQUEM_ATTACHMENTS_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID:id
+  },false);
+  return {ok:true,sent:false,template:'Modelo corporativo validado',files:result.files};
+}
+/**
+ * Retornado pelo doPost apos a validacao do segredo existente.
+ * Nao anuncia anexos como prontos so porque o ID do modelo existe.
+ */
+function arquemCapacidadesAnexos_() {
+  const props=PropertiesService.getScriptProperties();
+  const id=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
+  const checkedId=props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID');
+  const checkedAt=Date.parse(props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED_AT')||'');
+  let ready=false;
+  if(id && checkedId===id && Number.isFinite(checkedAt)){
+    try{
+      const file=DriveApp.getFileById(id);
+      ready=file.getMimeType()===MimeType.GOOGLE_DOCS &&
+        checkedAt>=file.getLastUpdated().getTime();
+    }catch(_){ready=false;}
+  }
+  return {sucesso:true,attachmentsVersion:'arquem-2',formats:['pdf','xlsx'],
+    paperTemplateConfigured:ready};
+}
+
 function arquemTesteAnexosSemEnvio() {
   const packet={
     schema:'arquem-mail-v1',title:'Relatório de validação — Produção',
@@ -89,8 +132,7 @@ function arquemTesteAnexosSemEnvio() {
  * const data=JSON.parse(e.postData.contents);
  * if(!validarTokenDoProjeto_(data.token)) return respostaDeErroExistente_();
  * if(data.action==='capabilities') return ContentService.createTextOutput(
- *   JSON.stringify({sucesso:true,attachmentsVersion:'arquem-1',formats:['pdf','xlsx'],
- *     paperTemplateConfigured:Boolean(PropertiesService.getScriptProperties().getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID'))})
+ *   JSON.stringify(arquemCapacidadesAnexos_())
  * ).setMimeType(ContentService.MimeType.JSON);
  *
  * // Depois, no bloco de envio já autorizado:
