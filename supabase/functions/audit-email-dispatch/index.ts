@@ -858,6 +858,7 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
    schema:'arquem-mail-v1',
    title:(kind==='monthly'||kind==='annual'?'Balancete ':'Relatório ')+REPORT_LABEL[kind].toLowerCase()+' - '+safe(rec.name||rec.sector||'Gestão'),
    from,to,partial,historicalIncomplete,
+   reportSections:{daily_detail:reportSectionOn(rec,'daily_detail'),customers:reportSectionOn(rec,'customers'),activities:reportSectionOn(rec,'activities')},
    metrics:report.metrics,
    collaborators:data.collaborators||[],daily:reportSectionOn(rec,'daily_detail')?(data.daily||[]):[],
    customers:reportSectionOn(rec,'customers')?(data.customers||[]):[],
