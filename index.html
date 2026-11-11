@@ -1456,7 +1456,12 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
       <div id="emailOfficialPreviewResult" class="hide" style="border:1px solid #d6e1f0;background:#fff;border-radius:10px;padding:14px;margin-top:12px"></div>
     </div>
     <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Frequências</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="7">Abra o módulo para carregar.</td></tr></tbody></table></div>
-    <h3 style="margin-top:22px">Histórico dos últimos envios</h3><div class="tw"><table><thead><tr><th>Data</th><th>Destinatário</th><th>Tipo</th><th>Período</th><th>Status</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
+    <div class="row" style="align-items:center;justify-content:space-between;margin-top:22px;gap:12px;flex-wrap:wrap">
+      <div><h3 style="margin:0">Histórico e rastreabilidade dos e-mails</h3><small class="subtle">“Enviado” significa que o provedor aceitou a mensagem, não que ela foi lida. Sem registro não significa necessariamente falha.</small></div>
+      <div class="row" style="gap:8px"><label for="emailHistoryFilter">Situação</label><select id="emailHistoryFilter"><option value="">Todas</option><option value="sent">Enviados</option><option value="processing">Em processo</option><option value="failed">Falhas</option><option value="pending">Pendentes (sem registro)</option></select><button type="button" class="s" id="emailHistoryRefresh">↻ Atualizar</button></div>
+    </div>
+    <div id="emailHistoryKpis" class="kpis" style="margin:12px 0"></div>
+    <div class="tw" style="max-height:400px;overflow:auto"><table><thead><tr><th>Agendado/registrado</th><th>Destinatário</th><th>Relatório</th><th>Período</th><th>Situação</th><th>Enviado em</th><th>Detalhes</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
     <p class="subtle" style="margin-top:12px">O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
   </div>
 </div>
@@ -5057,8 +5062,26 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         const allow=x.allowed_report_types==null?'Regras atuais':x.allowed_report_types.length?x.allowed_report_types.map(k=>({general:'Geral',production_flow:'Fluxo Produção',ticket_followup:'Cobranças'}[k]||k)).join(', '):'Nenhum relatório';
         return `<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?(x.sectors?.length?'Gestão · '+esc(x.sectors.join(', ')):'Gestão · Todos'):esc(Array.isArray(x.sectors)&&x.sectors.length?x.sectors.join(', '):x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${esc(cadence||'—')}<small style="display:block;color:var(--muted)">${esc(allow)}</small></td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`;
       }).join('')||'<tr><td colspan="7">Nenhum destinatário cadastrado.</td></tr>';
-      const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
-      $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(reportTypeLabel[x.report_kind]||x.report_kind)}</td><td>${esc(displayPeriodDate(x.period_from))} a ${esc(displayPeriodDate(x.period_to))}</td><td>${esc(dispatchStatusLabel[x.status]||x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
+      const logs=await client.from('audit_email_sector_dispatches').select('dispatch_key,recipient_id,report_kind,period_from,period_to,status,created_at,last_attempt_at,sent_at,attempt_count,error_message').order('created_at',{ascending:false}).limit(150);
+            if(logs.error)throw logs.error;
+      const items=logs.data||[];
+      const time=v=>{if(!v)return '—';const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})};
+      const late=x=>x.status==='processing' && (Date.now()-Date.parse(x.last_attempt_at||x.created_at)>20*60000);
+      const counts={sent:items.filter(x=>x.status==='sent').length,processing:items.filter(x=>x.status==='processing').length,failed:items.filter(x=>x.status==='failed').length,stalled:items.filter(late).length};
+      const known=new Set(items.map(x=>String(x.recipient_id)));
+      const withoutRecord=records.filter(x=>x.active&&!known.has(String(x.id)));
+      $('emailHistoryKpis').innerHTML=[['Enviados',counts.sent],['Em processo',counts.processing],['Falhas',counts.failed],['Aguardando conferência',withoutRecord.length],['Processo demorado',counts.stalled]].map(([label,n])=>'<div class="card"><small>'+esc(label)+'</small><h3>'+Number(n)+'</h3></div>').join('');
+      const filter=$('emailHistoryFilter').value;
+      const existing=items.filter(x=>!filter||x.status===filter).map(x=>{
+        const statusLabel=late(x)?'Em processo — verificar atraso':(dispatchStatusLabel[x.status]||x.status);
+        const reportName=String(x.dispatch_key||'').startsWith('production-flow-keila:')?'Fluxo da Produção · Keila':(reportTypeLabel[x.report_kind]||x.report_kind);
+        const notes=x.status==='sent'?'Aceito pelo serviço de e-mail':x.status==='processing'?'Aguardando confirmação do provedor':String(x.error_message||'Não foi possível confirmar o envio');
+        return '<tr><td>'+esc(time(x.created_at))+'</td><td>'+esc(records.find(r=>r.id===x.recipient_id)?.name||'Cadastro não encontrado')+'</td>'+
+          '<td>'+esc(reportName)+'</td><td>'+esc(displayPeriodDate(x.period_from))+' a '+esc(displayPeriodDate(x.period_to))+'</td>'+
+          '<td>'+esc(statusLabel)+'</td><td>'+esc(time(x.sent_at))+'</td><td>'+esc(notes)+(x.attempt_count>1?' · '+Number(x.attempt_count)+' tentativas':'')+'</td></tr>';
+      });
+      const pending=(!filter||filter==='pending')?withoutRecord.map(x=>'<tr><td>—</td><td>'+esc(x.name)+'</td><td>'+esc(x.scope==='management'?'Gestão':'Setorial')+'</td><td>—</td><td>Pendente de registro</td><td>—</td><td>Nenhum envio encontrado entre os 150 registros consultados; verificar agendamento e período.</td></tr>'):[];
+      $('emailDispatches').innerHTML=existing.concat(pending).join('')||'<tr><td colspan="7">Nenhum registro corresponde ao filtro.</td></tr>';
       loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
       try{await loadMovideskDirectory(true)}catch(err){console.warn('Diretório do Movidesk indisponível:',err)}
     }catch(e){say('Não foi possível carregar: '+e.message)}finally{loading=false}
@@ -5074,6 +5097,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   $('emailCoverageRefresh').addEventListener('click',()=>loadMovideskDirectory(true).catch(err=>{$('emailCoverageSummary').textContent='Erro ao consultar cobertura: '+(err?.message||err)}));
   $('emailNew').addEventListener('click',reset);
   $('emailReload').addEventListener('click',reload);
+  $('emailHistoryRefresh').addEventListener('click',reload);
+  $('emailHistoryFilter').addEventListener('change',reload);
   const officialDate=$('emailOfficialReferenceDate');
   if(officialDate){
     const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
