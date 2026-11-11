@@ -1276,8 +1276,7 @@ function scheduledReports(today:string, hol:Set<string>, recipients:R[]):Schedul
   const tasks:ScheduledReport[] = [];
   for (const r of recipients) {
     if(!recipientAllows(r,'general'))continue;
-    const director = directionRecipient(r);
-    if (businessDay && !director && r.daily_enabled===true)
+    if (businessDay && r.daily_enabled===true)
       tasks.push({r,kind:'daily',from:prev,to:prev});
     if (dow===1 && r.weekly_enabled===true)
       tasks.push({r,kind:'weekly',from:prevMonday,to:prevSunday});
