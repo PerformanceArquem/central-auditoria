@@ -1,0 +1,98 @@
+name: Publicar Central de Auditoria pela Vercel CLI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'api/**'
+      - 'lib/**'
+      - 'auth.js'
+      - 'production-flow.js'
+      - '.github/workflows/vercel-cli-production.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: central-auditoria-vercel-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Ative VERCEL_CLI_ENABLED=true em Settings > Secrets and variables > Actions > Variables
+    # somente depois de cadastrar o VERCEL_TOKEN e revisar a proteção de produção.
+    if: ${{ vars.VERCEL_CLI_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    env:
+      VERCEL_ORG_ID: team_822fjP4aTzA5VDJR7Lrx0AwA
+      VERCEL_PROJECT_ID: prj_gG3o7WVGA4SZ8Tz8rp4hog2XRCbn
+      VERCEL_CLI_VERSION: '65.12.1'
+      VERCEL_TELEMETRY_DISABLED: '1'
+    steps:
+      - name: Obter commit revisado
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Validar sintaxe do HTML e dos scripts
+        run: |
+          node --test tests/email-admin-ui.test.mjs
+          node --check auth.js
+          node --check production-flow.js
+
+      - name: Validar autenticação e projeto de destino
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "::error::Cadastre VERCEL_TOKEN nos secrets do ambiente production ou do repositório."
+            exit 1
+          fi
+          test "$VERCEL_ORG_ID" = "team_822fjP4aTzA5VDJR7Lrx0AwA"
+          test "$VERCEL_PROJECT_ID" = "prj_gG3o7WVGA4SZ8Tz8rp4hog2XRCbn"
+
+      - name: Instalar Vercel CLI (versão fixa)
+        run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
+
+      - name: Ler configuração existente de produção
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=production --scope "$VERCEL_ORG_ID"
+
+      - name: Confirmar vínculo antes do build
+        run: |
+          node -e '
+            const fs=require("node:fs");
+            const p=JSON.parse(fs.readFileSync(".vercel/project.json","utf8"));
+            if(p.projectId!==process.env.VERCEL_PROJECT_ID || p.orgId!==process.env.VERCEL_ORG_ID){
+              throw new Error("Projeto ou equipe Vercel divergente. Publicação cancelada.");
+            }
+            console.log("Vínculo com a Central de Auditoria confirmado.");
+          '
+
+      - name: Construir com configuração de produção
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel build --prod --scope "$VERCEL_ORG_ID"
+
+      - name: Publicar em produção usando build validado
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          url="$(vercel deploy --prebuilt --prod --scope "$VERCEL_ORG_ID")"
+          echo "URL de implantação: $url"
+          echo "### Publicação via GitHub Actions + Vercel CLI" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: ${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Destino: Central de Auditoria (produção)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Implantação: $url" >> "$GITHUB_STEP_SUMMARY"
