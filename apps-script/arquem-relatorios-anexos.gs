@@ -434,11 +434,14 @@ function arquemXlsx_(p, keep) {
     (p.productionQuality?[]:(p.collaborators||[])).map(x=>[x.name,x.sector,arquemExcelHora_(x.minutes),arquemExcelHora_(x.minimumMinutes),
      arquemExcelHora_(x.targetMinutes),arquemExcelHora_(x.minimumGap),arquemExcelHora_(x.targetGap),x.ruleSource||'Padrão']));
   arquemFormatarHoras_(people,[3,4,5,6,7],p.productionQuality?0:(p.collaborators||[]).length);
+  const authorizedSections=p.reportSections||{};
+  if(authorizedSections.daily_detail!==false){
   const daySheet=arquemCreateSheet_(ss,'Dia a dia',
     ['Data','Colaborador','Setor','Horas','Jornada','Mínimo','Situação'],
     (p.daily||[]).map(x=>[x.date,x.person,x.sector,arquemExcelHora_(x.minutes),
       arquemExcelHora_(x.referenceMinutes),arquemExcelHora_(x.minimumMinutes),x.status]));
   arquemFormatarHoras_(daySheet,[4,5,6],(p.daily||[]).length);
+  }
   const ticketSheet=arquemCreateSheet_(ss,'Chamados',
     ['Chamado','Cliente','Responsável','Status','Idade (dias)','Link Movidesk'],
     (p.tickets||[]).map(x=>['#'+String(x.id||''),x.client,x.owner,x.status,x.ageDays,x.url]));
@@ -454,14 +457,11 @@ function arquemXlsx_(p, keep) {
     ticketSheet.getRange(2,1,linked.length,1).setRichTextValues(linked).setFontColor('#2467a8');
     ticketSheet.getRange(2,6,rows.length,1).setFontColor('#2467a8');
   }
+  if(authorizedSections.customers!==false){
   const cust=arquemCreateSheet_(ss,'Empresas',
     ['Empresa','Horas','Chamados','Apontamentos'],
     (p.customers||[]).map(x=>[x.name,arquemExcelHora_(x.minutes),x.tickets,x.appointments]));
   arquemFormatarHoras_(cust,[2],(p.customers||[]).length);
-  const acts=arquemCreateSheet_(ss,'Atividades',
-    ['Atividade','Horas'],
-    (p.activities||[]).map(x=>[x.name,arquemExcelHora_(x.minutes)]));
-  arquemFormatarHoras_(acts,[2],(p.activities||[]).length);
   if((p.customers||[]).length>1){
     // Chart values use numeric hours to preserve comparability; displayed HHhMM remains in the table.
     cust.getRange(1,5).setValue('Horas (numérico)');
@@ -475,6 +475,13 @@ function arquemXlsx_(p, keep) {
       .setOption('legend',{position:'none'})
       .build();
     cust.insertChart(chart);
+  }
+  }
+  if(authorizedSections.activities!==false){
+    const acts=arquemCreateSheet_(ss,'Atividades',
+      ['Atividade','Horas'],
+      (p.activities||[]).map(x=>[x.name,arquemExcelHora_(x.minutes)]));
+    arquemFormatarHoras_(acts,[2],(p.activities||[]).length);
   }
   SpreadsheetApp.flush();
   const url='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(ss.getId())+
