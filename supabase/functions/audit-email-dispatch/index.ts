@@ -1,4 +1,5 @@
 import {forecastSection} from "./forecast-variance.ts";
+import {reportSectionOn,reportSectionFlags} from "./report-sections.ts";
 import {dashboardReport} from "./dashboard-report.ts";
 import {KEILA_PRODUCTION_FLOW_RECIPIENT_ID,buildKeilaProductionFlow,keilaProductionReport} from "./production-flow-keila.ts";
 import {composeTicketCharge} from "./ticket-charge.ts";
@@ -845,12 +846,6 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
   return { text: lines.join('\n'), detailsHtml, teamJourneyHtml, teamJourney:journey, exportData,
     metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
 }
-// Optional per-recipient controls. NULL/missing switches preserve existing reports.
-function reportSectionOn(rec:R,key:'daily_detail'|'customers'|'activities'):boolean {
-  const sections=rec.report_sections;
-  return !sections || typeof sections!=='object' || Array.isArray(sections) ||
-    (sections as R)[key]!==false;
-}
 function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:ReportKind,partial:boolean,historicalIncomplete:boolean,clients:R[],forecastRows:unknown[]=[]):R {
  const data=report.exportData as R;
  const clientNames=new Map(clients.map(x=>[String(x.ticket_id),String(x.client_name||'')]));
@@ -858,7 +853,7 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
    schema:'arquem-mail-v1',
    title:(kind==='monthly'||kind==='annual'?'Balancete ':'Relatório ')+REPORT_LABEL[kind].toLowerCase()+' - '+safe(rec.name||rec.sector||'Gestão'),
    from,to,partial,historicalIncomplete,
-   reportSections:{daily_detail:reportSectionOn(rec,'daily_detail'),customers:reportSectionOn(rec,'customers'),activities:reportSectionOn(rec,'activities')},
+   reportSections:reportSectionFlags(rec),
    metrics:report.metrics,
    collaborators:data.collaborators||[],daily:reportSectionOn(rec,'daily_detail')?(data.daily||[]):[],
    customers:reportSectionOn(rec,'customers')?(data.customers||[]):[],
@@ -1170,7 +1165,7 @@ async function manualOfficial(payload: R) {
   // Prévia de auditoria não cria disparos, não acessa o Gmail e não muda agendamentos.
   if (previewOnly) return json({ok:true,preview:true,release:RELEASE_ID,
     recipient:target,kind,from,to,partial,empty,
-    reportSections:{daily_detail:reportSectionOn(rec,'daily_detail'),customers:reportSectionOn(rec,'customers'),activities:reportSectionOn(rec,'activities')},
+    reportSections:reportSectionFlags(rec),
     metrics:report.metrics,ticketMetrics:tickets.metrics,superadores:quality.metric,teamJourney:report.teamJourney,
     directionOverview:overview.metrics,forecastPreview:forecast.rows,
     // Até cinco exemplos por categoria para conferência sem expor todos os dados.
