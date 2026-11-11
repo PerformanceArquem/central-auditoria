@@ -484,6 +484,20 @@ function arquemXlsx_(p, keep) {
       (p.activities||[]).map(x=>[x.name,arquemExcelHora_(x.minutes)]));
     arquemFormatarHoras_(acts,[2],(p.activities||[]).length);
   }
+  // Defesa adicional: um relatório personalizado nunca pode exportar uma aba
+  // cuja autorização foi revogada, mesmo se a montagem da planilha mudar.
+  if(p.reportSections && typeof p.reportSections==='object'){
+    const restricted=[
+      ['daily_detail','Dia a dia'],
+      ['customers','Empresas'],
+      ['activities','Atividades']
+    ];
+    restricted.forEach(entry=>{
+      const key=entry[0],sheet=entry[1];
+      if(p.reportSections[key]===false && ss.getSheetByName(sheet))
+        throw new Error('Exportação bloqueada: aba não autorizada '+sheet);
+    });
+  }
   SpreadsheetApp.flush();
   const url='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(ss.getId())+
     '/export?mimeType='+encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
