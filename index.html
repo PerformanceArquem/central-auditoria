@@ -4875,6 +4875,12 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   const $=id=>document.getElementById(id);
   let client=null, records=[], loaded=false, loading=false;
   const say=t=>{if($('emailAdminStatus'))$('emailAdminStatus').textContent=t};
+  const reportTypeLabel={daily:'Diário',weekly:'Semanal',monthly:'Mensal',annual:'Anual'};
+  const dispatchStatusLabel={sent:'Enviado',failed:'Falhou',processing:'Processando',pending:'Pendente',skipped:'Ignorado'};
+  const displayPeriodDate=value=>{
+    const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value??''));
+    return match?match[3]+'/'+match[2]+'/'+match[1]:String(value??'');
+  };
   const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const directionForm=()=>$('emailScope').value==='management'&&
     $('emailRecordId').value==='1b8168c6-bec0-4f6d-a3f9-feaec63ed147'&&
@@ -5030,7 +5036,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         return `<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${x.scope==='management'?(x.sectors?.length?'Gestão · '+esc(x.sectors.join(', ')):'Gestão · Todos'):esc(Array.isArray(x.sectors)&&x.sectors.length?x.sectors.join(', '):x.sector)}</td><td>${esc(x.collaborator_name||'Todos')}</td><td>${esc(cadence||'—')}</td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`;
       }).join('')||'<tr><td colspan="7">Nenhum destinatário cadastrado.</td></tr>';
       const logs=await client.from('audit_email_sector_dispatches').select('recipient_id,report_kind,period_from,period_to,status,created_at').order('created_at',{ascending:false}).limit(40);
-      $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(x.report_kind)}</td><td>${esc(x.period_from)} a ${esc(x.period_to)}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
+      $('emailDispatches').innerHTML=logs.error?`<tr><td colspan="5">${esc(logs.error.message)}</td></tr>`:(logs.data||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString('pt-BR'))}</td><td>${esc(records.find(r=>r.id===x.recipient_id)?.name||x.recipient_id)}</td><td>${esc(reportTypeLabel[x.report_kind]||x.report_kind)}</td><td>${esc(displayPeriodDate(x.period_from))} a ${esc(displayPeriodDate(x.period_to))}</td><td>${esc(dispatchStatusLabel[x.status]||x.status)}</td></tr>`).join('')||'<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
       loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
       try{await loadMovideskDirectory(true)}catch(err){console.warn('Diretório do Movidesk indisponível:',err)}
     }catch(e){say('Não foi possível carregar: '+e.message)}finally{loading=false}
