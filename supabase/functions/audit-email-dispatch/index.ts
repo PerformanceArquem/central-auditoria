@@ -948,8 +948,9 @@ async function adminAction(payload: R) {
       const ready=capabilities?.sucesso===true &&
         formats.includes('pdf') && formats.includes('xlsx') &&
         capabilities.paperTemplateConfigured===true;
-      const keilaGeneratorReady=ready&&capabilities?.attachmentsVersion==='arquem-3-keila-quality'&&capabilities?.keilaQualityReady===true;
+      const keilaGeneratorReady=ready&&['arquem-3-keila-quality','arquem-4-report-sections'].includes(String(capabilities?.attachmentsVersion||''))&&capabilities?.keilaQualityReady===true;
       return json({ok:true,enabled:flag,ready,keilaGeneratorReady,
+        sectionPermissionsSupported:capabilities?.sectionPermissionsSupported===true,
         templateConfigured:capabilities?.paperTemplateConfigured===true,
         formats:formats.filter(x=>x==='pdf'||x==='xlsx'),
         status:ready?(flag?'PDF/XLSX habilitados; validar entrega real em teste autorizado.':
@@ -1385,7 +1386,7 @@ async function requireKeilaGeneratorReady() {
  const capability=await res.json().catch(()=>null) as R|null;
  const formats=Array.isArray(capability?.formats)?capability.formats:[];
  if(capability?.sucesso!==true || capability?.paperTemplateConfigured!==true ||
-    capability?.attachmentsVersion!=='arquem-3-keila-quality' ||
+    !['arquem-3-keila-quality','arquem-4-report-sections'].includes(String(capability?.attachmentsVersion||'')) ||
     capability?.keilaQualityReady!==true ||
     !formats.includes('pdf') || !formats.includes('xlsx'))
   throw new Error('Envio Keila bloqueado: versão PDF/Excel com Qualidade ainda não homologada');
