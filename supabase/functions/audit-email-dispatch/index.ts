@@ -1,5 +1,6 @@
 import {forecastSection} from "./forecast-variance.ts";
 import {dashboardReport} from "./dashboard-report.ts";
+import {KEILA_PRODUCTION_FLOW_RECIPIENT_ID,buildKeilaProductionFlow,keilaProductionReport} from "./production-flow-keila.ts";
 import {composeTicketCharge} from "./ticket-charge.ts";
 import {chargeTicketLookup} from "./ticket-charge-lookup.ts";
 import {corporateCopy,corporatePacket,corporateFallbackHtml,assertCorporateCopy} from "./corporate-mail-policy.ts";
@@ -1260,6 +1261,75 @@ function scheduledReports(today:string, hol:Set<string>, recipients:R[]):Schedul
   return tasks.sort((a,b)=>order[a.kind]-order[b.kind]||Number(directionRecipient(b.r))-Number(directionRecipient(a.r)));
 }
 
+// Relatório separado de rastreabilidade: não interfere nas inscrições existentes da Keila.
+// Requer habilitação explícita depois da validação dos anexos e da cobertura histórica.
+function keilaFlowPeriods(today:string,hol:Set<string>) {
+ const dow=weekday(today);
+ const business=![0,6].includes(dow)&&!hol.has(today);
+ if(!business)return [] as {kind:'daily'|'weekly'|'monthly';from:string;to:string}[];
+ const tasks:{kind:'daily'|'weekly'|'monthly';from:string;to:string}[]=[];
+ const yesterday=shift(today,-1);
+ tasks.push({kind:'daily',from:yesterday,to:yesterday});
+ if(dow===1){
+  const start=shift(today,-7),end=shift(today,-1);
+  tasks.push({kind:'weekly',from:start,to:end});
+ }
+ const first=today.slice(0,7)+'-01';
+ let firstBusiness=first;
+ while([0,6].includes(weekday(firstBusiness))||hol.has(firstBusiness))firstBusiness=shift(firstBusiness,1);
+ if(today===firstBusiness&&today>=FIRST_MONTHLY_RUN){
+  const end=shift(first,-1);
+  tasks.push({kind:'monthly',from:end.slice(0,7)+'-01',to:end});
+ }
+ return tasks;
+}
+async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipients:R[]) {
+ if(E('PRODUCTION_FLOW_KEILA_ENABLED')!=='true')return [];
+ const matches=recipients.filter(r=>r.id===KEILA_PRODUCTION_FLOW_RECIPIENT_ID&&r.active===true&&norm(r.name)==='keila'&&
+  r.scope==='management'&&isEmail(String(r.email||'')));
+ if(matches.length!==1)throw new Error('Relatório de Produção: cadastro exclusivo de Keila não validado');
+ if(E('REPORT_ATTACHMENTS_ENABLED')!=='true')throw new Error('Relatório de Produção exige PDF e Excel habilitados');
+ const rec=matches[0];
+ const tasks=keilaFlowPeriods(today,hol);
+ if(!tasks.length)return [];
+ const results:R[]=[];
+ // A rotina pode ser agendada mais de uma vez: a chave específica impede duplicatas.
+ let rows: R[]|null=null;
+ for(const task of tasks){
+  const key='production-flow-keila:'+String(rec.id)+':'+task.kind+':'+task.from+':'+task.to;
+  try{
+   const existing=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=status&limit=1');
+   if(existing.length){results.push({recipient:'Keila',kind:task.kind,skipped:'Já registrado'});continue;}
+   await requireProductionReady();
+   const coverage=await recentCoverage(task.from,task.to);
+   if(!coverage.ready){results.push({recipient:'Keila',kind:task.kind,skipped:'Conciliação do período incompleta'});continue;}
+   rows ??= await list('audit_direct_tickets','?select=ticket_id,subject:payload->>subject,ownerHistories:payload->ownerHistories,clients:payload->clients');
+   const data=buildKeilaProductionFlow(rows,task.from,task.to);
+   const content=keilaProductionReport(data,task.kind);
+   const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
+    method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
+    body:JSON.stringify({dispatch_key:key,recipient_id:rec.id,report_kind:task.kind,
+     period_from:task.from,period_to:task.to,status:'processing'})
+   });
+   if(!inserted?.length){results.push({recipient:'Keila',kind:task.kind,skipped:'Reserva já existente'});continue;}
+   try{
+    await sendMail(String(rec.email),'Central de Auditoria - '+content.title+' - '+task.from,
+      content.text,content.html,content.packet as R);
+    await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+     method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
+    });
+    results.push({recipient:'Keila',kind:task.kind,status:'sent',entered:data.entered,exited:data.exited,detailLimited:content.limited});
+   }catch(ex){
+    await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+     method:'PATCH',body:JSON.stringify({status:'failed',error_message:err(ex).slice(0,300)})
+    }).catch(()=>{});
+    results.push({recipient:'Keila',kind:task.kind,status:'failed',error:err(ex)});
+   }
+  }catch(ex){results.push({recipient:'Keila',kind:task.kind,status:'failed',error:err(ex)});}
+ }
+ return results;
+}
+
 type ReportTotals = {appointments:number;tickets:number;minutes:number;days:number};
 function annualHighlights(task:ScheduledReport, report:ReportTotals, previous:ReportTotals, december:ReportTotals|null, months:{label:string;opened:number;closed:number}[]) {
   const year = task.from.slice(0,4);
@@ -1398,7 +1468,8 @@ async function dispatch() {
   const today = dateBR();
   const [hol, recipients] = await Promise.all([holidays(),recipientList()]);
   const tasks = scheduledReports(today,hol,recipients);
-  if (!tasks.length) return json({ ok: true, skipped: 'Sem relatorios programados' });
+  const keilaFlow = await dispatchKeilaProductionFlow(today,hol,recipients).catch(ex=>[{recipient:'Keila',status:'failed',error:err(ex)}]);
+  if (!tasks.length) return json({ ok: !keilaFlow.some(x=>x.status==='failed'), date:today, results:keilaFlow });
   const periods = new Map<string,Promise<R[]|null>>();
   let history:ReturnType<typeof state>|undefined;
   let referenceData:Promise<[R[],R[]]>|undefined;
@@ -1503,7 +1574,7 @@ async function dispatch() {
       }
     } catch (ex) { results.push({ recipientId: id, kind: t.kind, status: 'failed', error: err(ex) }); }
   }
-  return json({ ok: !results.some(x => x.status === 'failed'), date: today, results });
+  return json({ ok: ![...results,...keilaFlow].some(x => x.status === 'failed'), date: today, results:[...keilaFlow,...results] });
 }
 // Prévia executiva semanal: apenas leitura, sem Gmail, sem fila de envio e sem cache de disparos.
 // Escopo e formatação baseados nos cadastros e no mesmo relatório corporativo da Direção.
