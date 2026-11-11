@@ -303,7 +303,7 @@ function arquemPdf_(p, keep) {
   }
   arquemAddHeading_(body,'Observações metodológicas');
   body.appendParagraph('Dados da Central de Auditoria/Movidesk sincronizados. Horas apontadas não são controle de ponto. '+
-    'A ausência de registros não comprova ausência de trabalho. Categorias de risco podem se sobrepor.');
+    'A ausência de registros não comprova ausência de trabalho. Categorias de risco podem se sobrepor.').editAsText().setFontSize(9);
   doc.saveAndClose();
   return DriveApp.getFileById(file.getId()).getAs(MimeType.PDF);
 }
@@ -319,7 +319,7 @@ function arquemXlsx_(p, keep) {
      ['Chamados trabalhados',Number(p.metrics&&p.metrics.tickets)||0],
      ['Conciliação',p.partial?'Dados parciais':'Dados disponíveis'],
      ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]);
-  first.getRange('B4').setNumberFormat('[h]:mm:ss');
+  first.getRange('B5').setNumberFormat('[h]:mm:ss');
   const people=arquemCreateSheet_(ss,'Colaboradores',
     ['Colaborador','Setor','Horas','Mínimo','Jornada','Falta mínimo','Falta jornada','Origem'],
     (p.collaborators||[]).map(x=>[x.name,x.sector,arquemExcelHora_(x.minutes),arquemExcelHora_(x.minimumMinutes),
