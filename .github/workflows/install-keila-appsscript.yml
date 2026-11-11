@@ -1,0 +1,66 @@
+name: Instalar e testar gerador Keila sem email
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/install-keila-appsscript.yml'
+permissions:
+  contents: read
+concurrency:
+  group: install-keila-appsscript
+  cancel-in-progress: false
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Testes locais sem envio
+        run: |
+          node --check < apps-script/arquem-relatorios-anexos.gs
+          node --test tests/appsscript-complete-integration.test.mjs tests/appsscript-keila-dry-run.test.mjs
+      - name: Instalar CLI do Apps Script
+        run: npm install --no-save @google/clasp@3
+      - name: Configurar login temporario
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "$CLASPRC_JSON"
+          printf '%s' "$CLASPRC_JSON" | node -e 'let s="";process.stdin.on("data",b=>s+=b);process.stdin.on("end",()=>JSON.parse(s))'
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+      - name: Atualizar apenas gerador e preservar arquivos existentes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/keila-script"
+          cd "$RUNNER_TEMP/keila-script"
+          printf '%s' '{"scriptId":"1WUhIenOGO-B_jAkYgECmpBq-jMeeFrTghwElVyBdKLTTICWnFzgkWmm8"}' > .clasp.json
+          "$GITHUB_WORKSPACE/node_modules/.bin/clasp" pull
+          test -f "arquem-relatorios-anexos.gs.js"
+          test -f "Código.js"
+          test -f "validacao-sem-envio.js"
+          test "$(grep -h -E -c '^function doPost\\(' -- *.js | awk -F: '{sum+=$1} END {print sum+0}')" -eq 1
+          sha256sum "Código.js" "validacao-sem-envio.js" > "$RUNNER_TEMP/keila-original-sha"
+          cp "$GITHUB_WORKSPACE/apps-script/arquem-relatorios-anexos.gs" "arquem-relatorios-anexos.gs.js"
+          "$GITHUB_WORKSPACE/node_modules/.bin/clasp" push --force
+          "$GITHUB_WORKSPACE/node_modules/.bin/clasp" pull
+          sha256sum -c "$RUNNER_TEMP/keila-original-sha"
+          grep -q 'arquem-3-keila-quality' "arquem-relatorios-anexos.gs.js"
+          grep -q 'function arquemTesteKeilaSemEnvio' "arquem-relatorios-anexos.gs.js"
+          echo 'Código de anexos atualizado e outros arquivos preservados. Não houve envio de e-mail.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Testar geracao REAL sem email
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/keila-script"
+          "$GITHUB_WORKSPACE/node_modules/.bin/clasp" run arquemTesteKeilaSemEnvio
+      - name: Limpar credenciais
+        if: always()
+        run: rm -f "$HOME/.clasprc.json"
