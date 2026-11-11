@@ -1,0 +1,20 @@
+name: Validate Ticket Manager API diagnostics
+on:
+  pull_request:
+    paths:
+      - 'api/ticket-manager.js'
+      - 'tests/ticket-manager-api-diagnostics.test.mjs'
+      - '.github/workflows/validate-ticket-manager-api.yml'
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check API syntax
+        run: node --check api/ticket-manager.js
+      - name: Test API responses without network access
+        run: node --test tests/ticket-manager-api-diagnostics.test.mjs
