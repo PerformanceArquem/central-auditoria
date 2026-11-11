@@ -2524,8 +2524,7 @@ function printManagerReport(){
  const w=window.open('','_blank','width=850,height=650');
  if(!w){$('managerReportNotice').textContent='Permita pop-ups para imprimir o resumo.';return}
  const safe=esc(el.value);
- w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Resumo Gerencial</title><style>body{font:14px/1.6 Arial,sans-serif;padding:34px;color:#192842}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body><h2>Resumo Gerencial de Chamados</h2><pre>'+safe+'</pre><script src="/production-flow.js"></script>
-</body></html>');
+ w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Resumo Gerencial</title><style>body{font:14px/1.6 Arial,sans-serif;padding:34px;color:#192842}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body><h2>Resumo Gerencial de Chamados</h2><pre>'+safe+'</pre></body></html>');
  w.document.close();w.focus();w.print();
 }
 // Reinterpreta eventos antigos criados pelo navegador antes da correção de fuso.
@@ -5634,5 +5633,6 @@ window.clientImpactInit=()=>{
 })();
 </script>
 
+<script src="/production-flow.js"></script>
 </body>
 </html>
