@@ -1327,7 +1327,7 @@ async function keilaQualityForPeriod(rec:R,from:string,to:string) {
 async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipients:R[]) {
  if(E('PRODUCTION_FLOW_KEILA_ENABLED')!=='true')return [];
  const matches=recipients.filter(r=>r.id===KEILA_PRODUCTION_FLOW_RECIPIENT_ID&&r.active===true&&norm(r.name)==='keila'&&
-  r.scope==='management'&&isEmail(String(r.email||'')));
+  r.scope==='management'&&norm(r.email)==='inteligencia.gerencia@arquem.com.br');
  if(matches.length!==1)throw new Error('Relatório de Produção: cadastro exclusivo de Keila não validado');
  if(E('REPORT_ATTACHMENTS_ENABLED')!=='true')throw new Error('Relatório de Produção exige PDF e Excel habilitados');
  const rec=matches[0];
