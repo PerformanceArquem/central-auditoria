@@ -5271,8 +5271,9 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     try{
       await verify();
       // Não modificar outras autorizações (ex.: cobrança), nem o modo de agendamento.
-      const original=Array.isArray(current.allowed_report_types)?current.allowed_report_types:[];
-      const preserve=original.filter(v=>v!=='general'&&v!=='production_flow');
+      const original=Array.isArray(current.allowed_report_types)?current.allowed_report_types:null;
+      // Cadastros legados (NULL) autorizavam também cobranças: preservar essa permissão.
+      const preserve=(original===null?['ticket_followup']:original).filter(v=>v!=='general'&&v!=='production_flow');
       const codes=[
         ...preserve,
         ...[...row.querySelectorAll('[data-release-code]:checked')].map(el=>el.getAttribute('data-release-code'))
