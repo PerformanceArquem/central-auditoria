@@ -1902,6 +1902,34 @@ async function ticketChargeAiDraft(payload:R):Promise<Response>{
     warning:'Sugestao de IA: revise o texto e visualize a previa antes de enviar. Nenhum e-mail foi enviado.'});
 }
 
+// A restrição de prazo e de quantidade precisa existir no servidor, não só na tela.
+async function verifyTicketChargeRepeat(ids:string[],recipient:string){
+ const [rules,all]=await Promise.all([
+  db('audit_ticket_followup_policy?select=interval_days,max_reminders&id=eq.1&limit=1'),
+  db('audit_ticket_charge_history?select=recipient,ticket_ids,status,created_at,sent_at&recipient=eq.'+
+   encodeURIComponent(recipient)+'&order=created_at.desc&limit=1000')
+ ]) as [R[],R[]];
+ const d=Math.max(4,Math.min(30,Number(rules[0]?.interval_days)||5));
+ const max=Math.max(1,Math.min(3,Number(rules[0]?.max_reminders)||3));
+ for(const id of ids){
+  const related=all.filter(x=>Array.isArray(x.ticket_ids)&&x.ticket_ids.some((t:unknown)=>String(t)===id));
+  if(related.some(x=>x.status!=='sent'))
+   throw Error('Chamado #'+id+': já existe tentativa sem confirmação. Confira o histórico antes de enviar novamente.');
+  const sent=related.filter(x=>x.status==='sent');
+  if(sent.length>=max+1)
+   throw Error('Chamado #'+id+': limite de '+max+' reiterações atingido.');
+  if(sent.length){
+   const at=Math.max(...sent.map(x=>Date.parse(String(x.sent_at||x.created_at||''))).filter(Number.isFinite));
+   if(!Number.isFinite(at))throw Error('Chamado #'+id+': data da cobrança anterior indisponível.');
+   const due=at+d*86400000;
+   if(Date.now()<due){
+    const label=new Date(due).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
+    throw Error('Chamado #'+id+': aguarde até '+label+' para reiterar a cobrança.');
+   }
+  }
+ }
+}
+
 async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  const action=String(payload.action||'');
  if(action==='ticket_charge_history')return ticketChargeHistory();
@@ -1933,6 +1961,7 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   return json({ok:true,preview:true,recipient,subject:corporateCopy(draft.subject),text:corporateCopy(draft.text),
     html:corporateCopy(draft.html),ticketCount:draft.tickets.length,ids,guidance:draft.guidance});
  if(action!=='ticket_charge_send')return json({ok:false,error:'Ação não autorizada.'},400);
+ await verifyTicketChargeRepeat(ids,recipient);
  const sender=await ticketChargeAdminUser(req);
  const snapshot=draft.tickets.map(x=>({id:x.id,subject:x.subject,client:x.client,sector:x.sector,
   owner:x.owner,status:x.status,url:x.url}));
