@@ -5263,11 +5263,11 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
           [['daily_enabled','Diário'],['weekly_enabled','Semanal'],['monthly_enabled','Mensal'],['annual_enabled','Anual']].map(([field,label])=>
             '<label style="white-space:nowrap"><input type="checkbox" data-release-frequency="'+field+'" '+(x[field]===true?'checked ':'')+(!x.active?'disabled ':'')+'> '+label+'</label>'
           ).join('')+'</div></td>'+
-        '<td><div style="display:grid;gap:5px">'+
+        '<td>'+(flowEligible?'Somente rastreabilidade da Produção':('<div style="display:grid;gap:5px">'+
           [['daily_detail','Dia a dia'],['customers','Empresas por horas'],['activities','Atividades / Excel']].map(([field,label])=>
             '<label style="white-space:nowrap"><input type="checkbox" data-release-section="'+field+'" '+(x.report_sections?.[field]!==false?'checked ':'')+(!x.active?'disabled ':'')+'> '+label+'</label>'
-          ).join('')+'</div></td>'+
-        '<td><label><input type="checkbox" data-release-code="general" '+(general?'checked ':'')+(!x.active?'disabled ':'')+'> Liberado</label></td>'+
+          ).join('')+'</div>'))+'</td>'+
+        '<td>'+(flowEligible?'Não se aplica':'<label><input type="checkbox" data-release-code="general" '+(general?'checked ':'')+(!x.active?'disabled ':'')+'> Liberado</label>')+'</td>'+
         '<td>'+(flowEligible?'<label><input type="checkbox" data-release-code="production_flow" '+(flow?'checked ':'')+(!x.active?'disabled ':'')+'> Liberado</label>':'Exclusivo Keila')+'</td>'+
         '<td>'+(x.active?'Ativo':'Inativo')+(legacy?' · regras anteriores':' · personalizado')+'</td>'+
         '<td><button type="button" class="s" data-release-save="'+id+'" '+(!x.active?'disabled':'')+'>Salvar liberação</button></td></tr>';
@@ -5297,10 +5297,9 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const original=Array.isArray(current.allowed_report_types)?current.allowed_report_types:null;
       // Cadastros legados (NULL) autorizavam também cobranças: preservar essa permissão.
       const preserve=(original===null?['ticket_followup']:original).filter(v=>v!=='general'&&v!=='production_flow');
-      const codes=[
-        ...preserve,
-        ...[...row.querySelectorAll('[data-release-code]:checked')].map(el=>el.getAttribute('data-release-code'))
-      ];
+      const codes=String(id)===flowRecipientId?
+        (row.querySelector('[data-release-code="production_flow"]')?.checked?['production_flow']:[]):
+        [...preserve,...[...row.querySelectorAll('[data-release-code]:checked')].map(el=>el.getAttribute('data-release-code'))];
       const frequencyFields=['daily_enabled','weekly_enabled','monthly_enabled','annual_enabled'];
       const frequencies=Object.fromEntries(frequencyFields.map(field=>
         [field,Boolean(row.querySelector('[data-release-frequency="'+field+'"]')?.checked)]));
