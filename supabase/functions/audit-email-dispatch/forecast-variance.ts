@@ -1,4 +1,5 @@
 // Snapshot de previsões encerradas para relatório executivo, sem IA externa.
+import {recipientAllowsCollaborator} from './recipient-collaborators.ts';
 type R = Record<string,any>;
 type ForecastAlert = {
   id:string;subject:string;client:string;sector:string;owner:string;status:string;
@@ -31,7 +32,7 @@ export async function forecastSection(
  const ownerMap=new Map((Array.isArray(owners)?owners:[]).map(x=>[
   String(x.ticket_id),String(x.owner?.businessName||x.owner?.name||'Não informado')
  ]));
- const rows=qualified.filter(x=>!person||norm(ownerMap.get(String(x.ticket_id)))===person).map(x=>{
+ const rows=qualified.filter(x=>recipientAllowsCollaborator(rec,ownerMap.get(String(x.ticket_id)))).map(x=>{
   const expected=Number(x.estimated_hours),minutes=Number(x.actual_minutes);
   return {id:String(x.ticket_id),subject:String(x.subject||'Sem assunto'),
    client:String(x.client_name||'Não informado'),sector:String(x.sector||'Sem setor'),
@@ -67,3 +68,4 @@ export async function forecastSection(
   '<p style="padding:10px 14px 15px;color:#60728b;font-size:11px;line-height:1.5;margin:0">'+esc(disclaimer)+'</p></section>';
  return {text,html,rows};
 }
+

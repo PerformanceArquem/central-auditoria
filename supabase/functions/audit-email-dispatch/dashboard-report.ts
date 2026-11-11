@@ -1,4 +1,5 @@
 // Read-only collaborator preview: no dispatch, no email or write.
+import {recipientAllowsCollaborator} from './recipient-collaborators.ts';
 type R=Record<string,any>;
 type Dependencies={
  source:(from:string,to:string)=>Promise<R[]>;
@@ -39,7 +40,7 @@ export async function dashboardReport(payload:R,deps:Dependencies):Promise<R>{
  const labels=(Array.isArray(selected?.sectors)&&selected.sectors.length?selected.sectors:[selected?.sector]).filter(Boolean);
  const [appointments,holidays]=await Promise.all([deps.source(start,end),deps.holidays()]);
  const allowed=new Set(configured);
- const filtered=appointments.filter(a=>!selected||allowed.has(deps.norm(a.sector)));
+ const filtered=appointments.filter(a=>(!selected||allowed.has(deps.norm(a.sector)))&&(!selected||recipientAllowsCollaborator(selected,a.collaborator_name)));
  const records=new Map<string,{collaborator:string;sectors:Set<string>;ticketIds:Set<string>;entries:number;minutes:number}>();
  for(const a of filtered){
   const collaborator=String(a.collaborator_name||'').trim(),sector=String(a.sector||'').trim();
@@ -89,3 +90,4 @@ export async function dashboardReport(payload:R,deps:Dependencies):Promise<R>{
   coverage+' Apenas apontamentos importados do Movidesk. Referências de jornada não substituem ponto ou escala. Nenhum e-mail foi enviado.',
   generatedAt:new Date().toISOString()};
 }
+

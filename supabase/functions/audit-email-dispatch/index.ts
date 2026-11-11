@@ -1,4 +1,5 @@
 import {forecastSection} from "./forecast-variance.ts";
+import {recipientCollaborators,recipientAllowsCollaborator,recipientSelectionKey} from "./recipient-collaborators.ts";
 import {dashboardReport} from "./dashboard-report.ts";
 import {composeTicketCharge} from "./ticket-charge.ts";
 import {chargeTicketLookup} from "./ticket-charge-lookup.ts";
@@ -250,7 +251,7 @@ function supportRatingCache() {
     }
     const rows = await pending;
     const person = norm(rec.collaborator_name);
-    const metric = rows && ratingSummary(rows.filter(row => !person || norm(row.collaborator_name) === person)).superadores;
+    const metric = rows && ratingSummary(rows.filter(row => recipientAllowsCollaborator(rec,row.collaborator_name))).superadores;
     const result = metric?.percent != null
       ? `${metric.percent.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% (${metric.points} de ${metric.totalPoints} pontos)`
       : rows ? 'Sem pontuação no período' : 'Avaliações indisponíveis no momento';
@@ -311,7 +312,7 @@ function ticketAlerts(rec:R,records:R[]) {
       if(!matchesSector(sector))continue;
       // Relatório individual: somente tickets atualmente atribuídos à pessoa,
       // não todos os tickets nos quais ela já apontou horas.
-      if(person&&norm(owner)!==person)continue;
+      if(!recipientAllowsCollaborator(rec,owner))continue;
     }
     const id=String(r.ticket_id||t.id||'');
     if(!/^\d+$/.test(id))continue;
@@ -558,7 +559,7 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metri
  const target=Math.round(targetPerDay*m.days);
  const minimum=Math.round(target*minPercent/100);
  const missing=m.appointments===0;
- const person=safe(rec.collaborator_name)||'Equipe';
+ const person=safe(recipientCollaborators(rec).join(', '))||'Equipe';
  const sector=(Array.isArray(rec.sectors)&&rec.sectors.length?rec.sectors.map(safe).join(' · '):(safe(rec.sector)||(rec.scope==='management'?'Todos os setores':'')))||'Gestão';
  const k=REPORT_LABEL[kind];
  const badge=manual?'TESTE MANUAL':partial?'DADOS PARCIAIS':'RELATÓRIO DE APONTAMENTOS';
@@ -610,7 +611,8 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metri
 function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportKind, hol: Set<string>, authorizedSingleManual = false, clients: R[] = []) {
   const scope = String(rec.scope || 'sector');
   if (!['sector', 'management'].includes(scope)) throw new Error('Escopo de destinatario nao reconhecido');
-  const person = norm(rec.collaborator_name);
+  const selectedPeople=recipientCollaborators(rec);
+  const person=selectedPeople.length===1?norm(selectedPeople[0]):'';
   // Compatibilidade: cadastros antigos usam sector, novos podem ter varios sectors.
   const sectorLabels = (Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors : [rec.sector]).map(safe).filter(Boolean);
   const selectedSectors = [...new Set(sectorLabels.map(norm))];
@@ -627,7 +629,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
   };
   const selected = appts.filter(a =>
     ((scope === 'management' && !selectedSectors.length) || sameSector(a.sector)) &&
-    (!person || norm(a.collaborator_name) === person));
+    recipientAllowsCollaborator(rec,a.collaborator_name));
   const minutes = selected.reduce((s, a) => s + Number(a.duration_minutes || 0), 0);
   const days = workdays(from, to, hol);
   const targetPerDay = Number(rec.daily_target_minutes ?? 480);
@@ -828,7 +830,7 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
  const data=report.exportData as R;
  const clientNames=new Map(clients.map(x=>[String(x.ticket_id),String(x.client_name||'')]));
  return {
-   schema:'arquem-mail-v1',
+   schema:'arquem-mail-v1',recipientSelectionKey:recipientSelectionKey(rec),
    title:(kind==='monthly'||kind==='annual'?'Balancete ':'Relatório ')+REPORT_LABEL[kind].toLowerCase()+' - '+safe(rec.name||rec.sector||'Gestão'),
    from,to,partial,historicalIncomplete,
    metrics:report.metrics,
@@ -1347,7 +1349,7 @@ async function prepareReports() {
       '&select=dispatch_key,reconciliation_success_at,expires_at,report_data&limit=1');
     if(existing.length && Date.parse(String(existing[0].reconciliation_success_at))===Date.parse(String(coverage.lastSuccess)) &&
       Date.parse(String(existing[0].expires_at))>Date.now()+5*60000 &&
-      Array.isArray(existing[0].report_data?.forecastVariances)){
+      Array.isArray(existing[0].report_data?.forecastVariances)&&existing[0].report_data?.recipientSelectionKey===recipientSelectionKey(t.r)){
       results.push({key,skipped:'Conteudo ja preparado'});continue;
     }
     if(results.filter(x=>x.status==='prepared').length>=2)break;
@@ -1388,7 +1390,7 @@ async function cachedReport(t:ScheduledReport) {
   const rows=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
     '&status=eq.ready&select=subject,body_text,body_html,report_data,reconciliation_success_at,expires_at&limit=1');
   if(!rows.length||Date.parse(String(rows[0].expires_at))<=Date.now()||
-    !Array.isArray(rows[0].report_data?.forecastVariances))return null;
+    !Array.isArray(rows[0].report_data?.forecastVariances)||rows[0].report_data?.recipientSelectionKey!==recipientSelectionKey(t.r))return null;
   const coverage=await recentCoverage(t.from,t.to);
   if(!coverage.ready||Date.parse(String(coverage.lastSuccess))!==Date.parse(String(rows[0].reconciliation_success_at)))return null;
   return rows[0] as R;
@@ -1766,3 +1768,4 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return withCors(req, new Response(null, { status: 204 }));
   return withCors(req, await handleRequest(req));
 });
+

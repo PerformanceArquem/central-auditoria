@@ -26,7 +26,10 @@ jobs:
         run: deno test tests/forecast-email.test.ts
       - name: Test collaborator preview and period validation
         run: deno test tests/dashboard-report.test.ts
+      - name: Test explicit collaborator selection and legacy compatibility
+        run: deno test tests/recipient-collaborators.test.ts
       - name: Test selected-ticket email safety
         run: deno test tests/ticket-charge.test.ts
       - name: Test fallback ticket sources and missing IDs
         run: deno test tests/ticket-charge-lookup.test.ts
+
