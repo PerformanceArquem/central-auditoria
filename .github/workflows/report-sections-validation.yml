@@ -27,6 +27,8 @@ jobs:
         run: deno check supabase/functions/audit-email-dispatch/index.ts
       - name: Run all 8 combinations and legacy cases
         run: deno test supabase/functions/audit-email-dispatch/report-sections_test.ts
+      - name: Verify Keila contains no ratings or CSAT
+        run: deno test supabase/functions/audit-email-dispatch/production-flow-keila_test.ts
       - name: Check Apps Script JavaScript syntax
         run: |
           cp apps-script/arquem-relatorios-anexos.gs /tmp/arquem-relatorios-anexos.js
