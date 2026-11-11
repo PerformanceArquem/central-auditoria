@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - 'api/audit-production-flow.js'
-      - 'lib/production-flow.mjs'
+      - 'lib/production-flow.cjs'
       - 'production-flow.js'
       - 'index.html'
       - 'tests/production-flow*.test.mjs'

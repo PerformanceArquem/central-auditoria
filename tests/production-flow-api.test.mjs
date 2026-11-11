@@ -1,8 +1,8 @@
 import {test,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-const model=new URL('../lib/production-flow.mjs',import.meta.url).href;
-const code=readFileSync(new URL('../api/audit-production-flow.js',import.meta.url),'utf8').replace("'../lib/production-flow.mjs'",JSON.stringify(model));
+const model=new URL('../lib/production-flow.cjs',import.meta.url).href;
+const code=readFileSync(new URL('../api/audit-production-flow.js',import.meta.url),'utf8').replace("'../lib/production-flow.cjs'",JSON.stringify(model));
 const {default:handler}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
 const original=globalThis.fetch,env={...process.env};
 after(()=>{globalThis.fetch=original;for(const k of ['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','MOVIDESK_TOKEN']){if(env[k]===undefined)delete process.env[k];else process.env[k]=env[k];}});

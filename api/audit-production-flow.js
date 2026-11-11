@@ -1,4 +1,4 @@
-import {buildProductionFlow} from '../lib/production-flow.mjs';
+import {buildProductionFlow} from '../lib/production-flow.cjs';
 const PAGE=250,MAX=20000;
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const validDate=s=>/^\d{4}-\d\d-\d\d$/.test(s)&&Number.isFinite(Date.parse(s))&&new Date(s).toISOString().slice(0,10)===s;

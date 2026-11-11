@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildProductionFlow,utc} from '../lib/production-flow.mjs';
+import {buildProductionFlow,utc} from '../lib/production-flow.cjs';
 const p=(id,name=id)=>({id,businessName:name});
 const people=[{...p('P'),teams:['Produção - CPO']},{...p('Q'),teams:['Produção - CPO']},{...p('S'),teams:['Suporte']}];
 const at=d=>'2026-11-'+d+'T12:00:00';
