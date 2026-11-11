@@ -4337,7 +4337,12 @@ async function cloudApi(action,method='GET',body=null,params={}){
   if(!session?.access_token)throw new Error('Sessão expirada. Entre novamente.');
   const u=new URL('/api/ticket-manager',location.origin);u.searchParams.set('action',action);Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,String(v)));
   const opt={method,credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json','Authorization':'Bearer '+session.access_token}};
-  if(body!==null){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body)}
+  if(body!==null){
+    const payload=JSON.stringify(body);
+    if(!payload||payload.length<2)throw new Error('Dados de sincronizacao invalidos; nada foi enviado.');
+    opt.headers['Content-Type']='application/json;charset=utf-8';
+    opt.body=payload;
+  }
   const r=await fetch(u.toString(),opt);const j=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(j.error||('Erro HTTP '+r.status+' ao acessar o Supabase'));
   return j;
@@ -4364,12 +4369,38 @@ function applyCloudSettings(){
   try{liveEvents=JSON.parse(localStorage.getItem('md_live_events')||'[]');showLiveEvents()}catch(e){}
 }
 function cloudSig(t){return hash(JSON.stringify(t))}
+// Limites conservadores da sincronizacao compartilhada: os registros locais nao sao alterados.
+const CLOUD_BATCH_TICKETS=2;
+const CLOUD_MAX_BATCH_BYTES=90000;
 async function cloudSaveTickets(list){
   if(!cloudReady||!list.length)return;
   const pending=[];
-  for(const t of list){const id=String(t.id??'');if(!id)continue;const sig=cloudSig(t);if(cloudTicketSig.get(id)!==sig)pending.push({t,sig})}
-  for(let i=0;i<pending.length;i+=5){const part=pending.slice(i,i+5);await cloudApi('upsertTickets','POST',{tickets:part.map(x=>x.t)});part.forEach(x=>cloudTicketSig.set(String(x.t.id),x.sig))}
-  if(pending.length)cloudMessage(`Supabase conectado · ${pending.length} chamado(s) sincronizado(s) · ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`,'okc');
+  for(const t of list){
+    const id=String(t?.id??'');if(!id)continue;
+    const sig=cloudSig(t);
+    if(cloudTicketSig.get(id)!==sig)pending.push({t,sig});
+  }
+  let saved=0;
+  for(let i=0;i<pending.length;){
+    let batch=[];
+    let size=0;
+    while(i<pending.length && batch.length<CLOUD_BATCH_TICKETS){
+      const entry=pending[i];
+      // Serializar antes de enviar detecta dados que nao podem ser representados como JSON.
+      let bytes=0;
+      try{bytes=new TextEncoder().encode(JSON.stringify(entry.t)).length}
+      catch(e){throw new Error('Falha ao serializar chamado #'+entry.t.id+' para a nuvem. Cache local preservado.')}
+      if(bytes>CLOUD_MAX_BATCH_BYTES)throw new Error('Chamado #'+entry.t.id+' excede o limite seguro de transferencia. Cache local preservado.');
+      if(batch.length && size+bytes>CLOUD_MAX_BATCH_BYTES)break;
+      batch.push(entry);size+=bytes;i++;
+    }
+    // Em falhas, so tickets confirmados permanecem marcados como sincronizados;
+    // os demais serao novamente enviados na proxima tentativa.
+    await cloudApi('upsertTickets','POST',{tickets:batch.map(x=>x.t)});
+    batch.forEach(x=>cloudTicketSig.set(String(x.t.id),x.sig));
+    saved+=batch.length;
+  }
+  if(saved)cloudMessage(`Supabase conectado · ${saved} chamado(s) sincronizado(s) · ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`,'okc');
 }
 async function cloudLoadState(){const j=await cloudApi('loadState');const state=j.state||{};cloudHydrating=true;try{Object.entries(state).forEach(([k,v])=>{if(k.startsWith('md_')&&!CLOUD_EXCLUDE.has(k)&&typeof v==='string')localStorage.setItem(k,v)});}finally{cloudHydrating=false}cloudStateUpdated=j.updated_at||'';applyCloudSettings()}
 async function cloudLoadAllTickets(){
