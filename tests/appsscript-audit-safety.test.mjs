@@ -14,11 +14,12 @@ test('pipeline somente leitura e não publica nem executa scripts',()=>{
 test('rejeita projeto sem doPost válido',async()=>{
  const dir=await mkdtemp(path.join(tmpdir(),'audit-script-'));
  try{
-  const source=path.join(dir,'new.gs'),old=path.join(dir,'Old.gs');
+  const remote=path.join(dir,'remote');await mkdir(remote);
+  const source=path.join(dir,'new.gs'),old=path.join(remote,'Old.gs');
   await writeFile(source,'function doPost(e) {}\nfunction arquemCreateReportAttachments_() {}');
   await writeFile(old,'function otherHandler(e) {}');
   let failed=false;
-  try{execFileSync('node',[script,dir,source],{stdio:'pipe'})}catch(e){failed=e.status===2;}
+  try{execFileSync('node',[script,remote,source],{stdio:'pipe'})}catch(e){failed=e.status===2;}
   assert.equal(failed,true);
  }finally{await rm(dir,{recursive:true,force:true})}
 });
