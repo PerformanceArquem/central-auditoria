@@ -64,8 +64,8 @@ export function keilaProductionReport(
  const title='Entradas e Saídas da Produção — '+({daily:'Diário',weekly:'Semanal',monthly:'Mensal'}[kind]);
  const period=data.from.split('-').reverse().join('/')+' a '+data.to.split('-').reverse().join('/');
  const count=data.movements.length;
- const detail=data.movements.slice(0,500);
- const limited=count>500;
+ const detail=data.movements.slice(0,450);
+ const limited=count>450;
  const lines=[
   'ARQUEM SISTEMAS · CENTRAL DE AUDITORIA',title,'Período: '+period,
   'Entraram na Produção: '+data.entered+' chamados distintos',
@@ -73,7 +73,7 @@ export function keilaProductionReport(
   'Movimentações registradas: '+data.entryMovements+' entradas / '+data.exitMovements+' saídas.',
   'Finalizações não são contabilizadas como saídas.',
   'Um chamado pode aparecer nos dois indicadores ou ser movimentado mais de uma vez.',
-  limited?'Atenção: detalhes limitados aos 500 primeiros eventos; totais completos.':'',
+  limited?'Atenção: detalhes limitados aos 450 primeiros eventos; totais completos.':'',
   'DETALHAMENTO',
   ...detail.map(m=>['#'+m.id,m.direction==='entry'?'Entrada':'Saída',fmt(m.at),m.fromTeam+' → '+m.toTeam,'Responsável: '+m.responsible,'Movimentado por: '+m.actor,m.url].join(' | '))
  ].filter(Boolean);
@@ -87,14 +87,14 @@ export function keilaProductionReport(
  '<tr><td style="background:#142f50;color:#fff;padding:25px"><small>ARQUEM SISTEMAS · CENTRAL DE AUDITORIA</small><h1 style="font-size:22px;margin:10px 0 0">'+esc(title)+'</h1><p>Período: '+esc(period)+'</p></td></tr>'+
  '<tr><td style="padding:24px"><table role="presentation" width="100%"><tr><td style="background:#eef5ff;padding:20px"><b>ENTRARAM</b><h2>'+data.entered+'</h2></td><td style="background:#e8f7ef;padding:20px"><b>SAÍRAM POR TRANSFERÊNCIA</b><h2>'+data.exited+'</h2></td></tr></table>'+
  '<p style="font-size:12px;color:#53647c">Contagens de chamados distintos. Encerramentos não entram nas saídas. '+data.entryMovements+' movimentações de entrada e '+data.exitMovements+' de saída.</p>'+
- (limited?'<p><b>Detalhamento limitado a 500 eventos; totais completos.</b></p>':'')+
+ (limited?'<p><b>Detalhamento limitado a 450 eventos; totais completos.</b></p>':'')+
  '<h3>Chamados e movimentações</h3><table width="100%" style="font-size:12px;border-collapse:collapse"><tr style="background:#edf3fb"><th>Chamado</th><th>Movimento</th><th>Data</th><th>Origem / destino</th><th>Responsável</th></tr>'+table+'</table>'+
  '</td></tr><tr><td style="background:#f5f8fc;padding:18px;color:#60748c;font-size:11px">ARQUEM SISTEMAS · Gestão de Qualidade</td></tr></table></td></tr></table></body></html>';
  // O gerador existente cria PDF e Excel a partir deste pacote corporativo.
  const packet={schema:'arquem-mail-v1',title,from:data.from,to:data.to,partial:false,historicalIncomplete:false,
   metrics:{tickets:new Set(data.movements.map(m=>m.id)).size,appointments:0,minutes:0,entered:data.entered,exited:data.exited,entryMovements:data.entryMovements,exitMovements:data.exitMovements},
-  collaborators:[],customers:[],activities:[],
-  daily:detail.map(m=>({date:day(m.at),person:m.actor,sector:m.fromTeam+' → '+m.toTeam,minutes:0,referenceMinutes:0,minimumMinutes:0,status:m.direction==='entry'?'Entrada':'Saída'})),
+  collaborators:[],customers:[],activities:[],daily:[],
+  productionFlow:{entered:data.entered,exited:data.exited,entryMovements:data.entryMovements,exitMovements:data.exitMovements},
   tickets:detail.map(m=>({id:m.id,client:m.client,owner:m.responsible,status:(m.direction==='entry'?'Entrada':'Saída')+' · '+fmt(m.at)+' · '+m.fromTeam+' → '+m.toTeam,ageDays:0,url:m.url})),
   forecastVariances:[]};
  return {title,text:lines.join('\n'),html,packet,limited};
