@@ -3243,10 +3243,12 @@ async function emailAttachmentCheck(){
    const formats=Array.isArray(data.formats)?data.formats.filter(x=>x==='pdf'||x==='xlsx'):[];
    const ready=data.ready===true,enabled=data.enabled===true;
    const keilaReady=data.keilaGeneratorReady===true;
+   const sectionsReady=data.sectionPermissionsSupported===true;
+   const sectionLabel=sectionsReady?'Seleção de Dia a dia, Empresas e Atividades: suportada.':'Seleção de conteúdo: NÃO confirmada pelo Apps Script instalado; envios personalizados serão bloqueados.';
    const general=ready&&enabled?'PDF e Excel corporativos: gerador ativo.':ready?'PDF e Excel corporativos: homologados, mas o envio de anexos está desativado.':'PDF e Excel corporativos: pendentes — '+String(data.status||'revisar o serviço e o papel timbrado')+'.';
    const specific=keilaReady?'Relatório Keila: versão com qualidade homologada.':'Relatório Keila: a homologação específica de qualidade ainda não foi confirmada pelo Web App.';
-   status.textContent=general+' '+specific+' Consulta sem envio de e-mails.'+(formats.length?' Formatos: '+formats.join(' e ')+'.':'');
-   status.style.color=keilaReady&&ready&&enabled?'#167052':'#936018';
+   status.textContent=general+' '+specific+' '+sectionLabel+' Consulta sem envio de e-mails.'+(formats.length?' Formatos: '+formats.join(' e ')+'.':'');
+   status.style.color=keilaReady&&ready&&enabled&&sectionsReady?'#167052':'#936018';
  }catch(e){
    status.textContent='Não foi possível validar os anexos: '+String(e?.message||e)+'. Nenhum e-mail foi enviado.';
    status.style.color='#a23737';
@@ -5854,6 +5856,7 @@ async function checkAttachments(){
    const result=await call({action:'attachment_health'});
    status.textContent='Anexos PDF/XLSX: '+(result.ready?'gerador informado como pronto':'pendentes')+
      '. '+result.status+' · Ativação automática: '+(result.enabled?'ligada':'desligada')+
+     '. Seções individuais: '+(result.sectionPermissionsSupported?'suportadas':'não confirmadas pelo Apps Script instalado')+
      '. Esta verificação não gera arquivos e não confirma a marca-d’água visual.';
  }catch(e){status.textContent='Não foi possível verificar anexos: '+e.message}
  finally{button.disabled=false}
