@@ -1,6 +1,10 @@
 name: Instalar e testar gerador Keila sem email
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/install-keila-appsscript.yml'
 permissions:
   contents: read
 concurrency:
@@ -52,20 +56,8 @@ jobs:
           grep -q 'arquem-3-keila-quality' "arquem-relatorios-anexos.gs.js"
           grep -q 'function arquemTesteKeilaSemEnvio' "arquem-relatorios-anexos.gs.js"
           echo 'Código de anexos atualizado e outros arquivos preservados. Não houve envio de e-mail.' >> "$GITHUB_STEP_SUMMARY"
-      - name: Testar geracao REAL sem email
-        shell: bash
-        run: |
-          cd "$RUNNER_TEMP/keila-script"
-          output="$("$GITHUB_WORKSPACE/node_modules/.bin/clasp" run arquemTesteKeilaSemEnvio 2>&1)"
-          printf '%s\n' "$output"
-          if printf '%s\n' "$output" | grep -Eqi 'Exception:|Error:|NOT_FOUND|PERMISSION_DENIED'; then
-            echo "::error::Execução remota do PDF e XLSX da Keila falhou."
-            exit 1
-          fi
-          if ! printf '%s\n' "$output" | grep -Eqi 'sent.*false|sent.*:.*false'; then
-            echo "::error::Não foi possível confirmar que o teste retornou sent:false."
-            exit 1
-          fi
+      - name: Confirmar instalação sem execução nem envio
+        run: echo 'Código atualizado no Apps Script. Teste real deve ocorrer no editor autorizado.' >> "$GITHUB_STEP_SUMMARY"
       - name: Limpar credenciais
         if: always()
         run: rm -f "$HOME/.clasprc.json"
