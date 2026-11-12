@@ -116,7 +116,7 @@ export default async function handler(req,res){
   const priorDay=addDays(today,-1);
   const coverageReady=rec.completed===true&&!rec.last_error&&
     Number.isFinite(lastSyncMs)&&ageSyncMs>=0&&ageSyncMs<=36*60*60*1000&&
-    /^\\d{4}-\\d{2}-\\d{2}$/.test(lastCovered)&&lastCovered>=priorDay;
+    /^\d{4}-\d{2}-\d{2}$/.test(lastCovered)&&lastCovered>=priorDay;
   // A ausência de um registro não pode ser usada como alerta quando a conciliação está incompleta.
   const withoutAppointment=coverageReady?open.filter(t=>t.history?.last
    ? days(t.history.last,today)>=withoutAppointmentDays
