@@ -43,7 +43,7 @@ export default async function handler(req,res){
    let data=[];
    for(let offset=0;offset<MAX;offset+=PAGE){
     const u=new URL(base+'/rest/v1/'+table);
-    u.searchParams.set('select',columns);u.searchParams.set('order',table==='audit_direct_tickets'?'ticket_id.asc':'appointment_key.asc');
+    u.searchParams.set('select',columns);u.searchParams.set('order',table==='audit_direct_tickets'?'ticket_id.asc':table==='audit_direct_appointments'?'appointment_key.asc':table==='audit_recent_reconcile_state'?'job_name.asc':'id.asc');
     u.searchParams.set('limit',String(PAGE));u.searchParams.set('offset',String(offset));
     for(const [k,v] of Object.entries(params))u.searchParams.set(k,v);
     const response=await fetch(u,{headers:h,signal:ctrl.signal});
