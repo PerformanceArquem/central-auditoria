@@ -74,8 +74,13 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
     if(hh&&Number(hh)<24)hour.set(hh,(hour.get(hh)||0)+1);
     const ext=String(direction==='outbound'?row.ramal_id_origem??'':row.ramal_id??'');
     if(/^\d{1,12}$/.test(ext)){
-      const e=extension.get(ext)||{extension:ext,total:0,answered:0,unanswered:0,talkSeconds:0};
-      e.total++;if(status==='answered'){e.answered++;if(talk!=null)e.talkSeconds+=talk;}
+      const e=extension.get(ext)||{extension:ext,total:0,answered:0,unanswered:0,talkSeconds:0 as number|null,missingTalkSamples:0};
+      e.total++;
+      if(status==='answered'){
+        e.answered++;
+        if(talk==null)e.missingTalkSamples++;
+        else e.talkSeconds=(e.talkSeconds??0)+talk;
+      }
       if(status==='unanswered')e.unanswered++;
       extension.set(ext,e);
     }
@@ -105,6 +110,7 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
  metrics.tmeSeconds=queueConfigured&&qCount&&!qMissing?Math.round(qSum/qCount):null;
  return {metrics,byDay:[...day.values()].sort((a,b)=>a.date.localeCompare(b.date)),
   byHour:[...hour].map(([hour,count])=>({hour,count})).sort((a,b)=>b.count-a.count),
-  byExtension:[...extension.values()].sort((a,b)=>b.total-a.total).slice(0,30),
+  byExtension:[...extension.values()].map(x=>({...x,talkSeconds:x.missingTalkSamples?null:x.talkSeconds}))
+    .sort((a,b)=>b.total-a.total).slice(0,30),
   coverageVerified:true,source:'Zenvia Voice',queueConfigured};
 }
