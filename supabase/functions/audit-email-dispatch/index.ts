@@ -878,7 +878,7 @@ async function sendMail(email: string, subject: string, text: string, html?: str
   ]);
   const eligible=!!reportData &&
     allowVoiceEmails.get(String(reportData.recipientId))===String(email).trim().toLowerCase();
-  if(eligible&&E('ZENVIA_VOICE_REPORTS_ENABLED')==='true'){
+  if(eligible&&reportData&&E('ZENVIA_VOICE_REPORTS_ENABLED')==='true'){
     // Bloqueia ativacao ate que o Apps Script aceite e gere PDF/Excel com o mesmo bloco.
     if(E('ZENVIA_VOICE_ATTACHMENTS_READY')!=='true')
       throw new Error('Envio Zenvia bloqueado: anexos PDF/Excel ainda nao homologados');
