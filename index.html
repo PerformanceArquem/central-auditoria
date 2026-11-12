@@ -5677,9 +5677,13 @@ function render(d){
  el('pdLegacyKpis').innerHTML=newKpis.map(([name,n])=>'<div class="card"><div class="subtle">'+esc(name)+'</div><h3>'+esc(n)+'</h3></div>').join('');
  const cov=legacy.coverage||{};
  const windowLabel=cov.from&&cov.to?'Janela conciliada: '+ptDate(cov.from)+' a '+ptDate(cov.to)+'. ':'Janela conciliada não confirmada. ';
+ const hist=legacy.historicalImport||{};
+ const historyLabel=hist.jobCompleted===true
+   ?' Importação histórica processada ('+Number(hist.processedTickets||0)+' chamados), sem comprovação de cobertura integral.'
+   :' Importação histórica não confirmada.';
  el('pdCoverageNote').textContent=windowLabel+(legacy.coverageReady===true
    ?'Prazo de '+threshold+' dias coberto pela conciliação; ausência de lançamento não comprova falta de trabalho.'
-   :'Alerta suspenso: '+String(cov.reason||'cobertura não comprovada')+'.');
+   :'Alerta suspenso: '+String(cov.reason||'cobertura não comprovada')+'.')+historyLabel;
  window.productionLegacyRows=legacy;
  // Alerta de ausência de apontamento exige histórico conciliado.
  const missingFilter=el('pdLegacyFilter');
