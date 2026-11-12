@@ -73,3 +73,21 @@ test('triage offers multi-select rows and selected-only exports without changing
  assert.match(ui,/selectedIds\.clear\(\)/);
  assert.match(ui,/const valid=new Set\(items\.map/);
 });
+
+test('Tempo na fila permits selecting multiple non-overlapping age bands',()=>{
+ const html=readFileSync('index.html','utf8');
+ const ui=readFileSync('intelligence-triage.js','utf8');
+ for(const age of ['16-30','31-60','61-90','91+'])
+  assert.ok(html.includes('class="itDayBucket" value="'+age+'" checked'));
+ for(const id of ['itDaysSummary','itDaysAll','itDaysNone'])
+  assert.ok(html.includes('id="'+id+'"'));
+ assert.match(ui,/activeBuckets=\(\)=>new Set/);
+ assert.match(ui,/chosen\.has\(ageBucket\(Number\(x\.queueDays\)\)\)/);
+ assert.match(ui,/days>=16&&days<=30/);
+ assert.match(ui,/days>=31&&days<=60/);
+ assert.match(ui,/days>=61&&days<=90/);
+ assert.match(ui,/days>90/);
+ assert.match(ui,/el\('itDaysAll'\)\.addEventListener/);
+ assert.match(ui,/el\('itDaysNone'\)\.addEventListener/);
+ assert.ok(!ui.includes("Number(el('itDays').value)||15"));
+});
