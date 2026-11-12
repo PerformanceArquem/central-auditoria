@@ -2,7 +2,7 @@ name: Validate Zenvia voice metrics
 on:
   pull_request:
     paths:
-      - 'api/audit-zenvia-voice.js'
+      - 'lib/zenvia-voice.js'
       - 'tests/zenvia-voice-metrics.test.mjs'
       - 'index.html'
       - '.github/workflows/zenvia-voice-validation.yml'
