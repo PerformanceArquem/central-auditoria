@@ -93,7 +93,7 @@ test('voice UI shows TME unavailable, uses authenticated request, and has no sec
  assert.ok(html.includes('data-t="zenvia-voice"'));
  assert.ok(html.includes('id="t-zenvia-voice"'));
  assert.ok(html.includes("window.tmAuth?.getSession?.()"));
- assert.ok(html.includes("fetch('/api/audit-zenvia-voice?'"));
+ assert.ok(html.includes("fetch('/api/audit-production-metrics?mode=zenvia&'"));
  assert.ok(html.includes("['TME','Indisponível']"));
  assert.ok(!html.includes('ZENVIA_VOICE_ACCESS_TOKEN'));
 });
