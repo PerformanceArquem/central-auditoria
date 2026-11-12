@@ -999,7 +999,7 @@ async function adminAction(payload: R) {
       const ready=capabilities?.sucesso===true &&
         formats.includes('pdf') && formats.includes('xlsx') &&
         capabilities.paperTemplateConfigured===true;
-      const keilaGeneratorReady=ready&&capabilities?.attachmentsVersion==='arquem-6-keila-flow-only'&&capabilities?.keilaProductionReady===true;
+      const keilaGeneratorReady=ready&&capabilities?.attachmentsVersion==='arquem-8-keila-movements'&&capabilities?.keilaProductionReady===true;
       return json({ok:true,enabled:flag,ready,keilaGeneratorReady,
         sectionPermissionsSupported:capabilities?.sectionPermissionsSupported===true,
         templateConfigured:capabilities?.paperTemplateConfigured===true,
@@ -1404,7 +1404,7 @@ async function requireKeilaGeneratorReady() {
  const capability=await res.json().catch(()=>null) as R|null;
  const formats=Array.isArray(capability?.formats)?capability.formats:[];
  if(capability?.sucesso!==true || capability?.paperTemplateConfigured!==true ||
-    capability?.attachmentsVersion!=='arquem-6-keila-flow-only' ||
+    capability?.attachmentsVersion!=='arquem-8-keila-movements' ||
      capability?.keilaProductionReady!==true ||
     !formats.includes('pdf') || !formats.includes('xlsx'))
   throw new Error('Envio Keila bloqueado: gerador PDF/Excel de Produção ainda não homologado');
