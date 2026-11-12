@@ -29,6 +29,8 @@ const appointments=[
    appointment_date:utcDay(-7),collaborator_name:'Teste'}
 ];
 let syncReady=true;
+let syncAgeHours=1;
+let syncPeriodEndDaysAgo=0;
 let adminAllowed=true;
 const json=value=>({ok:true,json:async()=>value});
 const fetch=async input=>{
@@ -37,7 +39,10 @@ const fetch=async input=>{
   if(url.pathname.endsWith('/audit_users'))return json([{role:adminAllowed?'admin':'user',is_active:true}]);
   if(url.pathname.endsWith('/audit_direct_tickets'))return json(tickets);
   if(url.pathname.endsWith('/audit_direct_appointments'))return json(appointments);
-  if(url.pathname.endsWith('/audit_recent_reconcile_state'))return json([{completed:syncReady,last_error:syncReady?null:'Conciliação pendente'}]);
+  if(url.pathname.endsWith('/audit_recent_reconcile_state'))return json([{completed:syncReady,
+    last_error:syncReady?null:'Conciliação pendente',
+    last_success_at:new Date(Date.now()-syncAgeHours*3600000).toISOString(),
+    period_end:utcDay(syncPeriodEndDaysAgo)}]);
   throw Error('Unexpected URL '+url.pathname);
 };
 const scope={
@@ -111,4 +116,26 @@ test('UI refuses stale-appointment filter when synchronization is incomplete',()
   const html=readFileSync('index.html','utf8');
   assert.ok(html.includes("legacy.coverageReady===true?lc.withoutAppointmentCount||0:'Conciliação pendente'"));
   assert.ok(html.includes("missingOption.disabled=legacy.coverageReady!==true"));
+});
+
+test('completed but stale reconciliation cannot issue missing-appointment alerts',async()=>{
+  syncAgeHours=72;
+  try{
+    const response=await call(30);
+    assert.equal(response.code,200);
+    assert.equal(response.body.legacyAlerts.coverageReady,false);
+    assert.equal(response.body.legacyAlerts.counts.withoutAppointmentCount,null);
+    assert.deepEqual(ids(response),[]);
+  }finally{syncAgeHours=1;}
+});
+
+test('completed reconciliation not covering previous day cannot issue alerts',async()=>{
+  syncPeriodEndDaysAgo=5;
+  try{
+    const response=await call(30);
+    assert.equal(response.code,200);
+    assert.equal(response.body.legacyAlerts.coverageReady,false);
+    assert.equal(response.body.legacyAlerts.counts.withoutAppointmentCount,null);
+    assert.deepEqual(ids(response),[]);
+  }finally{syncPeriodEndDaysAgo=0;}
 });
