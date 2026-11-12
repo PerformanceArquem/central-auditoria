@@ -1178,9 +1178,10 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
     <div class="fg"><label for="pdLegacyFilter">Filtrar pendências</label><select id="pdLegacyFilter">
       <option value="old">Mais antigos (90+ dias)</option>
       <option value="withoutForecast">Sem previsão (30+ dias)</option>
-      <option value="withoutAppointment">Sem apontamento recente (30+ dias)</option>
+      <option value="withoutAppointment">Sem apontamento recente (prazo configurável)</option>
       <option value="withoutAction">Sem ação (7+ dias)</option>
     </select></div>
+    <div class="fg"><label for="pdNoAppointmentDays">Dias sem apontamento</label><input id="pdNoAppointmentDays" type="number" min="1" max="365" step="1" value="30" style="max-width:120px" title="Prazo de referência, de 1 a 365 dias"></div>
   </div>
   <div class="tw"><table id="pdLegacy"><thead><tr><th>Chamado</th><th>Cliente</th><th>Assunto</th><th>Responsável</th><th>Status</th><th>Tempo em aberto</th><th>Último apontamento</th><th>Dias sem apontamento</th><th>Previsão</th></tr></thead><tbody></tbody></table></div>
   <p class="subtle">A situação dos tickets é atual, não uma fotografia histórica. Chamados podem aparecer em mais de uma categoria. O número abre diretamente o Movidesk.</p>
@@ -5635,7 +5636,10 @@ function say(t){el('pdStatus').textContent=t}
 async function api(){
   const session=await window.tmAuth?.getSession?.();
   if(!session?.access_token)throw new Error('Faça login novamente para consultar os dados.');
-  const response=await fetch('/api/audit-production-metrics',{
+  const input=el('pdNoAppointmentDays');
+  const raw=String(input?.value||'30');
+  if(!/^[1-9][0-9]{0,2}$/.test(raw)||Number(raw)>365)throw new Error('Informe um prazo entre 1 e 365 dias.');
+  const response=await fetch('/api/audit-production-metrics?withoutAppointmentDays='+encodeURIComponent(raw),{
     method:'GET',cache:'no-store',credentials:'same-origin',
     headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'}
   });
@@ -5667,7 +5671,8 @@ function render(d){
  table('pdPeople',(n.peopleRows||[]).map(t=>'<tr><td>'+esc(t.name)+'</td><td>'+fmt(t.minutes)+'</td><td>'+esc(t.appointments)+'</td><td>'+esc(t.tickets)+'</td></tr>'));
  table('pdDailyJourney',(d.dailyRows||[]).map(x=>'<tr><td>'+esc(ptDate(x.date))+'</td><td>'+esc(x.person)+'</td><td>'+fmt(x.minutes)+'</td><td>'+(x.workday?fmt(x.referenceMinutes):'—')+'</td><td>'+(x.workday?fmt(x.minimumMinutes):'—')+'</td><td>'+(x.percent==null?'—':esc(x.percent)+'%')+'</td><td>'+(x.minimumGap==null?'—':fmt(x.minimumGap))+'</td><td>'+(x.journeyGap==null?'—':fmt(x.journeyGap))+'</td><td>'+(x.extraMinutes==null?'—':fmt(x.extraMinutes))+'</td><td>'+esc(x.status)+'</td></tr>'));
  const legacy=d.legacyAlerts||{counts:{}},lc=legacy.counts||{};
- const newKpis=[['Antigos 90+ dias',lc.old90||0],['Sem previsão 30+ dias',lc.withoutForecast30||0],['Sem apontamento recente',lc.withoutAppointment30||0],['Sem ação 7+ dias',lc.withoutAction7||0]];
+ const threshold=Number(legacy.thresholdDays)||30;
+ const newKpis=[['Antigos 90+ dias',lc.old90||0],['Sem previsão 30+ dias',lc.withoutForecast30||0],['Sem apontamento recente '+threshold+'+ dias',lc.withoutAppointmentCount||0],['Sem ação 7+ dias',lc.withoutAction7||0]];
  el('pdLegacyKpis').innerHTML=newKpis.map(([name,n])=>'<div class="card"><div class="subtle">'+esc(name)+'</div><h3>'+esc(n)+'</h3></div>').join('');
  window.productionLegacyRows=legacy;
  window.productionLegacyRender=()=>{
@@ -5707,6 +5712,7 @@ window.productionAuditInit=()=>{
     started=true;
     el('pdRefresh').addEventListener('click',load);
     el('pdLegacyFilter').addEventListener('change',()=>window.productionLegacyRender?.());
+    el('pdNoAppointmentDays').addEventListener('change',load);
   }
   load();
 };
