@@ -72,7 +72,13 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
   cells(['TMA',time(m.tmaSeconds),time(input.chatMetrics?.tmaSeconds)])+
   cells(['TME',time(m.tmeSeconds),time(input.chatMetrics?.tmeSeconds)])+
   cells(['CSAT (8–10)',csat(quality.voz),csat(quality.chat)])+
-  cells(['Avaliações válidas',quality.voz.total,quality.chat.total])+'</tbody></table>'+
+  cells(['Avaliações válidas',quality.voz.total,quality.chat.total])+
+  cells(['Notas 1–7',quality.voz.negative,quality.chat.negative])+
+  cells(['Notas 8–10',quality.voz.positive,quality.chat.positive])+
+  cells(['Superadores',quality.voz.superadoresPercent==null?'Sem avaliações':quality.voz.superadoresPercent+'%',quality.chat.superadoresPercent==null?'Sem avaliações':quality.chat.superadoresPercent+'%'])+'</tbody></table>'+
+  '<h3 style="font-size:14px">Chamadas por dia</h3>'+ 
+  '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr><th>Dia</th><th>Total</th><th>Atendidas</th></tr></thead><tbody>'+ 
+  (days.length?days.slice(0,31).map(x=>cells([x.date,x.total,x.answered])).join(''):cells(['Sem dados','—','—']))+'</tbody></table>'+ 
   '<h3 style="font-size:14px">Ramal · chamadas · atendidas · tempo falado</h3>'+
   '<table style="border-collapse:collapse;width:100%;font-size:12px"><tbody>'+
   (extensions.length?extensions.slice(0,10).map(x=>cells([x.extension,x.total,x.answered,time(x.talkSeconds)])).join(''):cells(['Sem ramais','—','—','—']))+
