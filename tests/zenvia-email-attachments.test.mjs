@@ -58,6 +58,8 @@ test('Zenvia reporting remains disabled by default and eligible only for three r
  const dispatch=readFileSync('supabase/functions/audit-email-dispatch/index.ts','utf8');
  assert.ok(dispatch.includes("E('ZENVIA_VOICE_REPORTS_ENABLED')==='true'"));
  assert.ok(dispatch.includes("E('ZENVIA_VOICE_ATTACHMENTS_READY')!=='true'"));
+ assert.ok(dispatch.includes("capabilities.zenviaVoiceReady!==true"));
+ assert.ok(dispatch.includes("E('REPORT_ATTACHMENTS_ENABLED')!=='true'"));
  assert.equal((dispatch.match(/allowVoiceEmails\.get\(/g)||[]).length,1);
  assert.ok(dispatch.includes('readZenviaEmailMetrics(from,to,token'));
 });
