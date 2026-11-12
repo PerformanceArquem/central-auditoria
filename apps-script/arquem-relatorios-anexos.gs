@@ -157,6 +157,11 @@ function arquemCapacidadesAnexos_() {
     sectionsAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
   return {sucesso:true,attachmentsVersion:'arquem-6-keila-flow-only',formats:['pdf','xlsx'],
     sectionPermissionsSupported,
+    csatNotesReady:ready &&
+      props.getProperty('ARQUEM_CSAT_VALIDATED_VERSION')==='arquem-7-csat-notas' &&
+      props.getProperty('ARQUEM_CSAT_VALIDATED_TEMPLATE_ID')===id &&
+      Number.isFinite(Date.parse(props.getProperty('ARQUEM_CSAT_VALIDATED_AT')||'')) &&
+      Date.parse(props.getProperty('ARQUEM_CSAT_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime(),
     paperTemplateConfigured:ready,
     keilaProductionReady:ready &&
       props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_VERSION')==='arquem-6-keila-flow-only' &&
@@ -177,7 +182,20 @@ function arquemTesteKeilaSemEnvio() {
     from:'2026-11-02',to:'2026-11-08',
     partial:false,historicalIncomplete:false,
     metrics:{entered:2,exited:1},
-    productionFlow:{entered:2,exited:1},
+    productionFlow:{entered:2,exited:1,movements:[
+      {id:'101001',direction:'entry',at:'2026-11-05T12:05:00.000Z',
+        subject:'Chamado fictício de teste 1',client:'Cliente demonstrativo',
+        fromTeam:'Inteligência',toTeam:'Produção - CPO',
+        responsible:'Pessoa demonstrativa',actor:'Agente demonstrativo'},
+      {id:'101002',direction:'entry',at:'2026-11-05T12:10:00.000Z',
+        subject:'Chamado fictício de teste 2',client:'Cliente demonstrativo',
+        fromTeam:'Suporte',toTeam:'Produção - CPO',
+        responsible:'Pessoa demonstrativa',actor:'Agente demonstrativo'},
+      {id:'101001',direction:'exit',at:'2026-11-05T16:45:00.000Z',
+        subject:'Chamado fictício de teste 1',client:'Cliente demonstrativo',
+        fromTeam:'Produção - CPO',toTeam:'Sucesso do Cliente',
+        responsible:'Outra pessoa demonstrativa',actor:'Agente demonstrativo'}
+    ]},
     collaborators:[],daily:[],customers:[],activities:[],forecastVariances:[],tickets:[]
   };
   const attachments=arquemCreateReportAttachments_(packet);
@@ -193,6 +211,49 @@ function arquemTesteKeilaSemEnvio() {
   return outcome;
 }
 
+/**
+ * Validação independente do CSAT 8–10 nos anexos.
+ * Usa dados fictícios, não envia e-mails e elimina os arquivos temporários.
+ */
+function arquemTesteCSATSemEnvio() {
+  const ratings=[
+    {date:'2026-11-11',ticketId:'101901',collaborator:'Atendente demonstrativo A',channel:'chat',score:7,source:'movidesk'},
+    {date:'2026-11-11',ticketId:'101902',collaborator:'Atendente demonstrativo B',channel:'voz',score:8,source:'movidesk'},
+    {date:'2026-11-11',ticketId:'101903',collaborator:'Atendente demonstrativo C',channel:'chat',score:10,source:'manual'}
+  ];
+  const positives=ratings.filter(x=>x.score>=8&&x.score<=10).length;
+  if(positives!==2)throw new Error('CSAT: nota 8 deve contar como positiva');
+  const packet={
+    schema:'arquem-mail-v1',title:'HOMOLOGAÇÃO SEM ENVIO — CSAT Suporte',
+    from:'2026-11-11',to:'2026-11-11',partial:false,historicalIncomplete:false,
+    metrics:{minutes:120,appointments:3,tickets:3},csat:{excelente:2,total:3,csatPercent:66.67},
+    csatRatings:ratings,collaborators:[],daily:[],customers:[],activities:[],tickets:[],forecastVariances:[]
+  };
+  const files=arquemCreateReportAttachments_(packet);
+  if(!Array.isArray(files)||files.length!==2 ||
+    !files.some(x=>x.getContentType()==='application/pdf'&&x.getBytes().length>2000) ||
+    !files.some(x=>x.getName().endsWith('.xlsx')&&x.getBytes().length>1500))
+    throw new Error('CSAT: exportação PDF e Excel não validada');
+  return {ok:true,sent:false,positiveNotes:positives,totalNotes:ratings.length,
+    files:files.map(x=>({name:x.getName(),bytes:x.getBytes().length}))};
+}
+/**
+ * Registra a aprovação do novo CSAT depois de gerar anexos reais, sem enviar e-mail.
+ */
+function arquemHomologarCSATSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const corp=arquemValidarPublicacaoSemEnvio();
+  if(corp.ok!==true||corp.sent!==false)throw new Error('Papel timbrado corporativo não validado');
+  const check=arquemTesteCSATSemEnvio();
+  if(check.ok!==true||check.sent!==false||check.positiveNotes!==2)
+    throw new Error('CSAT 8–10 não homologado');
+  props.setProperties({
+    ARQUEM_CSAT_VALIDATED_VERSION:'arquem-7-csat-notas',
+    ARQUEM_CSAT_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_CSAT_VALIDATED_TEMPLATE_ID:props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||''
+  },false);
+  return {ok:true,sent:false,csatNotesReady:true,files:check.files};
+}
 function arquemTesteAnexosSemEnvio() {
   const packet={
     schema:'arquem-mail-v1',title:'Relatório de validação — Produção',
