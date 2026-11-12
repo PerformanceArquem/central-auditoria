@@ -15,9 +15,17 @@
  };
  const toggleVisible=checked=>{current.forEach(x=>checked?selectedIds.add(String(x.id)):selectedIds.delete(String(x.id)));paint()};
  const status=s=>{if(el('itStatus'))el('itStatus').textContent=s};
+ const ageBucket=days=>days>=16&&days<=30?'16-30':
+   days>=31&&days<=60?'31-60':days>=61&&days<=90?'61-90':days>90?'91+':null;
+ const activeBuckets=()=>new Set([...el('itDays').querySelectorAll('input.itDayBucket:checked')].map(x=>x.value));
+ const paintAgeLabel=()=>{
+   const bucketCount=activeBuckets().size;
+   el('itDaysSummary').textContent=bucketCount===4?'Mais de 15 dias':
+     bucketCount===0?'Nenhuma faixa selecionada':bucketCount+' faixa(s) selecionada(s)';
+ };
  const selected=()=>{
-  const threshold=Number(el('itDays').value)||15,t=el('itType').value,q=norm(el('itSearch').value);
-  return items.filter(x=>x.queueDays>threshold&&(!t||x.type===t)&&
+  const chosen=activeBuckets(),t=el('itType').value,q=norm(el('itSearch').value);
+  return items.filter(x=>chosen.has(ageBucket(Number(x.queueDays)))&&(!t||x.type===t)&&
    (!q||norm([x.id,x.subject,x.client,x.status].join(' ')).includes(q)));
  };
  const outputColumns=[
@@ -27,6 +35,7 @@
   ['Previsão',x=>date(x.forecast)],['Status',x=>x.status],
   ['Próxima etapa',x=>x.nextStep],['Link Movidesk',x=>x.url]];
  function paint(){
+  paintAgeLabel();
   current=selected();
   const cards=[['Chamados acima do limite',current.length],['Maior tempo na fila',current.length?Math.max(...current.map(x=>x.queueDays))+' dias':'—'],
    ['Sem previsão',current.filter(x=>!x.forecast).length],['T1 / T2 / T3 / T4',[1,2,3,4].map(n=>current.filter(x=>x.type==='T'+n).length).join(' / ')]];
@@ -97,7 +106,10 @@
     input.checked?selectedIds.add(input.dataset.id):selectedIds.delete(input.dataset.id);
     syncSelection();
    });
-   ['itDays','itType'].forEach(id=>el(id).addEventListener('change',paint));
+   el('itDays').addEventListener('change',e=>{if(e.target.matches('input.itDayBucket'))paint()});
+   el('itDaysAll').addEventListener('click',()=>{el('itDays').querySelectorAll('input.itDayBucket').forEach(x=>x.checked=true);paint()});
+   el('itDaysNone').addEventListener('click',()=>{el('itDays').querySelectorAll('input.itDayBucket').forEach(x=>x.checked=false);paint()});
+   el('itType').addEventListener('change',paint);
    el('itSearch').addEventListener('input',paint);
   }
   if(!items.length)refresh();else paint();
