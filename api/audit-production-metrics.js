@@ -4,7 +4,7 @@ const ZONE='America/Sao_Paulo',MAX=20000,PAGE=1000;
 const name=x=>typeof x==='string'?x:String(x?.businessName||x?.name||'');
 const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const isProd=x=>/\bproducao\b|\bcpo\b/.test(norm(x));
-const isClosed=x=>/fechad|concluid|resolvid|encerrad|cancelad|finalizad/.test(norm(x));
+const isClosed=x=>/^(?:fechad[oa]|concluid[oa]|resolvid[oa]|encerrad[oa]|cancelad[oa]|finalizad[oa])(?:$|\s*\()/.test(norm(x));
 const sDate=x=>String(x||'').slice(0,10);
 const days=(a,b)=>Math.max(0,Math.floor((Date.parse(b+'T12:00:00Z')-Date.parse(a+'T12:00:00Z'))/86400000));
 const addDays=(s,n)=>new Date(Date.parse(s+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);
