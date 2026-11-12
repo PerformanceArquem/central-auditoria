@@ -37,6 +37,8 @@ let adminAllowed=true;
 const json=value=>({ok:true,json:async()=>value});
 const fetch=async input=>{
   const url=new URL(String(input));
+  const expectedOrder=url.pathname.endsWith('/audit_direct_sync_state')?'id.asc':url.pathname.endsWith('/audit_recent_reconcile_state')?'job_name.asc':url.pathname.endsWith('/audit_direct_tickets')?'ticket_id.asc':url.pathname.endsWith('/audit_direct_appointments')?'appointment_key.asc':null;
+  if(expectedOrder)assert.equal(url.searchParams.get('order'),expectedOrder,'Invalid order column for '+url.pathname);
   if(url.pathname.endsWith('/auth/v1/user'))return json({id:'user-123'});
   if(url.pathname.endsWith('/audit_users'))return json([{role:adminAllowed?'admin':'user',is_active:true}]);
   if(url.pathname.endsWith('/audit_direct_tickets'))return json(tickets);
