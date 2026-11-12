@@ -4,7 +4,7 @@ type R=Record<string,any>;
 type Rating={service_date:string;channel:string;ticket_id:string;score:number;source:string;collaborator_name:string};
 const norm=(s:unknown)=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const esc=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
-const safeNum=(n:unknown)=>{const v=Number(n);return Number.isFinite(v)&&v>=0?v:null};
+const safeNum=(n:unknown)=>{if(n==null||n==='')return null;const v=Number(n);return Number.isFinite(v)&&v>=0?v:null};
 const percent=(numerator:number,denominator:number)=>denominator?Math.round(numerator/denominator*10000)/100:null;
 const time=(seconds:unknown)=>{const n=safeNum(seconds);return n==null?'Indisponível':Math.floor(n/60)+'min '+String(Math.round(n%60)).padStart(2,'0')+'s'};
 export type VoiceEmailInput={metrics:R;byDay?:R[];byHour?:R[];byExtension?:R[];ratings:Rating[];from:string;to:string;verified:boolean};
