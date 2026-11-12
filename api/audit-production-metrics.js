@@ -14,6 +14,12 @@ const fail=(res,status,message)=>res.status(status).json({ok:false,error:message
 export default async function handler(req,res){
  res.setHeader('Cache-Control','private, no-store');
  if(req.method!=='GET')return fail(res,405,'Método não permitido');
+ // Threshold configurável somente para a visualização. Não ativa envios nem modifica banco.
+ const rawDays=req.query?.withoutAppointmentDays;
+ const requestedDays=Array.isArray(rawDays)?'':rawDays===undefined?'30':String(rawDays);
+ if(!/^[1-9][0-9]{0,2}$/.test(requestedDays)||Number(requestedDays)>365)
+  return fail(res,400,'Prazo sem apontamentos inválido (1 a 365 dias)');
+ const withoutAppointmentDays=Number(requestedDays);
  const base=(process.env.SUPABASE_URL||'').replace(/\/$/,'');
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
  if(!/^https:\/\//.test(base)||!key)return fail(res,503,'Integração Supabase não configurada');
@@ -95,11 +101,15 @@ export default async function handler(req,res){
   const stalled=open.filter(t=>t.updated&&days(t.updated,today)>=7);
   const old=open.filter(t=>t.created&&days(t.created,today)>=90);
   const withoutForecast=open.filter(t=>t.created&&days(t.created,today)>=30&&!t.sla);
-  const withoutAppointment=open.filter(t=>!t.history?.last||days(t.history.last,today)>=30);
+  // Sem registros: usar a data de abertura; não classificar ticket recém-aberto como atrasado.
+  // Último apontamento: usar o registro mais recente realmente importado.
+  const withoutAppointment=open.filter(t=>t.history?.last
+   ? days(t.history.last,today)>=withoutAppointmentDays
+   : Boolean(t.created)&&days(t.created,today)>=withoutAppointmentDays);
   const toAlert=t=>({id:t.id,subject:t.subject,client:t.client,owner:t.owner,status:t.status,
     sla:t.sla,ageDays:days(t.updated||t.created,today),daysWithoutAction:days(t.updated||t.created,today)});
   const toLegacy=t=>({...toAlert(t),ageDays:days(t.created,today),lastAppointment:t.history?.last||null,
-    noAppointmentEver:!t.history?.last,daysWithoutAppointment:t.history?.last?days(t.history.last,today):null,
+    noAppointmentEver:!t.history?.last,daysWithoutAppointment:t.history?.last?days(t.history.last,today):(t.created?days(t.created,today):null),
     withoutForecast:!t.sla});
   const highProjects=current.tasks.filter(t=>/projeto|melhoria|integrac|desenvolv/i.test(norm(t.subject+' '+t.category))).slice(0,30);
   const weekdays=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
@@ -115,8 +125,8 @@ export default async function handler(req,res){
      weekday,count:weekdayStats.get(i)||0,days:countByWeekday.get(i)||0,
      average:(countByWeekday.get(i)||0)?Number(((weekdayStats.get(i)||0)/countByWeekday.get(i)).toFixed(1)):0
    })),dailyRows:current.dailyRows,
-   legacyAlerts:{counts:{old90:old.length,withoutForecast30:withoutForecast.length,
-     withoutAppointment30:withoutAppointment.length,withoutAction7:stalled.length},
+   legacyAlerts:{thresholdDays:withoutAppointmentDays,counts:{old90:old.length,withoutForecast30:withoutForecast.length,
+     withoutAppointmentCount:withoutAppointment.length,withoutAction7:stalled.length},
      old:old.slice(0,100).map(toLegacy),withoutForecast:withoutForecast.slice(0,100).map(toLegacy),
      withoutAppointment:withoutAppointment.slice(0,100).map(toLegacy),withoutAction:stalled.slice(0,100).map(toLegacy)},
    partial:rec.completed!==true||Boolean(rec.last_error),
