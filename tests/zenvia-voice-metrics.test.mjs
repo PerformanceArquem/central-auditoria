@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
-const source=readFileSync('api/audit-zenvia-voice.js','utf8')
+const source=readFileSync('lib/zenvia-voice.js','utf8')
  .replace('export default async function handler(req,res){','async function handler(req,res){');
 const outbound=[
  {id:1,data_criacao:'2026-11-10T10:00:00-03:00',ramal_id_origem:2000,
