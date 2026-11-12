@@ -1230,8 +1230,8 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
   <div id="zvKpis" class="kpis" style="margin:12px 0"></div>
   <p class="subtle">TMA = duração média das chamadas atendidas. TME não é exibido sem dados reais de espera em fila. Não utilize estimativas como métricas observadas.</p>
   <div class="grid2">
-   <div class="card"><h3>Volume por dia</h3><div class="tablewrap"><table><thead><tr><th>Data</th><th>Ligações</th><th>Atendidas</th><th>Não atendidas</th></tr></thead><tbody id="zvDays"></tbody></table></div></div>
-   <div class="card"><h3>Distribuição por ramal</h3><div class="tablewrap"><table><thead><tr><th>Ramal</th><th>Ligações</th><th>Atendidas</th><th>Não atendidas</th></tr></thead><tbody id="zvExtensions"></tbody></table></div></div>
+   <div class="card"><h3>Volume por dia</h3><div class="tablewrap"><table><thead><tr><th>Data</th><th>Ligações</th><th>Atendidas</th><th>Não atendidas</th><th>Em andamento</th><th>Sem classificação</th></tr></thead><tbody id="zvDays"></tbody></table></div></div>
+   <div class="card"><h3>Distribuição por ramal</h3><div class="tablewrap"><table><thead><tr><th>Ramal</th><th>Ligações</th><th>Atendidas</th><th>Não atendidas</th><th>Em andamento</th><th>Sem classificação</th></tr></thead><tbody id="zvExtensions"></tbody></table></div></div>
   </div>
  </div>
 </div>
@@ -5964,7 +5964,7 @@ window.clientImpactInit=()=>{
    if(start!==el('zvStart').value||end!==el('zvEnd').value)throw Error('Período alterado; consulte novamente');
    const x=d.summary||{},rows=[
     ['Recebidas',x.inbound],['Efetuadas',x.outbound],['Total de ligações',x.total],
-    ['Atendidas',x.answered],['Não atendidas',x.unanswered],
+    ['Atendidas',x.answered],['Não atendidas',x.unanswered],['Em andamento',x.inProgress],['Não classificadas',x.unclassified],
     ['TMA real',fmtSeconds(x.tmaSeconds)],['Tempo total atendido',fmtSeconds(x.durationSeconds)],
     ['TME','Indisponível']
    ];
@@ -5972,8 +5972,8 @@ window.clientImpactInit=()=>{
     const text=document.createElement('div');text.className='subtle';text.textContent=label;
     const h=document.createElement('h3');h.textContent=String(value??'Indisponível');
     box.append(text,h);el('zvKpis').appendChild(box);}
-   renderRows('zvDays',d.byDay||[],['date','total','answered','unanswered']);
-   renderRows('zvExtensions',d.byExtension||[],['extension','total','answered','unanswered']);
+   renderRows('zvDays',d.byDay||[],['date','total','answered','unanswered','inProgress','unclassified']);
+   renderRows('zvExtensions',d.byExtension||[],['extension','total','answered','unanswered','inProgress','unclassified']);
    el('zvStatus').textContent='Fonte: API Zenvia Voice · '+start+' a '+end+' · '+(x.total||0)+' chamadas consolidadas.';
   }catch(e){reset();el('zvStatus').textContent='Métricas indisponíveis: '+e.message;}
   finally{loading=false;button.disabled=false;}
