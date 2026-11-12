@@ -149,6 +149,7 @@ test('a short recent synchronization window cannot confirm absence for 30 days',
     assert.equal(response.code,200);
     assert.equal(response.body.legacyAlerts.coverageReady,false);
     assert.equal(response.body.legacyAlerts.counts.withoutAppointmentCount,null);
+    assert.equal(response.body.legacyAlerts.coverage.reason,'Janela conciliada menor que o prazo solicitado');
     assert.deepEqual(ids(response),[]);
   }finally{syncPeriodStartDaysAgo=370;}
 });
@@ -160,5 +161,20 @@ test('the same 14-day window permits a shorter threshold, if complete and recent
     assert.equal(response.code,200);
     assert.equal(response.body.legacyAlerts.coverageReady,true);
     assert.deepEqual(ids(response),['102','103','104','106']);
+  }finally{syncPeriodStartDaysAgo=370;}
+});
+
+test('the panel explains when coverage is insufficient without exposing ticket details',async()=>{
+  syncPeriodStartDaysAgo=14;
+  try{
+    const response=await call(30);
+    const coverage=response.body.legacyAlerts.coverage;
+    assert.equal(coverage.reason,'Janela conciliada menor que o prazo solicitado');
+    assert.match(coverage.from,/^\d{4}-\d{2}-\d{2}$/);
+    assert.match(coverage.to,/^\d{4}-\d{2}-\d{2}$/);
+    const html=readFileSync('index.html','utf8');
+    assert.ok(html.includes('id="pdCoverageNote"'));
+    assert.ok(html.includes('Alerta suspenso:'));
+    assert.ok(html.includes('ausência de lançamento não comprova falta de trabalho'));
   }finally{syncPeriodStartDaysAgo=370;}
 });
