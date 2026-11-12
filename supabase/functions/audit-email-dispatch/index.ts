@@ -658,10 +658,12 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
   const days = workdays(from, to, hol);
   const validDays=new Set(days);
   const selected = appts.filter(a =>
-    validDays.has(String(a.appointment_date||'').slice(0,10)) &&
     ((scope === 'management' && !selectedSectors.length) || sameSector(a.sector)) &&
     (!selectedPeople.size || selectedPeople.has(norm(a.collaborator_name))));
-  const minutes = selected.reduce((s, a) => s + Number(a.duration_minutes || 0), 0);
+  const extra=selected.filter(a=>!validDays.has(String(a.appointment_date||'').slice(0,10)));
+  const ordinary=selected.filter(a=>validDays.has(String(a.appointment_date||'').slice(0,10)));
+  const extraMinutes=extra.reduce((v,a)=>v+Number(a.duration_minutes||0),0);
+  const minutes=selected.reduce((v,a)=>v+Number(a.duration_minutes||0),0);
   const targetPerDay = Number(rec.daily_target_minutes ?? 480);
   const minimumPercent = Number(rec.minimum_percent ?? 80);
   if (!Number.isFinite(targetPerDay) || targetPerDay <= 0 || targetPerDay > 1440 ||
@@ -677,8 +679,10 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     const s = String(a.sector || 'Nao informado');
     bySector.set(s, (bySector.get(s) || 0) + Number(a.duration_minutes || 0));
   }
-  // Total das diferenças individuais, sem compensar horas de uma pessoa com as de outra.
-  const journeyGaps=calculateJourneyGaps(byPerson.values(),target,minimum);
+  // Team totals cannot compensate one person's shortage with another's excess.
+  const byOrdinary=new Map<string,number>();
+  for(const a of ordinary){const n=String(a.collaborator_name||'Não informado');byOrdinary.set(n,(byOrdinary.get(n)||0)+Number(a.duration_minutes||0));}
+  const journeyGaps=calculateJourneyGaps([...byPerson.keys()].map(n=>byOrdinary.get(n)||0),target,minimum);
   const worked = new Set(selected.map(a => String(a.ticket_id))).size;
   const dayMap=new Map<string,number>();
   const sectorsByDay=new Map<string,Set<string>>();
@@ -734,7 +738,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
       name,sector:[...member.sectors].sort().join(' · '),minutes,
       entries:member.entries,tickets:member.tickets.size,clients:member.clients.size,days:member.dates.size,
       averageMinutes:member.dates.size?minutes/member.dates.size:null,offMinutes:member.offMinutes,
-      targetMinutes:target,minimumMinutes:minimum,...periodReference(minutes,target,minimum)
+      targetMinutes:target,minimumMinutes:minimum,...periodReference(byOrdinary.get(name)||0,target,minimum)
     };
   }).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
   const dailyJourney=daily.map(x=>{
@@ -760,6 +764,16 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
       [x.name,String(x.entries),String(x.tickets),String(x.clients),String(x.days),x.averageMinutes===null?'—':duration(x.averageMinutes),duration(x.offMinutes)]))+
     (journey.length>emailTeam.length?'<p style="font-size:12px">Mostrando '+emailTeam.length+' de '+journey.length+' colaboradores. Consulte o Excel, quando disponível, para mais detalhes.</p>':''):
       '<p style="font-size:12px">Sem apontamentos importados nos setores vinculados.</p>'):'';
+  const extraRows=extra.map(a=>{
+    const d=String(a.appointment_date||'').slice(0,10);
+    return {date:d,person:safe(a.collaborator_name),sector:safe(a.sector),ticket:safe(a.ticket_id),minutes:Number(a.duration_minutes||0),
+      kind:hol.has(d)?'Feriado':weekday(d)===0?'Domingo':'Sábado'};
+  }).sort((a,b)=>a.date.localeCompare(b.date)||a.person.localeCompare(b.person,'pt-BR'));
+  const extraHtml='<h3 style="color:#17345d;font-size:15px;margin-top:24px">Apontamentos em fins de semana e feriados</h3>'+
+   '<p style="font-size:12px">Não geram jornada obrigatória. Apontamentos não comprovam pagamento de horas extras.</p>'+
+   '<p><b>'+duration(extraMinutes)+' · '+extraRows.length+' registros</b></p>'+
+   (extraRows.length?detailTable(['Data','Tipo','Colaborador','Setor','Chamado','Horas'],extraRows.slice(0,50).map(x=>
+     [displayDate(x.date),x.kind,x.person,x.sector,'#'+x.ticket,duration(x.minutes)])):'<p>Sem registros em dias não úteis.</p>');
   const emailDailyLimit=12;
   const detailsHtml='<div style="margin-top:24px;border-top:2px solid #dce6f4;padding-top:12px">'+
     (reportSectionOn(rec,'daily_detail')?'<h3 style="color:#17345d;font-size:15px">Horas por colaborador, dia a dia</h3>'+ 
@@ -773,7 +787,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     (reportSectionOn(rec,'customers')?'<h3 style="color:#17345d;font-size:15px;margin-top:24px">Empresas com maior consumo de horas</h3>'+ 
     (companies.length?detailTable(['Empresa','Tempo','Chamados'],companies.map(x=>[x.name,duration(x.minutes),String(x.tickets)])):
       '<p style="font-size:12px">Sem empresas identificadas.</p>'):'')+
-    '<p style="font-size:11px;color:#64748b">Somente horas importadas do Movidesk; ausência de lançamento não comprova falta de trabalho.</p></div>';
+    extraHtml+'<p style="font-size:11px;color:#64748b">Somente horas importadas do Movidesk; ausência de lançamento não comprova falta de trabalho.</p></div>';
   const title = `${kind==='monthly'||kind==='annual'?'Balancete':'Relatório'} ${REPORT_LABEL[kind].toLowerCase()} - ${scope === 'management' ? 'Gestao / ' + (sectorLabels.join(' + ') || 'Todos os setores') : sectorLabels.join(' + ')}${person ? ' / ' + safe(rec.collaborator_name) : ''}`;
   const details = person ? selected.slice(0, 100).map(a =>
     `- ${String(a.appointment_date)} | #${safe(a.ticket_id)} | ${duration(Number(a.duration_minutes || 0))} | ${safe(a.activity)}`)
@@ -820,6 +834,10 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
       (scopedManagement?' | '+(x.referenceMinutes?duration(x.referenceMinutes)+' de jornada | '+showJourneyPercent(x.percent)+' | ':'')+x.status:'')),'']:[]),
     ...(reportSectionOn(rec,'customers')?['EMPRESAS QUE MAIS CONSUMIRAM TEMPO','────────────────────────────────────────',
     ...companies.map(x=>'- '+safe(x.name)+' | '+duration(x.minutes)+' | '+x.tickets+' chamados'),'']:[]),
+    'APONTAMENTOS EM FINS DE SEMANA E FERIADOS',
+    '────────────────────────────────────────',
+    ...(extraRows.length?extraRows.map(x=>'- '+displayDate(x.date)+' | '+x.kind+' | '+x.person+' | '+x.sector+' | #'+x.ticket+' | '+duration(x.minutes)):['Sem registros.']),
+    '',
     'INFORMAÇÃO IMPORTANTE',
     '────────────────────────────────────────',
     'Este relatório considera somente apontamentos importados do Movidesk.',
@@ -848,11 +866,12 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
         scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
       minutes:x.minutes,referenceMinutes:x.referenceMinutes,minimumMinutes:x.minimumMinutes,
       status:scopedManagement?x.status:'Apontamento importado'})),
+    extraordinary:extraRows,
     customers:(reportSectionOn(rec,'customers')?companies:[]).map(x=>({name:x.name,minutes:x.minutes,tickets:x.tickets,appointments:0})), 
     activities:(reportSectionOn(rec,'activities')?[...byActivity]:[]).sort((a,b)=>b[1]-a[1]).slice(0,30).map(([name,minutes])=>({name,minutes}))
   };
   return { text: lines.join('\n'), detailsHtml, teamJourneyHtml, teamJourney:journey, exportData,
-    metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length, ...journeyGaps } };
+    metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length,extraMinutes,extraCount:extraRows.length,...journeyGaps } };
 }
 function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:ReportKind,partial:boolean,historicalIncomplete:boolean,clients:R[],forecastRows:unknown[]=[]):R {
  const data=report.exportData as R;
@@ -863,6 +882,7 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
    from,to,partial,historicalIncomplete,
    reportSections:reportSectionFlags(rec),
    metrics:report.metrics,
+   extraordinary:data.extraordinary||[],
    collaborators:data.collaborators||[],daily:reportSectionOn(rec,'daily_detail')?(data.daily||[]):[],
    customers:reportSectionOn(rec,'customers')?(data.customers||[]):[],
    tickets:(Array.isArray(tickets.attachmentTickets)?tickets.attachmentTickets:[])
@@ -1299,9 +1319,9 @@ function scheduledReports(today:string, hol:Set<string>, recipients:R[]):Schedul
   const isMonthCloseDay=businessDay&&today===firstBusinessDay;
   const tasks:ScheduledReport[] = [];
   for (const r of recipients) {
-    if(isKeilaRecipient(r)||!recipientAllows(r,'general'))continue;
+    if(!recipientAllows(r,'general'))continue;
     if (businessDay && r.daily_enabled===true)
-      tasks.push({r,kind:'daily',from:prev,to:prev});
+      tasks.push({r,kind:'daily',from:prev,to:shift(today,-1)});
     if (businessDay && today===firstWeekBusinessDay && r.weekly_enabled===true)
       tasks.push({r,kind:'weekly',from:prevMonday,to:prevSunday});
     const linked = (Array.isArray(r.sectors)&&r.sectors.length?r.sectors:[r.sector]).some(x=>norm(x));
@@ -1542,14 +1562,15 @@ async function prepareReports() {
 }
 async function cachedReport(t:ScheduledReport) {
   // Never send an outdated prepared report after a recipient opts into custom content controls.
-  // Keila must never receive a previously prepared document containing quality indicators.
-  if(isKeilaRecipient(t.r)||t.r.report_sections!=null)return null;
+  if(t.r.report_sections!=null)return null;
   if(t.kind!=='daily'&&t.kind!=='weekly')return null;
   const key=String(t.r.id)+':'+t.kind+':'+t.from+':'+t.to;
   const rows=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
     '&status=eq.ready&select=subject,body_text,body_html,report_data,reconciliation_success_at,expires_at&limit=1');
   if(!rows.length||Date.parse(String(rows[0].expires_at))<=Date.now()||
-    !Array.isArray(rows[0].report_data?.forecastVariances))return null;
+    !Array.isArray(rows[0].report_data?.forecastVariances) ||
+    !Number.isFinite(Number(rows[0].report_data?.metrics?.targetGapMinutes)) ||
+    !Array.isArray(rows[0].report_data?.extraordinary))return null;
   const coverage=await recentCoverage(t.from,t.to);
   if(!coverage.ready||Date.parse(String(coverage.lastSuccess))!==Date.parse(String(rows[0].reconciliation_success_at)))return null;
   return rows[0] as R;
