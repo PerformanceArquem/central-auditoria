@@ -1,4 +1,6 @@
 import {forecastSection} from "./forecast-variance.ts";
+import {readZenviaEmailMetrics} from "./zenvia-email-source.ts";
+import {prepareVoiceEmail} from "./zenvia-email-section.ts";
 import {dashboardReport} from "./dashboard-report.ts";
 import {KEILA_PRODUCTION_FLOW_RECIPIENT_ID,buildKeilaProductionFlow,keilaProductionReport} from "./production-flow-keila.ts";
 import {composeTicketCharge} from "./ticket-charge.ts";
@@ -854,6 +856,7 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
  const clientNames=new Map(clients.map(x=>[String(x.ticket_id),String(x.client_name||'')]));
  return {
    schema:'arquem-mail-v1',
+   recipientId:String(rec.id),reportKind:kind,
    title:(kind==='monthly'||kind==='annual'?'Balancete ':'Relatório ')+REPORT_LABEL[kind].toLowerCase()+' - '+safe(rec.name||rec.sector||'Gestão'),
    from,to,partial,historicalIncomplete,
    metrics:report.metrics,
@@ -866,6 +869,33 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
 }
 async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R) {
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
+  // Controles duplos: destinatario corporativo e flags de homologacao.
+  // Mantem a rotina 09h atual intacta enquanto a revisao nao for aprovada.
+  const allowVoiceEmails=new Map<string,string>([
+    ['a4748115-e1d6-42dc-a8d1-706b8129219f','suportegestao@arquem.com.br'],
+    ['40752b0b-c2a4-4031-9496-733b6f846d76','financeiro@arquem.com.br'],
+    ['1b8168c6-bec0-4f6d-a3f9-feaec63ed147','canestraro@arquem.com.br']
+  ]);
+  const eligible=!!reportData &&
+    allowVoiceEmails.get(String(reportData.recipientId))===String(email).trim().toLowerCase();
+  if(eligible&&E('ZENVIA_VOICE_REPORTS_ENABLED')==='true'){
+    // Bloqueia ativacao ate que o Apps Script aceite e gere PDF/Excel com o mesmo bloco.
+    if(E('ZENVIA_VOICE_ATTACHMENTS_READY')!=='true')
+      throw new Error('Envio Zenvia bloqueado: anexos PDF/Excel ainda nao homologados');
+    const token=E('ZENVIA_VOICE_ACCESS_TOKEN');
+    if(!token)throw new Error('Envio Zenvia bloqueado: segredo do Supabase ausente');
+    const from=String(reportData.from||''),to=String(reportData.to||'');
+    const [voice,ratings]=await Promise.all([
+      readZenviaEmailMetrics(from,to,token,E('ZENVIA_VOICE_QUEUE_ID')),
+      supportRatings(from,to)
+    ]);
+    const section=prepareVoiceEmail({metrics:voice.metrics,byDay:voice.byDay,
+      byHour:voice.byHour,byExtension:voice.byExtension,ratings,from,to,
+      verified:voice.coverageVerified});
+    text+=section.text;
+    html=html?(/<\/body>/i.test(html)?html.replace(/<\/body>/i,section.html+'</body>'):html+section.html):section.html;
+    reportData={...reportData,zenviaVoice:section.kpis};
+  }
   if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
   // Regra obrigatoria no ultimo ponto de envio, inclusive para relatorios previamente preparados.
   const cleanSubject=corporateCopy(subject);
