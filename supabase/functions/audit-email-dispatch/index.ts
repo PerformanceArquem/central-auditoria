@@ -961,6 +961,12 @@ async function sendMail(email: string, subject: string, text: string, html?: str
        !capabilities.formats.includes('pdf') || !capabilities.formats.includes('xlsx') ||
        capabilities.paperTemplateConfigured!==true)
       throw new Error('PDF/XLSX ainda não validados no Apps Script com papel timbrado');
+    // Aplicar a regra também no ponto final de envio, independentemente
+    // de qual rotina criou o pacote de Rastreabilidade da Produção.
+    if(cleanReportData?.productionFlow && (
+       capabilities.attachmentsVersion!=='arquem-9-keila-totals-only' ||
+       capabilities.keilaProductionReady!==true))
+      throw new Error('Rastreabilidade bloqueada: o Apps Script não confirmou o gerador exclusivo e homologado da Keila');
     const sections=cleanReportData?.reportSections as R|undefined;
     if(cleanReportData?.timing&&capabilities.postCloseAdjustmentsSupported!==true)
       throw new Error('Gerador ainda não homologado para observações de ajustes posteriores ao fechamento');
