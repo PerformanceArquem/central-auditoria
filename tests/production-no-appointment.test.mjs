@@ -18,22 +18,26 @@ const ticket=(id,daysOld,status='Em andamento')=>({
     createdDate:utcDay(daysOld)}
 });
 const tickets=[
-  ticket(101,2),ticket(102,45),ticket(103,90),ticket(104,90),ticket(105,90,'Fechado')
+  ticket(101,2),ticket(102,45),ticket(103,90),ticket(104,90),ticket(105,90,'Fechado'),ticket(106,45)
 ];
 const appointments=[
   {appointment_key:'a1',ticket_id:'103',sector:'Produção - CPO',duration_minutes:30,
    appointment_date:utcDay(10),collaborator_name:'Teste'},
   {appointment_key:'a2',ticket_id:'104',sector:'Produção - CPO',duration_minutes:30,
-   appointment_date:utcDay(40),collaborator_name:'Teste'}
+   appointment_date:utcDay(40),collaborator_name:'Teste'},
+  {appointment_key:'a3',ticket_id:'106',sector:'Produção - CPO',duration_minutes:30,
+   appointment_date:utcDay(-7),collaborator_name:'Teste'}
 ];
+let syncReady=true;
+let adminAllowed=true;
 const json=value=>({ok:true,json:async()=>value});
 const fetch=async input=>{
   const url=new URL(String(input));
   if(url.pathname.endsWith('/auth/v1/user'))return json({id:'user-123'});
-  if(url.pathname.endsWith('/audit_users'))return json([{role:'admin',is_active:true}]);
+  if(url.pathname.endsWith('/audit_users'))return json([{role:adminAllowed?'admin':'user',is_active:true}]);
   if(url.pathname.endsWith('/audit_direct_tickets'))return json(tickets);
   if(url.pathname.endsWith('/audit_direct_appointments'))return json(appointments);
-  if(url.pathname.endsWith('/audit_recent_reconcile_state'))return json([{completed:true}]);
+  if(url.pathname.endsWith('/audit_recent_reconcile_state'))return json([{completed:syncReady,last_error:syncReady?null:'Conciliação pendente'}]);
   throw Error('Unexpected URL '+url.pathname);
 };
 const scope={
@@ -59,8 +63,8 @@ test('30-day default excludes recent tickets and closed tickets, includes no his
   const response=await call(undefined);
   assert.equal(response.code,200);
   assert.equal(response.body.legacyAlerts.thresholdDays,30);
-  assert.deepEqual(ids(response),['102','104']);
-  assert.equal(response.body.legacyAlerts.counts.withoutAppointmentCount,2);
+  assert.deepEqual(ids(response),['102','104','106']);
+  assert.equal(response.body.legacyAlerts.counts.withoutAppointmentCount,3);
   const without=response.body.legacyAlerts.withoutAppointment.find(x=>x.id==='102');
   assert.equal(without.noAppointmentEver,true);
   assert.ok(without.daysWithoutAppointment>=40);
@@ -69,7 +73,7 @@ test('30-day default excludes recent tickets and closed tickets, includes no his
 test('configurable threshold uses last appointment, not just ticket age',async()=>{
   const response=await call(7);
   assert.equal(response.code,200);
-  assert.deepEqual(ids(response),['102','103','104']);
+  assert.deepEqual(ids(response),['102','103','104','106']);
   assert.equal(response.body.legacyAlerts.thresholdDays,7);
 });
 
@@ -79,6 +83,9 @@ test('invalid thresholds and unauthenticated access are rejected',async()=>{
     assert.equal(response.code,400);
   }
   assert.equal((await call(30,false)).code,401);
+  adminAllowed=false;
+  try{assert.equal((await call(30,true)).code,403);}
+  finally{adminAllowed=true;}
 });
 
 test('the UI threshold triggers an authenticated, read-only API reload',()=>{
@@ -86,4 +93,22 @@ test('the UI threshold triggers an authenticated, read-only API reload',()=>{
   assert.ok(html.includes('id="pdNoAppointmentDays"'));
   assert.ok(html.includes("el('pdNoAppointmentDays').addEventListener('change',load)"));
   assert.ok(html.includes('/api/audit-production-metrics?withoutAppointmentDays='));
+});
+
+test('incomplete synchronization suppresses warnings rather than reporting zero or missing work',async()=>{
+  syncReady=false;
+  try{
+    const response=await call(30);
+    assert.equal(response.code,200);
+    assert.equal(response.body.partial,true);
+    assert.equal(response.body.legacyAlerts.coverageReady,false);
+    assert.equal(response.body.legacyAlerts.counts.withoutAppointmentCount,null);
+    assert.deepEqual(ids(response),[]);
+  }finally{syncReady=true;}
+});
+
+test('UI refuses stale-appointment filter when synchronization is incomplete',()=>{
+  const html=readFileSync('index.html','utf8');
+  assert.ok(html.includes("legacy.coverageReady===true?lc.withoutAppointmentCount||0:'Conciliação pendente'"));
+  assert.ok(html.includes("missingOption.disabled=legacy.coverageReady!==true"));
 });
