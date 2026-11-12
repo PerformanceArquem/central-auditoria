@@ -961,6 +961,12 @@ async function sendMail(email: string, subject: string, text: string, html?: str
        !capabilities.formats.includes('pdf') || !capabilities.formats.includes('xlsx') ||
        capabilities.paperTemplateConfigured!==true)
       throw new Error('PDF/XLSX ainda não validados no Apps Script com papel timbrado');
+    // Aplicar a regra também no ponto final de envio, independentemente
+    // de qual rotina criou o pacote de Rastreabilidade da Produção.
+    if(cleanReportData?.productionFlow && (
+       capabilities.attachmentsVersion!=='arquem-9-keila-totals-only' ||
+       capabilities.keilaProductionReady!==true))
+      throw new Error('Rastreabilidade bloqueada: o Apps Script não confirmou o gerador exclusivo e homologado da Keila');
     const sections=cleanReportData?.reportSections as R|undefined;
     if(cleanReportData?.timing&&capabilities.postCloseAdjustmentsSupported!==true)
       throw new Error('Gerador ainda não homologado para observações de ajustes posteriores ao fechamento');
@@ -1022,7 +1028,7 @@ async function adminAction(payload: R) {
       const ready=capabilities?.sucesso===true &&
         formats.includes('pdf') && formats.includes('xlsx') &&
         capabilities.paperTemplateConfigured===true;
-      const keilaGeneratorReady=ready&&capabilities?.attachmentsVersion==='arquem-8-keila-movements'&&capabilities?.keilaProductionReady===true;
+      const keilaGeneratorReady=ready&&capabilities?.attachmentsVersion==='arquem-9-keila-totals-only'&&capabilities?.keilaProductionReady===true;
       const csatGeneratorReady=ready&&capabilities?.csatNotesReady===true;
       return json({ok:true,enabled:flag,ready,keilaGeneratorReady,csatGeneratorReady,
         postCloseAdjustmentsSupported:capabilities?.postCloseAdjustmentsSupported===true,
@@ -1434,7 +1440,7 @@ async function requireKeilaGeneratorReady() {
  const capability=await res.json().catch(()=>null) as R|null;
  const formats=Array.isArray(capability?.formats)?capability.formats:[];
  if(capability?.sucesso!==true || capability?.paperTemplateConfigured!==true ||
-    capability?.attachmentsVersion!=='arquem-8-keila-movements' ||
+    capability?.attachmentsVersion!=='arquem-9-keila-totals-only' ||
      capability?.keilaProductionReady!==true ||
     !formats.includes('pdf') || !formats.includes('xlsx'))
   throw new Error('Envio Keila bloqueado: gerador PDF/Excel de Produção ainda não homologado');
@@ -2242,7 +2248,7 @@ async function handleRequest(req: Request): Promise<Response> {
       const rec=(await recipientList()).find(r=>r.id===id);
       if(!rec)return json({ok:false,error:'Destinatário inativo ou inválido'},404);
       const timing=await reportTiming({recipientId:id,reportKind:'daily',from:shift(dateBR(),-1),to:shift(dateBR(),-1),reportSections:reportSectionFlags(rec)},db,list);
-      return json({ok:true,sent:false,recipientId:id,status:timing?.status,adjustmentCount:timing?.adjustmentCount||0,noticePresent:!!timing?.notice,presentation:{version:'arquem-visual-v1',subject:reportSubject(rec,'daily',shift(dateBR(),-1),shift(dateBR(),-1)),heading:reportIdentity(rec).title,hierarchy:reportIdentity(rec).hierarchy,csatAllowed:canReceiveCsat(rec)}});
+      return json({ok:true,sent:false,recipientId:id,status:timing?.status,adjustmentCount:Array.isArray(timing?.adjustments)?timing.adjustments.length:0,noticePresent:!!timing?.notice,presentation:{version:'arquem-visual-v1',subject:reportSubject(rec,'daily',shift(dateBR(),-1),shift(dateBR(),-1)),heading:reportIdentity(rec).title,hierarchy:reportIdentity(rec).hierarchy,csatAllowed:canReceiveCsat(rec)}});
     }
     return action === 'dispatch_noon_partial' ? await dispatchNoonPartial() : action === 'attachment_probe' ? await adminAction({action:'attachment_health'}) : action === 'prepare' ? await prepareReports() : action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch(payload);
   } catch (ex) { console.error('audit-email-dispatch:', err(ex)); return json({ ok: false, error: err(ex), release: RELEASE_ID }, 500); }

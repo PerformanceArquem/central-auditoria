@@ -35,3 +35,5 @@ jobs:
         run: |
           cp apps-script/arquem-relatorios-anexos.gs /tmp/arquem-relatorios-anexos.js
           node --check /tmp/arquem-relatorios-anexos.js
+      - name: Verify Keila attachments do not leak details
+        run: node --test tests/keila-attachments-boundary.test.mjs

@@ -99,10 +99,7 @@ export function keilaProductionReport(
     schema:'arquem-mail-v1',
     title,from:data.from,to:data.to,partial:false,historicalIncomplete:false,
     metrics:{entered,exited},
-    productionFlow:{entered,exited,movements:data.movements.map(m=>({
-      id:m.id,direction:m.direction,at:m.at,subject:m.subject,client:m.client,
-      fromTeam:m.fromTeam,toTeam:m.toTeam,responsible:m.responsible,actor:m.actor
-    }))},
+    productionFlow:{entered,exited},
     collaborators:[],customers:[],activities:[],daily:[],tickets:[],forecastVariances:[]
   };
   return {title,text,html,packet,limited:false};

@@ -14,4 +14,8 @@ Deno.test('Keila: somente rastreabilidade de entradas e saídas',()=>{
     check(![text,html,packet].some(p=>p.includes(forbidden)),'Disallowed Keila content: '+forbidden);
   }
   check(Array.isArray(report.packet.tickets) && report.packet.tickets.length===0,'No tickets in Keila email attachment');
+  check(!('movements' in report.packet.productionFlow),'No detailed movements in exported packet');
+  check(Object.keys(report.packet.productionFlow).sort().join(',')==='entered,exited','Only the authorized metrics in productionFlow');
+  const fixture=keilaProductionReport({...data,entered:0,exited:0},'daily');
+  check(JSON.stringify(fixture.packet.productionFlow)==='{"entered":0,"exited":0}','Empty day must remain safe');
 });

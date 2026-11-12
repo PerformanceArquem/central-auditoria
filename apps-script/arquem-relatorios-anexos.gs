@@ -90,7 +90,7 @@ function arquemHomologarKeilaSemEnvio() {
   props.setProperties({
     ARQUEM_KEILA_FLOW_VALIDATED_AT:new Date().toISOString(),
     ARQUEM_KEILA_FLOW_VALIDATED_TEMPLATE_ID:props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID') || '',
-    ARQUEM_KEILA_FLOW_VALIDATED_VERSION:'arquem-8-keila-movements'
+    ARQUEM_KEILA_FLOW_VALIDATED_VERSION:'arquem-9-keila-totals-only'
   },false);
   return {ok:true,sent:false,productionReady:true,files:keila.files};
 }
@@ -155,7 +155,7 @@ function arquemCapacidadesAnexos_() {
     props.getProperty('ARQUEM_SECTIONS_VALIDATED_TEMPLATE_ID')===id &&
     Number.isFinite(sectionsAt) &&
     sectionsAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
-  return {sucesso:true,attachmentsVersion:'arquem-8-keila-movements',formats:['pdf','xlsx'],
+  return {sucesso:true,attachmentsVersion:'arquem-9-keila-totals-only',formats:['pdf','xlsx'],
     postCloseAdjustmentsSupported:ready&&props.getProperty('ARQUEM_TIMING_VALIDATED_VERSION')==='arquem-post-close-v1',
     sectionPermissionsSupported,
     csatNotesReady:ready &&
@@ -165,7 +165,7 @@ function arquemCapacidadesAnexos_() {
       Date.parse(props.getProperty('ARQUEM_CSAT_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime(),
     paperTemplateConfigured:ready,
     keilaProductionReady:ready &&
-      props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_VERSION')==='arquem-8-keila-movements' &&
+      props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_VERSION')==='arquem-9-keila-totals-only' &&
       props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_TEMPLATE_ID')===id &&
       Number.isFinite(Date.parse(props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_AT')||'')) &&
       Date.parse(props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime()};
@@ -183,20 +183,7 @@ function arquemTesteKeilaSemEnvio() {
     from:'2026-11-02',to:'2026-11-08',
     partial:false,historicalIncomplete:false,
     metrics:{entered:2,exited:1},
-    productionFlow:{entered:2,exited:1,movements:[
-      {id:'101001',direction:'entry',at:'2026-11-05T12:05:00.000Z',
-        subject:'Chamado fictício de teste 1',client:'Cliente demonstrativo',
-        fromTeam:'Inteligência',toTeam:'Produção - CPO',
-        responsible:'Pessoa demonstrativa',actor:'Agente demonstrativo'},
-      {id:'101002',direction:'entry',at:'2026-11-05T12:10:00.000Z',
-        subject:'Chamado fictício de teste 2',client:'Cliente demonstrativo',
-        fromTeam:'Suporte',toTeam:'Produção - CPO',
-        responsible:'Pessoa demonstrativa',actor:'Agente demonstrativo'},
-      {id:'101001',direction:'exit',at:'2026-11-05T16:45:00.000Z',
-        subject:'Chamado fictício de teste 1',client:'Cliente demonstrativo',
-        fromTeam:'Produção - CPO',toTeam:'Sucesso do Cliente',
-        responsible:'Outra pessoa demonstrativa',actor:'Agente demonstrativo'}
-    ]},
+    productionFlow:{entered:2,exited:1},
     collaborators:[],daily:[],customers:[],activities:[],forecastVariances:[],tickets:[]
   };
   const attachments=arquemCreateReportAttachments_(packet);
@@ -347,31 +334,17 @@ function arquemCreateReportAttachments_(packet) {
     if(permissions.activities===false)packet.activities=[];
   }
   if(packet.productionFlow){
-    // A Rastreabilidade agora exige todas as movimentações nos anexos, nunca somente os totais.
+    // Dados individuais nunca seguem para os anexos da Keila.
     const flow=packet.productionFlow;
-    const movements=flow.movements;
-    if(!Array.isArray(movements) || movements.length>500)
-      throw new Error('Rastreabilidade: movimentações ausentes ou acima do limite de 500 por anexo');
-    const clean=movements.map(m=>{
-      const id=String(m.id||'');
-      if(!/^\d{1,12}$/.test(id) || !['entry','exit'].includes(m.direction))
-        throw new Error('Movimentação com chamado ou direção inválida');
-      const date=String(m.at||'');
-      if(!/^\d{4}-\d\d-\d\dT/.test(date)||!Number.isFinite(Date.parse(date)))
-        throw new Error('Movimentação com data/hora inválida');
-      const value=(x,n)=>String(x||'Não informado').slice(0,n);
-      return {id,direction:m.direction,at:date,subject:value(m.subject,240),
-        client:value(m.client,150),fromTeam:value(m.fromTeam,100),toTeam:value(m.toTeam,100),
-        responsible:value(m.responsible,120),actor:value(m.actor,120)};
-    });
-    const entries=new Set(clean.filter(m=>m.direction==='entry').map(m=>m.id)).size;
-    const exits=new Set(clean.filter(m=>m.direction==='exit').map(m=>m.id)).size;
-    if(entries!==(Number(flow.entered)||0)||exits!==(Number(flow.exited)||0))
-      throw new Error('Totais de rastreabilidade não conferem com o detalhamento');
-    packet.productionFlow={entered:entries,exited:exits,movements:clean};
-    packet.metrics={entered:entries,exited:exits};
-    ['productionWorkload','productionQuality','collaborators','daily','tickets',
-     'customers','activities','forecastVariances'].forEach(key=>{packet[key]=[];});
+    const entered=Number(flow.entered),exited=Number(flow.exited);
+    if(!Number.isSafeInteger(entered)||entered<0||!Number.isSafeInteger(exited)||exited<0)
+      throw new Error('Totais de entradas e saídas inválidos.');
+    packet={
+      schema:'arquem-mail-v1', title:String(packet.title||'').slice(0,120),
+      from:packet.from,to:packet.to,partial:false,historicalIncomplete:false,
+      metrics:{entered,exited},productionFlow:{entered,exited},
+      collaborators:[],daily:[],customers:[],activities:[],tickets:[],forecastVariances:[]
+    };
   }
   const title = String(packet.title || 'Relatório gerencial').slice(0,120);
   const from = String(packet.from || ''), to = String(packet.to || '');
@@ -468,31 +441,9 @@ function arquemPdf_(p, keep) {
     const flow=p.productionFlow;
     arquemEstilizarTabelaPdf_(body.appendTable([
       ['ENTRADAS','SAÍDAS'],
-      [String(Number(flow.entered)||0),String(Number(flow.exited)||0)]
+      [String(flow.entered),String(flow.exited)]
     ]));
-    const movements=flow.movements||[];
-    const dateBR=(s)=>Utilities.formatDate(new Date(s),'America/Sao_Paulo','dd/MM/yyyy HH:mm');
-    const addSection=(direction,title)=>{
-      const items=movements.filter(m=>m.direction===direction);
-      arquemAddHeading_(body,title);
-      body.appendParagraph(items.length+' movimentações · '+
-        new Set(items.map(m=>m.id)).size+' chamados distintos.');
-      const rows=[['Chamado / data','Assunto / cliente','Setores e responsáveis']];
-      items.forEach(m=>rows.push([
-        '#'+m.id+'\n'+dateBR(m.at),
-        m.subject+'\nCliente: '+m.client,
-        'Origem: '+m.fromTeam+'\nDestino: '+m.toTeam+
-        '\nResponsável: '+m.responsible+'\nMovimentado por: '+m.actor
-      ]));
-      if(!items.length)rows.push(['—','Nenhuma movimentação','—']);
-      const table=body.appendTable(rows);
-      arquemEstilizarTabelaPdf_(table);
-      items.forEach((m,i)=>table.getCell(i+1,0).editAsText()
-        .setLinkUrl(0,m.id.length+1,'https://arquem.movidesk.com/Ticket/Edit/'+m.id));
-    };
-    addSection('entry','Entradas na Produção — chamados detalhados');
-    addSection('exit','Saídas da Produção — chamados detalhados');
-    body.appendParagraph('Entradas e saídas são transferências identificadas no histórico do Movidesk. Encerramentos não contam como saídas.');
+    body.appendParagraph('Comparativo de entradas e saídas da Produção. Os detalhes permanecem exclusivamente na Central de Auditoria.');
     doc.saveAndClose();
     return DriveApp.getFileById(file.getId()).getAs(MimeType.PDF);
   }else{
@@ -630,26 +581,6 @@ function arquemXlsx_(p, keep) {
       .setOption('title','Entradas x Saídas da Produção')
       .setOption('legend',{position:'none'}).build();
     first.insertChart(chart);
-  }
-  if(p.productionFlow){
-    const flow=p.productionFlow;
-    const moves=flow.movements||[];
-    const headers=['Chamado','Assunto','Cliente','Data/hora Brasília','Movimentação','Origem','Destino','Responsável','Movimentado por','Link Movidesk'];
-    const toRow=m=>['#'+m.id,m.subject,m.client,
-      Utilities.formatDate(new Date(m.at),'America/Sao_Paulo','dd/MM/yyyy HH:mm'),
-      m.direction==='entry'?'Entrada':'Saída',m.fromTeam,m.toTeam,m.responsible,m.actor,
-      'https://arquem.movidesk.com/Ticket/Edit/'+m.id];
-    const sections=[['Entradas',moves.filter(m=>m.direction==='entry')],
-      ['Saídas',moves.filter(m=>m.direction==='exit')],['Movimentações',moves]];
-    sections.forEach(pair=>{
-      const rows=pair[1],sheet=arquemCreateSheet_(ss,pair[0],headers,rows.map(toRow));
-      if(rows.length){
-        const refs=rows.map(m=>[SpreadsheetApp.newRichTextValue().setText('#'+m.id)
-          .setLinkUrl('https://arquem.movidesk.com/Ticket/Edit/'+m.id).build()]);
-        sheet.getRange(2,1,refs.length,1).setRichTextValues(refs).setFontColor('#2467a8');
-        sheet.getRange(2,10,refs.length,1).setFontColor('#2467a8');
-      }
-    });
   }
   if(!p.productionFlow){
   if(p.productionFlow && Array.isArray(p.productionWorkload)){
@@ -794,6 +725,21 @@ function arquemXlsx_(p, keep) {
     }
   }
   SpreadsheetApp.flush();
+  if(p.productionFlow){
+    // Bloquear exportacao de planilhas com qualquer aba extra para a Keila.
+    const sheets=ss.getSheets();
+    if(sheets.length!==1 || sheets[0].getName()!=='Resumo')
+      throw new Error('Keila: planilha contem abas nao autorizadas.');
+    const values=sheets[0].getRange(1,1,6,2).getValues();
+    const expected=['Indicador','Relatório','Início','Fim','Entradas','Saídas'];
+    if(expected.some((label,i)=>String(values[i][0])!==label))
+      throw new Error('Keila: formato de resumo inesperado.');
+    if(Number(values[4][1])!==Number(p.productionFlow.entered) ||
+       Number(values[5][1])!==Number(p.productionFlow.exited))
+      throw new Error('Keila: indicadores de entrada/saida divergentes.');
+    if(sheets[0].getCharts().length!==1)
+      throw new Error('Keila: grafico comparativo ausente ou duplicado.');
+  }
   const url='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(ss.getId())+
     '/export?mimeType='+encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   const response=UrlFetchApp.fetch(url,{
