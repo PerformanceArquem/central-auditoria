@@ -56,3 +56,20 @@ test('UI is wired and exports are available without new unauthenticated route',(
  assert.ok(ui.includes('doc.autoTable'));
  assert.ok(api.includes("if(req.query?.mode==='triage')"));
 });
+
+test('triage offers multi-select rows and selected-only exports without changing filters',()=>{
+ const html=readFileSync('index.html','utf8');
+ const ui=readFileSync('intelligence-triage.js','utf8');
+ for(const id of ['itSelectAll','itSelectVisible','itClearSelection','itSelectedCount','itExportSelected'])
+  assert.ok(html.includes('id="'+id+'"'),'missing selection control '+id);
+ assert.match(ui,/const selectedIds=new Set\(\)/);
+ assert.match(ui,/data-id=/);
+ assert.match(ui,/visibleSelected\(\)/);
+ assert.match(ui,/exportItems\(\)/);
+ assert.match(ui,/rows\(data\)/);
+ assert.match(ui,/const body=data\.map/);
+ assert.match(ui,/el\('itSelectVisible'\)\.addEventListener\('change'/);
+ assert.match(ui,/el\('itTable'\)\.querySelector\('tbody'\)\.addEventListener\('change'/);
+ assert.match(ui,/selectedIds\.clear\(\)/);
+ assert.match(ui,/const valid=new Set\(items\.map/);
+});
