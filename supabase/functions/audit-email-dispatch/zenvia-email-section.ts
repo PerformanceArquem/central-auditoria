@@ -51,7 +51,7 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
   answered:m.answered,unanswered:m.unanswered,inProgress:m.inProgress,unclassified:m.unclassified,
   talkSeconds:safeNum(m.talkSeconds),tmaSeconds:safeNum(m.tmaSeconds),tmeSeconds:safeNum(m.tmeSeconds),
   queueCalls:m.queueCalls??null,quality,byDay:days,byHour:hours,byExtension:extensions.slice(0,30)};
- const csat=q=>q.total?q.csatPercent+'% ('+q.positive+'/'+q.total+' notas de 8 a 10)':'Sem avaliações no período';
+ const csat=(q:R)=>q.total?q.csatPercent+'% ('+q.positive+'/'+q.total+' notas de 8 a 10)':'Sem avaliações no período';
  const text='\n\nVOZ × CHAT · Indicadores reais do Suporte\n'+
   'Período: '+input.from+' a '+input.to+'\n'+
   'Voz recebidas: '+m.inbound+'; efetuadas: '+m.outbound+'; atendidas: '+m.answered+
@@ -61,7 +61,7 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
   'CSAT Voz: '+csat(quality.voz)+'; CSAT Chat: '+csat(quality.chat)+'\n'+
   'CSAT = notas de 8 a 10 / todas as notas válidas (1 a 10). Notas 1 a 7 são negativas; ausência de nota não equivale a zero.\n'+
   'Fontes: ligações Zenvia; notas Movidesk e avaliações manuais com deduplicação por ticket e canal.';
- const cells=values=>'<tr>'+values.map(x=>'<td style="border-bottom:1px solid #e2e8f0;padding:8px 10px">'+esc(x)+'</td>').join('')+'</tr>';
+ const cells=(values:unknown[])=>'<tr>'+values.map(x=>'<td style="border-bottom:1px solid #e2e8f0;padding:8px 10px">'+esc(x)+'</td>').join('')+'</tr>';
  const html='<section style="border-top:3px solid #2457d6;padding:18px 0;margin-top:24px;font-family:Arial,sans-serif;color:#17345d">'+
   '<h2 style="font-size:18px;margin:0">Voz × Chat · Qualidade do Suporte</h2>'+
   '<p style="font-size:12px;color:#64748b">Ligações: Zenvia · Avaliações: Movidesk e manuais</p>'+
