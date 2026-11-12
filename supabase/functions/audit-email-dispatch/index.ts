@@ -867,6 +867,24 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
    activities:data.activities||[],forecastVariances:forecastRows
  };
 }
+// Mesma medicao de chat do modulo Suporte: por tickets com apontamento no periodo.
+// Sem amostras: TMA/TME permanecem indisponiveis, nunca zero.
+async function measuredChatForEmail(from:string,to:string){
+ const rows=await list('audit_direct_appointments',
+   '?select=ticket_id&sector=eq.Suporte&appointment_date=gte.'+from+'&appointment_date=lte.'+to);
+ const ids=[...new Set(rows.map(r=>String(r.ticket_id||'')).filter(x=>/^\d+$/.test(x)))];
+ const times:R[]=[];
+ for(let off=0;off<ids.length;off+=150){
+  times.push(...await list('audit_support_chat_times',
+    '?select=ticket_id,talk_seconds,wait_seconds&ticket_id=in.('+ids.slice(off,off+150).join(',')+')'));
+ }
+ const valid=(key:string)=>times.map(r=>r[key]).filter(v=>v!=null&&Number.isFinite(Number(v))&&Number(v)>=0).map(Number);
+ const talk=valid('talk_seconds'),wait=valid('wait_seconds');
+ const avg=(n:number[])=>n.length?Math.round(n.reduce((a,b)=>a+b,0)/n.length):null;
+ return {tickets:ids.length,tmaSeconds:avg(talk),tmeSeconds:avg(wait),
+  tmaSamples:talk.length,tmeSamples:wait.length,source:'audit_support_chat_times'};
+}
+
 async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R) {
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
   // Controles duplos: destinatario corporativo e flags de homologacao.
@@ -885,12 +903,12 @@ async function sendMail(email: string, subject: string, text: string, html?: str
     const token=E('ZENVIA_VOICE_ACCESS_TOKEN');
     if(!token)throw new Error('Envio Zenvia bloqueado: segredo do Supabase ausente');
     const from=String(reportData.from||''),to=String(reportData.to||'');
-    const [voice,ratings]=await Promise.all([
+    const [voice,ratings,chatMetrics]=await Promise.all([
       readZenviaEmailMetrics(from,to,token,E('ZENVIA_VOICE_QUEUE_ID')),
-      supportRatings(from,to)
+      supportRatings(from,to),measuredChatForEmail(from,to)
     ]);
     const section=prepareVoiceEmail({metrics:voice.metrics,byDay:voice.byDay,
-      byHour:voice.byHour,byExtension:voice.byExtension,ratings,from,to,
+      byHour:voice.byHour,byExtension:voice.byExtension,ratings,chatMetrics,from,to,
       verified:voice.coverageVerified});
     text+=section.text;
     html=html?(/<\/body>/i.test(html)?html.replace(/<\/body>/i,section.html+'</body>'):html+section.html):section.html;
