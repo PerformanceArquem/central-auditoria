@@ -44,7 +44,7 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
  const days=(input.byDay||[]).map(x=>({date:String(x.date||''),total:Number(x.total||0),answered:Number(x.answered||0)}));
  const hours=(input.byHour||[]).map(x=>({hour:String(x.hour||''),count:Number(x.count||0)})).sort((a,b)=>b.count-a.count);
  const extensions=(input.byExtension||[]).map(x=>({extension:String(x.extension||''),total:Number(x.total||0),
-  answered:Number(x.answered||0),talkSeconds:Number(x.talkSeconds||0)})).filter(x=>/^\d{1,12}$/.test(x.extension));
+  answered:Number(x.answered||0),talkSeconds:safeNum(x.talkSeconds)})).filter(x=>/^\d{1,12}$/.test(x.extension));
  const kpis={from:input.from,to:input.to,provider:'Zenvia Voice',total:m.total,inbound:m.inbound,outbound:m.outbound,
   answered:m.answered,unanswered:m.unanswered,inProgress:m.inProgress,unclassified:m.unclassified,
   talkSeconds:safeNum(m.talkSeconds),tmaSeconds:safeNum(m.tmaSeconds),tmeSeconds:safeNum(m.tmeSeconds),
