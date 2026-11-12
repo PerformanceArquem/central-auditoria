@@ -304,7 +304,7 @@ function arquemCreateReportAttachments_(packet) {
       !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) throw new Error('Datas inválidas');
   const rows = [
     packet.collaborators || [], packet.daily || [], packet.tickets || [],
-    packet.customers || [], packet.activities || []
+    packet.customers || [], packet.activities || [], packet.csatRatings || []
   ];
   if (rows.some(arr => !Array.isArray(arr) || arr.length > 500))
     throw new Error('Limite de dados excedido para anexos');
@@ -457,6 +457,22 @@ function arquemPdf_(p, keep) {
       arquemH_(x.targetMinutes),arquemH_(x.minimumGap),arquemH_(x.targetGap)]));
     arquemEstilizarTabelaPdf_(body.appendTable(lines));
   }
+  if ((p.csatRatings||[]).length) {
+    arquemAddHeading_(body,'CSAT do Suporte · notas por atendimento');
+    const items=p.csatRatings,stat=p.csat||{};
+    body.appendParagraph('Notas positivas: 8 a 10. Avaliações detalhadas: '+items.length+
+      ' | Positivas: '+(stat.excelente||0)+
+      ' | CSAT: '+(stat.csatPercent==null?'Sem avaliações':stat.csatPercent+'%'));
+    const rows=[['Data','Chamado','Colaborador','Canal','Nota','Fonte']];
+    items.forEach(x=>rows.push([String(x.date||''),'#'+String(x.ticketId||''),
+      String(x.collaborator||''),String(x.channel||''),String(x.score??''),String(x.source||'')]));
+    const table=body.appendTable(rows);
+    arquemEstilizarTabelaPdf_(table);
+    items.forEach((x,i)=>{
+      const id=String(x.ticketId||'');
+      if(/^\d+$/.test(id))table.getCell(i+1,1).editAsText().setLinkUrl('https://arquem.movidesk.com/Ticket/Edit/'+id);
+    });
+  }
   if ((p.daily||[]).length) {
     arquemAddHeading_(body,'Horas por colaborador · dia a dia');
     const rows=[['Data','Colaborador','Setor','Horas','Jornada ref.','Meta mínima ref.']];
@@ -568,6 +584,20 @@ function arquemXlsx_(p, keep) {
     (p.productionQuality?[]:(p.collaborators||[])).map(x=>[x.name,x.sector,arquemExcelHora_(x.minutes),arquemExcelHora_(x.minimumMinutes),
      arquemExcelHora_(x.targetMinutes),arquemExcelHora_(x.minimumGap),arquemExcelHora_(x.targetGap),x.ruleSource||'Padrão']));
   arquemFormatarHoras_(people,[3,4,5,6,7],p.productionQuality?0:(p.collaborators||[]).length);
+  if((p.csatRatings||[]).length){
+    const items=p.csatRatings;
+    const sheet=arquemCreateSheet_(ss,'CSAT - Notas',
+      ['Data','Chamado','Colaborador','Canal','Nota','Classificação','Fonte','Link Movidesk'],
+      items.map(x=>[x.date,'#'+x.ticketId,x.collaborator,x.channel,Number(x.score),
+        Number(x.score)>=8?'Positiva (8–10)':'Abaixo do padrão (1–7)',x.source,
+        /^\d+$/.test(String(x.ticketId))?'https://arquem.movidesk.com/Ticket/Edit/'+x.ticketId:'']));
+    const links=items.map(x=>{
+      const id=String(x.ticketId||''),rt=SpreadsheetApp.newRichTextValue().setText('#'+id);
+      if(/^\d+$/.test(id))rt.setLinkUrl('https://arquem.movidesk.com/Ticket/Edit/'+id);
+      return [rt.build()];
+    });
+    sheet.getRange(2,2,links.length,1).setRichTextValues(links).setFontColor('#2467a8');
+  }
   const authorizedSections=p.reportSections||{};
   if(authorizedSections.daily_detail!==false){
   const daySheet=arquemCreateSheet_(ss,'Dia a dia',
