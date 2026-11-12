@@ -12,15 +12,13 @@ export function calculateChannelNotes(rows:Rating[]) {
  const map={} as R;
  for(const channel of ['voz','chat']){
   const valid=rows.filter(r=>norm(r.channel)===channel&&Number.isInteger(Number(r.score))&&Number(r.score)>=1&&Number(r.score)<=10);
-  const sourcePriority=new Map<string,Rating>();
-  for(const r of valid){
-   const ticket=String(r.ticket_id||'').trim();
-   const key=ticket?ticket+':'+channel:null;
-   if(!key)continue;
-   const prev=sourcePriority.get(key);
-   if(!prev||norm(r.source)==='movidesk'&&norm(prev.source)!=='movidesk')sourcePriority.set(key,r);
-  }
-  const dedup=valid.filter(r=>!String(r.ticket_id||'').trim()||sourcePriority.get(String(r.ticket_id).trim()+':'+channel)===r);
+  // A fonte supportRatings() ja descarta lancamentos manuais quando existe
+  // uma resposta Movidesk para o mesmo ticket/canal. Duas respostas distintas
+  // do proprio Movidesk nao podem ser fundidas apenas por ticket.
+  const imported=new Set(valid.filter(r=>norm(r.source)==='movidesk'&&
+    String(r.ticket_id||'').trim()).map(r=>String(r.ticket_id).trim()));
+  const dedup=valid.filter(r=>norm(r.source)!=='manual'||
+    !String(r.ticket_id||'').trim()||!imported.has(String(r.ticket_id).trim()));
   const positive=dedup.filter(r=>Number(r.score)>=8);
   const sum=dedup.reduce((n,r)=>n+Number(r.score),0);
   const pts=positive.reduce((n,r)=>n+Number(r.score),0);
