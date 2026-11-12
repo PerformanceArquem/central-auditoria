@@ -89,8 +89,10 @@ Deno.test('missing actual talk duration does not silently lower voice TMA to zer
  assertEquals(result.metrics.tmaSamples,1);
  assertEquals(result.metrics.tmaMissingSamples,1);
  assertEquals(result.metrics.tmaSeconds,null);
+ assertEquals(result.metrics.talkSeconds,null);
  const email=prepareVoiceEmail({verified:true,ratings:[],metrics:result.metrics,
   from:'2026-11-10',to:'2026-11-11'});
  assertEquals(email.kpis.tmaSeconds,null);
+ assertEquals(email.kpis.talkSeconds,null);
  if(!email.html.includes('Indisponível'))throw Error('Missing TMA must be unavailable');
 });
