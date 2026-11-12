@@ -1,0 +1,23 @@
+name: Validate Intelligence triage queue
+on:
+  push:
+    branches:
+      - feature/intelligence-triage-queue-20261112
+  pull_request:
+    paths:
+      - 'lib/intelligence-triage.js'
+      - 'api/audit-production-metrics.js'
+      - 'intelligence-triage.js'
+      - 'index.html'
+      - 'tests/intelligence-triage.test.mjs'
+      - '.github/workflows/intelligence-triage.yml'
+jobs:
+  test-triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate Intelligence triage
+        run: node --test tests/intelligence-triage.test.mjs
