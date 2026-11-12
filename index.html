@@ -1225,6 +1225,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    <div><label for="zvStart">Data inicial</label><input id="zvStart" type="date"></div>
    <div><label for="zvEnd">Data final</label><input id="zvEnd" type="date"></div>
    <button type="button" id="zvRefresh" class="b">↻ Consultar Zenvia</button>
+   <button type="button" id="zvCheck" class="b">Verificar conexão</button>
   </div>
   <p id="zvStatus" role="status" class="subtle">Conecte a API Zenvia para consultar os indicadores do canal de voz.</p>
   <div id="zvKpis" class="kpis" style="margin:12px 0"></div>
@@ -5979,10 +5980,35 @@ window.clientImpactInit=()=>{
   }catch(e){reset();el('zvStatus').textContent='Métricas indisponíveis: '+e.message;}
   finally{loading=false;button.disabled=false;}
  }
+ async function diagnose(){
+  if(loading)return;loading=true;reset();
+  const button=el('zvCheck');button.disabled=true;
+  el('zvStatus').textContent='Verificando conexão de leitura com a Zenvia...';
+  try{
+   const start=el('zvStart').value,end=el('zvEnd').value;
+   if(!valid(start)||!valid(end)||start>end)throw Error('Selecione datas válidas');
+   const session=await window.tmAuth?.getSession?.();
+   if(!session?.access_token)throw Error('Faça login na Central de Auditoria');
+   const q=new URLSearchParams({mode:'zenvia',check:'1',start,end});
+   const response=await fetch('/api/audit-production-metrics?'+q,{
+     headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
+   const d=await response.json().catch(()=>({}));
+   if(!response.ok||!d.ok)throw Error(d.error||'Falha ao consultar o diagnóstico');
+   const translations={ok:'conectado',unauthorized:'credencial ou permissão recusada',
+    rate_limited:'limite de consultas',provider_error:'erro do provedor',
+    invalid_schema:'formato de resposta incompatível',unreachable:'sem resposta'};
+   const labels={inbound:'Recebidas',outbound:'Efetuadas',queue:'Fila'};
+   el('zvStatus').textContent=(d.checks||[]).map(x=>
+    (labels[x.channel]||'Origem')+': '+(translations[x.status]||'indisponível')).join(' · ')+
+    (d.queueConfigured?'':' · TME pendente: fila não configurada');
+  }catch(e){el('zvStatus').textContent='Diagnóstico indisponível: '+e.message;}
+  finally{loading=false;button.disabled=false;}
+ }
  window.zenviaVoiceInit=()=>{
   if(initialized)return;initialized=true;
   const today=dateToday();el('zvEnd').value=today;el('zvStart').value=today.slice(0,7)+'-01';
   el('zvRefresh').addEventListener('click',load);
+  el('zvCheck').addEventListener('click',diagnose);
   for(const id of ['zvStart','zvEnd'])el(id).addEventListener('change',reset);
  };
 })();
