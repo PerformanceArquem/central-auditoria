@@ -50,7 +50,7 @@ test('ranking mostra situação de e-mail e relatório com exportação',()=>{
  assert.match(source,/ticket_charge_history/);
  assert.match(source,/alarmEmailRequestId=crypto\.randomUUID\(\)/);
  assert.match(source,/requestId:alarmEmailRequestId/);
- assert.match(source,/✉ E-mail enviado/);
+ assert.match(source,/✉ Já cobrado/);
  assert.match(source,/✉ Verificar envio/);
 });
 
@@ -79,4 +79,22 @@ test('a Direção pode habilitar o relatório diário no cadastro',()=>{
  const source=extract('emailAdminIntegratedScript');
  assert.match(source,/\$\('emailDaily'\)\.disabled=false/);
  assert.doesNotMatch(source,/if\(directionForm\(\)\)data\.daily_enabled=false/);
+});
+
+
+test('revisão de cobranças separa destinatários e prioriza envio incerto',()=>{
+ const source=extract('tm-application-source');
+ const status=source.slice(source.indexOf('function alarmReminderStatusForTicket('),source.indexOf('async function alarmReminderPolicyLoad'));
+ const badge=source.slice(source.indexOf('function alarmEmailTicketBadge('),source.indexOf('const alarmSelected='));
+ const history=[{recipient:'a@arquem.com.br',status:'sent',ticket_ids:['1'],sent_at:new Date(Date.now()-2*86400000).toISOString()},{recipient:'b@arquem.com.br',status:'sent',ticket_ids:['1'],sent_at:new Date(Date.now()-6*86400000).toISOString()}];
+ const run=new Function('alarmEmailHistory','alarmReminderPolicy','alarmEmailTime','esc',status+badge+';return {status:alarmReminderStatusForTicket,badge:alarmEmailTicketBadge};')(history,{interval_days:5,max_reminders:3},String,String);
+ assert.equal(run.status('1','a@arquem.com.br').count,1);
+ assert.equal(run.status('1','a@arquem.com.br').eligible,false);
+ assert.ok(run.status('1','a@arquem.com.br').nextReviewAt);
+ assert.equal(run.status('1','b@arquem.com.br').eligible,true);
+ assert.match(run.badge('1'),/Revisão de reforço disponível/);
+ history.push({recipient:'a@arquem.com.br',status:'uncertain',ticket_ids:['1']});
+ assert.match(run.badge('1'),/Verificar envio anterior/);
+ assert.doesNotMatch(run.badge('1'),/pill ok/);
+ assert.equal(run.badge('2'),'');
 });
