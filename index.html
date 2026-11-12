@@ -1123,7 +1123,19 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
  <p>Chamados T1–T4 em aberto. O encaminhamento à Produção precisa ser confirmado; a classificação sozinha não comprova a transferência.</p></div></div>
  <div class="card">
   <div class="row noprint" style="align-items:flex-end;gap:10px;flex-wrap:wrap">
-   <div class="fg"><label for="itDays">Tempo na fila</label><select id="itDays"><option value="15">Mais de 15 dias</option><option value="30">Mais de 30 dias</option><option value="60">Mais de 60 dias</option><option value="90">Mais de 90 dias</option></select></div>
+   <div class="fg"><label id="itDaysLabel">Tempo na fila</label>
+   <details id="itDays" style="position:relative;min-width:180px">
+    <summary id="itDaysSummary" aria-labelledby="itDaysLabel" style="cursor:pointer;border:1px solid #cad4e1;border-radius:8px;padding:9px 12px;background:white;list-style-position:inside">Mais de 15 dias</summary>
+    <div style="position:absolute;top:100%;left:0;z-index:30;width:215px;padding:12px;box-shadow:0 8px 28px #14213d24;border:1px solid #d5dfeb;border-radius:10px;background:white">
+     <div style="font-weight:600;margin-bottom:8px">Selecionar faixas</div>
+     <label style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" class="itDayBucket" value="16-30" checked> 16 a 30 dias</label>
+     <label style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" class="itDayBucket" value="31-60" checked> 31 a 60 dias</label>
+     <label style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" class="itDayBucket" value="61-90" checked> 61 a 90 dias</label>
+     <label style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" class="itDayBucket" value="91+" checked> Mais de 90 dias</label>
+     <div style="display:flex;gap:6px;margin-top:12px"><button type="button" class="s" id="itDaysAll">Todas</button><button type="button" class="s" id="itDaysNone">Limpar</button></div>
+    </div>
+   </details>
+  </div>
    <div class="fg"><label for="itType">Tipo</label><select id="itType"><option value="">Todos: T1–T4</option><option>T1</option><option>T2</option><option>T3</option><option>T4</option></select></div>
    <div class="fg"><label for="itSearch">Buscar</label><input id="itSearch" placeholder="Cliente, chamado ou assunto"></div>
    <button type="button" class="b" id="itRefresh">↻ Atualizar</button>
