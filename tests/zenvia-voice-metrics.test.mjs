@@ -19,7 +19,7 @@ const inbound=[
 ];
 let calls=[];
 const json=(data,status=200)=>({ok:status>=200&&status<300,status,json:async()=>data});
-let allowed=true,token=true,broken=false,waitMissing=false;
+let allowed=true,token=true,broken=false,waitMissing=false,shortPages=false,missingSecondPage=false;
 const queueCalls=[
  {id:41,data_inicio:'2026-11-10T14:00:00-03:00',tempo_espera:40},
  {id:42,data_inicio:'2026-11-11T15:00:00-03:00',tempo_espera:80}
@@ -37,6 +37,11 @@ const fetch=async(input,opts={})=>{
   assert.equal(url.searchParams.get('data_fim'),'2026-11-11');
   const rows=url.pathname==='/chamada/relatorio'?outbound:url.pathname==='/fila/430/relatorio'?
    queueCalls.map((x,i)=>i===1&&waitMissing?{...x,tempo_espera:null}:x):inbound;
+  const offset=Number(url.searchParams.get('posicao')||0);
+  if(shortPages&&url.pathname==='/chamada/relatorio'){
+    const batch=offset===0?rows.slice(0,1):missingSecondPage?[]:rows.slice(1,2);
+    return json({sucesso:true,dados:{relatorio:batch,total:rows.length}});
+  }
   return json({sucesso:true,dados:{relatorio:rows,total:rows.length}});
  }
  throw Error('Unexpected request '+url);
@@ -149,4 +154,34 @@ test('invalid queue ID is not sent to Zenvia external API',async()=>{
    assert.equal(r.body.queue.configured,false);
    assert.equal(calls.some(x=>x.url.pathname.startsWith('/fila/')),false);
  }finally{delete scope.process.env.ZENVIA_VOICE_QUEUE_ID;}
+});
+
+test('Zenvia pagination continues after short first page when reported total is larger',async()=>{
+ shortPages=true;
+ try{
+  const r=await invoke();
+  assert.equal(r.code,200);
+  assert.equal(r.body.summary.outbound,2);
+  const offsets=calls.filter(x=>x.url.pathname==='/chamada/relatorio')
+   .map(x=>x.url.searchParams.get('posicao'));
+  assert.deepEqual(offsets,['0','1']);
+ }finally{shortPages=false;}
+});
+test('Zenvia incomplete pagination fails closed without returning misleading totals',async()=>{
+ shortPages=true;missingSecondPage=true;
+ try{
+  const r=await invoke();
+  assert.equal(r.code,502);
+  assert.equal(r.body.summary,undefined);
+ }finally{shortPages=false;missingSecondPage=false;}
+});
+test('numeric active flag is counted as in-progress rather than missed',async()=>{
+ const old=inbound[2].ativa;
+ inbound[2].ativa=1;
+ try{
+  const r=await invoke();
+  assert.equal(r.code,200);
+  assert.equal(r.body.summary.inProgress,1);
+  assert.equal(r.body.summary.unanswered,2);
+ }finally{inbound[2].ativa=old;}
 });
