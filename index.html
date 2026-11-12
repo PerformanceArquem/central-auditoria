@@ -1174,6 +1174,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
   <h3>Chamados antigos, sem previsão e sem apontamento recente — Produção</h3>
   <p class="subtle">Baseado no mesmo histórico de chamados e apontamentos do sistema. Chamados antigos: 90+ dias abertos. Sem previsão: abertos há 30+ dias sem SLA de solução. Sem apontamento recente: sem registro na base ou com último apontamento há 30+ dias. <b>Falta de apontamento não comprova falta de trabalho.</b></p>
   <div id="pdLegacyKpis" class="kpis" style="margin:12px 0"></div>
+  <p id="pdCoverageNote" class="subtle" aria-live="polite">Aguardando conferência da cobertura de apontamentos.</p>
   <div class="row noprint" style="align-items:flex-end;margin:10px 0">
     <div class="fg"><label for="pdLegacyFilter">Filtrar pendências</label><select id="pdLegacyFilter">
       <option value="old">Mais antigos (90+ dias)</option>
@@ -5674,6 +5675,11 @@ function render(d){
  const threshold=Number(legacy.thresholdDays)||30;
  const newKpis=[['Antigos 90+ dias',lc.old90||0],['Sem previsão 30+ dias',lc.withoutForecast30||0],['Sem apontamento recente '+threshold+'+ dias',legacy.coverageReady===true?lc.withoutAppointmentCount||0:'Conciliação pendente'],['Sem ação 7+ dias',lc.withoutAction7||0]];
  el('pdLegacyKpis').innerHTML=newKpis.map(([name,n])=>'<div class="card"><div class="subtle">'+esc(name)+'</div><h3>'+esc(n)+'</h3></div>').join('');
+ const cov=legacy.coverage||{};
+ const windowLabel=cov.from&&cov.to?'Janela conciliada: '+ptDate(cov.from)+' a '+ptDate(cov.to)+'. ':'Janela conciliada não confirmada. ';
+ el('pdCoverageNote').textContent=windowLabel+(legacy.coverageReady===true
+   ?'Prazo de '+threshold+' dias coberto pela conciliação; ausência de lançamento não comprova falta de trabalho.'
+   :'Alerta suspenso: '+String(cov.reason||'cobertura não comprovada')+'.');
  window.productionLegacyRows=legacy;
  // Alerta de ausência de apontamento exige histórico conciliado.
  const missingFilter=el('pdLegacyFilter');
