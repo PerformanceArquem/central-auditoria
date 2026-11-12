@@ -74,3 +74,23 @@ Deno.test('Zenvia inbound/outbound metrics and TMA require complete provider pag
  assertEquals(x.metrics.tmaSeconds,90);assertEquals(x.metrics.tmeSeconds,null);
  assertEquals(x.byExtension[0].extension,'430');
 });
+
+Deno.test('missing actual talk duration does not silently lower voice TMA to zero',async()=>{
+ const outbound=[
+  {id:10,data_criacao:'2026-11-10T09:00:00-03:00',destino:{status:'atendida',duracao_falada_segundos:120}},
+  {id:11,data_criacao:'2026-11-10T10:00:00-03:00',destino:{status:'atendida',duracao_falada_segundos:null}}
+ ];
+ const fetchMock=async(input:string|URL|Request):Promise<Response>=>{
+  const rows=new URL(String(input)).pathname==='/chamada/relatorio'?outbound:[];
+  return new Response(JSON.stringify({sucesso:true,dados:{relatorio:rows,total:rows.length}}),{status:200});
+ };
+ const result=await readZenviaEmailMetrics('2026-11-10','2026-11-11','fixture-token','',fetchMock);
+ assertEquals(result.metrics.answered,2);
+ assertEquals(result.metrics.tmaSamples,1);
+ assertEquals(result.metrics.tmaMissingSamples,1);
+ assertEquals(result.metrics.tmaSeconds,null);
+ const email=prepareVoiceEmail({verified:true,ratings:[],metrics:result.metrics,
+  from:'2026-11-10',to:'2026-11-11'});
+ assertEquals(email.kpis.tmaSeconds,null);
+ if(!email.html.includes('Indisponível'))throw Error('Missing TMA must be unavailable');
+});
