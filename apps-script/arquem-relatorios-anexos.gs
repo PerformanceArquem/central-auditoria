@@ -156,6 +156,7 @@ function arquemCapacidadesAnexos_() {
     Number.isFinite(sectionsAt) &&
     sectionsAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
   return {sucesso:true,attachmentsVersion:'arquem-8-keila-movements',formats:['pdf','xlsx'],
+    postCloseAdjustmentsSupported:ready&&props.getProperty('ARQUEM_TIMING_VALIDATED_VERSION')==='arquem-post-close-v1',
     sectionPermissionsSupported,
     csatNotesReady:ready &&
       props.getProperty('ARQUEM_CSAT_VALIDATED_VERSION')==='arquem-7-csat-notas' &&
@@ -285,6 +286,19 @@ function arquemTesteAnexosSemEnvio() {
   console.log(JSON.stringify(result));
   return result;
 }
+function arquemHomologarAjustesSemEnvio() {
+  const packet={schema:'arquem-mail-v1',title:'HOMOLOGAÇÃO SEM ENVIO — Ajustes posteriores',from:'2026-11-11',to:'2026-11-11',
+    metrics:{minutes:60,appointments:1,tickets:1},collaborators:[],daily:[],customers:[],activities:[],tickets:[],
+    timing:{notice:'As horas permanecem na data do trabalho. A identificação posterior não comprova quando a pessoa registrou o apontamento.',adjustments:[
+      {date:'2026-11-10',person:'Pessoa demonstrativa',ticketId:'101901',previousMinutes:60,currentMinutes:90,deltaMinutes:30,observedAt:'2026-11-12T12:00:00Z',inCurrentPeriod:false},
+      {date:'2026-11-10',person:'Pessoa demonstrativa',ticketId:'101902',previousMinutes:60,currentMinutes:30,deltaMinutes:-30,observedAt:'2026-11-12T12:00:00Z',inCurrentPeriod:false}
+    ]}};
+  const files=arquemCreateReportAttachments_(packet);
+  if(files.length!==2||!files.some(x=>x.getContentType()==='application/pdf'&&x.getBytes().length>2000)||!files.some(x=>x.getName().endsWith('.xlsx')&&x.getBytes().length>1500))throw new Error('Ajustes posteriores: arquivos não homologados');
+  PropertiesService.getScriptProperties().setProperty('ARQUEM_TIMING_VALIDATED_VERSION','arquem-post-close-v1');
+  const result={ok:true,sent:false,postCloseAdjustmentsSupported:true,files:files.map(x=>({name:x.getName(),bytes:x.getBytes().length}))};
+  console.log(JSON.stringify(result));return result;
+}
 
 /**
  * Integração no doPost existente: depois de validar o segredo atual,
@@ -365,7 +379,7 @@ function arquemCreateReportAttachments_(packet) {
       !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) throw new Error('Datas inválidas');
   const rows = [
     packet.collaborators || [], packet.daily || [], packet.tickets || [],
-    packet.customers || [], packet.activities || [], packet.csatRatings || []
+    packet.customers || [], packet.activities || [], packet.csatRatings || [], (packet.timing&&packet.timing.adjustments)||[]
   ];
   if (rows.some(arr => !Array.isArray(arr) || arr.length > 500))
     throw new Error('Limite de dados excedido para anexos');
@@ -569,6 +583,23 @@ function arquemPdf_(p, keep) {
     });
     body.appendParagraph('Clique no número do chamado no PDF para abrir o Movidesk.');
   }
+  if(p.timing){
+    arquemAddHeading_(body,'Posição dos apontamentos e ajustes posteriores');
+    body.appendParagraph(String(p.timing.notice||''));
+    const adjustments=p.timing.adjustments||[];
+    if(adjustments.length){
+      const rows=[['Data do trabalho','Colaborador / chamado','Antes → atual','Diferença','Identificado em']];
+      adjustments.slice(0,100).forEach(x=>rows.push([
+        String(x.date||''),String(x.person||'')+' / #'+String(x.ticketId||''),
+        arquemH_(x.previousMinutes)+' → '+arquemH_(x.currentMinutes),
+        (x.deltaMinutes<0?'-':'+')+arquemH_(Math.abs(x.deltaMinutes)),
+        Utilities.formatDate(new Date(x.observedAt),'America/Sao_Paulo','dd/MM/yyyy HH:mm')
+      ]));
+      arquemEstilizarTabelaPdf_(body.appendTable(rows));
+      body.appendParagraph('Identificado na atualização dos dados; a data exata do lançamento não é fornecida. As horas permanecem na data original do trabalho e não são somadas novamente ao dia atual.');
+      if(adjustments.length>100)body.appendParagraph('Exibidos 100 de '+adjustments.length+' ajustes.');
+    }
+  }
   arquemAddHeading_(body,'Observações metodológicas');
   body.appendParagraph(p.productionFlow?
     'Contagens de chamados distintos por direção; um chamado pode entrar e sair no mesmo período. Finalizações não são transferências. Verifique a cobertura da sincronização.':
@@ -743,6 +774,25 @@ function arquemXlsx_(p, keep) {
       if(graded[i][0]!==want)throw new Error('CSAT: classificação divergente na planilha');
     }
   }
+  if(p.timing&&!p.productionFlow){
+    const timingSheet=arquemCreateSheet_(ss,'Posição dos dados',['Informação','Descrição'],[
+      ['Data do trabalho',String(p.timing.notice||'')],
+      ['Identificação dos ajustes','Data de identificação na atualização dos dados. Não comprova quando a pessoa lançou o apontamento.'],
+      ['Acumulados','As horas permanecem na data original e não são somadas novamente ao dia atual.']
+    ]);
+    timingSheet.getRange('B2:B4').setWrap(true);timingSheet.setColumnWidth(2,500);
+    const changes=p.timing.adjustments||[];
+    if(changes.length){
+      const sh=arquemCreateSheet_(ss,'Ajustes posteriores',
+        ['Data do trabalho','Colaborador','Chamado','Antes','Atual','Diferença','Identificado em','Tratamento'],
+        changes.map(x=>[x.date,x.person,'#'+x.ticketId,arquemExcelHora_(x.previousMinutes),arquemExcelHora_(x.currentMinutes),
+          (x.deltaMinutes<0?'-':'+')+arquemH_(Math.abs(x.deltaMinutes)),
+          Utilities.formatDate(new Date(x.observedAt),'America/Sao_Paulo','dd/MM/yyyy HH:mm'),
+          x.inCurrentPeriod?'Incluído no período deste relatório':'Atualiza o período original; não somar ao dia atual']));
+      arquemFormatarHoras_(sh,[4,5],changes.length);
+      if(sh.getLastRow()!==changes.length+1)throw new Error('Ajustes posteriores: planilha incompleta');
+    }
+  }
   SpreadsheetApp.flush();
   const url='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(ss.getId())+
     '/export?mimeType='+encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -782,3 +832,5 @@ function arquemSheet_(sh,headers,rows){
   }
   return sh;
 }
+
+
