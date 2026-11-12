@@ -22,10 +22,14 @@ Deno.test('absence of voice ratings produces unavailable CSAT, not fabricated ze
 Deno.test('mail sections contain voice and chat with transparent sources, no credentials or customer phones',()=>{
  const d=prepareVoiceEmail({verified:true,ratings:quality,metrics,from:'2026-11-10',to:'2026-11-11',
   byDay:[{date:'2026-11-10',total:4}],byHour:[{hour:'11',count:4}],
-  byExtension:[{extension:'430',total:4,answered:2,talkSeconds:172}]});
+  byExtension:[{extension:'430',total:4,answered:2,talkSeconds:172}],
+  chatMetrics:{tickets:3,tmaSeconds:45,tmeSeconds:12,tmaSamples:3,tmeSamples:3}});
  assertEquals(d.kpis.quality.chat.csatPercent,50);
  assertEquals(d.kpis.quality.voz.csatPercent,50);
  assertEquals(d.kpis.tmeSeconds,null);
+ assertEquals(d.kpis.chatMetrics?.tmaSeconds,45);
+ assertEquals(d.kpis.chatMetrics?.tmeSeconds,12);
+ if(!d.html.includes('45s')&&!d.html.includes('0min 45s'))throw Error('Chat TMA omitted');
  for(const text of ['Voz × Chat','CSAT','Zenvia','Movidesk'])if(!d.html.includes(text))throw Error('Missing '+text);
  for(const leaked of ['secret_token','+5541999999999','url_gravacao'])if(d.html.includes(leaked)||d.text.includes(leaked))throw Error('Leaked '+leaked);
 });
