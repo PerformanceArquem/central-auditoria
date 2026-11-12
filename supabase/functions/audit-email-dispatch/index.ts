@@ -655,11 +655,13 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     return selectedSectors.some(sector =>
       value === sector || (sector === 'sucesso' && value === 'sucesso do cliente'));
   };
+  const days = workdays(from, to, hol);
+  const validDays=new Set(days);
   const selected = appts.filter(a =>
+    validDays.has(String(a.appointment_date||'').slice(0,10)) &&
     ((scope === 'management' && !selectedSectors.length) || sameSector(a.sector)) &&
     (!selectedPeople.size || selectedPeople.has(norm(a.collaborator_name))));
   const minutes = selected.reduce((s, a) => s + Number(a.duration_minutes || 0), 0);
-  const days = workdays(from, to, hol);
   const targetPerDay = Number(rec.daily_target_minutes ?? 480);
   const minimumPercent = Number(rec.minimum_percent ?? 80);
   if (!Number.isFinite(targetPerDay) || targetPerDay <= 0 || targetPerDay > 1440 ||
