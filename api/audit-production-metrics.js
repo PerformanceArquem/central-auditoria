@@ -60,7 +60,10 @@ export default async function handler(req,res){
     all('audit_recent_reconcile_state','completed,last_error,last_success_at,period_start,period_end',{'job_name':'eq.movidesk_recent_reconcile'})
   ]);
   const known=new Map(tickets.map(x=>[String(x.ticket_id),x]));
-  const relevant=appointments.filter(a=>isProd(a.sector)||known.has(String(a.ticket_id)));
+  // Ignorar datas futuras: lançamento futuro não é evidência de atividade já realizada.
+  const referenceDay=currentDate();
+  const relevant=appointments.filter(a=>(isProd(a.sector)||known.has(String(a.ticket_id)))&&
+    /^\d{4}-\d{2}-\d{2}$/.test(String(a.appointment_date||''))&&String(a.appointment_date)<=referenceDay);
   const appByTicket=new Map();
   for(const a of relevant){
    const id=String(a.ticket_id),r=appByTicket.get(id)||{minutes:0,entries:0,people:new Set(),last:''};
@@ -103,9 +106,12 @@ export default async function handler(req,res){
   const withoutForecast=open.filter(t=>t.created&&days(t.created,today)>=30&&!t.sla);
   // Sem registros: usar a data de abertura; não classificar ticket recém-aberto como atrasado.
   // Último apontamento: usar o registro mais recente realmente importado.
-  const withoutAppointment=open.filter(t=>t.history?.last
+  const rec=sync[0]||{};
+  const coverageReady=rec.completed===true&&!rec.last_error;
+  // A ausência de um registro não pode ser usada como alerta quando a conciliação está incompleta.
+  const withoutAppointment=coverageReady?open.filter(t=>t.history?.last
    ? days(t.history.last,today)>=withoutAppointmentDays
-   : Boolean(t.created)&&days(t.created,today)>=withoutAppointmentDays);
+   : Boolean(t.created)&&days(t.created,today)>=withoutAppointmentDays):[];
   const toAlert=t=>({id:t.id,subject:t.subject,client:t.client,owner:t.owner,status:t.status,
     sla:t.sla,ageDays:days(t.updated||t.created,today),daysWithoutAction:days(t.updated||t.created,today)});
   const toLegacy=t=>({...toAlert(t),ageDays:days(t.created,today),lastAppointment:t.history?.last||null,
@@ -116,7 +122,6 @@ export default async function handler(req,res){
   const weekdayStats=new Map();
   for(const [date,n] of current.dates){const w=new Date(date+'T12:00:00Z').getUTCDay();weekdayStats.set(w,(weekdayStats.get(w)||0)+n);}
   const countByWeekday=new Map();for(let d=from;d<=today;d=addDays(d,1)){const w=new Date(d+'T12:00:00Z').getUTCDay();countByWeekday.set(w,(countByWeekday.get(w)||0)+1);}
-  const rec=sync[0]||{};
   return res.status(200).json({ok:true,from,to:today,previousFrom:prevFrom,previousTo:prevTo,
    current:{...current,dates:undefined},previous:{...previous,dates:undefined,dailyRows:undefined,tasks:undefined},
    alertMetrics:{open:open.length,overdue:overdue.length,stalled:stalled.length,withoutSla:open.filter(t=>!t.sla).length},
@@ -125,8 +130,8 @@ export default async function handler(req,res){
      weekday,count:weekdayStats.get(i)||0,days:countByWeekday.get(i)||0,
      average:(countByWeekday.get(i)||0)?Number(((weekdayStats.get(i)||0)/countByWeekday.get(i)).toFixed(1)):0
    })),dailyRows:current.dailyRows,
-   legacyAlerts:{thresholdDays:withoutAppointmentDays,counts:{old90:old.length,withoutForecast30:withoutForecast.length,
-     withoutAppointmentCount:withoutAppointment.length,withoutAction7:stalled.length},
+   legacyAlerts:{thresholdDays:withoutAppointmentDays,coverageReady,counts:{old90:old.length,withoutForecast30:withoutForecast.length,
+     withoutAppointmentCount:coverageReady?withoutAppointment.length:null,withoutAction7:stalled.length},
      old:old.slice(0,100).map(toLegacy),withoutForecast:withoutForecast.slice(0,100).map(toLegacy),
      withoutAppointment:withoutAppointment.slice(0,100).map(toLegacy),withoutAction:stalled.slice(0,100).map(toLegacy)},
    partial:rec.completed!==true||Boolean(rec.last_error),
