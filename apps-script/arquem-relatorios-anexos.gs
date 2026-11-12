@@ -225,6 +225,76 @@ function arquemSanearPacote_(value) {
   }
   return value;
 }
+// Mesmo bloco de Voz x Chat no corpo, PDF e XLSX. Sem telefones e gravações.
+// Segurança: recusar métricas inconciliáveis; null significa indisponível, nunca zero.
+function arquemVozChatDados_(raw) {
+  if(!raw || typeof raw!=='object')throw new Error('Pacote de Voz x Chat inválido');
+  const count={};
+  ['total','inbound','outbound','answered','unanswered','inProgress','unclassified'].forEach(k=>{
+    const n=Number(raw[k]);
+    if(raw[k]==null || !Number.isInteger(n) || n<0)
+      throw new Error('Indicador Zenvia inválido: '+k);
+    count[k]=n;
+  });
+  if(count.total!==count.inbound+count.outbound ||
+     count.total!==count.answered+count.unanswered+count.inProgress+count.unclassified)
+    throw new Error('Totais do canal de voz sem conciliação');
+  const duration=x=>{
+    if(x==null||x==='')return 'Indisponível';
+    const n=Number(x);
+    if(!Number.isFinite(n)||n<0)throw new Error('Duração de canal inválida');
+    return String(Math.floor(n/60)).padStart(2,'0')+':'+String(Math.round(n%60)).padStart(2,'0');
+  };
+  const quality=(raw.quality||{});
+  const scores={};
+  ['voz','chat'].forEach(channel=>{
+    const q=quality[channel]||{};
+    const total=Number(q.total),positive=Number(q.positive);
+    if(q.total==null||q.positive==null||!Number.isInteger(total)||
+       !Number.isInteger(positive)||total<0||positive<0||positive>total)
+      throw new Error('Avaliações '+channel+' inválidas');
+    scores[channel]={
+      total,positive,negative:total-positive,
+      csat:total?(positive/total*100).toFixed(2)+'%':'Sem avaliações'
+    };
+  });
+  const ch=raw.chatMetrics||{};
+  const daily=Array.isArray(raw.byDay)?raw.byDay:[];
+  const byExtension=Array.isArray(raw.byExtension)?raw.byExtension:[];
+  if(daily.length>370||byExtension.length>30)
+    throw new Error('Detalhamento de voz excede limites seguros');
+  const days=daily.map(x=>{
+    const date=String(x.date||'');
+    const total=Number(x.total),answered=Number(x.answered);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isInteger(total)||
+      !Number.isInteger(answered)||total<0||answered<0||answered>total)
+      throw new Error('Registro diário de Voz inválido');
+    return [date,total,answered];
+  });
+  const ramais=byExtension.map(x=>{
+    const id=String(x.extension||'');
+    const total=Number(x.total),answered=Number(x.answered);
+    if(!/^\d{1,12}$/.test(id)||!Number.isInteger(total)||!Number.isInteger(answered)||
+       total<0||answered<0||answered>total)throw new Error('Registro de ramal inválido');
+    return [id,total,answered,duration(x.talkSeconds)];
+  });
+  const overview=[
+    ['Recebidas',count.inbound,'—'],['Efetuadas',count.outbound,'—'],
+    ['Total de atendimentos',count.total,ch.tickets==null?'Indisponível':Number(ch.tickets)],
+    ['Atendidas',count.answered,'—'],['Não atendidas',count.unanswered,'—'],
+    ['Em andamento',count.inProgress,'—'],['Sem classificação',count.unclassified,'—'],
+    ['TMA',duration(raw.tmaSeconds),duration(ch.tmaSeconds)],
+    ['TME',duration(raw.tmeSeconds),duration(ch.tmeSeconds)],
+    ['Tempo falado',duration(raw.talkSeconds),'—'],
+    ['Notas 1–7',scores.voz.negative,scores.chat.negative],
+    ['Notas 8–10',scores.voz.positive,scores.chat.positive],
+    ['Avaliações válidas',scores.voz.total,scores.chat.total],
+    ['CSAT',scores.voz.csat,scores.chat.csat]
+  ];
+  return {overview,days,ramais,
+    note:'CSAT: notas 8–10 / notas válidas (1–10); sem avaliações não equivale a zero. Tempos: Zenvia (voz) e base medida do chat. TME de voz só com fila validada.'};
+}
+
 function arquemCreateReportAttachments_(packet) {
   if (!packet || packet.schema !== 'arquem-mail-v1') throw new Error('Pacote de relatório inválido');
   packet=arquemSanearPacote_(packet);
@@ -240,6 +310,7 @@ function arquemCreateReportAttachments_(packet) {
     throw new Error('Limite de dados excedido para anexos');
   if (rows.reduce((sum,arr)=>sum+arr.length,0)>950)
     throw new Error('Quantidade total de linhas excede o limite seguro dos anexos');
+  if(packet.zenviaVoice)arquemVozChatDados_(packet.zenviaVoice);
   const keep = [];
   try {
     const pdf = arquemPdf_(packet, keep);
@@ -389,6 +460,23 @@ function arquemPdf_(p, keep) {
     });
     body.appendParagraph('Clique no número do chamado no PDF para abrir o Movidesk.');
   }
+  if(p.zenviaVoice){
+    const v=arquemVozChatDados_(p.zenviaVoice);
+    arquemAddHeading_(body,'Voz × Chat · Indicadores de atendimento');
+    arquemEstilizarTabelaPdf_(body.appendTable(
+      [['Indicador','Voz','Chat']].concat(v.overview.map(x=>x.map(String)))));
+    if(v.days.length){
+      arquemAddHeading_(body,'Volume de chamadas por dia');
+      arquemEstilizarTabelaPdf_(body.appendTable(
+        [['Data','Ligações','Atendidas']].concat(v.days.map(x=>x.map(String)))));
+    }
+    if(v.ramais.length){
+      arquemAddHeading_(body,'Chamadas por ramal');
+      arquemEstilizarTabelaPdf_(body.appendTable(
+        [['Ramal','Ligações','Atendidas','Tempo falado (mm:ss)']].concat(v.ramais.map(x=>x.map(String)))));
+    }
+    body.appendParagraph(v.note);
+  }
   arquemAddHeading_(body,'Observações metodológicas');
   body.appendParagraph(p.productionFlow?
     'Contagens de chamados distintos por direção; um chamado pode entrar e sair no mesmo período. Finalizações não são transferências. Verifique a cobertura da sincronização.':
@@ -475,6 +563,18 @@ function arquemXlsx_(p, keep) {
       .setOption('legend',{position:'none'})
       .build();
     cust.insertChart(chart);
+  }
+  if(p.zenviaVoice){
+    const v=arquemVozChatDados_(p.zenviaVoice);
+    arquemCreateSheet_(ss,'Voz e Chat',
+      ['Indicador','Voz','Chat'],v.overview);
+    arquemCreateSheet_(ss,'Voz por dia',
+      ['Data','Chamadas','Atendidas'],v.days);
+    arquemCreateSheet_(ss,'Voz por ramal',
+      ['Ramal','Chamadas','Atendidas','Tempo falado (mm:ss)'],v.ramais);
+    const notes=arquemCreateSheet_(ss,'Metodologia canais',
+      ['Regra','Descrição'],[['CSAT e qualidade',v.note]]);
+    notes.getRange(2,2).setWrap(true);
   }
   SpreadsheetApp.flush();
   const url='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(ss.getId())+
