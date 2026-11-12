@@ -5702,6 +5702,24 @@ function render(d){
  table('pdTopTickets',(n.tasks||[]).slice(0,25).map(x=>'<tr><td>'+ticketLink(x.id)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.category)+'</td><td>'+fmt(x.minutes)+'</td><td>'+esc(x.appointments)+'</td></tr>'));
  say('Fonte: Supabase / Movidesk · '+from+' a '+to+'. '+(d.partial?'Conciliação em andamento: resultados parciais.':'Período conciliado.')+' Alertas de SLA e andamento representam a situação atual dos chamados.');
 }
+function clearProductionView(){
+  // Falha de sessao ou consulta: nao manter indicadores antigos como se estivessem atualizados.
+  const cardIds=['pdKpis','pdLegacyKpis','pdPeakBars'];
+  for(const id of cardIds){const node=el(id);if(node)node.replaceChildren();}
+  const tableIds=['pdCompare','pdAlerts','pdProjects','pdPeople','pdDailyJourney','pdLegacy','pdWeekdays','pdGaps','pdTopTickets'];
+  for(const id of tableIds){
+    const body=el(id)?.querySelector('tbody');
+    if(body)body.replaceChildren();
+  }
+  const note=el('pdCoverageNote');
+  if(note)note.textContent='Dados indisponiveis: cobertura de apontamentos nao verificada.';
+  window.productionLegacyRows=null;
+  window.productionLegacyRender=null;
+  const filter=el('pdLegacyFilter');
+  const option=filter?.querySelector('option[value="withoutAppointment"]');
+  if(option)option.disabled=true;
+  if(filter?.value==='withoutAppointment')filter.value='old';
+}
 async function load(){
   if(busy)return;
   busy=true;
@@ -5715,8 +5733,9 @@ async function load(){
     say(el('pdStatus').textContent+' Atualizado às '+
       new Date(data.generatedAt||Date.now()).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'})+'.');
   }catch(e){
+    clearProductionView();
     console.error('Falha ao atualizar a Produção:',e);
-    say('Não foi possível atualizar a Produção: '+e.message);
+    say('Dados da Produção indisponíveis. Não utilize indicadores de consultas anteriores. '+e.message);
   }finally{
     busy=false;button.disabled=false;button.textContent='↻ Atualizar Produção';
   }
