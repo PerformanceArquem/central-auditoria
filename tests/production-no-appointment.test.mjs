@@ -31,6 +31,7 @@ const appointments=[
 let syncReady=true;
 let syncAgeHours=1;
 let syncPeriodEndDaysAgo=0;
+let syncPeriodStartDaysAgo=370;
 let adminAllowed=true;
 const json=value=>({ok:true,json:async()=>value});
 const fetch=async input=>{
@@ -42,7 +43,8 @@ const fetch=async input=>{
   if(url.pathname.endsWith('/audit_recent_reconcile_state'))return json([{completed:syncReady,
     last_error:syncReady?null:'Conciliação pendente',
     last_success_at:new Date(Date.now()-syncAgeHours*3600000).toISOString(),
-    period_end:utcDay(syncPeriodEndDaysAgo)}]);
+    period_end:utcDay(syncPeriodEndDaysAgo),
+    period_start:utcDay(syncPeriodStartDaysAgo)}]);
   throw Error('Unexpected URL '+url.pathname);
 };
 const scope={
@@ -138,4 +140,25 @@ test('completed reconciliation not covering previous day cannot issue alerts',as
     assert.equal(response.body.legacyAlerts.counts.withoutAppointmentCount,null);
     assert.deepEqual(ids(response),[]);
   }finally{syncPeriodEndDaysAgo=0;}
+});
+
+test('a short recent synchronization window cannot confirm absence for 30 days',async()=>{
+  syncPeriodStartDaysAgo=14;
+  try{
+    const response=await call(30);
+    assert.equal(response.code,200);
+    assert.equal(response.body.legacyAlerts.coverageReady,false);
+    assert.equal(response.body.legacyAlerts.counts.withoutAppointmentCount,null);
+    assert.deepEqual(ids(response),[]);
+  }finally{syncPeriodStartDaysAgo=370;}
+});
+
+test('the same 14-day window permits a shorter threshold, if complete and recent',async()=>{
+  syncPeriodStartDaysAgo=14;
+  try{
+    const response=await call(7);
+    assert.equal(response.code,200);
+    assert.equal(response.body.legacyAlerts.coverageReady,true);
+    assert.deepEqual(ids(response),['102','103','104','106']);
+  }finally{syncPeriodStartDaysAgo=370;}
 });
