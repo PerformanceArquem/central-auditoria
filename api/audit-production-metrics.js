@@ -122,6 +122,10 @@ export default async function handler(req,res){
     Number.isFinite(lastSyncMs)&&ageSyncMs>=0&&ageSyncMs<=36*60*60*1000&&
     /^\d{4}-\d{2}-\d{2}$/.test(lastCovered)&&lastCovered>=priorDay&&
     /^\d{4}-\d{2}-\d{2}$/.test(firstCovered)&&firstCovered<=thresholdStart;
+  const coverageReason=rec.completed!==true||Boolean(rec.last_error)?'Conciliação incompleta ou com erro':
+    !Number.isFinite(lastSyncMs)||ageSyncMs<0||ageSyncMs>36*60*60*1000?'Última conciliação desatualizada':
+    !/^\d{4}-\d{2}-\d{2}$/.test(lastCovered)||lastCovered<priorDay?'Conciliação não cobre o dia anterior':
+    !/^\d{4}-\d{2}-\d{2}$/.test(firstCovered)||firstCovered>thresholdStart?'Janela conciliada menor que o prazo solicitado':null;
   // A ausência de um registro não pode ser usada como alerta quando a conciliação está incompleta.
   const withoutAppointment=coverageReady?open.filter(t=>t.history?.last
    ? days(t.history.last,today)>=withoutAppointmentDays
@@ -144,7 +148,7 @@ export default async function handler(req,res){
      weekday,count:weekdayStats.get(i)||0,days:countByWeekday.get(i)||0,
      average:(countByWeekday.get(i)||0)?Number(((weekdayStats.get(i)||0)/countByWeekday.get(i)).toFixed(1)):0
    })),dailyRows:current.dailyRows,
-   legacyAlerts:{thresholdDays:withoutAppointmentDays,coverageReady,counts:{old90:old.length,withoutForecast30:withoutForecast.length,
+   legacyAlerts:{thresholdDays:withoutAppointmentDays,coverageReady,coverage:{from:/^\d{4}-\d{2}-\d{2}$/.test(firstCovered)?firstCovered:null,to:/^\d{4}-\d{2}-\d{2}$/.test(lastCovered)?lastCovered:null,reason:coverageReason},counts:{old90:old.length,withoutForecast30:withoutForecast.length,
      withoutAppointmentCount:coverageReady?withoutAppointment.length:null,withoutAction7:stalled.length},
      old:old.slice(0,100).map(toLegacy),withoutForecast:withoutForecast.slice(0,100).map(toLegacy),
      withoutAppointment:withoutAppointment.slice(0,100).map(toLegacy),withoutAction:stalled.slice(0,100).map(toLegacy)},
