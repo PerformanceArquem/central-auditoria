@@ -410,30 +410,61 @@ function arquemPdf_(p, keep) {
     body.appendParagraph('Avaliações: '+ratings+' | Notas excelentes (8–10): '+excellent+
       ' | Índice de qualidade: '+(ratings?(excellent/ratings*100).toFixed(2)+'%':'Sem avaliações'));
     body.appendParagraph('Notas 1–7: abaixo do padrão; 8–10: excelente. Sem avaliações não representa nota zero.');
-    const lines=[['Colaborador','Horas','Apontamentos','Avaliações','Excelentes','Média']];
-    qs.slice(0,100).forEach(x=>lines.push([
+    const qualityRows=[['Colaborador','Horas','Apontamentos','Avaliações','Excelentes','Média']];
+    qs.forEach(x=>qualityRows.push([
       String(x.name||''),arquemH_(x.hoursMinutes),String(x.appointments||0),
       String(x.ratings||0),String(x.excellent||0),
       x.average==null?'Sem avaliações':Number(x.average).toFixed(2)
     ]));
-    arquemEstilizarTabelaPdf_(body.appendTable(lines));
-  } else if ((p.collaborators||[]).length) {
-    arquemAddHeading_(body,'Colaboradores · horas e jornada');
-    const lines=[['Colaborador','Setor','Horas','Meta mínima','Jornada','Falta mínimo','Falta jornada']];
-    p.collaborators.slice(0,70).forEach(x=>lines.push([
-      String(x.name||''),String(x.sector||''),arquemH_(x.minutes),arquemH_(x.minimumMinutes),
-      arquemH_(x.targetMinutes),arquemH_(x.minimumGap),arquemH_(x.targetGap)]));
-    arquemEstilizarTabelaPdf_(body.appendTable(lines));
+    arquemEstilizarTabelaPdf_(body.appendTable(qualityRows));
   }
-  if ((p.daily||[]).length) {
-    arquemAddHeading_(body,'Horas por colaborador · dia a dia');
-    const rows=[['Data','Colaborador','Setor','Horas','Jornada ref.','Meta mínima ref.']];
-    p.daily.slice(0,90).forEach(x=>rows.push([
-      String(x.date||''),String(x.person||''),String(x.sector||''),
-      arquemH_(x.minutes),arquemH_(x.referenceMinutes),arquemH_(x.minimumMinutes)
-    ]));
-    arquemEstilizarTabelaPdf_(body.appendTable(rows));
-    if(p.daily.length>90)body.appendParagraph('Exibindo os primeiros 90 de '+p.daily.length+' registros diários agrupados.');
+  // Fonte única: o pacote já chega autorizado e filtrado por destinatário.
+  // Gestores recebem apenas sua equipe; direção pode receber todas as equipes.
+  // Nunca ampliar o escopo de dados aqui no Apps Script.
+  const people=Array.isArray(p.collaborators)?p.collaborators:[];
+  const daily=Array.isArray(p.daily)?p.daily:[];
+  const sectorName=x=>String(x.sector||x.team||'Equipe não informada').trim()||'Equipe não informada';
+  const sectors=[...new Set(people.map(sectorName).concat(daily.map(sectorName)))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  if(people.length||daily.length){
+    arquemAddHeading_(body,'Colaboradores | Horas apontadas e jornada');
+    body.appendParagraph('Visão por equipe e detalhamento individual. Horas apontadas são registros de atividade, não controle de ponto.');
+    const summary=[['Equipe','Colaboradores','Horas apontadas','Jornada ref.','Meta mínima ref.']];
+    let allMinutes=0,allTarget=0,allMinimum=0;
+    sectors.forEach(sector=>{
+      const members=people.filter(x=>sectorName(x)===sector);
+      const hours=members.reduce((n,x)=>n+(Number(x.minutes)||0),0);
+      const target=members.reduce((n,x)=>n+(Number(x.targetMinutes)||0),0);
+      const minimum=members.reduce((n,x)=>n+(Number(x.minimumMinutes)||0),0);
+      allMinutes+=hours;allTarget+=target;allMinimum+=minimum;
+      summary.push([sector,String(members.length),arquemH_(hours),arquemH_(target),arquemH_(minimum)]);
+    });
+    summary.push(['TOTAL',String(people.length),arquemH_(allMinutes),arquemH_(allTarget),arquemH_(allMinimum)]);
+    arquemEstilizarTabelaPdf_(body.appendTable(summary));
+    sectors.forEach(sector=>{
+      const members=people.filter(x=>sectorName(x)===sector)
+        .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+      const days=daily.filter(x=>sectorName(x)===sector)
+        .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||
+          String(a.person||'').localeCompare(String(b.person||''),'pt-BR'));
+      arquemAddHeading_(body,'Equipe: '+sector);
+      if(members.length){
+        const rows=[['Colaborador','Horas','Meta mínima','Jornada','Falta mínimo','Falta jornada','% jornada']];
+        members.forEach(x=>{
+          const minutes=Number(x.minutes)||0,target=Number(x.targetMinutes)||0;
+          rows.push([String(x.name||''),arquemH_(minutes),arquemH_(x.minimumMinutes),
+            arquemH_(target),arquemH_(x.minimumGap),arquemH_(x.targetGap),
+            target?(100*minutes/target).toFixed(1)+'%':'N/D']);
+        });
+        arquemEstilizarTabelaPdf_(body.appendTable(rows));
+      }
+      if(days.length){
+        arquemAddHeading_(body,'Detalhamento diário | '+sector,DocumentApp.ParagraphHeading.HEADING3);
+        const rows=[['Data','Colaborador','Horas','Jornada ref.','Meta mínima ref.']];
+        days.forEach(x=>rows.push([String(x.date||''),String(x.person||''),
+          arquemH_(x.minutes),arquemH_(x.referenceMinutes),arquemH_(x.minimumMinutes)]));
+        arquemEstilizarTabelaPdf_(body.appendTable(rows));
+      }
+    });
   }
   if ((p.customers||[]).length){
     arquemAddHeading_(body,'Empresas que mais consomem tempo');
