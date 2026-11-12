@@ -57,7 +57,7 @@ const scope={
   AbortController,setTimeout,clearTimeout,
 };
 vm.createContext(scope);
-vm.runInContext(apiSource+'\nthis.__handler=handler;',scope);
+vm.runInContext(apiSource+'\nthis.__handler=handler;this.__isClosed=isClosed;',scope);
 const call=async (days,auth=true)=>{
   let response;
   const req={method:'GET',query:days===undefined?{}:{withoutAppointmentDays:days},
@@ -205,4 +205,13 @@ test('missing historical completion does not falsely claim certified historical 
     assert.equal(response.body.legacyAlerts.historicalImport.jobCompleted,false);
     assert.equal(response.body.legacyAlerts.historicalImport.completeCoverageVerified,false);
   }finally{historicalCompleted=true;}
+});
+
+test('only explicit terminal statuses close tickets; negated or reopened cases remain active',()=>{
+  for(const status of ['Fechado','Resolvido','Cancelado','Concluído','Concluído (sem confirmação)','Finalizado']){
+    assert.equal(scope.__isClosed(status),true,'Expected closed: '+status);
+  }
+  for(const status of ['Não resolvido','Ainda não concluído','Reaberto','Cancelamento solicitado','Em andamento','Fila','Em Análise']){
+    assert.equal(scope.__isClosed(status),false,'Expected open: '+status);
+  }
 });
