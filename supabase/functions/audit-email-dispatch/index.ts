@@ -1285,6 +1285,8 @@ function scheduledReports(today:string, hol:Set<string>, recipients:R[]):Schedul
   const thisMonday = shift(today, -((dow + 6) % 7));
   const prevMonday = shift(thisMonday, -7);
   const prevSunday = shift(thisMonday, -1);
+  let firstWeekBusinessDay=thisMonday;
+  while(hol.has(firstWeekBusinessDay)||[0,6].includes(weekday(firstWeekBusinessDay))) firstWeekBusinessDay=shift(firstWeekBusinessDay,1);
   const monthStart = today.slice(0,7)+'-01';
   const prevMonthEnd = shift(monthStart,-1);
   const priorYear = prevMonthEnd.slice(0,4);
@@ -1298,7 +1300,7 @@ function scheduledReports(today:string, hol:Set<string>, recipients:R[]):Schedul
     if(isKeilaRecipient(r)||!recipientAllows(r,'general'))continue;
     if (businessDay && r.daily_enabled===true)
       tasks.push({r,kind:'daily',from:prev,to:prev});
-    if (dow===1 && r.weekly_enabled===true)
+    if (businessDay && today===firstWeekBusinessDay && r.weekly_enabled===true)
       tasks.push({r,kind:'weekly',from:prevMonday,to:prevSunday});
     const linked = (Array.isArray(r.sectors)&&r.sectors.length?r.sectors:[r.sector]).some(x=>norm(x));
     // Fechamentos mensais e anuais agora também podem ser setoriais e individuais.
