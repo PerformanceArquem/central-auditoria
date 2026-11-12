@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - feature/zenvia-voice-metrics-20261112
+      - integration/zenvia-voice-chat-reports-20261112
 jobs:
   voice-metrics:
     runs-on: ubuntu-latest
