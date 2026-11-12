@@ -1000,7 +1000,8 @@ async function adminAction(payload: R) {
         formats.includes('pdf') && formats.includes('xlsx') &&
         capabilities.paperTemplateConfigured===true;
       const keilaGeneratorReady=ready&&capabilities?.attachmentsVersion==='arquem-8-keila-movements'&&capabilities?.keilaProductionReady===true;
-      return json({ok:true,enabled:flag,ready,keilaGeneratorReady,
+      const csatGeneratorReady=ready&&capabilities?.csatNotesReady===true;
+      return json({ok:true,enabled:flag,ready,keilaGeneratorReady,csatGeneratorReady,
         sectionPermissionsSupported:capabilities?.sectionPermissionsSupported===true,
         templateConfigured:capabilities?.paperTemplateConfigured===true,
         formats:formats.filter(x=>x==='pdf'||x==='xlsx'),
