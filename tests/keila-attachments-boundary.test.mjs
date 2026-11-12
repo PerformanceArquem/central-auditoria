@@ -77,3 +77,19 @@ test('final mail sending boundary requires Keila generator v9, even outside sche
   assert.ok(send.includes("E('REPORT_ATTACHMENTS_ENABLED')!=='true'"),'Block reports when attachments disabled');
   assert.ok(send.includes('Number(result.anexos)!==2'),'Require PDF and Excel confirmation');
 });
+
+test('Keila scheduled dispatch reserves one unique period and never retries uncertain sends',()=>{
+  const backend=readFileSync('supabase/functions/audit-email-dispatch/index.ts','utf8');
+  const start=backend.indexOf('async function dispatchKeilaProductionFlow(');
+  const end=backend.indexOf('\ntype ReportTotals',start);
+  assert.ok(start>=0&&end>start,'Scheduled Keila dispatch must exist');
+  const section=backend.slice(start,end);
+  assert.ok(section.includes("'production-flow-keila:'"),'Unique key per recipient and period');
+  assert.ok(section.includes("':'+task.kind+':'+task.from+':'+task.to"),'Period and report kind in unique key');
+  assert.ok(section.includes("if(existing.length)"),'Any preexisting delivery must suppress retries');
+  assert.ok(section.includes("on_conflict=dispatch_key"),'Concurrent dispatches must reserve idempotently');
+  assert.ok(section.includes("resolution=ignore-duplicates"),'Reservation conflict must not overwrite');
+  assert.ok(section.includes("if(!inserted?.length)"),'Only the winner can send');
+  assert.ok(section.includes("status:'failed'"),'Failure must be recorded for manual review');
+  assert.ok(!section.includes("method:'DELETE'"),'Cannot delete deduplication record automatically');
+});
