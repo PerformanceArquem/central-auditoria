@@ -158,7 +158,7 @@ function ratingSummary(ratings: SupportRating[]) {
   const totalPoints = ratings.reduce((sum, row) => sum + row.score, 0);
   const high = ratings.filter(row => row.score >= 8);
   const superadorPoints = high.reduce((sum, row) => sum + row.score, 0);
-  const positive = ratings.filter(row => row.score >= 9).length;
+  const positive = ratings.filter(row => row.score >= 8).length;
   const percent = (numerator: number, denominator: number) =>
     denominator ? Math.round(numerator / denominator * 10000) / 100 : null;
   const movidesk = ratings.filter(row => row.source === 'movidesk').length;
@@ -241,27 +241,49 @@ function supportRatingCache() {
   const periods = new Map<string, Promise<SupportRating[] | null>>();
   return async (rec: R, from: string, to: string) => {
     const sectors = Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors : [rec.sector];
-    if (!sectors.some(sector => norm(sector) === 'suporte')) return { text: '', html: '', metric: null };
-    const key = `${from}:${to}`;
+    if (!sectors.some(sector => norm(sector) === 'suporte')) return { text: '', html: '', metric: null, ratings:[] };
+    const key = from+':'+to;
     let pending = periods.get(key);
     if (!pending) {
-      pending = supportRatings(from, to).catch(error => {
-        console.error('Avaliações de Suporte indisponíveis:', err(error));
+      pending = supportRatings(from,to).catch(error => {
+        console.error('Avaliações de Suporte indisponíveis:',err(error));
         return null;
       });
-      periods.set(key, pending);
+      periods.set(key,pending);
     }
     const rows = await pending;
-    const person = norm(rec.collaborator_name);
-    const metric = rows && ratingSummary(rows.filter(row => !person || norm(row.collaborator_name) === person)).superadores;
-    const result = metric?.percent != null
-      ? `${metric.percent.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% (${metric.points} de ${metric.totalPoints} pontos)`
-      : rows ? 'Sem pontuação no período' : 'Avaliações indisponíveis no momento';
-    const text = `Qualidade do Suporte — Superadores: ${result}.`;
-    return { text: '\n\n' + text, html: '<p><strong>' + emailEsc(text) + '</strong></p>', metric };
+    const names = Array.isArray(rec.collaborator_names) && rec.collaborator_names.length ?
+      rec.collaborator_names.map(norm).filter(Boolean) :
+      rec.collaborator_name ? [norm(rec.collaborator_name)] : [];
+    const selected = rows?.filter(row => !names.length || names.includes(norm(row.collaborator_name))) || [];
+    const metric = rows ? ratingSummary(selected) : null;
+    const eligible = rec.id==='40752b0b-c2a4-4031-9496-733b6f846d76' ||
+      rec.id==='a4748115-e1d6-42dc-a8d1-706b8129219f';
+    const result = metric?.csatPercent != null ?
+      metric.csatPercent.toLocaleString('pt-BR',{maximumFractionDigits:2})+'% ('+metric.excelente+' de '+metric.total+' notas ≥ 8)' :
+      rows ? 'Sem avaliações no período' : 'Avaliações indisponíveis no momento';
+    const superadores = metric?.superadores.percent != null ?
+      metric.superadores.percent.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%' : 'Indisponível';
+    const visible = eligible ? selected.slice(0,100) : [];
+    const ratings = visible.map(row=>({date:row.service_date,ticketId:row.ticket_id,
+      collaborator:row.collaborator_name,channel:row.channel,score:row.score,source:row.source}));
+    const table = eligible && ratings.length ?
+      '<h3>Notas CSAT por atendimento (até 100 registros)</h3>'+
+      '<table width="100%" cellpadding="6" cellspacing="0" style="font-size:12px;border-collapse:collapse"><tr style="background:#edf3fb"><th>Data</th><th>Chamado</th><th>Colaborador</th><th>Canal</th><th>Nota</th></tr>'+
+      ratings.map(row=>'<tr><td>'+emailEsc(displayDate(String(row.date)))+'</td><td>'+
+        (/^\\d+$/.test(String(row.ticketId))?'<a href="https://arquem.movidesk.com/Ticket/Edit/'+row.ticketId+'">#'+row.ticketId+'</a>':'—')+
+        '</td><td>'+emailEsc(row.collaborator)+'</td><td>'+emailEsc(row.channel)+'</td><td><b>'+row.score+'</b></td></tr>').join('')+
+      '</table>' : '';
+    const detail = eligible && rows ?
+      '\nNotas CSAT (até 100):\n'+ratings.map(row=>
+        row.date+' | #'+row.ticketId+' | '+row.collaborator+' | '+row.channel+' | nota '+row.score).join('\n') : '';
+    const text = 'CSAT do Suporte (notas 8–10 positivas): '+result+'. Superadores: '+superadores+'.'+
+      (eligible?' Notas 1–7: abaixo do padrão. Sem avaliação não equivale a nota zero.':'');
+    return {text:'\n\n'+text+detail,
+      html:'<p><strong>'+emailEsc(text)+'</strong></p>'+table,
+      metric,ratings:eligible?ratings:[],csatFullCount:selected.length};
   };
 }
-
 // Resiliência: falhas do módulo de previsões não bloqueiam relatórios oficiais.
 async function optionalForecast(rec:R){
  try{return await forecastSection(rec,{db,norm,duration,emailEsc});}
@@ -873,7 +895,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
   return { text: lines.join('\n'), detailsHtml, teamJourneyHtml, teamJourney:journey, exportData,
     metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length,extraMinutes,extraCount:extraRows.length,...journeyGaps } };
 }
-function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:ReportKind,partial:boolean,historicalIncomplete:boolean,clients:R[],forecastRows:unknown[]=[]):R {
+function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:ReportKind,partial:boolean,historicalIncomplete:boolean,clients:R[],forecastRows:unknown[]=[],quality:R|null=null):R {
  const data=report.exportData as R;
  const clientNames=new Map(clients.map(x=>[String(x.ticket_id),String(x.client_name||'')]));
  return {
@@ -883,6 +905,7 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
    reportSections:reportSectionFlags(rec),
    metrics:report.metrics,
    extraordinary:data.extraordinary||[],
+   csat:quality?.metric||null,csatRatings:quality?.ratings||[],
    collaborators:data.collaborators||[],daily:reportSectionOn(rec,'daily_detail')?(data.daily||[]):[],
    customers:reportSectionOn(rec,'customers')?(data.customers||[]):[],
    tickets:(Array.isArray(tickets.attachmentTickets)?tickets.attachmentTickets:[])
@@ -1486,7 +1509,7 @@ async function dispatchPreliminary(t:ScheduledReport,hol:Set<string>,clientsAndT
     await sendMail(String(t.r.email),'[PRELIMINAR - DADOS PARCIAIS] Central de Auditoria - '+REPORT_LABEL[t.kind]+' - '+t.from,
       notice+report.text+overview.text+quality.text+'\\n\\n'+alerts.text,
       reportEmailHtml(t.r,report,t.from,t.to,t.kind,true,true,alerts.html,report.detailsHtml+quality.html,overview.html),
-      reportPacket(t.r,report,alerts,t.from,t.to,t.kind,true,true,clients));
+      reportPacket(t.r,report,alerts,t.from,t.to,t.kind,true,true,clients,[],quality));
     await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -1541,7 +1564,7 @@ async function prepareReports() {
     const quality=await recipientQuality(t.r,t.from,t.to,getQuality);
     const overview=await getOverview(t.r,t.from,t.to,tickets.activeTickets,t.kind);
     const forecast=await optionalForecast(t.r);
-    const packet=reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows);
+    const packet=reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows,quality);
     const subject='Central de Auditoria - '+REPORT_LABEL[t.kind]+' - '+t.from;
     const bodyText=report.text+overview.text+quality.text+'\n\n'+tickets.text+forecast.text;
     const bodyHtml=reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,
@@ -1563,6 +1586,7 @@ async function prepareReports() {
 async function cachedReport(t:ScheduledReport) {
   // Never send an outdated prepared report after a recipient opts into custom content controls.
   if(t.r.report_sections!=null)return null;
+  if(['40752b0b-c2a4-4031-9496-733b6f846d76','a4748115-e1d6-42dc-a8d1-706b8129219f'].includes(String(t.r.id)))return null; // CSAT individual sempre atualizado
   if(t.kind!=='daily'&&t.kind!=='weekly')return null;
   const key=String(t.r.id)+':'+t.kind+':'+t.from+':'+t.to;
   const rows=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
@@ -1610,6 +1634,8 @@ async function dispatch() {
   const getQuality = supportRatingCache();
   const getOverview = directionOverviewCache();
   const results: R[] = [];
+  let handled=0;
+  const MAX_DISPATCH_BATCH=2;
   for (const t of tasks) {
     const id = String(t.r.id);
     const key = `${id}:${t.kind}:${t.from}:${t.to}`;
@@ -1618,6 +1644,7 @@ async function dispatch() {
       if (exists.length) { results.push({ recipientId: id, kind: t.kind, skipped: 'Ja registrado; revisar status antes de retentar' }); continue; }
       // Conteudo pronto evita recalcular HTML e dados dos anexos as 9h.
       // O snapshot so pode ser usado se a conciliacao ainda estiver valida.
+      if(handled>=MAX_DISPATCH_BATCH)break;
       const prepared=await cachedReport(t);
       if(prepared){
         const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
@@ -1626,6 +1653,7 @@ async function dispatch() {
             period_from:t.from,period_to:t.to,status:'processing'})
         });
         if(!inserted?.length)continue;
+        handled++;
         try{
           await sendMail(String(t.r.email),String(prepared.subject),String(prepared.body_text),
             String(prepared.body_html),prepared.report_data as R);
@@ -1645,7 +1673,10 @@ async function dispatch() {
       const appts = await readPeriod(t);
       if (!appts) {
         referenceData ??= Promise.all([ticketSource(),clientSource()]);
-        results.push(await dispatchPreliminary(t,hol,()=>referenceData!));
+        const preliminary=await dispatchPreliminary(t,hol,()=>referenceData!);
+        results.push(preliminary);
+        if(preliminary.status==='sent_preliminary'||preliminary.status==='failed')handled++;
+
         continue;
       }
       referenceData ??= Promise.all([ticketSource(),clientSource()]);
@@ -1653,7 +1684,7 @@ async function dispatch() {
       const report = buildReport(t.r, appts, t.from, t.to, t.kind, hol, false, clients);
       const tickets = ticketAlerts(t.r, allTickets);
       if (!report.metrics.appointments && (t.kind==='daily'||t.kind==='weekly')) { results.push({ recipientId: id, kind: t.kind, skipped: 'Sem apontamentos; envio suspenso' }); continue; }
-      const quality = await recipientQuality(t.r, t.from, t.to, getQuality);
+      const quality = await getQuality(t.r, t.from, t.to);
       const overview = await getOverview(t.r, t.from, t.to, tickets.activeTickets,t.kind);
       const forecast=await optionalForecast(t.r);
       let annual = {text:'',html:''};
@@ -1671,11 +1702,12 @@ async function dispatch() {
           period_from: t.from, period_to: t.to, status: 'processing' })
       });
       if (!inserted?.length) continue;
+      handled++;
       try {
         const label = t.includeDecember?'Anual e fechamento de dezembro':REPORT_LABEL[t.kind];
         await sendMail(String(t.r.email), `Central de Auditoria - ${label} - ${t.from}`, report.text+annual.text+overview.text+quality.text+'\n\n'+tickets.text+forecast.text,
           reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml+quality.html,annual.html+overview.html,forecast.html),
-          reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows));
+          reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows,quality));
         await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH', body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString(), provider_id: 'gmail-apps-script' }) });
         results.push({ recipientId: id, kind: t.kind, status: 'sent', ...report.metrics });
@@ -1686,7 +1718,10 @@ async function dispatch() {
       }
     } catch (ex) { results.push({ recipientId: id, kind: t.kind, status: 'failed', error: err(ex) }); }
   }
-  return json({ ok: ![...results,...keilaFlow].some(x => x.status === 'failed'), date: today, results:[...keilaFlow,...results] });
+  return json({ok:![...results,...keilaFlow].some(x=>x.status==='failed'),
+    date:today,batchSize:MAX_DISPATCH_BATCH,handled,
+    pendingMayRemain:handled===MAX_DISPATCH_BATCH,
+    results:[...keilaFlow,...results]});
 }
 // Prévia executiva semanal: apenas leitura, sem Gmail, sem fila de envio e sem cache de disparos.
 // Escopo e formatação baseados nos cadastros e no mesmo relatório corporativo da Direção.
