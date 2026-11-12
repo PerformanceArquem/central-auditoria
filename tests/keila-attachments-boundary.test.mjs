@@ -61,9 +61,9 @@ test('Keila PDF and XLSX branches never include detailed movement tables',()=>{
   assert.match(pdf,/if\(p\.productionFlow\)/);
   assert.doesNotMatch(pdf,/Entradas na Produção — chamados detalhados/);
   assert.doesNotMatch(xlsx,/\['Entradas',moves\.filter/);
-  assert.match(xlsx,/first\\.insertChart\\(chart\\)/);
-  assert.match(xlsx,/sheets\\.length!==1/);
-  assert.match(xlsx,/sheets\\[0\\]\\.getName\\(\\)!=='Resumo'/);
-  assert.match(xlsx,/getCharts\\(\\)\\.length!==1/);
-  assert.match(xlsx,/indicadores de entrada\\/saida divergentes/);
+  assert.ok(xlsx.includes('first.insertChart(chart)'),'Bar chart must be inserted');
+  assert.ok(xlsx.includes('sheets.length!==1'),'Fail if XLSX has more than one tab');
+  assert.ok(xlsx.includes("sheets[0].getName()!=='Resumo'"),'Only Resumo tab allowed');
+  assert.ok(xlsx.includes('getCharts().length!==1'),'Require exactly one chart');
+  assert.ok(xlsx.includes('indicadores de entrada/saida divergentes'),'Totals mismatch must fail');
 });
