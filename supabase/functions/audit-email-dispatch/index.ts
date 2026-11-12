@@ -898,8 +898,8 @@ async function sendMail(email: string, subject: string, text: string, html?: str
     allowVoiceEmails.get(String(reportData.recipientId))===String(email).trim().toLowerCase();
   if(eligible&&reportData&&E('ZENVIA_VOICE_REPORTS_ENABLED')==='true'){
     // Bloqueia ativacao ate que o Apps Script aceite e gere PDF/Excel com o mesmo bloco.
-    if(E('ZENVIA_VOICE_ATTACHMENTS_READY')!=='true')
-      throw new Error('Envio Zenvia bloqueado: anexos PDF/Excel ainda nao homologados');
+    if(E('ZENVIA_VOICE_ATTACHMENTS_READY')!=='true' || E('REPORT_ATTACHMENTS_ENABLED')!=='true')
+      throw new Error('Envio Zenvia bloqueado: PDF/Excel nao habilitados ou nao homologados');
     const token=E('ZENVIA_VOICE_ACCESS_TOKEN');
     if(!token)throw new Error('Envio Zenvia bloqueado: segredo do Supabase ausente');
     const from=String(reportData.from||''),to=String(reportData.to||'');
@@ -936,6 +936,9 @@ async function sendMail(email: string, subject: string, text: string, html?: str
        !capabilities.formats.includes('pdf') || !capabilities.formats.includes('xlsx') ||
        capabilities.paperTemplateConfigured!==true)
       throw new Error('PDF/XLSX ainda não validados no Apps Script com papel timbrado');
+    if(cleanReportData?.zenviaVoice &&
+       (capabilities.zenviaVoiceReady!==true || capabilities.zenviaVoiceVersion!=='arquem-voice-chat-v1'))
+      throw new Error('PDF/XLSX de Voz e Chat não homologados no Apps Script');
   }
   const res = await fetch(endpoint, {
     method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
