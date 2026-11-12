@@ -1,4 +1,5 @@
 import zenviaVoiceHandler from '../lib/zenvia-voice.js';
+import {triageReport} from '../lib/intelligence-triage.js';
 // Relatório mensal automático da Produção a partir das tabelas consolidadas.
 // Leitura somente, acesso administrativo obrigatório, sem chaves no navegador.
 const ZONE='America/Sao_Paulo',MAX=20000,PAGE=1000;
@@ -34,6 +35,10 @@ export default async function handler(req,res){
   const roles=await allowed.json();
   if(!Array.isArray(roles)||!roles.some(r=>String(r.role).toLowerCase()==='admin'&&r.is_active!==false))
     return fail(res,403,'Somente administradores podem consultar os indicadores consolidados');
+  if(req.query?.mode==='triage'){
+   const report=await triageReport({base,key,signal:ctrl.signal,now:new Date()});
+   return res.status(200).json(report);
+  }
   const today=currentDate(),from=today.slice(0,7)+'-01',prevTo=addDays(from,-1),prevFrom=prevTo.slice(0,7)+'-01';
   async function all(table,columns,params={}){
    let data=[];

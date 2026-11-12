@@ -935,6 +935,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
               <button data-t="support-quality">🎧 &nbsp;Qualidade do Suporte</button>
               <button data-t="zenvia-voice">☎ &nbsp;Métricas de Voz · Zenvia</button>
               <button data-t="production-audit">🏭 &nbsp;Auditoria da Produção</button>
+              <button data-t="intelligence-triage">🕒 &nbsp;Triagem da Inteligência <span id="itNavCount" class="nav-count">0</span></button>
               <button data-t="proj">▤ &nbsp;Projetos e prazos</button>
               <button data-t="occ">♙ &nbsp;Colaboradores</button>
             </div>
@@ -1115,6 +1116,45 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    <button type="button" class="b" id="imVipSave">Salvar lista corporativa</button>
   </div>
   <p id="imVipStatus" class="subtle" role="status">Nenhum VIP será marcado automaticamente sem cadastro.</p>
+ </div>
+</div>
+
+<div id="t-intelligence-triage" class="hide">
+ <div class="mh"><div><div class="eyebrow">AUDITORIAS · INTELIGÊNCIA / TRIAGEM</div><h2>Triagem da Inteligência · Aguardando avaliação da Produção</h2>
+ <p>Chamados T1–T4 em aberto. O encaminhamento à Produção precisa ser confirmado; a classificação sozinha não comprova a transferência.</p></div></div>
+ <div class="card">
+  <div class="row noprint" style="align-items:flex-end;gap:10px;flex-wrap:wrap">
+   <div class="fg"><label id="itDaysLabel">Tempo na fila</label>
+   <details id="itDays" style="position:relative;min-width:180px">
+    <summary id="itDaysSummary" aria-labelledby="itDaysLabel" style="cursor:pointer;border:1px solid #cad4e1;border-radius:8px;padding:9px 12px;background:white;list-style-position:inside">Mais de 15 dias</summary>
+    <div style="position:absolute;top:100%;left:0;z-index:30;width:215px;padding:12px;box-shadow:0 8px 28px #14213d24;border:1px solid #d5dfeb;border-radius:10px;background:white">
+     <div style="font-weight:600;margin-bottom:8px">Selecionar faixas</div>
+     <label style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" class="itDayBucket" value="16-30" checked> 16 a 30 dias</label>
+     <label style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" class="itDayBucket" value="31-60" checked> 31 a 60 dias</label>
+     <label style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" class="itDayBucket" value="61-90" checked> 61 a 90 dias</label>
+     <label style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" class="itDayBucket" value="91+" checked> Mais de 90 dias</label>
+     <div style="display:flex;gap:6px;margin-top:12px"><button type="button" class="s" id="itDaysAll">Todas</button><button type="button" class="s" id="itDaysNone">Limpar</button></div>
+    </div>
+   </details>
+  </div>
+   <div class="fg"><label for="itType">Tipo</label><select id="itType"><option value="">Todos: T1–T4</option><option>T1</option><option>T2</option><option>T3</option><option>T4</option></select></div>
+   <div class="fg"><label for="itSearch">Buscar</label><input id="itSearch" placeholder="Cliente, chamado ou assunto"></div>
+   <button type="button" class="b" id="itRefresh">↻ Atualizar</button>
+   <button type="button" class="s" id="itXlsx">Excel</button>
+   <button type="button" class="s" id="itPdf">PDF</button>
+  </div>
+  <div class="row noprint" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px">
+   <button type="button" class="s" id="itSelectAll">Selecionar todos os filtrados</button>
+   <button type="button" class="s" id="itClearSelection">Limpar seleção</button>
+   <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="itExportSelected"> Exportar somente selecionados</label>
+   <span class="subtle" id="itSelectedCount" aria-live="polite">0 chamados selecionados</span>
+  </div>
+  <p id="itStatus" class="subtle" role="status">Clique em Atualizar para consultar os dados sincronizados.</p>
+  <div id="itCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0"></div>
+  <div style="overflow-x:auto"><table id="itTable" class="tbl" style="width:100%;min-width:1080px">
+   <thead><tr><th><input id="itSelectVisible" type="checkbox" title="Selecionar todos os chamados visíveis" aria-label="Selecionar todos os chamados visíveis"></th><th>Chamado</th><th>Tipo</th><th>Cliente</th><th>Assunto</th><th>Na triagem</th><th>Abertura</th><th>Idade total</th><th>Previsão</th><th>Status</th></tr></thead>
+   <tbody><tr><td colspan="10">Aguardando consulta.</td></tr></tbody></table></div>
+  <p class="subtle">A idade da triagem considera a última entrada na equipe Inteligência segundo o histórico Movidesk. Dados sujeitos ao atraso da sincronização. Não confundir idade total com dias na fila.</p>
  </div>
 </div>
 
@@ -3545,10 +3585,10 @@ function showTab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   revealActiveNavigation(t);
   $('t-cfg').classList.toggle('hide',t!=='cfg');
-  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','zenvia-voice','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='zenvia-voice')window.zenviaVoiceInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
-  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='email-admin'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='client-impact');
-  if(raw.length&&!['load','cfg','diag','alerts','email-admin','report-preview','support-quality','production-audit','zenvia-voice','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
+  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','zenvia-voice','intelligence-triage','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='zenvia-voice')window.zenviaVoiceInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='intelligence-triage')window.intelligenceTriageInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
+  $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='email-admin'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='intelligence-triage'||t==='client-impact');
+  if(raw.length&&!['load','cfg','diag','alerts','email-admin','report-preview','support-quality','production-audit','zenvia-voice','intelligence-triage','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
 $('tabs').addEventListener('click',e=>{const btn=e.target.closest('button');if(btn&&btn.dataset.t)showTab(btn.dataset.t)});
 
@@ -5931,6 +5971,7 @@ window.clientImpactInit=()=>{
 })();
 </script>
 
+<script src="/intelligence-triage.js"></script>
 <script id="zenviaVoiceScript">
 (()=>{'use strict';
  const el=id=>document.getElementById(id);
