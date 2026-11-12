@@ -13,7 +13,9 @@ const outbound=[
 ];
 const inbound=[
  {id:5,data_inicio:'2026-11-10T12:00:00-03:00',ramal_id:2000,status:'atendida',duracao_segundos:60,duracao_falada_segundos:55},
- {id:6,data_inicio:'2026-11-11T12:00:00-03:00',ramal_id:2001,status:'nao_atendida',duracao_segundos:0}
+ {id:6,data_inicio:'2026-11-11T12:00:00-03:00',ramal_id:2001,status:'nao_atendida',duracao_segundos:0},
+ {id:7,data_inicio:'2026-11-11T12:15:00-03:00',ramal_id:2001,status:'chamando',ativa:true,duracao_segundos:0},
+ {id:8,data_inicio:'2026-11-11T13:00:00-03:00',ramal_id:2001,status:'estado_novo',ativa:false,duracao_segundos:0}
 ];
 let calls=[];
 const json=(data,status=200)=>({ok:status>=200&&status<300,status,json:async()=>data});
@@ -63,11 +65,14 @@ test('rejects date errors before any Zenvia request',async()=>{
 test('reports inbound/outbound KPIs and never exposes personal information or credentials',async()=>{
  const r=await invoke();
  assert.equal(r.code,200);
- assert.equal(r.body.summary.total,4);
- assert.equal(r.body.summary.inbound,2);
+ assert.equal(r.body.summary.total,6);
+ assert.equal(r.body.summary.inbound,4);
  assert.equal(r.body.summary.outbound,2);
  assert.equal(r.body.summary.answered,2);
  assert.equal(r.body.summary.unanswered,2);
+ assert.equal(r.body.summary.inProgress,1);
+ assert.equal(r.body.summary.unclassified,1);
+ assert.equal(r.body.summary.answered+r.body.summary.unanswered+r.body.summary.inProgress+r.body.summary.unclassified,r.body.summary.total);
  assert.equal(r.body.summary.tmaSeconds,85);
  assert.equal(r.body.summary.durationSeconds,180);
  assert.equal(r.body.summary.talkSeconds,170);
@@ -97,5 +102,7 @@ test('voice UI shows TME unavailable, uses authenticated request, and has no sec
  assert.ok(html.includes("window.tmAuth?.getSession?.()"));
  assert.ok(html.includes("fetch('/api/audit-production-metrics?mode=zenvia&'"));
  assert.ok(html.includes("['TME','Indisponível']"));
+ assert.ok(html.includes("['Em andamento',x.inProgress]"));
+ assert.ok(html.includes("['Não classificadas',x.unclassified]"));
  assert.ok(!html.includes('ZENVIA_VOICE_ACCESS_TOKEN'));
 });
