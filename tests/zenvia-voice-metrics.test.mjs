@@ -185,3 +185,35 @@ test('numeric active flag is counted as in-progress rather than missed',async()=
   assert.equal(r.body.summary.unanswered,2);
  }finally{inbound[2].ativa=old;}
 });
+
+test('admin connection diagnostic tests Zenvia endpoints without exposing calls',async()=>{
+ const response=await invoke({start:'2026-11-10',end:'2026-11-11',check:'1'});
+ assert.equal(response.code,200);
+ assert.equal(response.body.diagnostic,true);
+ assert.equal(response.body.ready,true);
+ assert.equal(response.body.checks.length,2);
+ assert.equal(response.body.queueConfigured,false);
+ assert.equal(response.body.summary,undefined);
+ const serialized=JSON.stringify(response.body);
+ for(const secret of ['fixture-token','fixture-service','numero_origem','url_gravacao','data_inicio'])
+   assert.equal(serialized.includes(secret),false);
+ const probes=calls.filter(x=>x.url.hostname==='voice-api.zenvia.com');
+ assert.equal(probes.length,2);
+ assert.ok(probes.every(x=>x.url.searchParams.get('limite')==='1'));
+});
+test('diagnostic rejects missing Zenvia authorization and returns a safe status',async()=>{
+ broken=true;
+ try{
+  const response=await invoke({start:'2026-11-10',end:'2026-11-11',check:'1'});
+  assert.equal(response.code,200);
+  assert.equal(response.body.ready,false);
+  assert.ok(response.body.checks.every(x=>x.status==='provider_error'));
+  assert.equal(response.body.summary,undefined);
+ }finally{broken=false;}
+});
+test('connection test UI requires login and only presents endpoint statuses',()=>{
+ const html=readFileSync('index.html','utf8');
+ assert.ok(html.includes('id="zvCheck"'));
+ assert.ok(html.includes("el('zvCheck').addEventListener('click',diagnose)"));
+ assert.ok(html.includes("new URLSearchParams({mode:'zenvia',check:'1',start,end})"));
+});
