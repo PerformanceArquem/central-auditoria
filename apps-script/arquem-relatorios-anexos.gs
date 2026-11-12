@@ -90,7 +90,7 @@ function arquemHomologarKeilaSemEnvio() {
   props.setProperties({
     ARQUEM_KEILA_FLOW_VALIDATED_AT:new Date().toISOString(),
     ARQUEM_KEILA_FLOW_VALIDATED_TEMPLATE_ID:props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID') || '',
-    ARQUEM_KEILA_FLOW_VALIDATED_VERSION:'arquem-6-keila-flow-only'
+    ARQUEM_KEILA_FLOW_VALIDATED_VERSION:'arquem-8-keila-movements'
   },false);
   return {ok:true,sent:false,productionReady:true,files:keila.files};
 }
@@ -155,7 +155,7 @@ function arquemCapacidadesAnexos_() {
     props.getProperty('ARQUEM_SECTIONS_VALIDATED_TEMPLATE_ID')===id &&
     Number.isFinite(sectionsAt) &&
     sectionsAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
-  return {sucesso:true,attachmentsVersion:'arquem-6-keila-flow-only',formats:['pdf','xlsx'],
+  return {sucesso:true,attachmentsVersion:'arquem-8-keila-movements',formats:['pdf','xlsx'],
     sectionPermissionsSupported,
     csatNotesReady:ready &&
       props.getProperty('ARQUEM_CSAT_VALIDATED_VERSION')==='arquem-7-csat-notas' &&
@@ -164,7 +164,7 @@ function arquemCapacidadesAnexos_() {
       Date.parse(props.getProperty('ARQUEM_CSAT_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime(),
     paperTemplateConfigured:ready,
     keilaProductionReady:ready &&
-      props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_VERSION')==='arquem-6-keila-flow-only' &&
+      props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_VERSION')==='arquem-8-keila-movements' &&
       props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_TEMPLATE_ID')===id &&
       Number.isFinite(Date.parse(props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_AT')||'')) &&
       Date.parse(props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime()};
