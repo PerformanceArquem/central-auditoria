@@ -107,7 +107,16 @@ export default async function handler(req,res){
   // Sem registros: usar a data de abertura; não classificar ticket recém-aberto como atrasado.
   // Último apontamento: usar o registro mais recente realmente importado.
   const rec=sync[0]||{};
-  const coverageReady=rec.completed===true&&!rec.last_error;
+  // O estado 'completed' isolado nao prova atualidade da conciliacao.
+  // Falhar fechado quando a ultima execucao bem-sucedida nao for recente
+  // ou o periodo coberto nao alcancar o dia anterior em Sao Paulo.
+  const lastSyncMs=Date.parse(String(rec.last_success_at||''));
+  const ageSyncMs=Date.now()-lastSyncMs;
+  const lastCovered=sDate(rec.period_end);
+  const priorDay=addDays(today,-1);
+  const coverageReady=rec.completed===true&&!rec.last_error&&
+    Number.isFinite(lastSyncMs)&&ageSyncMs>=0&&ageSyncMs<=36*60*60*1000&&
+    /^\\d{4}-\\d{2}-\\d{2}$/.test(lastCovered)&&lastCovered>=priorDay;
   // A ausência de um registro não pode ser usada como alerta quando a conciliação está incompleta.
   const withoutAppointment=coverageReady?open.filter(t=>t.history?.last
    ? days(t.history.last,today)>=withoutAppointmentDays
