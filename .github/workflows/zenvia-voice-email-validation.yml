@@ -1,0 +1,28 @@
+name: Validate Zenvia voice email reports
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/audit-email-dispatch/zenvia-email-*.ts'
+      - 'supabase/functions/audit-email-dispatch/index.ts'
+      - 'tests/zenvia-email-report.test.ts'
+      - '.github/workflows/zenvia-voice-email-validation.yml'
+  push:
+    branches:
+      - feature/zenvia-voice-email-reports-20261112
+jobs:
+  email-voice:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Typecheck and tests
+        run: |
+          deno check supabase/functions/audit-email-dispatch/zenvia-email-section.ts supabase/functions/audit-email-dispatch/zenvia-email-source.ts
+          deno test --allow-none tests/zenvia-email-report.test.ts
+      - name: Static send safety
+        run: |
+          grep -q 'ZENVIA_VOICE_REPORTS_ENABLED' supabase/functions/audit-email-dispatch/index.ts
+          grep -q 'ZENVIA_VOICE_ATTACHMENTS_READY' supabase/functions/audit-email-dispatch/index.ts
+          grep -q 'recipientId:String(rec.id)' supabase/functions/audit-email-dispatch/index.ts
