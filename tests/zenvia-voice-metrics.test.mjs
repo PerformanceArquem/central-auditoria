@@ -19,7 +19,11 @@ const inbound=[
 ];
 let calls=[];
 const json=(data,status=200)=>({ok:status>=200&&status<300,status,json:async()=>data});
-let allowed=true,token=true,broken=false;
+let allowed=true,token=true,broken=false,waitMissing=false;
+const queueCalls=[
+ {id:41,data_inicio:'2026-11-10T14:00:00-03:00',tempo_espera:40},
+ {id:42,data_inicio:'2026-11-11T15:00:00-03:00',tempo_espera:80}
+];
 const fetch=async(input,opts={})=>{
  const url=new URL(String(input));
  calls.push({url,opts});
@@ -31,7 +35,8 @@ const fetch=async(input,opts={})=>{
   if(broken)return json({message:'rejected'},502);
   assert.equal(url.searchParams.get('data_inicio'),'2026-11-10');
   assert.equal(url.searchParams.get('data_fim'),'2026-11-11');
-  const rows=url.pathname==='/chamada/relatorio'?outbound:inbound;
+  const rows=url.pathname==='/chamada/relatorio'?outbound:url.pathname==='/fila/430/relatorio'?
+   queueCalls.map((x,i)=>i===1&&waitMissing?{...x,tempo_espera:null}:x):inbound;
   return json({sucesso:true,dados:{relatorio:rows,total:rows.length}});
  }
  throw Error('Unexpected request '+url);
@@ -77,6 +82,8 @@ test('reports inbound/outbound KPIs and never exposes personal information or cr
  assert.equal(r.body.summary.durationSeconds,180);
  assert.equal(r.body.summary.talkSeconds,170);
  assert.equal(r.body.summary.tmeSeconds,null);
+ assert.equal(r.body.queue.configured,false);
+ assert.equal(calls.some(x=>x.url.pathname==='/fila/430/relatorio'),false);
  assert.equal(r.body.byDay.length,2);
  assert.equal(r.body.byExtension.length,2);
  const serial=JSON.stringify(r.body);
@@ -101,8 +108,45 @@ test('voice UI shows TME unavailable, uses authenticated request, and has no sec
  assert.ok(html.includes('id="t-zenvia-voice"'));
  assert.ok(html.includes("window.tmAuth?.getSession?.()"));
  assert.ok(html.includes("fetch('/api/audit-production-metrics?mode=zenvia&'"));
- assert.ok(html.includes("['TME','Indisponível']"));
+ assert.ok(html.includes("['TME da fila',fmtSeconds(x.tmeSeconds)]"));
  assert.ok(html.includes("['Em andamento',x.inProgress]"));
  assert.ok(html.includes("['Não classificadas',x.unclassified]"));
  assert.ok(!html.includes('ZENVIA_VOICE_ACCESS_TOKEN'));
+});
+
+test('configured support queue supplies real TME from all queue wait samples',async()=>{
+ scope.process.env.ZENVIA_VOICE_QUEUE_ID='430';
+ try{
+   const r=await invoke();
+   assert.equal(r.code,200);
+   assert.equal(r.body.queue.configured,true);
+   assert.equal(r.body.queue.queueId,'430');
+   assert.equal(r.body.queue.calls,2);
+   assert.equal(r.body.queue.waitSampleCount,2);
+   assert.equal(r.body.queue.waitTotalSeconds,120);
+   assert.equal(r.body.queue.missingWaitSamples,0);
+   assert.equal(r.body.summary.tmeSeconds,60);
+   assert.equal(calls.some(x=>x.url.pathname==='/fila/430/relatorio'),true);
+ }finally{delete scope.process.env.ZENVIA_VOICE_QUEUE_ID;}
+});
+test('queue wait missing or null means no TME, never treated as zero',async()=>{
+ scope.process.env.ZENVIA_VOICE_QUEUE_ID='430';waitMissing=true;
+ try{
+   const r=await invoke();
+   assert.equal(r.code,200);
+   assert.equal(r.body.queue.calls,2);
+   assert.equal(r.body.queue.waitSampleCount,1);
+   assert.equal(r.body.queue.missingWaitSamples,1);
+   assert.equal(r.body.queue.tmeSeconds,null);
+   assert.equal(r.body.summary.tmeSeconds,null);
+ }finally{waitMissing=false;delete scope.process.env.ZENVIA_VOICE_QUEUE_ID;}
+});
+test('invalid queue ID is not sent to Zenvia external API',async()=>{
+ scope.process.env.ZENVIA_VOICE_QUEUE_ID='../private';
+ try{
+   const r=await invoke();
+   assert.equal(r.code,200);
+   assert.equal(r.body.queue.configured,false);
+   assert.equal(calls.some(x=>x.url.pathname.startsWith('/fila/')),false);
+ }finally{delete scope.process.env.ZENVIA_VOICE_QUEUE_ID;}
 });
