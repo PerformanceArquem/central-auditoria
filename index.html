@@ -3028,9 +3028,10 @@ document.getElementById('alarmReviewRows')?.addEventListener('click',async event
  $('alarmEmailStatus').textContent='Reiteração preparada, ainda NÃO enviada. Confira o chamado, atualize a prévia e confirme o envio, se necessário.';
 });
 
-function alarmReminderStatusForTicket(id) {
- const sent=alarmEmailHistory.filter(r=>r.status==='sent'&&(r.ticket_ids||[]).map(String).includes(String(id))).sort((a,b)=>Date.parse(a.sent_at||a.created_at)-Date.parse(b.sent_at||b.created_at));
- const uncertain=alarmEmailHistory.some(r=>r.status!=='sent'&&(r.ticket_ids||[]).map(String).includes(String(id)));
+function alarmReminderStatusForTicket(id,recipient="") {
+ const history=recipient?alarmEmailHistory.filter(r=>String(r.recipient||'').toLowerCase()===String(recipient).toLowerCase()):alarmEmailHistory;
+ const sent=history.filter(r=>r.status==='sent'&&(r.ticket_ids||[]).map(String).includes(String(id))).sort((a,b)=>Date.parse(a.sent_at||a.created_at)-Date.parse(b.sent_at||b.created_at));
+ const uncertain=history.some(r=>r.status!=='sent'&&(r.ticket_ids||[]).map(String).includes(String(id)));
  if(uncertain)return {label:'Verificar envio anterior',eligible:false,count:sent.length};
  if(!sent.length)return {label:'Sem cobrança confirmada',eligible:false,count:0};
  const last=sent[sent.length-1],at=Date.parse(last.sent_at||last.created_at);
@@ -3038,7 +3039,7 @@ function alarmReminderStatusForTicket(id) {
  if(sent.length>=limit+1)return {label:'Limite de '+limit+' reiterações atingido',eligible:false,count:sent.length};
  if(!Number.isFinite(at))return {label:'Revisar data da última cobrança',eligible:false,count:sent.length};
  const due=new Date(at+days*86400000);
- if(Date.now()<due.getTime())return {label:'Próxima revisão: '+alarmEmailTime(due.toISOString()),eligible:false,count:sent.length};
+ if(Date.now()<due.getTime())return {label:'Próxima revisão: '+alarmEmailTime(due.toISOString()),eligible:false,count:sent.length,nextReviewAt:due.toISOString()};
  return {label:'Elegível para revisão humana · '+sent.length+'ª cobrança registrada',eligible:true,count:sent.length};
 }
 async function alarmReminderPolicyLoad() {
@@ -3098,7 +3099,7 @@ function alarmEmailHistoryRender(){
   const state=r.status==='sent'?'ok':r.status==='uncertain'?'alert-warn':'alert-warn';
   return '<tr><td>'+esc(alarmEmailTime(sentDate))+'</td><td>'+esc(r.recipient)+'</td>'+
     '<td><span class="pill '+state+'">'+esc(alarmEmailHistoryStatus(r.status))+'</span></td>'+
-    '<td>'+links+'</td><td>'+ids.length+'</td><td>'+esc(ids.map(id=>'#'+id+': '+alarmReminderStatusForTicket(id).label).join(' · '))+'</td><td title="'+esc(r.id||'')+'">'+esc(String(r.request_id||r.id||'').slice(0,8))+'</td></tr>';
+    '<td>'+links+'</td><td>'+ids.length+'</td><td>'+esc(ids.map(id=>'#'+id+': '+alarmReminderStatusForTicket(id,r.recipient).label).join(' · '))+'</td><td title="'+esc(r.id||'')+'">'+esc(String(r.request_id||r.id||'').slice(0,8))+'</td></tr>';
  }).join('')||'<tr><td colspan="7">Nenhum registro corresponde ao filtro.</td></tr>';
 }
 function alarmEmailHistoryExport(){
@@ -3146,10 +3147,17 @@ async function alarmEmailHistoryLoad(){
 }
 function alarmEmailTicketBadge(id){
  const relevant=alarmEmailHistory.filter(r=>(r.ticket_ids||[]).map(String).includes(String(id)));
- const sent=relevant.find(r=>r.status==='sent');
- if(sent){const review=alarmReminderStatusForTicket(id);return ' <span class="pill ok" title="'+esc('Aceite pelo Gmail em '+alarmEmailTime(sent.sent_at||sent.created_at)+' · '+review.label)+'">✉ E-mail enviado · '+review.count+' cobrança(s)</span>';}
- if(relevant.length)return ' <span class="pill alert-warn" title="Envio não confirmado: consulte o relatório de e-mails.">✉ Verificar envio</span>';
- return '';
+ const sent=relevant.filter(r=>r.status==='sent');
+ const uncertain=relevant.some(r=>r.status!=='sent');
+ if(uncertain)return ' <span class="pill alert-warn" title="Existe tentativa sem confirmação. Consulte o histórico antes de preparar novo envio.">✉ Verificar envio anterior</span>';
+ if(!sent.length)return '';
+ const recipients=[...new Set(sent.map(r=>String(r.recipient||'').toLowerCase()))];
+ const reviews=recipients.map(recipient=>alarmReminderStatusForTicket(id,recipient));
+ const ready=reviews.some(r=>r.eligible);
+ const dates=reviews.map(r=>r.nextReviewAt).filter(Boolean).sort();
+ const next=dates[0];
+ const label=ready?'Revisão de reforço disponível':next?'Revisar em '+alarmEmailTime(next):reviews[0]?.label||'Consultar histórico';
+ return ' <span class="pill ok">✉ Já cobrado · '+sent.length+' cobrança(s)</span> <span class="pill '+(ready?'alert-warn':'')+'" title="O reforço exige rechecagem do chamado e sua aprovação. Nenhum envio automático.">'+esc(label)+'</span>';
 }
 
 const alarmSelected=new Set();
@@ -5839,3 +5847,5 @@ window.clientImpactInit=()=>{
 <script src="/production-flow.js"></script>
 </body>
 </html>
+
+
