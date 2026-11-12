@@ -5957,7 +5957,7 @@ window.clientImpactInit=()=>{
    const session=await window.tmAuth?.getSession?.();
    if(!session?.access_token)throw Error('Faça login na Central de Auditoria');
    const q=new URLSearchParams({start,end});
-   const response=await fetch('/api/audit-zenvia-voice?'+q,{headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
+   const response=await fetch('/api/audit-production-metrics?mode=zenvia&'+q,{headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
    const d=await response.json().catch(()=>({}));
    if(!response.ok||d.ok!==true)throw Error(d.error||'Falha ao consultar Zenvia');
    // Não renderizar resposta de período que foi alterado durante a requisição.
