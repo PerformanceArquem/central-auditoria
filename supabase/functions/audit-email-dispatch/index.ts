@@ -2327,7 +2327,7 @@ async function handleRequest(req: Request): Promise<Response> {
       const rec=(await recipientList()).find(r=>r.id===id);
       if(!rec)return json({ok:false,error:'Destinatário inativo ou inválido'},404);
       const timing=await reportTiming({recipientId:id,reportKind:'daily',from:shift(dateBR(),-1),to:shift(dateBR(),-1),reportSections:reportSectionFlags(rec)},db,list);
-      return json({ok:true,sent:false,recipientId:id,status:timing?.status,adjustmentCount:timing?.adjustmentCount||0,noticePresent:!!timing?.notice,presentation:{version:'arquem-visual-v1',subject:reportSubject(rec,'daily',shift(dateBR(),-1),shift(dateBR(),-1)),heading:reportIdentity(rec).title,hierarchy:reportIdentity(rec).hierarchy,csatAllowed:canReceiveCsat(rec)}});
+      return json({ok:true,sent:false,recipientId:id,status:timing?.status,adjustmentCount:Array.isArray(timing?.adjustments)?timing.adjustments.length:0,noticePresent:!!timing?.notice,presentation:{version:'arquem-visual-v1',subject:reportSubject(rec,'daily',shift(dateBR(),-1),shift(dateBR(),-1)),heading:reportIdentity(rec).title,hierarchy:reportIdentity(rec).hierarchy,csatAllowed:canReceiveCsat(rec)}});
     }
     return action === 'dispatch_noon_partial' ? await dispatchNoonPartial() : action === 'attachment_probe' ? await adminAction({action:'attachment_health'}) : action === 'prepare' ? await prepareReports() : action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch(payload);
   } catch (ex) { console.error('audit-email-dispatch:', err(ex)); return json({ ok: false, error: err(ex), release: RELEASE_ID }, 500); }
