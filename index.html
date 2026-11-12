@@ -933,6 +933,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
             <summary><span class="nav-folder-icon" aria-hidden="true">▤</span><span>Auditorias</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary>
             <div class="nav-folder-items">
               <button data-t="support-quality">🎧 &nbsp;Qualidade do Suporte</button>
+              <button data-t="zenvia-voice">☎ &nbsp;Métricas de Voz · Zenvia</button>
               <button data-t="production-audit">🏭 &nbsp;Auditoria da Produção</button>
               <button data-t="proj">▤ &nbsp;Projetos e prazos</button>
               <button data-t="occ">♙ &nbsp;Colaboradores</button>
@@ -1213,6 +1214,25 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
  <div class="card">
   <h3>Chamados com mais horas de trabalho</h3>
   <div class="tw"><table id="pdTopTickets"><thead><tr><th>Chamado</th><th>Assunto</th><th>Categoria</th><th>Horas</th><th>Apontamentos</th></tr></thead><tbody></tbody></table></div>
+ </div>
+</div>
+
+<div id="t-zenvia-voice" class="hide">
+ <div class="mh"><div><div class="eyebrow">SUPORTE · ZENVIA VOICE</div><h2>Métricas do canal de voz</h2>
+ <p>Fonte oficial Zenvia Voice. Consultas somente leitura, sem gravações ou telefones. Dados reais apenas após autenticação.</p></div></div>
+ <div class="card">
+  <div class="row noprint" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
+   <div><label for="zvStart">Data inicial</label><input id="zvStart" type="date"></div>
+   <div><label for="zvEnd">Data final</label><input id="zvEnd" type="date"></div>
+   <button type="button" id="zvRefresh" class="b">↻ Consultar Zenvia</button>
+  </div>
+  <p id="zvStatus" role="status" class="subtle">Conecte a API Zenvia para consultar os indicadores do canal de voz.</p>
+  <div id="zvKpis" class="kpis" style="margin:12px 0"></div>
+  <p class="subtle">TMA = duração média das chamadas atendidas. TME não é exibido sem dados reais de espera em fila. Não utilize estimativas como métricas observadas.</p>
+  <div class="grid2">
+   <div class="card"><h3>Volume por dia</h3><div class="tablewrap"><table><thead><tr><th>Data</th><th>Ligações</th><th>Atendidas</th><th>Não atendidas</th></tr></thead><tbody id="zvDays"></tbody></table></div></div>
+   <div class="card"><h3>Distribuição por ramal</h3><div class="tablewrap"><table><thead><tr><th>Ramal</th><th>Ligações</th><th>Atendidas</th><th>Não atendidas</th></tr></thead><tbody id="zvExtensions"></tbody></table></div></div>
+  </div>
  </div>
 </div>
 
@@ -3524,10 +3544,10 @@ function showTab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   revealActiveNavigation(t);
   $('t-cfg').classList.toggle('hide',t!=='cfg');
-  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
+  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','zenvia-voice','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='zenvia-voice')window.zenviaVoiceInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='email-admin'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='client-impact');
-  if(raw.length&&!['load','cfg','diag','alerts','email-admin','report-preview','support-quality','production-audit','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
+  if(raw.length&&!['load','cfg','diag','alerts','email-admin','report-preview','support-quality','production-audit','zenvia-voice','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
 $('tabs').addEventListener('click',e=>{const btn=e.target.closest('button');if(btn&&btn.dataset.t)showTab(btn.dataset.t)});
 
@@ -5907,6 +5927,63 @@ window.clientImpactInit=()=>{
  }
  load();
 };
+})();
+</script>
+
+<script id="zenviaVoiceScript">
+(()=>{'use strict';
+ const el=id=>document.getElementById(id);
+ const fmtSeconds=s=>s==null?'Indisponível':Math.floor(s/60)+'m '+String(s%60).padStart(2,'0')+'s';
+ let initialized=false,loading=false;
+ function reset(){
+  el('zvKpis').replaceChildren();el('zvDays').replaceChildren();el('zvExtensions').replaceChildren();
+ }
+ function dateToday(){
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ }
+ const valid=d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'');
+ function addCell(row,value){const td=document.createElement('td');td.textContent=String(value);row.appendChild(td);}
+ function renderRows(id,records,keys){
+  const tbody=el(id);
+  for(const item of records){const tr=document.createElement('tr');for(const k of keys)addCell(tr,item[k]??'—');tbody.appendChild(tr);}
+ }
+ async function load(){
+  if(loading)return;loading=true;reset();
+  const button=el('zvRefresh');button.disabled=true;
+  el('zvStatus').textContent='Consultando a Zenvia Voice...';
+  try{
+   const start=el('zvStart').value,end=el('zvEnd').value;
+   if(!valid(start)||!valid(end)||start>end)throw Error('Selecione datas válidas');
+   const session=await window.tmAuth?.getSession?.();
+   if(!session?.access_token)throw Error('Faça login na Central de Auditoria');
+   const q=new URLSearchParams({start,end});
+   const response=await fetch('/api/audit-zenvia-voice?'+q,{headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
+   const d=await response.json().catch(()=>({}));
+   if(!response.ok||d.ok!==true)throw Error(d.error||'Falha ao consultar Zenvia');
+   // Não renderizar resposta de período que foi alterado durante a requisição.
+   if(start!==el('zvStart').value||end!==el('zvEnd').value)throw Error('Período alterado; consulte novamente');
+   const x=d.summary||{},rows=[
+    ['Recebidas',x.inbound],['Efetuadas',x.outbound],['Total de ligações',x.total],
+    ['Atendidas',x.answered],['Não atendidas',x.unanswered],
+    ['TMA real',fmtSeconds(x.tmaSeconds)],['Tempo total atendido',fmtSeconds(x.durationSeconds)],
+    ['TME','Indisponível']
+   ];
+   for(const [label,value] of rows){const box=document.createElement('div');box.className='card';
+    const text=document.createElement('div');text.className='subtle';text.textContent=label;
+    const h=document.createElement('h3');h.textContent=String(value??'Indisponível');
+    box.append(text,h);el('zvKpis').appendChild(box);}
+   renderRows('zvDays',d.byDay||[],['date','total','answered','unanswered']);
+   renderRows('zvExtensions',d.byExtension||[],['extension','total','answered','unanswered']);
+   el('zvStatus').textContent='Fonte: API Zenvia Voice · '+start+' a '+end+' · '+(x.total||0)+' chamadas consolidadas.';
+  }catch(e){reset();el('zvStatus').textContent='Métricas indisponíveis: '+e.message;}
+  finally{loading=false;button.disabled=false;}
+ }
+ window.zenviaVoiceInit=()=>{
+  if(initialized)return;initialized=true;
+  const today=dateToday();el('zvEnd').value=today;el('zvStart').value=today.slice(0,7)+'-01';
+  el('zvRefresh').addEventListener('click',load);
+  for(const id of ['zvStart','zvEnd'])el(id).addEventListener('change',reset);
+ };
 })();
 </script>
 
