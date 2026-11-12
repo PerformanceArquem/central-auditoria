@@ -20,7 +20,7 @@ jobs:
       - name: Typecheck and tests
         run: |
           deno check supabase/functions/audit-email-dispatch/zenvia-email-section.ts supabase/functions/audit-email-dispatch/zenvia-email-source.ts
-          deno test --allow-none tests/zenvia-email-report.test.ts
+          deno test tests/zenvia-email-report.test.ts
       - name: Static send safety
         run: |
           grep -q 'ZENVIA_VOICE_REPORTS_ENABLED' supabase/functions/audit-email-dispatch/index.ts
