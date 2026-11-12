@@ -725,6 +725,21 @@ function arquemXlsx_(p, keep) {
     }
   }
   SpreadsheetApp.flush();
+  if(p.productionFlow){
+    // Bloquear exportacao de planilhas com qualquer aba extra para a Keila.
+    const sheets=ss.getSheets();
+    if(sheets.length!==1 || sheets[0].getName()!=='Resumo')
+      throw new Error('Keila: planilha contem abas nao autorizadas.');
+    const values=sheets[0].getRange(1,1,6,2).getValues();
+    const expected=['Indicador','Relatório','Início','Fim','Entradas','Saídas'];
+    if(expected.some((label,i)=>String(values[i][0])!==label))
+      throw new Error('Keila: formato de resumo inesperado.');
+    if(Number(values[4][1])!==Number(p.productionFlow.entered) ||
+       Number(values[5][1])!==Number(p.productionFlow.exited))
+      throw new Error('Keila: indicadores de entrada/saida divergentes.');
+    if(sheets[0].getCharts().length!==1)
+      throw new Error('Keila: grafico comparativo ausente ou duplicado.');
+  }
   const url='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(ss.getId())+
     '/export?mimeType='+encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   const response=UrlFetchApp.fetch(url,{
