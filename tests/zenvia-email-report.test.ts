@@ -15,6 +15,23 @@ Deno.test('CSAT 8-10 positive, 1-7 negative, priority Movidesk per ticket/channe
  assertEquals(d.voz.total,2);assertEquals(d.voz.positive,1);assertEquals(d.voz.csatPercent,50);
  assertEquals(d.chat.movidesk,1);assertEquals(d.chat.manual,1);
 });
+Deno.test('multiple real Movidesk surveys on one ticket are preserved, manual overlap is excluded',()=>{
+ const rows=[
+  {service_date:'2026-11-10',channel:'voz',ticket_id:'701',score:8,source:'movidesk',collaborator_name:'Atendente'},
+  {service_date:'2026-11-10',channel:'voz',ticket_id:'701',score:10,source:'movidesk',collaborator_name:'Atendente'},
+  {service_date:'2026-11-10',channel:'voz',ticket_id:'701',score:1,source:'manual',collaborator_name:'Atendente'},
+  {service_date:'2026-11-10',channel:'chat',ticket_id:'701',score:7,source:'manual',collaborator_name:'Atendente'},
+  {service_date:'2026-11-10',channel:'voz',ticket_id:'702',score:0,source:'movidesk',collaborator_name:'Atendente'}
+ ];
+ const d=calculateChannelNotes(rows);
+ assertEquals(d.voz.total,2);
+ assertEquals(d.voz.positive,2);
+ assertEquals(d.voz.csatPercent,100);
+ assertEquals(d.voz.movidesk,2);
+ assertEquals(d.voz.manual,0);
+ assertEquals(d.chat.total,1);
+ assertEquals(d.chat.csatPercent,0);
+});
 Deno.test('absence of voice ratings produces unavailable CSAT, not fabricated zero',()=>{
  const d=calculateChannelNotes(quality.filter(x=>x.channel==='chat'));
  assertEquals(d.voz.total,0);assertEquals(d.voz.csatPercent,null);
