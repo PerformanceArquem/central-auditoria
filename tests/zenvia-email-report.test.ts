@@ -90,9 +90,34 @@ Deno.test('missing actual talk duration does not silently lower voice TMA to zer
  assertEquals(result.metrics.tmaMissingSamples,1);
  assertEquals(result.metrics.tmaSeconds,null);
  assertEquals(result.metrics.talkSeconds,null);
+ // Ramal com chamada sem tempo nao pode publicar soma parcial como definitiva.
+ assertEquals(result.byExtension.length,0);
  const email=prepareVoiceEmail({verified:true,ratings:[],metrics:result.metrics,
   from:'2026-11-10',to:'2026-11-11'});
  assertEquals(email.kpis.tmaSeconds,null);
  assertEquals(email.kpis.talkSeconds,null);
  if(!email.html.includes('Indisponível'))throw Error('Missing TMA must be unavailable');
+});
+
+Deno.test('per-extension durations are unavailable with a missing answered talk sample',async()=>{
+ const outbound=[
+  {id:10,data_criacao:'2026-11-10T09:00:00-03:00',ramal_id_origem:430,destino:{status:'atendida',duracao_falada_segundos:120}},
+  {id:11,data_criacao:'2026-11-10T10:00:00-03:00',ramal_id_origem:430,destino:{status:'atendida',duracao_falada_segundos:null}},
+  {id:12,data_criacao:'2026-11-10T11:00:00-03:00',ramal_id_origem:431,destino:{status:'atendida',duracao_falada_segundos:45}}
+ ];
+ const fetchMock=async(input:string|URL|Request):Promise<Response>=>{
+  const rows=new URL(String(input)).pathname==='/chamada/relatorio'?outbound:[];
+  return new Response(JSON.stringify({sucesso:true,dados:{relatorio:rows,total:rows.length}}),{status:200});
+ };
+ const result=await readZenviaEmailMetrics('2026-11-10','2026-11-11','fixture-token','',fetchMock);
+ const extension430=result.byExtension.find(x=>x.extension==='430');
+ const extension431=result.byExtension.find(x=>x.extension==='431');
+ assertEquals(extension430?.answered,2);
+ assertEquals(extension430?.missingTalkSamples,1);
+ assertEquals(extension430?.talkSeconds,null);
+ assertEquals(extension431?.talkSeconds,45);
+ const email=prepareVoiceEmail({verified:true,ratings:[],metrics:result.metrics,from:'2026-11-10',to:'2026-11-11',byExtension:result.byExtension});
+ const q=email.kpis.byExtension.find(x=>x.extension==='430');
+ assertEquals(q?.talkSeconds,null);
+ if(!email.html.includes('Indisponível'))throw Error('Incomplete ramal talk duration must not become 0');
 });
