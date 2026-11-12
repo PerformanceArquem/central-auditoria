@@ -325,8 +325,8 @@ function arquemHomologarVozChatSemEnvio() {
   };
   const attachments=arquemCreateReportAttachments_(packet);
   if(attachments.length!==2 ||
-     !/\\.pdf$/i.test(attachments[0].getName()) ||
-     !/\\.xlsx$/i.test(attachments[1].getName()) ||
+     !/\.pdf$/i.test(attachments[0].getName()) ||
+     !/\.xlsx$/i.test(attachments[1].getName()) ||
      attachments.some(x=>x.getBytes().length===0))
     throw new Error('Arquivos de Voz e Chat nao foram gerados corretamente');
   // Os arquivos devem conter o mesmo bloco. O teste detalhado de conteúdo
