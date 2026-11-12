@@ -32,6 +32,7 @@ let syncReady=true;
 let syncAgeHours=1;
 let syncPeriodEndDaysAgo=0;
 let syncPeriodStartDaysAgo=370;
+let historicalCompleted=true;
 let adminAllowed=true;
 const json=value=>({ok:true,json:async()=>value});
 const fetch=async input=>{
@@ -40,6 +41,7 @@ const fetch=async input=>{
   if(url.pathname.endsWith('/audit_users'))return json([{role:adminAllowed?'admin':'user',is_active:true}]);
   if(url.pathname.endsWith('/audit_direct_tickets'))return json(tickets);
   if(url.pathname.endsWith('/audit_direct_appointments'))return json(appointments);
+  if(url.pathname.endsWith('/audit_direct_sync_state'))return json([{completed:historicalCompleted,last_error:null,processed_tickets:4722}]);
   if(url.pathname.endsWith('/audit_recent_reconcile_state'))return json([{completed:syncReady,
     last_error:syncReady?null:'Conciliação pendente',
     last_success_at:new Date(Date.now()-syncAgeHours*3600000).toISOString(),
@@ -177,4 +179,28 @@ test('the panel explains when coverage is insufficient without exposing ticket d
     assert.ok(html.includes('Alerta suspenso:'));
     assert.ok(html.includes('ausência de lançamento não comprova falta de trabalho'));
   }finally{syncPeriodStartDaysAgo=370;}
+});
+
+test('historical import status is informational and cannot override insufficient recent reconciliation',async()=>{
+  syncPeriodStartDaysAgo=14;
+  historicalCompleted=true;
+  try{
+    const response=await call(30);
+    assert.equal(response.code,200);
+    assert.equal(response.body.legacyAlerts.historicalImport.jobCompleted,true);
+    assert.equal(response.body.legacyAlerts.historicalImport.processedTickets,4722);
+    assert.equal(response.body.legacyAlerts.historicalImport.completeCoverageVerified,false);
+    assert.equal(response.body.legacyAlerts.coverageReady,false);
+    assert.equal(response.body.legacyAlerts.counts.withoutAppointmentCount,null);
+  }finally{syncPeriodStartDaysAgo=370;}
+});
+
+test('missing historical completion does not falsely claim certified historical coverage',async()=>{
+  historicalCompleted=false;
+  try{
+    const response=await call(7);
+    assert.equal(response.code,200);
+    assert.equal(response.body.legacyAlerts.historicalImport.jobCompleted,false);
+    assert.equal(response.body.legacyAlerts.historicalImport.completeCoverageVerified,false);
+  }finally{historicalCompleted=true;}
 });
