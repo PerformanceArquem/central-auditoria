@@ -113,10 +113,15 @@ export default async function handler(req,res){
   const lastSyncMs=Date.parse(String(rec.last_success_at||''));
   const ageSyncMs=Date.now()-lastSyncMs;
   const lastCovered=sDate(rec.period_end);
+  const firstCovered=sDate(rec.period_start);
   const priorDay=addDays(today,-1);
+  const thresholdStart=addDays(today,-withoutAppointmentDays);
+  // Conciliacao recente so comprova ausencia de apontamentos dentro da sua janela.
+  // Nunca inferir ausencia por X dias se o periodo sincronizado for mais curto.
   const coverageReady=rec.completed===true&&!rec.last_error&&
     Number.isFinite(lastSyncMs)&&ageSyncMs>=0&&ageSyncMs<=36*60*60*1000&&
-    /^\d{4}-\d{2}-\d{2}$/.test(lastCovered)&&lastCovered>=priorDay;
+    /^\d{4}-\d{2}-\d{2}$/.test(lastCovered)&&lastCovered>=priorDay&&
+    /^\d{4}-\d{2}-\d{2}$/.test(firstCovered)&&firstCovered<=thresholdStart;
   // A ausência de um registro não pode ser usada como alerta quando a conciliação está incompleta.
   const withoutAppointment=coverageReady?open.filter(t=>t.history?.last
    ? days(t.history.last,today)>=withoutAppointmentDays
