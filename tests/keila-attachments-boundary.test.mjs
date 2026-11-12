@@ -67,3 +67,13 @@ test('Keila PDF and XLSX branches never include detailed movement tables',()=>{
   assert.ok(xlsx.includes('getCharts().length!==1'),'Require exactly one chart');
   assert.ok(xlsx.includes('indicadores de entrada/saida divergentes'),'Totals mismatch must fail');
 });
+
+test('final mail sending boundary requires Keila generator v9, even outside scheduled flow',()=>{
+  const backend=readFileSync('supabase/functions/audit-email-dispatch/index.ts','utf8');
+  const send=backend.slice(backend.indexOf('async function sendMail('),backend.indexOf('async function isAdmin('));
+  assert.ok(send.includes("cleanReportData?.productionFlow"),'Check Keila flow at final send boundary');
+  assert.ok(send.includes("capabilities.attachmentsVersion!=='arquem-9-keila-totals-only'"),'Reject older generator');
+  assert.ok(send.includes('capabilities.keilaProductionReady!==true'),'Reject unhomologated generator');
+  assert.ok(send.includes("E('REPORT_ATTACHMENTS_ENABLED')!=='true'"),'Block reports when attachments disabled');
+  assert.ok(send.includes('Number(result.anexos)!==2'),'Require PDF and Excel confirmation');
+});
