@@ -61,5 +61,9 @@ test('Keila PDF and XLSX branches never include detailed movement tables',()=>{
   assert.match(pdf,/if\(p\.productionFlow\)/);
   assert.doesNotMatch(pdf,/Entradas na Produção — chamados detalhados/);
   assert.doesNotMatch(xlsx,/\['Entradas',moves\.filter/);
-  assert.match(xlsx,/first\.insertChart\(chart\)/);
+  assert.match(xlsx,/first\\.insertChart\\(chart\\)/);
+  assert.match(xlsx,/sheets\\.length!==1/);
+  assert.match(xlsx,/sheets\\[0\\]\\.getName\\(\\)!=='Resumo'/);
+  assert.match(xlsx,/getCharts\\(\\)\\.length!==1/);
+  assert.match(xlsx,/indicadores de entrada\\/saida divergentes/);
 });
