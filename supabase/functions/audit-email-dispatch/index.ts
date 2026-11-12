@@ -1,6 +1,10 @@
 import {forecastSection} from "./forecast-variance.ts";
 import {readZenviaEmailMetrics} from "./zenvia-email-source.ts";
 import {prepareVoiceEmail} from "./zenvia-email-section.ts";
+import {renderHourCharts,renderCsatChart,canReceiveCsat,reportIdentity,reportSubject} from "./email-visuals.ts";
+import {reportTiming,timingContent,TIMING_NOTICE} from "./late-adjustments.ts";
+import {reportSectionOn,reportSectionFlags} from "./report-sections.ts";
+import {calculateJourneyGaps} from "./journey-gaps.ts";
 import {dashboardReport} from "./dashboard-report.ts";
 import {KEILA_PRODUCTION_FLOW_RECIPIENT_ID,buildKeilaProductionFlow,keilaProductionReport} from "./production-flow-keila.ts";
 import {composeTicketCharge} from "./ticket-charge.ts";
@@ -158,7 +162,7 @@ function ratingSummary(ratings: SupportRating[]) {
   const totalPoints = ratings.reduce((sum, row) => sum + row.score, 0);
   const high = ratings.filter(row => row.score >= 8);
   const superadorPoints = high.reduce((sum, row) => sum + row.score, 0);
-  const positive = ratings.filter(row => row.score >= 9).length;
+  const positive = ratings.filter(row => row.score >= 8).length;
   const percent = (numerator: number, denominator: number) =>
     denominator ? Math.round(numerator / denominator * 10000) / 100 : null;
   const movidesk = ratings.filter(row => row.source === 'movidesk').length;
@@ -240,28 +244,50 @@ async function supportQualityMetrics(payload: R) {
 function supportRatingCache() {
   const periods = new Map<string, Promise<SupportRating[] | null>>();
   return async (rec: R, from: string, to: string) => {
+    if(!canReceiveCsat(rec))return {text:'',html:'',metric:null,ratings:[]};
     const sectors = Array.isArray(rec.sectors) && rec.sectors.length ? rec.sectors : [rec.sector];
-    if (!sectors.some(sector => norm(sector) === 'suporte')) return { text: '', html: '', metric: null };
-    const key = `${from}:${to}`;
+    if (!sectors.some(sector => norm(sector) === 'suporte')) return { text: '', html: '', metric: null, ratings:[] };
+    const key = from+':'+to;
     let pending = periods.get(key);
     if (!pending) {
-      pending = supportRatings(from, to).catch(error => {
-        console.error('Avaliações de Suporte indisponíveis:', err(error));
+      pending = supportRatings(from,to).catch(error => {
+        console.error('Avaliações de Suporte indisponíveis:',err(error));
         return null;
       });
-      periods.set(key, pending);
+      periods.set(key,pending);
     }
     const rows = await pending;
-    const person = norm(rec.collaborator_name);
-    const metric = rows && ratingSummary(rows.filter(row => !person || norm(row.collaborator_name) === person)).superadores;
-    const result = metric?.percent != null
-      ? `${metric.percent.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% (${metric.points} de ${metric.totalPoints} pontos)`
-      : rows ? 'Sem pontuação no período' : 'Avaliações indisponíveis no momento';
-    const text = `Qualidade do Suporte — Superadores: ${result}.`;
-    return { text: '\n\n' + text, html: '<p><strong>' + emailEsc(text) + '</strong></p>', metric };
+    const names = Array.isArray(rec.collaborator_names) && rec.collaborator_names.length ?
+      rec.collaborator_names.map(norm).filter(Boolean) :
+      rec.collaborator_name ? [norm(rec.collaborator_name)] : [];
+    const selected = rows?.filter(row => !names.length || names.includes(norm(row.collaborator_name))) || [];
+    const metric = rows ? ratingSummary(selected) : null;
+    const eligible = canReceiveCsat(rec);
+    const result = metric?.csatPercent != null ?
+      metric.csatPercent.toLocaleString('pt-BR',{maximumFractionDigits:2})+'% ('+metric.excelente+' de '+metric.total+' notas ≥ 8)' :
+      rows ? 'Sem avaliações no período' : 'Avaliações indisponíveis no momento';
+    const superadores = metric?.superadores.percent != null ?
+      metric.superadores.percent.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%' : 'Indisponível';
+    const visible = eligible ? selected.slice(0,100) : [];
+    const ratings = visible.map(row=>({date:row.service_date,ticketId:row.ticket_id,
+      collaborator:row.collaborator_name,channel:row.channel,score:row.score,source:row.source}));
+    const table = eligible && ratings.length ?
+      '<h3>Notas CSAT por atendimento (até 100 registros)</h3>'+
+      '<table width="100%" cellpadding="6" cellspacing="0" style="font-size:12px;border-collapse:collapse"><tr style="background:#edf3fb"><th>Data</th><th>Chamado</th><th>Colaborador</th><th>Canal</th><th>Nota</th></tr>'+
+      ratings.map(row=>'<tr><td>'+emailEsc(displayDate(String(row.date)))+'</td><td>'+
+        (/^\\d+$/.test(String(row.ticketId))?'<a href="https://arquem.movidesk.com/Ticket/Edit/'+row.ticketId+'">#'+row.ticketId+'</a>':'—')+
+        '</td><td>'+emailEsc(row.collaborator)+'</td><td>'+emailEsc(row.channel)+'</td><td><b>'+row.score+'</b></td></tr>').join('')+
+      '</table>' : '';
+    const detail = eligible && rows ?
+      '\nNotas CSAT (até 100):\n'+ratings.map(row=>
+        row.date+' | #'+row.ticketId+' | '+row.collaborator+' | '+row.channel+' | nota '+row.score).join('\n') : '';
+    const text = 'CSAT do Suporte (notas 8–10 positivas): '+result+'. Superadores: '+superadores+'.'+
+      (eligible?' Notas 1–7: abaixo do padrão. Sem avaliação não equivale a nota zero.':'');
+    return {text:'\n\n'+text+detail,
+      html:renderCsatChart(metric,rec)+'<p><strong>'+emailEsc(text)+'</strong></p>'+table,
+      metric,ratings:eligible?ratings:[],csatFullCount:selected.length};
   };
 }
-
 // Resiliência: falhas do módulo de previsões não bloqueiam relatórios oficiais.
 async function optionalForecast(rec:R){
  try{return await forecastSection(rec,{db,norm,duration,emailEsc});}
@@ -577,14 +603,19 @@ function workdays(from: string, to: string, ignored: Set<string>) {
 
 const emailEsc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]||ch));
 const displayDate=(d:string)=>/^\d{4}-\d{2}-\d{2}$/.test(d)?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):d;
-function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metrics:{appointments:number;tickets:number;minutes:number;days:number}},from:string,to:string,kind:ReportKind,partial:boolean,manual:boolean,alertsHtml='',detailsHtml='',executiveHtml='',forecastHtml=''){
+function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;exportData?:R;metrics:{appointments:number;tickets:number;minutes:number;days:number;people?:number;referenceTargetMinutes?:number;referenceMinimumMinutes?:number;targetGapMinutes?:number;minimumGapMinutes?:number}},from:string,to:string,kind:ReportKind,partial:boolean,manual:boolean,alertsHtml='',detailsHtml='',executiveHtml='',forecastHtml=''){
  const m=report.metrics;
  const targetPerDay=Number(rec.daily_target_minutes??480);
  const minPercent=Number(rec.minimum_percent??80);
- const target=Math.round(targetPerDay*m.days);
- const minimum=Math.round(target*minPercent/100);
+ const target=m.referenceTargetMinutes??Math.round(targetPerDay*m.days);
+ const minimum=m.referenceMinimumMinutes??Math.round(target*minPercent/100);
+ const targetGap=m.targetGapMinutes??Math.max(0,target-m.minutes);
+ const minimumGap=m.minimumGapMinutes??Math.max(0,minimum-m.minutes);
+ const teamLabel=(m.people??1)>1?' (equipe)':'';
  const missing=m.appointments===0;
- const person=safe(rec.collaborator_name)||'Equipe';
+ const identity=reportIdentity(rec);
+ const person=safe(identity.title);
+ const hierarchy=identity.hierarchy.length?'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 8px;border-top:1px solid #dce7f2;border-bottom:1px solid #dce7f2"><tr>'+identity.hierarchy.map(label=>'<td align="center" style="padding:12px 6px;color:#315f79;font-size:12px;line-height:1.5">'+emailEsc(label)+'</td>').join('')+'</tr></table>':'';
  const sector=(Array.isArray(rec.sectors)&&rec.sectors.length?rec.sectors.map(safe).join(' · '):(safe(rec.sector)||(rec.scope==='management'?'Todos os setores':'')))||'Gestão';
  const k=REPORT_LABEL[kind];
  const badge=manual?'TESTE MANUAL':partial?'DADOS PARCIAIS':'RELATÓRIO DE APONTAMENTOS';
@@ -599,9 +630,9 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metri
    'O tempo apresentado é tempo apontado no Movidesk; não representa controle de ponto ou avaliação definitiva de produtividade.';
  const missingMetrics=missing?'<div style="color:#66768d;font-size:13px;margin-top:12px">Metas de referência não avaliadas por ausência de apontamentos importados.</div>':
    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px"><tr>'+
-     tile('Meta mínima de referência',duration(minimum))+tile('Jornada de referência',duration(target))+'</tr><tr>'+
-     tile('Diferença para a mínima',duration(Math.max(0,minimum-m.minutes)))+
-     tile('Diferença para a jornada',duration(Math.max(0,target-m.minutes)))+'</tr></table>';
+     tile('Meta mínima de referência'+teamLabel,duration(minimum))+tile('Jornada de referência'+teamLabel,duration(target))+'</tr><tr>'+
+     tile('Diferença para a mínima'+teamLabel,duration(minimumGap))+
+     tile('Diferença para a jornada'+teamLabel,duration(targetGap))+'</tr></table>';
  const test=manual?'<div style="background:#eaf3ff;color:#174c99;border:1px solid #c8ddff;padding:14px 16px;border-radius:8px;margin:0 0 18px;font-size:13px"><strong>ENVIO DE TESTE</strong> — Mensagem para verificar o recebimento. Não substitui um relatório definitivo.</div>':'';
  const warning=(partial||missing)?'<div style="background:#fff8e9;color:#86520f;border-left:4px solid #e4ad38;padding:14px 16px;border-radius:7px;font-size:13px;margin:18px 0">'+esc(completeness)+'<div style="margin-top:7px">'+esc(note)+'</div></div>':
    '<p style="color:#65748b;font-size:12px;line-height:1.5">'+esc(note)+'</p>';
@@ -609,18 +640,18 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;metri
  '<body style="margin:0;padding:0;background:#edf2f9;font-family:Arial,Helvetica,sans-serif;color:#1e304a">'+
  '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#edf2f9"><tr><td align="center" style="padding:32px 12px">'+
  '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:650px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #dbe5f2">'+
- '<tr><td style="background:#102c4f;padding:28px 30px;color:#fff">'+
+ '<tr><td align="center" style="background:#102c4f;padding:28px 30px;color:#fff;text-align:center">'+
  '<div style="font-size:13px;letter-spacing:2px;font-weight:750;color:#8fd5e7">ARQUEM SISTEMAS</div>'+
  '<div style="font-size:26px;font-weight:750;margin-top:12px">Central de Auditoria</div>'+
  '<div style="font-size:13px;color:#bed1e8;margin-top:8px">'+esc(kind==='monthly'||kind==='annual'?'Balancete '+k.toLowerCase():'Relatório '+k.toLowerCase()+' de apontamentos')+'</div>'+
  '</td></tr><tr><td style="padding:26px 26px 12px">'+test+
- '<div style="font-size:11px;color:#3873ae;letter-spacing:1px;font-weight:700">'+esc(badge)+'</div>'+
- '<h1 style="font-size:23px;line-height:1.2;margin:10px 0 8px;color:#102b51">'+esc(person)+'</h1>'+
- '<div style="color:#5e718b;font-size:14px">'+esc(sector)+' &nbsp;·&nbsp; '+esc(displayDate(from))+' a '+esc(displayDate(to))+'</div>'+
+ '<div style="font-size:11px;color:#3873ae;letter-spacing:1px;font-weight:700;text-align:center">'+esc(badge)+'</div>'+
+ '<h1 style="font-size:23px;line-height:1.3;margin:10px 0 8px;color:#102b51;text-align:center">'+esc(person)+'</h1>'+
+ '<div style="color:#5e718b;font-size:13px;text-align:center;line-height:1.6">'+esc(identity.kind)+' · '+esc(sector)+'<br>'+esc(displayDate(from))+' a '+esc(displayDate(to))+'</div>'+hierarchy+
  '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:23px -8px 5px"><tr>'+
  tile('Horas apontadas',duration(m.minutes))+tile('Apontamentos',String(m.appointments))+'</tr><tr>'+
  tile('Chamados com horas',String(m.tickets))+tile('Dias úteis de referência',String(m.days))+'</tr></table>'+
- warning+
+ warning+renderHourCharts({metrics:m,visual:report.exportData?.visual,group:deliveryGroup(rec),dailyAllowed:reportSectionOn(rec,'daily_detail')})+
  executiveHtml+forecastHtml+
  (report.teamJourneyHtml||
    '<div style="font-size:15px;color:#18385e;font-weight:700;margin:23px 0 6px">Referências de jornada</div>'+missingMetrics)+
@@ -643,7 +674,8 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
   const selectedSectors = [...new Set(sectorLabels.map(norm))];
   const scopedManagement = scope === 'management' && selectedSectors.length > 0;
   if (scope === 'sector' && !selectedSectors.length) throw new Error('Destinatario setorial sem setor');
-  if (scope === 'sector' && selectedPeople.size===0 && !authorizedSingleManual && E('REPORT_ALLOW_SECTOR_EMAIL') !== 'true')
+  const authorizedCarla = rec.id==='40752b0b-c2a4-4031-9496-733b6f846d76' && norm(rec.email)==='financeiro@arquem.com.br';
+  if (scope === 'sector' && selectedPeople.size===0 && !authorizedCarla && !authorizedSingleManual && E('REPORT_ALLOW_SECTOR_EMAIL') !== 'true')
     throw new Error('Envio setorial coletivo exige REPORT_ALLOW_SECTOR_EMAIL=true e autorizacao da supervisao');
   // O Movidesk utiliza "Sucesso do Cliente", enquanto cadastros antigos usam "Sucesso".
   // Manter o alias restrito, sem misturar setores distintos.
@@ -652,11 +684,15 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     return selectedSectors.some(sector =>
       value === sector || (sector === 'sucesso' && value === 'sucesso do cliente'));
   };
+  const days = workdays(from, to, hol);
+  const validDays=new Set(days);
   const selected = appts.filter(a =>
     ((scope === 'management' && !selectedSectors.length) || sameSector(a.sector)) &&
     (!selectedPeople.size || selectedPeople.has(norm(a.collaborator_name))));
-  const minutes = selected.reduce((s, a) => s + Number(a.duration_minutes || 0), 0);
-  const days = workdays(from, to, hol);
+  const extra=selected.filter(a=>!validDays.has(String(a.appointment_date||'').slice(0,10)));
+  const ordinary=selected.filter(a=>validDays.has(String(a.appointment_date||'').slice(0,10)));
+  const extraMinutes=extra.reduce((v,a)=>v+Number(a.duration_minutes||0),0);
+  const minutes=selected.reduce((v,a)=>v+Number(a.duration_minutes||0),0);
   const targetPerDay = Number(rec.daily_target_minutes ?? 480);
   const minimumPercent = Number(rec.minimum_percent ?? 80);
   if (!Number.isFinite(targetPerDay) || targetPerDay <= 0 || targetPerDay > 1440 ||
@@ -672,6 +708,10 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     const s = String(a.sector || 'Nao informado');
     bySector.set(s, (bySector.get(s) || 0) + Number(a.duration_minutes || 0));
   }
+  // Team totals cannot compensate one person's shortage with another's excess.
+  const byOrdinary=new Map<string,number>();
+  for(const a of ordinary){const n=String(a.collaborator_name||'Não informado');byOrdinary.set(n,(byOrdinary.get(n)||0)+Number(a.duration_minutes||0));}
+  const journeyGaps=calculateJourneyGaps([...byPerson.keys()].map(n=>byOrdinary.get(n)||0),target,minimum);
   const worked = new Set(selected.map(a => String(a.ticket_id))).size;
   const dayMap=new Map<string,number>();
   const sectorsByDay=new Map<string,Set<string>>();
@@ -727,7 +767,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
       name,sector:[...member.sectors].sort().join(' · '),minutes,
       entries:member.entries,tickets:member.tickets.size,clients:member.clients.size,days:member.dates.size,
       averageMinutes:member.dates.size?minutes/member.dates.size:null,offMinutes:member.offMinutes,
-      targetMinutes:target,minimumMinutes:minimum,...periodReference(minutes,target,minimum)
+      targetMinutes:target,minimumMinutes:minimum,...periodReference(byOrdinary.get(name)||0,target,minimum)
     };
   }).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
   const dailyJourney=daily.map(x=>{
@@ -753,20 +793,30 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
       [x.name,String(x.entries),String(x.tickets),String(x.clients),String(x.days),x.averageMinutes===null?'—':duration(x.averageMinutes),duration(x.offMinutes)]))+
     (journey.length>emailTeam.length?'<p style="font-size:12px">Mostrando '+emailTeam.length+' de '+journey.length+' colaboradores. Consulte o Excel, quando disponível, para mais detalhes.</p>':''):
       '<p style="font-size:12px">Sem apontamentos importados nos setores vinculados.</p>'):'';
+  const extraRows=extra.map(a=>{
+    const d=String(a.appointment_date||'').slice(0,10);
+    return {date:d,person:safe(a.collaborator_name),sector:safe(a.sector),ticket:safe(a.ticket_id),minutes:Number(a.duration_minutes||0),
+      kind:hol.has(d)?'Feriado':weekday(d)===0?'Domingo':'Sábado'};
+  }).sort((a,b)=>a.date.localeCompare(b.date)||a.person.localeCompare(b.person,'pt-BR'));
+  const extraHtml='<h3 style="color:#17345d;font-size:15px;margin-top:24px">Apontamentos em fins de semana e feriados</h3>'+
+   '<p style="font-size:12px">Não geram jornada obrigatória. Apontamentos não comprovam pagamento de horas extras.</p>'+
+   '<p><b>'+duration(extraMinutes)+' · '+extraRows.length+' registros</b></p>'+
+   (extraRows.length?detailTable(['Data','Tipo','Colaborador','Setor','Chamado','Horas'],extraRows.slice(0,50).map(x=>
+     [displayDate(x.date),x.kind,x.person,x.sector,'#'+x.ticket,duration(x.minutes)])):'<p>Sem registros em dias não úteis.</p>');
   const emailDailyLimit=12;
   const detailsHtml='<div style="margin-top:24px;border-top:2px solid #dce6f4;padding-top:12px">'+
-    '<h3 style="color:#17345d;font-size:15px">Horas por colaborador, dia a dia</h3>'+
+    (reportSectionOn(rec,'daily_detail')?'<h3 style="color:#17345d;font-size:15px">Horas por colaborador, dia a dia</h3>'+ 
     (daily.length?(scopedManagement?
       detailTable(['Colaborador','Data','Horas','Jornada','%','Falta jornada','Situação'],dailyJourney.slice(0,emailDailyLimit).map(x=>
         [x.name,displayDate(x.day),duration(x.minutes),x.referenceMinutes?duration(x.referenceMinutes):'—',
           showJourneyPercent(x.percent),x.referenceMinutes?duration(x.targetGap):'—',x.status])):
       detailTable(['Colaborador','Data','Horas'],daily.slice(0,emailDailyLimit).map(x=>[x.name,displayDate(x.day),duration(x.minutes)]))):
       '<p style="font-size:12px">Sem apontamentos importados.</p>')+
-    (daily.length>emailDailyLimit?'<p style="font-size:12px">Resumo no e-mail: '+emailDailyLimit+' de '+daily.length+' linhas. Consulte o Excel, quando disponível, para mais detalhes.</p>':'')+
-    '<h3 style="color:#17345d;font-size:15px;margin-top:24px">Empresas com maior consumo de horas</h3>'+
+    (daily.length>emailDailyLimit?'<p style="font-size:12px">Resumo no e-mail: '+emailDailyLimit+' de '+daily.length+' linhas. Consulte o Excel, quando disponível, para mais detalhes.</p>':''):'')+
+    (reportSectionOn(rec,'customers')?'<h3 style="color:#17345d;font-size:15px;margin-top:24px">Empresas com maior consumo de horas</h3>'+ 
     (companies.length?detailTable(['Empresa','Tempo','Chamados'],companies.map(x=>[x.name,duration(x.minutes),String(x.tickets)])):
-      '<p style="font-size:12px">Sem empresas identificadas.</p>')+
-    '<p style="font-size:11px;color:#64748b">Somente horas importadas do Movidesk; ausência de lançamento não comprova falta de trabalho.</p></div>';
+      '<p style="font-size:12px">Sem empresas identificadas.</p>'):'')+
+    extraHtml+'<p style="font-size:11px;color:#64748b">Somente horas importadas do Movidesk; ausência de lançamento não comprova falta de trabalho.</p></div>';
   const title = `${kind==='monthly'||kind==='annual'?'Balancete':'Relatório'} ${REPORT_LABEL[kind].toLowerCase()} - ${scope === 'management' ? 'Gestao / ' + (sectorLabels.join(' + ') || 'Todos os setores') : sectorLabels.join(' + ')}${person ? ' / ' + safe(rec.collaborator_name) : ''}`;
   const details = person ? selected.slice(0, 100).map(a =>
     `- ${String(a.appointment_date)} | #${safe(a.ticket_id)} | ${duration(Number(a.duration_minutes || 0))} | ${safe(a.activity)}`)
@@ -794,11 +844,11 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
       ...(journey.length>emailTeam.length?[`Mostrando ${emailTeam.length} de ${journey.length} colaboradores. Consulte o Excel, quando disponível, para mais detalhes.`]:[]),
       ...(!journey.length?['Sem apontamentos importados nos setores vinculados.']:[])
     ] : selected.length ? [
-      `Meta mínima de referência . ${duration(minimum)}`,
-      `Jornada de referência ..... ${duration(target)}`,
-      `Diferença para a mínima ... ${duration(Math.max(0, minimum-minutes))}`,
-      `Diferença para a jornada .. ${duration(Math.max(0, target-minutes))}`,
-      `Tempo acima da jornada .... ${duration(Math.max(0, minutes-target))}`
+      `Meta mínima de referência . ${duration(journeyGaps.referenceMinimumMinutes)}`,
+      `Jornada de referência ..... ${duration(journeyGaps.referenceTargetMinutes)}`,
+      `Diferença para a mínima ... ${duration(journeyGaps.minimumGapMinutes)}`,
+      `Diferença para a jornada .. ${duration(journeyGaps.targetGapMinutes)}`,
+      `Tempo acima da jornada .... ${duration([...byPerson.values()].reduce((sum,value)=>sum+Math.max(0,value-target),0))}`
     ] : [
       'Metas não avaliadas: nenhum apontamento importado neste período.',
       'Isso NÃO comprova ausência de trabalho.'
@@ -808,14 +858,14 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     '────────────────────────────────────────',
     ...(details.length ? details : ['Nenhum registro importado para o período.']),
     '',
-    'HORAS POR COLABORADOR E DIA',
-    '────────────────────────────────────────',
+    ...(reportSectionOn(rec,'daily_detail')?['HORAS POR COLABORADOR E DIA','────────────────────────────────────────',
     ...dailyJourney.slice(0,emailDailyLimit).map(x=>'- '+safe(x.name)+' | '+displayDate(x.day)+' | '+duration(x.minutes)+
-      (scopedManagement?' | '+(x.referenceMinutes?duration(x.referenceMinutes)+' de jornada | '+showJourneyPercent(x.percent)+' | ':'')+x.status:'')),
-    '',
-    'EMPRESAS QUE MAIS CONSUMIRAM TEMPO',
+      (scopedManagement?' | '+(x.referenceMinutes?duration(x.referenceMinutes)+' de jornada | '+showJourneyPercent(x.percent)+' | ':'')+x.status:'')),'']:[]),
+    ...(reportSectionOn(rec,'customers')?['EMPRESAS QUE MAIS CONSUMIRAM TEMPO','────────────────────────────────────────',
+    ...companies.map(x=>'- '+safe(x.name)+' | '+duration(x.minutes)+' | '+x.tickets+' chamados'),'']:[]),
+    'APONTAMENTOS EM FINS DE SEMANA E FERIADOS',
     '────────────────────────────────────────',
-    ...companies.map(x=>'- '+safe(x.name)+' | '+duration(x.minutes)+' | '+x.tickets+' chamados'),
+    ...(extraRows.length?extraRows.map(x=>'- '+displayDate(x.date)+' | '+x.kind+' | '+x.person+' | '+x.sector+' | #'+x.ticket+' | '+duration(x.minutes)):['Sem registros.']),
     '',
     'INFORMAÇÃO IMPORTANTE',
     '────────────────────────────────────────',
@@ -831,7 +881,10 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     const name=String(a.activity||'Não informado');
     byActivity.set(name,(byActivity.get(name)||0)+Number(a.duration_minutes||0));
   }
+  const chartDays=new Map<string,number>();
+  if(reportSectionOn(rec,'daily_detail'))for(const a of selected){const day=String(a.appointment_date);chartDays.set(day,(chartDays.get(day)||0)+Number(a.duration_minutes||0));}
   const exportData={
+    visual:{sectors:[...bySector].map(([sector,minutes])=>({sector,minutes})),daily:[...chartDays].map(([date,minutes])=>({date,minutes}))},
     collaborators:scopedManagement?journey.slice(0,70).map(x=>({
       name:x.name,sector:x.sector,minutes:x.minutes,minimumMinutes:x.minimumMinutes,targetMinutes:x.targetMinutes,
       minimumGap:x.minimumGap,targetGap:x.targetGap,ruleSource:'Referência do cadastro; não é controle de ponto'
@@ -840,31 +893,36 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
         minutes,minimumMinutes:days.length*targetPerDay*minimumPercent/100,
         targetMinutes:days.length*targetPerDay,minimumGap:Math.max(0,days.length*targetPerDay*minimumPercent/100-minutes),
         targetGap:Math.max(0,days.length*targetPerDay-minutes),ruleSource:'Referência padrão; não é controle de ponto'})),
-    daily:dailyJourney.slice(0,90).map(x=>({date:x.day,person:x.name,
+    daily:(reportSectionOn(rec,'daily_detail')?dailyJourney:[]).slice(0,90).map(x=>({date:x.day,person:x.name,
       sector:scopedManagement?x.sector:
         scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
       minutes:x.minutes,referenceMinutes:x.referenceMinutes,minimumMinutes:x.minimumMinutes,
       status:scopedManagement?x.status:'Apontamento importado'})),
-    customers:companies.map(x=>({name:x.name,minutes:x.minutes,tickets:x.tickets,appointments:0})),
-    activities:[...byActivity].sort((a,b)=>b[1]-a[1]).slice(0,30).map(([name,minutes])=>({name,minutes}))
+    extraordinary:extraRows,
+    customers:(reportSectionOn(rec,'customers')?companies:[]).map(x=>({name:x.name,minutes:x.minutes,tickets:x.tickets,appointments:0})), 
+    activities:(reportSectionOn(rec,'activities')?[...byActivity]:[]).sort((a,b)=>b[1]-a[1]).slice(0,30).map(([name,minutes])=>({name,minutes}))
   };
   return { text: lines.join('\n'), detailsHtml, teamJourneyHtml, teamJourney:journey, exportData,
-    metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length } };
+    metrics: { appointments: selected.length, tickets: worked, minutes, days: days.length,extraMinutes,extraCount:extraRows.length,...journeyGaps } };
 }
-function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:ReportKind,partial:boolean,historicalIncomplete:boolean,clients:R[],forecastRows:unknown[]=[]):R {
+function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:ReportKind,partial:boolean,historicalIncomplete:boolean,clients:R[],forecastRows:unknown[]=[],quality:R|null=null):R {
  const data=report.exportData as R;
  const clientNames=new Map(clients.map(x=>[String(x.ticket_id),String(x.client_name||'')]));
  return {
    schema:'arquem-mail-v1',
+   visualVersion:'arquem-visual-v1',
    recipientId:String(rec.id),reportKind:kind,
    title:(kind==='monthly'||kind==='annual'?'Balancete ':'Relatório ')+REPORT_LABEL[kind].toLowerCase()+' - '+safe(rec.name||rec.sector||'Gestão'),
    from,to,partial,historicalIncomplete,
+   reportSections:reportSectionFlags(rec),
    metrics:report.metrics,
-   collaborators:data.collaborators||[],daily:data.daily||[],
-   customers:data.customers||[],
+   extraordinary:data.extraordinary||[],
+   csat:canReceiveCsat(rec)?quality?.metric||null:null,csatRatings:canReceiveCsat(rec)?quality?.ratings||[]:[],
+   collaborators:data.collaborators||[],daily:reportSectionOn(rec,'daily_detail')?(data.daily||[]):[],
+   customers:reportSectionOn(rec,'customers')?(data.customers||[]):[],
    tickets:(Array.isArray(tickets.attachmentTickets)?tickets.attachmentTickets:[])
      .map(x=>({...x,client:clientNames.get(String(x.id))||'Não identificado'})),
-   activities:data.activities||[],forecastVariances:forecastRows
+   activities:reportSectionOn(rec,'activities')?(data.activities||[]):[],forecastVariances:forecastRows
  };
 }
 // Mesma medicao de chat do modulo Suporte: por tickets com apontamento no periodo.
@@ -887,6 +945,7 @@ async function measuredChatForEmail(from:string,to:string){
 
 async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R) {
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
+  if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
   // Controles duplos: destinatario corporativo e flags de homologacao.
   // Mantem a rotina 09h atual intacta enquanto a revisao nao for aprovada.
   const allowVoiceEmails=new Map<string,string>([
@@ -914,14 +973,28 @@ async function sendMail(email: string, subject: string, text: string, html?: str
     html=html?(/<\/body>/i.test(html)?html.replace(/<\/body>/i,section.html+'</body>'):html+section.html):section.html;
     reportData={...reportData,zenviaVoice:section.kpis};
   }
-  if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
+
+  if(reportData&&!reportData.productionFlow){
+    let timing;
+    try{timing=await reportTiming(reportData,db,list);}
+    catch(ex){console.error('Consulta de ajustes indisponível:',safe(err(ex)));timing={notice:TIMING_NOTICE+' O detalhamento de ajustes posteriores não ficou disponível neste fechamento.',adjustments:[],status:'unavailable'};}
+    if(timing){
+      const section=timingContent(timing);
+      text+=section.text;
+      if(html)html=/<\/body>/i.test(html)?html.replace(/<\/body>/i,section.html+'</body>'):html+section.html;
+      reportData={...reportData,timing};
+    }
+  }
   // Regra obrigatoria no ultimo ponto de envio, inclusive para relatorios previamente preparados.
   const cleanSubject=corporateCopy(subject);
   const cleanText=corporateCopy(text);
   const cleanHtml=corporateCopy(html||corporateFallbackHtml(cleanSubject,cleanText));
   const cleanReportData=reportData?corporatePacket(reportData):undefined;
   assertCorporateCopy({cleanSubject,cleanText,cleanHtml,cleanReportData});
-  const withAttachments=E('REPORT_ATTACHMENTS_ENABLED')==='true' && !!cleanReportData;
+  // Relatórios oficiais jamais podem sair sem os dois anexos exigidos. Testes de integração sem pacote permanecem separados.
+  if(cleanReportData && E('REPORT_ATTACHMENTS_ENABLED')!=='true')
+    throw new Error('Envio bloqueado: PDF e Excel obrigatórios; habilite e valide os anexos no servidor.');
+  const withAttachments=!!cleanReportData;
   const endpoint=validUrl();
   if(withAttachments) {
     // Exigir gerador validado e modelo timbrado antes de tentar um envio com anexos.
@@ -939,6 +1012,14 @@ async function sendMail(email: string, subject: string, text: string, html?: str
     if(cleanReportData?.zenviaVoice &&
        (capabilities.zenviaVoiceReady!==true || capabilities.zenviaVoiceVersion!=='arquem-voice-chat-v1'))
       throw new Error('PDF/XLSX de Voz e Chat não homologados no Apps Script');
+    const sections=cleanReportData?.reportSections as R|undefined;
+    if(cleanReportData?.timing&&capabilities.postCloseAdjustmentsSupported!==true)
+      throw new Error('Gerador ainda não homologado para observações de ajustes posteriores ao fechamento');
+    const customSections=sections && typeof sections==='object' &&
+      ['daily_detail','customers','activities'].some(k=>sections[k]===false);
+    // Do not send restricted data through a legacy attachment generator.
+    if(customSections && capabilities.sectionPermissionsSupported!==true)
+      throw new Error('Envio bloqueado: Apps Script instalado não confirma suporte às seções personalizadas. Atualize e homologue os anexos.');
   }
   const res = await fetch(endpoint, {
     method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -992,8 +1073,10 @@ async function adminAction(payload: R) {
       const ready=capabilities?.sucesso===true &&
         formats.includes('pdf') && formats.includes('xlsx') &&
         capabilities.paperTemplateConfigured===true;
-      const keilaGeneratorReady=ready&&capabilities?.attachmentsVersion==='arquem-3-keila-quality'&&capabilities?.keilaQualityReady===true;
-      return json({ok:true,enabled:flag,ready,keilaGeneratorReady,
+      const keilaGeneratorReady=ready&&capabilities?.attachmentsVersion==='arquem-8-keila-movements'&&capabilities?.keilaProductionReady===true;
+      const csatGeneratorReady=ready&&capabilities?.csatNotesReady===true;
+      return json({ok:true,enabled:flag,ready,keilaGeneratorReady,csatGeneratorReady,
+        postCloseAdjustmentsSupported:capabilities?.postCloseAdjustmentsSupported===true,
         templateConfigured:capabilities?.paperTemplateConfigured===true,
         formats:formats.filter(x=>x==='pdf'||x==='xlsx'),
         status:ready?(flag?'PDF/XLSX habilitados; validar entrega real em teste autorizado.':
@@ -1167,6 +1250,10 @@ async function manualOfficial(payload: R) {
   const recipients = await db(`audit_email_recipients?id=eq.${encodeURIComponent(id)}&active=eq.true&select=*&limit=1`);
   if (!recipients.length) return json({ error: 'Destinatario nao cadastrado ou inativo' }, 404);
   const rec = recipients[0] as R;
+  // Reutilizar no envio manual a mesma permissao de relatorio aplicada ao Cron.
+  // A autorizacao de administrador no endpoint nao substitui a permissao do destinatario.
+  if (!recipientAllows(rec,'general'))
+    return json({ok:false,error:'Relatorios gerenciais/setoriais nao liberados para este destinatario. Autorize no modulo de liberacao antes de gerar previa ou enviar.'},403);
   // Testes manuais somente para destinatarios ativos cadastrados e dominios corporativos.
   // Selecao individual explicita por admin; nao ha disparo em massa.
   const target = String(rec.email || '').trim().toLowerCase();
@@ -1211,13 +1298,13 @@ async function manualOfficial(payload: R) {
   // Prévia de auditoria não cria disparos, não acessa o Gmail e não muda agendamentos.
   if (previewOnly) return json({ok:true,preview:true,release:RELEASE_ID,
     recipient:target,kind,from,to,partial,empty,
+    reportSections:reportSectionFlags(rec),
     metrics:report.metrics,ticketMetrics:tickets.metrics,superadores:quality.metric,teamJourney:report.teamJourney,
     directionOverview:overview.metrics,forecastPreview:forecast.rows,
     // Até cinco exemplos por categoria para conferência sem expor todos os dados.
     ticketPreview:tickets.preview
   });
-  const subject = '[TESTE MANUAL] Central de Auditoria - Relatorio '+(kind === 'weekly' ? 'semanal' : 'diario')+
-    (partial?' [DADOS PARCIAIS]':'')+(empty?' [SEM APONTAMENTOS]':'')+' - '+from;
+  const subject = reportSubject(rec,kind,from,to,{prefix:'[TESTE MANUAL]'+(partial?' [DADOS PARCIAIS]':'')+(empty?' [SEM APONTAMENTOS]':'')});
   const body = '[TESTE MANUAL DE ENVIO]'+
     '\nEste e-mail verifica o recebimento e não é um relatório definitivo.'+
     (partial?'\nATENÇÃO: sincronização incompleta; indicadores parciais.':'')+
@@ -1254,7 +1341,7 @@ async function dispatchWeeklyPreliminary() {
   const hol=await holidays();
   if(!hol.has('2026-11-02')) return json({ok:false,error:'Feriado de Finados não cadastrado: corrigir antes do envio'},409);
   const coverage=await recentCoverage(from,to);
-  const recipients=(await recipientList()).filter(r=>r.weekly_enabled===true);
+  const recipients=(await recipientList()).filter(r=>r.weekly_enabled===true&&recipientAllows(r,'general'));
   if(!recipients.length) return json({ok:false,error:'Sem destinatários semanais ativos'},409);
   const [appts,allTickets,clients]=await Promise.all([source(from,to),ticketSource(),clientSource()]);
   const getQuality = supportRatingCache();
@@ -1271,7 +1358,7 @@ async function dispatchWeeklyPreliminary() {
       const quality = await getQuality(r, from, to);
       const overview = await getOverview(r, from, to, alerts.activeTickets);
       const empty=!report.metrics.appointments;
-      const subject='[BALANCETE PRELIMINAR - DADOS PARCIAIS] Central de Auditoria - Semana 02 a 08/11/2026'+(empty?' [SEM APONTAMENTOS]':'');
+      const subject=reportSubject(r,'weekly',from,to,{prefix:'[BALANCETE PRELIMINAR - DADOS PARCIAIS]'+(empty?' [SEM APONTAMENTOS]':'')});
       const disclaimer='BALANCETE SEMANAL PRELIMINAR — 02 A 08/11/2026\n'+
         'SINCRONIZAÇÃO DO MOVIDESK AINDA EM ANDAMENTO. NÃO É FECHAMENTO DEFINITIVO.\n'+
         '02/11: FINADOS (FERIADO). DIAS ÚTEIS: 03, 04, 05 E 06/11.\n'+
@@ -1308,6 +1395,12 @@ function recipientAllows(r:R, report:'general'|'production_flow'|'ticket_followu
  const codes=r.allowed_report_types;
  return codes==null || (Array.isArray(codes)&&codes.includes(report));
 }
+function deliveryGroup(r:R):'management'|'individual' {
+  if(r.scope==='management')return 'management';
+  const people=Array.isArray(r.collaborator_names)&&r.collaborator_names.length
+    ? r.collaborator_names : r.collaborator_name ? [r.collaborator_name] : [];
+  return people.length===1 ? 'individual' : 'management';
+}
 function scheduledReports(today:string, hol:Set<string>, recipients:R[]):ScheduledReport[] {
   const dow = weekday(today);
   const businessDay = ![0,6].includes(dow) && !hol.has(today);
@@ -1316,6 +1409,8 @@ function scheduledReports(today:string, hol:Set<string>, recipients:R[]):Schedul
   const thisMonday = shift(today, -((dow + 6) % 7));
   const prevMonday = shift(thisMonday, -7);
   const prevSunday = shift(thisMonday, -1);
+  let firstWeekBusinessDay=thisMonday;
+  while(hol.has(firstWeekBusinessDay)||[0,6].includes(weekday(firstWeekBusinessDay))) firstWeekBusinessDay=shift(firstWeekBusinessDay,1);
   const monthStart = today.slice(0,7)+'-01';
   const prevMonthEnd = shift(monthStart,-1);
   const priorYear = prevMonthEnd.slice(0,4);
@@ -1328,8 +1423,8 @@ function scheduledReports(today:string, hol:Set<string>, recipients:R[]):Schedul
   for (const r of recipients) {
     if(!recipientAllows(r,'general'))continue;
     if (businessDay && r.daily_enabled===true)
-      tasks.push({r,kind:'daily',from:prev,to:prev});
-    if (dow===1 && r.weekly_enabled===true)
+      tasks.push({r,kind:'daily',from:prev,to:shift(today,-1)});
+    if (businessDay && today===firstWeekBusinessDay && r.weekly_enabled===true)
       tasks.push({r,kind:'weekly',from:prevMonday,to:prevSunday});
     const linked = (Array.isArray(r.sectors)&&r.sectors.length?r.sectors:[r.sector]).some(x=>norm(x));
     // Fechamentos mensais e anuais agora também podem ser setoriais e individuais.
@@ -1424,8 +1519,8 @@ async function requireKeilaGeneratorReady() {
  const capability=await res.json().catch(()=>null) as R|null;
  const formats=Array.isArray(capability?.formats)?capability.formats:[];
  if(capability?.sucesso!==true || capability?.paperTemplateConfigured!==true ||
-    capability?.attachmentsVersion!=='arquem-3-keila-quality' ||
-    capability?.keilaQualityReady!==true ||
+    capability?.attachmentsVersion!=='arquem-8-keila-movements' ||
+    capability?.keilaProductionReady!==true ||
     !formats.includes('pdf') || !formats.includes('xlsx'))
   throw new Error('Envio Keila bloqueado: versão PDF/Excel com Qualidade ainda não homologada');
 }
@@ -1456,8 +1551,7 @@ async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipien
    rows ??= await list('audit_direct_tickets','?select=ticket_id,subject:payload->>subject,ownerHistories:payload->ownerHistories,clients:payload->clients');
    await requireKeilaGeneratorReady();
    const data=buildKeilaProductionFlow(rows,task.from,task.to);
-   const quality=await keilaQualityForPeriod(rec,task.from,task.to);
-   const content=keilaProductionReport(data,task.kind,quality);
+   const content=keilaProductionReport(data,task.kind);
    const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
     method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
     body:JSON.stringify({dispatch_key:key,recipient_id:rec.id,report_kind:task.kind,
@@ -1465,7 +1559,7 @@ async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipien
    });
    if(!inserted?.length){results.push({recipient:'Keila',kind:task.kind,skipped:'Reserva já existente'});continue;}
    try{
-    await sendMail(String(rec.email),'Central de Auditoria - '+content.title+' - '+task.from,
+    await sendMail(String(rec.email),reportSubject(rec,task.kind,task.from,task.to,{sector:'Produção',detail:'Rastreabilidade · '+REPORT_LABEL[task.kind]}),
       content.text,content.html,content.packet as R);
     await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
      method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
@@ -1527,10 +1621,10 @@ async function dispatchPreliminary(t:ScheduledReport,hol:Set<string>,clientsAndT
   if(!inserted?.length)return {recipientId:id,kind:t.kind,skipped:'Preliminar reservado por outra execução'};
   try{
     const notice='RELATORIO PRELIMINAR - CONCILIACAO MOVIDESK EM ANDAMENTO. Os totais ainda podem mudar. Este documento NAO substitui o fechamento oficial.\\n\\n';
-    await sendMail(String(t.r.email),'[PRELIMINAR - DADOS PARCIAIS] Central de Auditoria - '+REPORT_LABEL[t.kind]+' - '+t.from,
+    await sendMail(String(t.r.email),reportSubject(t.r,t.kind,t.from,t.to,{prefix:'[PRELIMINAR - DADOS PARCIAIS]'}),
       notice+report.text+overview.text+quality.text+'\\n\\n'+alerts.text,
       reportEmailHtml(t.r,report,t.from,t.to,t.kind,true,true,alerts.html,report.detailsHtml+quality.html,overview.html),
-      reportPacket(t.r,report,alerts,t.from,t.to,t.kind,true,true,clients));
+      reportPacket(t.r,report,alerts,t.from,t.to,t.kind,true,true,clients,[],quality));
     await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -1555,6 +1649,7 @@ async function prepareReports() {
   const results:R[]=[];
   for(const t of tasks){
     const key=String(t.r.id)+':'+t.kind+':'+t.from+':'+t.to;
+    try {
     const previouslySent=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=status&limit=1');
     if(previouslySent.length){results.push({key,skipped:'Envio ja registrado'});continue;}
     const coverage=await recentCoverage(t.from,t.to);
@@ -1567,9 +1662,9 @@ async function prepareReports() {
     // os limites de execucao das Edge Functions em janelas concorridas.
     const existing=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
       '&select=dispatch_key,reconciliation_success_at,expires_at,report_data&limit=1');
-    if(existing.length && Date.parse(String(existing[0].reconciliation_success_at))===Date.parse(String(coverage.lastSuccess)) &&
+    if(t.r.report_sections==null && existing.length && Date.parse(String(existing[0].reconciliation_success_at))===Date.parse(String(coverage.lastSuccess)) &&
       Date.parse(String(existing[0].expires_at))>Date.now()+5*60000 &&
-      Array.isArray(existing[0].report_data?.forecastVariances)){
+      Array.isArray(existing[0].report_data?.forecastVariances)&&existing[0].report_data?.visualVersion==='arquem-visual-v1'){
       results.push({key,skipped:'Conteudo ja preparado'});continue;
     }
     if(results.filter(x=>x.status==='prepared').length>=2)break;
@@ -1585,8 +1680,8 @@ async function prepareReports() {
     const quality=await getQuality(t.r,t.from,t.to);
     const overview=await getOverview(t.r,t.from,t.to,tickets.activeTickets,t.kind);
     const forecast=await optionalForecast(t.r);
-    const packet=reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows);
-    const subject='Central de Auditoria - '+REPORT_LABEL[t.kind]+' - '+t.from;
+    const packet=reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows,quality);
+    const subject=reportSubject(t.r,t.kind,t.from,t.to);
     const bodyText=report.text+overview.text+quality.text+'\n\n'+tickets.text+forecast.text;
     const bodyHtml=reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,
       tickets.html,report.detailsHtml+quality.html,overview.html,forecast.html);
@@ -1600,27 +1695,43 @@ async function prepareReports() {
         prepared_at:new Date().toISOString(),expires_at:expires,status:'ready'})
     });
     results.push({key,status:'prepared',appointments:report.metrics.appointments,minutes:report.metrics.minutes});
+    } catch(ex) { results.push({key,status:'failed',error:safe(err(ex))}); }
   }
-  return json({ok:true,mode:'prepare_only',date:today,prepared:results.filter(x=>x.status==='prepared').length,
+  return json({ok:!results.some(x=>x.status==='failed'),mode:'prepare_only',date:today,prepared:results.filter(x=>x.status==='prepared').length,
     pending:results.filter(x=>x.skipped).length,results});
 }
 async function cachedReport(t:ScheduledReport) {
+  // Never send an outdated prepared report after a recipient opts into custom content controls.
+  if(t.r.report_sections!=null)return null;
+  if(canReceiveCsat(t.r))return null; // CSAT sempre atualizado somente para os três destinatários autorizados
   if(t.kind!=='daily'&&t.kind!=='weekly')return null;
   const key=String(t.r.id)+':'+t.kind+':'+t.from+':'+t.to;
   const rows=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
     '&status=eq.ready&select=subject,body_text,body_html,report_data,reconciliation_success_at,expires_at&limit=1');
   if(!rows.length||Date.parse(String(rows[0].expires_at))<=Date.now()||
-    !Array.isArray(rows[0].report_data?.forecastVariances))return null;
+    rows[0].report_data?.visualVersion!=='arquem-visual-v1' ||
+    !Array.isArray(rows[0].report_data?.forecastVariances) ||
+    !Number.isFinite(Number(rows[0].report_data?.metrics?.targetGapMinutes)) ||
+    !Array.isArray(rows[0].report_data?.extraordinary))return null;
   const coverage=await recentCoverage(t.from,t.to);
   if(!coverage.ready||Date.parse(String(coverage.lastSuccess))!==Date.parse(String(rows[0].reconciliation_success_at)))return null;
   return rows[0] as R;
 }
-async function dispatch() {
+async function dispatch(payload:R = {}) {
   if (E('REPORT_EMAIL_SEND_ENABLED') !== 'true') return json({ ok: true, skipped: 'Envio automatico desativado' });
   const today = dateBR();
   const [hol, recipients] = await Promise.all([holidays(),recipientList()]);
-  const tasks = scheduledReports(today,hol,recipients);
-  const keilaFlow = await dispatchKeilaProductionFlow(today,hol,recipients).catch(ex=>[{recipient:'Keila',status:'failed',error:err(ex)}]);
+  const selectedIds = Array.isArray(payload.recipientIds) ? payload.recipientIds.map(String) : [];
+  if(selectedIds.some(id=>!/^[-a-f0-9]{36}$/i.test(id)))return json({ok:false,error:'recipientIds inválidos'},400);
+  const batchGroup=String(payload.batchGroup||'');
+  if(batchGroup&&!['management','individual'].includes(batchGroup))
+    return json({ok:false,error:'Lote inválido'},400);
+  const localHour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:TZ,hour:'2-digit',hourCycle:'h23'}).format(new Date()));
+  if(batchGroup && localHour < (batchGroup==='management'?8:9))
+    return json({ok:true,skipped:'Aguardando horário do lote',batchGroup});
+  const tasks = scheduledReports(today,hol,recipients).filter(t=>
+    (!selectedIds.length||selectedIds.includes(String(t.r.id)))&&(!batchGroup||deliveryGroup(t.r)===batchGroup));
+  const keilaFlow = selectedIds.length || batchGroup==='individual' ? [] : await dispatchKeilaProductionFlow(today,hol,recipients).catch(ex=>[{recipient:'Keila',status:'failed',error:err(ex)}]);
   if (!tasks.length) return json({ ok: !keilaFlow.some(x=>x.status==='failed'), date:today, results:keilaFlow });
   const periods = new Map<string,Promise<R[]|null>>();
   let history:ReturnType<typeof state>|undefined;
@@ -1650,6 +1761,8 @@ async function dispatch() {
   const getQuality = supportRatingCache();
   const getOverview = directionOverviewCache();
   const results: R[] = [];
+  let handled=0;
+  const MAX_DISPATCH_BATCH=1;
   for (const t of tasks) {
     const id = String(t.r.id);
     const key = `${id}:${t.kind}:${t.from}:${t.to}`;
@@ -1658,6 +1771,7 @@ async function dispatch() {
       if (exists.length) { results.push({ recipientId: id, kind: t.kind, skipped: 'Ja registrado; revisar status antes de retentar' }); continue; }
       // Conteudo pronto evita recalcular HTML e dados dos anexos as 9h.
       // O snapshot so pode ser usado se a conciliacao ainda estiver valida.
+      if(handled>=MAX_DISPATCH_BATCH)break;
       const prepared=await cachedReport(t);
       if(prepared){
         const inserted=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
@@ -1666,9 +1780,10 @@ async function dispatch() {
             period_from:t.from,period_to:t.to,status:'processing'})
         });
         if(!inserted?.length)continue;
+        handled++;
         try{
           await sendMail(String(t.r.email),String(prepared.subject),String(prepared.body_text),
-            String(prepared.body_html),prepared.report_data as R);
+            String(prepared.body_html),{...(prepared.report_data as R),recipientId:t.r.id,reportKind:t.kind});
           await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
             method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),
               provider_id:'gmail-apps-script'})
@@ -1685,14 +1800,17 @@ async function dispatch() {
       const appts = await readPeriod(t);
       if (!appts) {
         referenceData ??= Promise.all([ticketSource(),clientSource()]);
-        results.push(await dispatchPreliminary(t,hol,()=>referenceData!));
+        const preliminary=await dispatchPreliminary(t,hol,()=>referenceData!);
+        results.push(preliminary);
+        if(preliminary.status==='sent_preliminary'||preliminary.status==='failed')handled++;
+
         continue;
       }
       referenceData ??= Promise.all([ticketSource(),clientSource()]);
       const [allTickets,clients] = await referenceData;
       const report = buildReport(t.r, appts, t.from, t.to, t.kind, hol, false, clients);
       const tickets = ticketAlerts(t.r, allTickets);
-      if (!report.metrics.appointments && (t.kind==='daily'||t.kind==='weekly')) { results.push({ recipientId: id, kind: t.kind, skipped: 'Sem apontamentos; envio suspenso' }); continue; }
+      if (!report.metrics.appointments && (t.kind==='daily'||t.kind==='weekly') && !(selectedIds.length===1 && payload.sendEmpty===true)) { results.push({ recipientId: id, kind: t.kind, skipped: 'Sem apontamentos; envio suspenso' }); continue; }
       const quality = await getQuality(t.r, t.from, t.to);
       const overview = await getOverview(t.r, t.from, t.to, tickets.activeTickets,t.kind);
       const forecast=await optionalForecast(t.r);
@@ -1711,11 +1829,12 @@ async function dispatch() {
           period_from: t.from, period_to: t.to, status: 'processing' })
       });
       if (!inserted?.length) continue;
+      handled++;
       try {
         const label = t.includeDecember?'Anual e fechamento de dezembro':REPORT_LABEL[t.kind];
-        await sendMail(String(t.r.email), `Central de Auditoria - ${label} - ${t.from}`, report.text+annual.text+overview.text+quality.text+'\n\n'+tickets.text+forecast.text,
+        await sendMail(String(t.r.email),reportSubject(t.r,t.kind,t.from,t.to,{detail:label}), report.text+annual.text+overview.text+quality.text+'\n\n'+tickets.text+forecast.text,
           reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml+quality.html,annual.html+overview.html,forecast.html),
-          reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows));
+          reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows,quality));
         await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH', body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString(), provider_id: 'gmail-apps-script' }) });
         results.push({ recipientId: id, kind: t.kind, status: 'sent', ...report.metrics });
@@ -1726,7 +1845,11 @@ async function dispatch() {
       }
     } catch (ex) { results.push({ recipientId: id, kind: t.kind, status: 'failed', error: err(ex) }); }
   }
-  return json({ ok: ![...results,...keilaFlow].some(x => x.status === 'failed'), date: today, results:[...keilaFlow,...results] });
+  return json({ok:![...results,...keilaFlow].some(x=>x.status==='failed'),
+    date:today,batchSize:MAX_DISPATCH_BATCH,handled,
+    pendingMayRemain:handled===MAX_DISPATCH_BATCH||results.some(x=>String(x.skipped||'').includes('Aguardando')),
+    waitingForReconciliation:results.filter(x=>String(x.skipped||'').includes('Aguardando')).length,
+    results:[...keilaFlow,...results]});
 }
 // Prévia executiva semanal: apenas leitura, sem Gmail, sem fila de envio e sem cache de disparos.
 // Escopo e formatação baseados nos cadastros e no mesmo relatório corporativo da Direção.
@@ -2063,6 +2186,120 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   ticketCount:draft.tickets.length,ids,sentAt:new Date().toISOString(),
   info:'Aceite confirmado pelo serviço Gmail. A entrega/leitura na caixa postal não foi verificada.'});
 }
+// Relatório do meio-dia: duas mensagens parciais (Inteligência e equipe da Keila).
+// Usa o horário do apontamento original Movidesk; nunca mistura relatórios das 09h.
+async function dispatchNoonPartial() {
+ const now=new Date();
+ const time=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(now);
+ if(time<'12:00'||time>'12:09')return json({ok:true,skipped:'Fora da janela de envio do meio-dia',time});
+ const today=dateBR(now);
+ if([0,6].includes(weekday(today)))return json({ok:true,skipped:'Fim de semana',today});
+ const hol=await holidays();
+ if(hol.has(today))return json({ok:true,skipped:'Feriado',today});
+ // Evitar remessa de snapshot antigo caso a sincronização direta pare.
+ const last=await db('audit_direct_tickets?select=source_synced_at&order=source_synced_at.desc&limit=1');
+ const latest=String(last?.[0]?.source_synced_at||'');
+ if(!Number.isFinite(Date.parse(latest))||now.getTime()-Date.parse(latest)>20*60000)
+   return json({ok:false,skipped:'Sincronização direta sem atualização recente',latest},503);
+ const sourceRows=await db('rpc/audit_noon_window_rows',{
+   method:'POST',body:JSON.stringify({p_day:today})
+ });
+ if(!Array.isArray(sourceRows))throw new Error('Janela 09h-11h50 indisponível');
+ const recipients=await recipientList();
+ const specifications=[
+  {code:'inteligencia',id:'ba07a7f7-6b33-4788-8a05-a5fd6e899387',
+   title:'Inteligência',expectedScope:'sector',sectors:['Inteligência']},
+  {code:'keila-equipe',id:'a5329710-dd63-4bfd-bbd3-dc23e0efc8f0',
+   title:'Equipe da Keila',expectedScope:'management',
+   sectors:['Treinamento','Testes (QA)','Sucesso do Cliente','Implantação','Qualidade']}
+ ];
+ const results:R[]=[];
+ for(const spec of specifications){
+  const rec=recipients.find(r=>String(r.id)===spec.id);
+  if(!rec||rec.active!==true||rec.scope!==spec.expectedScope||
+     norm(rec.name)!=='keila'||norm(rec.email)!=='inteligencia.gerencia@arquem.com.br'){
+    results.push({report:spec.code,status:'blocked',error:'Cadastro destinatário não validado'});continue;
+  }
+  if(spec.code==='keila-equipe'){
+    const configured=(Array.isArray(rec.sectors)?rec.sectors:[]).map(norm);
+    if(spec.sectors.some(x=>!configured.includes(norm(x)))){
+      results.push({report:spec.code,status:'blocked',error:'Setores do cadastro divergentes'});continue;
+    }
+  }
+  const key='partial-noon:'+spec.code+':'+today+':09:00-11:50';
+  const prev=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=status&limit=1');
+  if(prev.length){results.push({report:spec.code,status:'skipped',reason:'Já registrado, evitar duplicidade'});continue;}
+  const picked=sourceRows.filter((row:R)=>spec.sectors.some(sector=>norm(sector)===norm(row.sector)));
+  const persons=new Map<string,{name:string;sector:string;minutes:number;appointments:number;tickets:Set<string>}>();
+  const tickets=new Set<string>();
+  let minutes=0;
+  for(const row of picked){
+    const name=safe(row.collaborator_name)||'Não identificado';
+    const sector=safe(row.sector);
+    const m=Math.max(0,Math.min(170,Number(row.minutes)||0));
+    if(!m)continue;
+    const id=String(row.ticket_id||'');
+    const key=norm(name)+'|'+norm(sector);
+    if(!persons.has(key))persons.set(key,{name,sector,minutes:0,appointments:0,tickets:new Set()});
+    const person=persons.get(key)!;
+    person.minutes+=m;person.appointments++;
+    if(id){person.tickets.add(id);tickets.add(id);}
+    minutes+=m;
+  }
+  const team=[...persons.values()].sort((a,b)=>b.minutes-a.minutes||a.name.localeCompare(b.name,'pt-BR'));
+  const hh=(n:number)=>duration(n);
+  const formatDay=today.slice(8,10)+'/'+today.slice(5,7)+'/'+today.slice(0,4);
+  const subject=reportSubject(rec,'daily',today,today,{prefix:'[PARCIAL 12H]',detail:spec.title+' · 09h–11h50'});
+  const intro='Dados parciais do dia '+formatDay+' | Janela 09h00-11h50. Atualização da fonte: '+latest+'.';
+  const textBody=[
+   'ARQUEM SISTEMAS — CENTRAL DE AUDITORIA',subject,intro,
+   'Horas apontadas na janela: '+hh(minutes),
+   'Apontamentos: '+picked.length,
+   'Chamados distintos: '+tickets.size,
+   '',...team.map(x=>x.name+' | '+x.sector+' | '+hh(x.minutes)+' | '+x.appointments+' apontamentos | '+x.tickets.size+' chamados'),
+   'PARCIAL: dados sincronizados do Movidesk, sujeitos a atualização. Não é controle de ponto.'
+  ].join('\n');
+  const rows=team.map(x=>'<tr><td>'+emailEsc(x.name)+'</td><td>'+emailEsc(x.sector)+'</td><td>'+hh(x.minutes)+'</td><td>'+x.appointments+'</td><td>'+x.tickets.size+'</td></tr>').join('');
+  const html='<!doctype html><html lang="pt-BR"><body style="font-family:Arial,sans-serif;background:#edf3fa;color:#173453;padding:20px">'+
+    '<table role="presentation" style="max-width:700px;margin:auto;background:#fff;width:100%;border-collapse:collapse">'+
+    '<tr><td style="background:#142f50;color:#fff;padding:22px"><small>ARQUEM SISTEMAS · CENTRAL DE AUDITORIA</small><h2>Parcial das 12h — '+emailEsc(spec.title)+'</h2><p>'+formatDay+' · 09h00 a 11h50</p></td></tr>'+
+    '<tr><td style="padding:24px"><table width="100%" cellpadding="10"><tr><td style="background:#edf4ff"><b>Horas apontadas</b><h2>'+hh(minutes)+'</h2></td><td style="background:#e9f8f1"><b>Apontamentos</b><h2>'+picked.length+'</h2></td><td style="background:#f2f4ff"><b>Chamados</b><h2>'+tickets.size+'</h2></td></tr></table>'+
+    '<h3>Colaboradores</h3><table width="100%" cellpadding="7" cellspacing="0" style="border-collapse:collapse;font-size:12px"><tr style="background:#edf3fb"><th align="left">Colaborador</th><th align="left">Setor</th><th>Horas</th><th>Apontamentos</th><th>Chamados</th></tr>'+
+    (rows||'<tr><td colspan="5">Sem apontamentos identificados na janela.</td></tr>')+'</table>'+
+    '<p style="color:#60748c;font-size:12px">Parcial, sujeito a atualização. Não é controle de ponto. Última sincronização: '+emailEsc(latest)+'.</p>'+
+    '</td></tr></table></body></html>';
+  const packet:R={schema:'arquem-mail-v1',title:'Parcial 12h - '+spec.title,from:today,to:today,
+    partial:true,historicalIncomplete:false,
+    metrics:{tickets:tickets.size,appointments:picked.length,minutes,days:1},
+    collaborators:team.map(x=>({name:x.name,sector:x.sector,minutes:x.minutes,
+      minimumMinutes:0,targetMinutes:0,minimumGap:0,targetGap:0,
+      ruleSource:'Janela parcial 09h00-11h50, sem jornada de referência'})),
+    daily:[],customers:[],activities:[],tickets:[],forecastVariances:[]};
+  const reserved=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
+    method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
+    body:JSON.stringify({dispatch_key:key,recipient_id:rec.id,report_kind:'daily',
+      period_from:today,period_to:today,status:'processing'})
+  });
+  if(!Array.isArray(reserved)||!reserved.length){
+   results.push({report:spec.code,status:'skipped',reason:'Reserva existente'});continue;
+  }
+  try{
+    await sendMail(String(rec.email),subject,textBody,html,packet);
+    await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+      method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
+    });
+    results.push({report:spec.code,status:'sent',appointments:picked.length,minutes});
+  }catch(ex){
+    // Envio pode ter sido aceito pelo provedor: não reexecutar automaticamente.
+    await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
+      method:'PATCH',body:JSON.stringify({status:'failed',error_message:err(ex).slice(0,300)})
+    }).catch(()=>{});
+    results.push({report:spec.code,status:'failed',error:err(ex)});
+  }
+ }
+ return json({ok:results.every(x=>x.status!=='failed'&&x.status!=='blocked'),kind:'noon_partial',day:today,window:'09:00-11:50',latest,results});
+}
+
 async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'Apenas POST' }, 405);
   let payload: R = {};
@@ -2081,15 +2318,36 @@ async function handleRequest(req: Request): Promise<Response> {
         : action === 'support_quality_metrics' ? await supportQualityMetrics(payload)
         : await adminAction(payload);
     }
-    if (action !== 'dispatch' && action !== 'dispatch_weekly_preliminary' && action !== 'prepare' && action !== 'attachment_probe') return json({ error: 'Acao desconhecida' }, 400);
+    if (action !== 'dispatch' && action !== 'dispatch_noon_partial' && action !== 'dispatch_weekly_preliminary' && action !== 'prepare' && action !== 'attachment_probe' && action !== 'timing_probe') return json({ error: 'Acao desconhecida' }, 400);
     const expected = E('REPORT_CRON_SECRET');
     if (!expected || req.headers.get('x-report-secret') !== expected) return json({ error: 'Cron nao autorizado' }, 401);
-    return action === 'attachment_probe' ? await adminAction({action:'attachment_health'}) : action === 'prepare' ? await prepareReports() : action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch();
+    if(action==='timing_probe'){
+      const id=String(payload.recipientId||'');
+      if(!/^[-a-f0-9]{36}$/i.test(id))return json({ok:false,error:'Destinatário inválido'},400);
+      const rec=(await recipientList()).find(r=>r.id===id);
+      if(!rec)return json({ok:false,error:'Destinatário inativo ou inválido'},404);
+      const timing=await reportTiming({recipientId:id,reportKind:'daily',from:shift(dateBR(),-1),to:shift(dateBR(),-1),reportSections:reportSectionFlags(rec)},db,list);
+      return json({ok:true,sent:false,recipientId:id,status:timing?.status,adjustmentCount:timing?.adjustmentCount||0,noticePresent:!!timing?.notice,presentation:{version:'arquem-visual-v1',subject:reportSubject(rec,'daily',shift(dateBR(),-1),shift(dateBR(),-1)),heading:reportIdentity(rec).title,hierarchy:reportIdentity(rec).hierarchy,csatAllowed:canReceiveCsat(rec)}});
+    }
+    return action === 'dispatch_noon_partial' ? await dispatchNoonPartial() : action === 'attachment_probe' ? await adminAction({action:'attachment_health'}) : action === 'prepare' ? await prepareReports() : action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch(payload);
   } catch (ex) { console.error('audit-email-dispatch:', err(ex)); return json({ ok: false, error: err(ex), release: RELEASE_ID }, 500); }
 }
 
 Deno.serve(async (req: Request) => {
   // A preflight do browser deve responder antes da leitura do corpo e do JWT.
   if (req.method === 'OPTIONS') return withCors(req, new Response(null, { status: 204 }));
-  return withCors(req, await handleRequest(req));
+  const auditPayload=await req.clone().json().catch(()=>({}));
+  const response=await handleRequest(req);
+  if(['dispatch','prepare','attachment_probe','timing_probe'].includes(String(auditPayload.action))){
+    const summary=await response.clone().json().catch(()=>({error:'Resposta inválida'}));
+    await db('audit_email_run_logs',{method:'POST',body:JSON.stringify({
+      action:String(auditPayload.action),batch_group:auditPayload.batchGroup||null,
+      http_status:response.status,ok:summary.ok===true,summary
+    })}).catch(ex=>console.error('Falha ao gravar log de execução:',safe(err(ex))));
+  }
+  return withCors(req,response);
 });
+
+
+
+
