@@ -6,6 +6,9 @@ on:
       - 'supabase/functions/audit-email-dispatch/index.ts'
       - 'tests/zenvia-email-report.test.ts'
       - 'tests/zenvia-email-attachments.test.mjs'
+      - 'tests/zenvia-keila-preservation.test.mjs'
+      - 'supabase/functions/audit-email-dispatch/production-flow-keila.ts'
+      - 'supabase/functions/audit-email-dispatch/production-flow-keila-expanded.draft.ts'
       - 'apps-script/arquem-relatorios-anexos.gs'
       - '.github/workflows/zenvia-voice-email-validation.yml'
   push:
@@ -25,6 +28,8 @@ jobs:
           deno test tests/zenvia-email-report.test.ts
       - name: PDF/Excel Voice-Chat consistency
         run: node --test tests/zenvia-email-attachments.test.mjs
+      - name: Preserve active Keila report
+        run: node --test tests/zenvia-keila-preservation.test.mjs
       - name: Static send safety
         run: |
           grep -q 'ZENVIA_VOICE_REPORTS_ENABLED' supabase/functions/audit-email-dispatch/index.ts
