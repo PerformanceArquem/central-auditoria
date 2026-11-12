@@ -222,3 +222,16 @@ test('Production panel shows the actual date of the latest imported appointment'
   assert.ok(html.includes("'Nenhum registro importado'"));
   assert.ok(!html.includes("'Último registro disponível'"));
 });
+
+test('failed production refresh clears stale KPIs and all sensitive table rows',()=>{
+  const html=readFileSync('index.html','utf8');
+  assert.ok(html.includes('function clearProductionView(){'));
+  const segment=html.slice(html.indexOf('function clearProductionView(){'),html.indexOf('async function load(){',html.indexOf('function clearProductionView(){')));
+  for(const id of ['pdKpis','pdLegacyKpis','pdCompare','pdAlerts','pdProjects','pdPeople','pdDailyJourney','pdLegacy','pdWeekdays','pdGaps','pdTopTickets']){
+    assert.ok(segment.includes("'"+id+"'"),'Missing stale-data reset: '+id);
+  }
+  assert.ok(segment.includes("if(option)option.disabled=true"));
+  assert.ok(segment.includes('window.productionLegacyRows=null'));
+  assert.ok(html.includes("}catch(e){\n    clearProductionView();"));
+  assert.ok(html.includes('Não utilize indicadores de consultas anteriores'));
+});
