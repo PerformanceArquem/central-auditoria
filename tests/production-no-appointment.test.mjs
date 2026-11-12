@@ -235,3 +235,15 @@ test('failed production refresh clears stale KPIs and all sensitive table rows',
   assert.ok(html.includes("}catch(e){\n    clearProductionView();"));
   assert.ok(html.includes('Não utilize indicadores de consultas anteriores'));
 });
+
+test('Production refresh never presents previous data during loading and rejects blank threshold',()=>{
+  const html=readFileSync('index.html','utf8');
+  const script=html.split('<script id="productionAuditScript">')[1]?.split('</script>')[0]||'';
+  assert.ok(script.includes("const raw=String(input?.value??'');"));
+  assert.ok(!script.includes("const raw=String(input?.value||'30');"));
+  const load=script.split('async function load(){')[1]?.split('window.productionAuditInit=')[0]||'';
+  assert.match(load,/busy=true;\s*clearProductionView\(\)/);
+  assert.match(load,/if\(busy\)\{rerun=true;return;\}/);
+  assert.ok(load.includes("String(el('pdNoAppointmentDays')?.value??'')!==String(data.legacyAlerts?.thresholdDays)"));
+  assert.ok(load.includes('if(rerun){rerun=false;void load();}'));
+});
