@@ -111,8 +111,15 @@ function arquemCapacidadesAnexos_() {
         checkedAt>=file.getLastUpdated().getTime();
     }catch(_){ready=false;}
   }
+  const zenviaCheckedAt=Date.parse(props.getProperty('ARQUEM_ZENVIA_VOICE_VALIDATED_AT')||'');
+  const zenviaReady=ready &&
+    props.getProperty('ARQUEM_ZENVIA_VOICE_VALIDATED_VERSION')==='arquem-voice-chat-v1' &&
+    props.getProperty('ARQUEM_ZENVIA_VOICE_VALIDATED_TEMPLATE_ID')===id &&
+    Number.isFinite(zenviaCheckedAt) &&
+    zenviaCheckedAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
   return {sucesso:true,attachmentsVersion:'arquem-3-keila-quality',formats:['pdf','xlsx'],
-    paperTemplateConfigured:ready,
+    paperTemplateConfigured:ready,zenviaVoiceReady:zenviaReady,
+    zenviaVoiceVersion:'arquem-voice-chat-v1',
     keilaQualityReady:ready &&
       props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_VERSION')==='arquem-3-keila-quality' &&
       props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_TEMPLATE_ID')===id &&
@@ -293,6 +300,43 @@ function arquemVozChatDados_(raw) {
   ];
   return {overview,days,ramais,
     note:'CSAT: notas 8–10 / notas válidas (1–10); sem avaliações não equivale a zero. Tempos: Zenvia (voz) e base medida do chat. TME de voz só com fila validada.'};
+}
+
+// Homologação real de PDF e XLSX, com dados artificiais e sem disparo.
+function arquemHomologarVozChatSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const templateId=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
+  if(!templateId)throw new Error('Modelo corporativo timbrado nao configurado');
+  const template=DriveApp.getFileById(templateId);
+  if(template.getMimeType()!==MimeType.GOOGLE_DOCS)
+    throw new Error('O modelo de papel timbrado nao e um Google Docs');
+  const packet={
+    schema:'arquem-mail-v1',title:'Homologação Voz e Chat — sem envio',
+    from:'2026-11-10',to:'2026-11-11',metrics:{minutes:300,appointments:5,tickets:3},
+    collaborators:[],daily:[],tickets:[],customers:[],activities:[],
+    zenviaVoice:{
+      total:4,inbound:2,outbound:2,answered:2,unanswered:1,inProgress:1,unclassified:0,
+      tmaSeconds:85,tmeSeconds:null,talkSeconds:170,
+      chatMetrics:{tickets:3,tmaSeconds:45,tmeSeconds:12},
+      quality:{voz:{total:2,positive:1},chat:{total:3,positive:2}},
+      byDay:[{date:'2026-11-10',total:4,answered:2}],
+      byExtension:[{extension:'430',total:4,answered:2,talkSeconds:170}]
+    }
+  };
+  const attachments=arquemCreateReportAttachments_(packet);
+  if(attachments.length!==2 ||
+     !/\\.pdf$/i.test(attachments[0].getName()) ||
+     !/\\.xlsx$/i.test(attachments[1].getName()) ||
+     attachments.some(x=>x.getBytes().length===0))
+    throw new Error('Arquivos de Voz e Chat nao foram gerados corretamente');
+  // Os arquivos devem conter o mesmo bloco. O teste detalhado de conteúdo
+  // requer inspeção da exportação PDF e XLSX no ambiente de homologação.
+  props.setProperties({
+    ARQUEM_ZENVIA_VOICE_VALIDATED_VERSION:'arquem-voice-chat-v1',
+    ARQUEM_ZENVIA_VOICE_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_ZENVIA_VOICE_VALIDATED_TEMPLATE_ID:templateId
+  },false);
+  return {ok:true,sent:false,files:attachments.map(x=>({name:x.getName(),size:x.getBytes().length}))};
 }
 
 function arquemCreateReportAttachments_(packet) {
