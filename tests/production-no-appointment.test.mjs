@@ -215,3 +215,10 @@ test('only explicit terminal statuses close tickets; negated or reopened cases r
     assert.equal(scope.__isClosed(status),false,'Expected open: '+status);
   }
 });
+
+test('Production panel shows the actual date of the latest imported appointment',()=>{
+  const html=readFileSync('index.html','utf8');
+  assert.ok(html.includes("x.lastAppointment?ptDate(x.lastAppointment):'Data não disponível'"));
+  assert.ok(html.includes("'Nenhum registro importado'"));
+  assert.ok(!html.includes("'Último registro disponível'"));
+});
