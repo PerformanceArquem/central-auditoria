@@ -5631,14 +5631,14 @@ const fmt=minutes=>{let n=Math.max(0,Math.round(Number(minutes)||0));return Math
 const dateBR=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const ptDate=v=>String(v||'').split('-').reverse().join('/');
 const ticketLink=id=>/^\d+$/.test(String(id))?'<a href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(id)+'" target="_blank" rel="noopener noreferrer">#'+esc(id)+'</a>':esc(id||'—');
-let started=false,busy=false;
+let started=false,busy=false,rerun=false;
 function table(id,rows){el(id).querySelector('tbody').innerHTML=rows.join('')||'<tr><td colspan="8">Nenhum registro disponível para o período.</td></tr>'}
 function say(t){el('pdStatus').textContent=t}
 async function api(){
   const session=await window.tmAuth?.getSession?.();
   if(!session?.access_token)throw new Error('Faça login novamente para consultar os dados.');
   const input=el('pdNoAppointmentDays');
-  const raw=String(input?.value||'30');
+  const raw=String(input?.value??'');
   if(!/^[1-9][0-9]{0,2}$/.test(raw)||Number(raw)>365)throw new Error('Informe um prazo entre 1 e 365 dias.');
   const response=await fetch('/api/audit-production-metrics?withoutAppointmentDays='+encodeURIComponent(raw),{
     method:'GET',cache:'no-store',credentials:'same-origin',
@@ -5721,14 +5721,20 @@ function clearProductionView(){
   if(filter?.value==='withoutAppointment')filter.value='old';
 }
 async function load(){
-  if(busy)return;
+  if(busy){rerun=true;return;}
   busy=true;
+  clearProductionView();
   const button=el('pdRefresh');
   button.disabled=true;
   button.textContent='↻ Atualizando...';
   say('Consultando diretamente o Supabase: chamados, horas e alertas da Produção...');
   try{
     const data=await api();
+    // Mudanca de prazo durante a consulta: descartar resposta anterior e consultar novamente.
+    if(String(el('pdNoAppointmentDays')?.value??'')!==String(data.legacyAlerts?.thresholdDays)){
+      rerun=true;
+      return;
+    }
     render(data);
     say(el('pdStatus').textContent+' Atualizado às '+
       new Date(data.generatedAt||Date.now()).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'})+'.');
@@ -5738,6 +5744,7 @@ async function load(){
     say('Dados da Produção indisponíveis. Não utilize indicadores de consultas anteriores. '+e.message);
   }finally{
     busy=false;button.disabled=false;button.textContent='↻ Atualizar Produção';
+    if(rerun){rerun=false;void load();}
   }
 }
 window.productionAuditInit=()=>{
