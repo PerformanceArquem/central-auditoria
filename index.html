@@ -1130,11 +1130,17 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    <button type="button" class="s" id="itXlsx">Excel</button>
    <button type="button" class="s" id="itPdf">PDF</button>
   </div>
+  <div class="row noprint" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px">
+   <button type="button" class="s" id="itSelectAll">Selecionar todos os filtrados</button>
+   <button type="button" class="s" id="itClearSelection">Limpar seleção</button>
+   <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="itExportSelected"> Exportar somente selecionados</label>
+   <span class="subtle" id="itSelectedCount" aria-live="polite">0 chamados selecionados</span>
+  </div>
   <p id="itStatus" class="subtle" role="status">Clique em Atualizar para consultar os dados sincronizados.</p>
   <div id="itCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0"></div>
   <div style="overflow-x:auto"><table id="itTable" class="tbl" style="width:100%;min-width:1080px">
-   <thead><tr><th>Chamado</th><th>Tipo</th><th>Cliente</th><th>Assunto</th><th>Na triagem</th><th>Abertura</th><th>Idade total</th><th>Previsão</th><th>Status</th></tr></thead>
-   <tbody><tr><td colspan="9">Aguardando consulta.</td></tr></tbody></table></div>
+   <thead><tr><th><input id="itSelectVisible" type="checkbox" title="Selecionar todos os chamados visíveis" aria-label="Selecionar todos os chamados visíveis"></th><th>Chamado</th><th>Tipo</th><th>Cliente</th><th>Assunto</th><th>Na triagem</th><th>Abertura</th><th>Idade total</th><th>Previsão</th><th>Status</th></tr></thead>
+   <tbody><tr><td colspan="10">Aguardando consulta.</td></tr></tbody></table></div>
   <p class="subtle">A idade da triagem considera a última entrada na equipe Inteligência segundo o histórico Movidesk. Dados sujeitos ao atraso da sincronização. Não confundir idade total com dias na fila.</p>
  </div>
 </div>
