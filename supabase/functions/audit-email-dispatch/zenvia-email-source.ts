@@ -7,6 +7,7 @@ const norm=(v:unknown)=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/
 const answered=new Set(['atendida','atendido','answered','completada']);
 const missed=new Set(['sem resposta','nao atendida','nao atendido','nao_atendida','ocupado','ocupada','congestionado','falha','cancelada','cancelado','nao existe','failed','busy','no answer']);
 const positive=(n:unknown)=>{const x=Number(n);return Number.isFinite(x)&&x>0?Math.round(x):0};
+const measuredSeconds=(n:unknown)=>{if(n==null||n==='')return null;const x=Number(n);return Number.isFinite(x)&&x>=0?Math.round(x):null};
 type R=Record<string,any>;
 const addDate=(date:string,n:number)=>new Date(Date.parse(date+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);
 export async function readZenviaEmailMetrics(from:string,to:string,token:string,queueId='',http:typeof fetch=fetch){
@@ -36,6 +37,7 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
  };
  const metrics={total:0,inbound:0,outbound:0,answered:0,unanswered:0,inProgress:0,unclassified:0,
   durationSeconds:0,talkSeconds:0,tmaSeconds:null as number|null,tmeSeconds:null as number|null,
+  tmaSamples:0,tmaMissingSamples:0,
   queueCalls:null as number|null,queueMissingWait:null as number|null};
  const day=new Map<string,R>(),hour=new Map<string,number>(),extension=new Map<string,R>(),
    known=new Set<string>();
@@ -60,8 +62,12 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
     const active=row.ativa===true||row.ativa===1||row.ativo===true||row.ativo===1||norm(row.status_geral)==='curso';
     const status=active?'inProgress':answered.has(state)?'answered':missed.has(state)?'unanswered':'unclassified';
     metrics.total++;metrics[direction]++;metrics[status]++;
-    const talk=positive(leg.duracao_falada_segundos);
-    if(status==='answered'){metrics.talkSeconds+=talk;metrics.durationSeconds+=positive(leg.duracao_segundos);}
+    const talk=measuredSeconds(leg.duracao_falada_segundos);
+    if(status==='answered'){
+      if(talk==null)metrics.tmaMissingSamples++;
+      else {metrics.tmaSamples++;metrics.talkSeconds+=talk;}
+      metrics.durationSeconds+=positive(leg.duracao_segundos);
+    }
     const cell=day.get(d)||{date:d,total:0,answered:0,unanswered:0,inProgress:0,unclassified:0};
     cell.total++;cell[status]++;day.set(d,cell);
     const hh=/^\d{4}-\d{2}-\d{2}T(\d{2}):/.exec(timestamp)?.[1];
@@ -69,7 +75,7 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
     const ext=String(direction==='outbound'?row.ramal_id_origem??'':row.ramal_id??'');
     if(/^\d{1,12}$/.test(ext)){
       const e=extension.get(ext)||{extension:ext,total:0,answered:0,unanswered:0,talkSeconds:0};
-      e.total++;if(status==='answered'){e.answered++;e.talkSeconds+=talk;}
+      e.total++;if(status==='answered'){e.answered++;if(talk!=null)e.talkSeconds+=talk;}
       if(status==='unanswered')e.unanswered++;
       extension.set(ext,e);
     }
@@ -90,7 +96,9 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
    }
   }
  }
- metrics.tmaSeconds=metrics.answered?Math.round(metrics.talkSeconds/metrics.answered):null;
+ // Sem duracao falada para TODAS as chamadas atendidas, não publicar TMA parcial.
+ metrics.tmaSeconds=metrics.answered&&metrics.tmaMissingSamples===0?
+   Math.round(metrics.talkSeconds/metrics.answered):null;
  metrics.queueCalls=queueConfigured?qCount:null;
  metrics.queueMissingWait=queueConfigured?qMissing:null;
  metrics.tmeSeconds=queueConfigured&&qCount&&!qMissing?Math.round(qSum/qCount):null;
