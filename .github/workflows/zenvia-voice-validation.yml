@@ -18,6 +18,6 @@ jobs:
         with:
           node-version: '22'
       - run: |
-          cp api/audit-zenvia-voice.js /tmp/audit-zenvia-voice.mjs
+          cp lib/zenvia-voice.js /tmp/audit-zenvia-voice.mjs
           node --check /tmp/audit-zenvia-voice.mjs
           node --test tests/zenvia-voice-metrics.test.mjs
