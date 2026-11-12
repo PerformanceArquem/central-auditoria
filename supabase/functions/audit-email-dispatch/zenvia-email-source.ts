@@ -110,7 +110,7 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
  metrics.tmeSeconds=queueConfigured&&qCount&&!qMissing?Math.round(qSum/qCount):null;
  return {metrics,byDay:[...day.values()].sort((a,b)=>a.date.localeCompare(b.date)),
   byHour:[...hour].map(([hour,count])=>({hour,count})).sort((a,b)=>b.count-a.count),
-  byExtension:[...extension.values()].map(x=>({...x,talkSeconds:x.missingTalkSamples?null:x.talkSeconds}))
+  byExtension:[...extension.values()].map(x=>({...x,talkSeconds:x.missingTalkSamples?null:x.talkSeconds} as R))
     .sort((a,b)=>Number((b as R).total)-Number((a as R).total)).slice(0,30),
   coverageVerified:true,source:'Zenvia Voice',queueConfigured};
 }
