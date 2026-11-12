@@ -723,6 +723,26 @@ function arquemXlsx_(p, keep) {
     });
   }
   }
+  // Verificação antes de exportar: não aceitar uma planilha sem todas as abas e linhas exigidas.
+  if(p.productionFlow){
+    const moves=p.productionFlow.movements||[];
+    for(const pair of [['Entradas','entry'],['Saídas','exit'],['Movimentações',null]]){
+      const sh=ss.getSheetByName(pair[0]);
+      const expected=pair[1]?moves.filter(x=>x.direction===pair[1]).length:moves.length;
+      if(!sh||sh.getLastRow()!==expected+1)
+        throw new Error('Rastreabilidade: aba incompleta '+pair[0]);
+    }
+  }
+  if(Array.isArray(p.csatRatings)&&p.csatRatings.length){
+    const sh=ss.getSheetByName('CSAT - Notas');
+    if(!sh||sh.getLastRow()!==p.csatRatings.length+1)
+      throw new Error('CSAT: nem todas as notas foram exportadas');
+    const graded=sh.getRange(2,6,p.csatRatings.length,1).getValues();
+    for(let i=0;i<graded.length;i++){
+      const want=Number(p.csatRatings[i].score)>=8?'Positiva (8–10)':'Abaixo do padrão (1–7)';
+      if(graded[i][0]!==want)throw new Error('CSAT: classificação divergente na planilha');
+    }
+  }
   SpreadsheetApp.flush();
   const url='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(ss.getId())+
     '/export?mimeType='+encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
