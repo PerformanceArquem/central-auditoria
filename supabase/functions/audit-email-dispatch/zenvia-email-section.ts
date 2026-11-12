@@ -7,7 +7,7 @@ const esc=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 const safeNum=(n:unknown)=>{if(n==null||n==='')return null;const v=Number(n);return Number.isFinite(v)&&v>=0?v:null};
 const percent=(numerator:number,denominator:number)=>denominator?Math.round(numerator/denominator*10000)/100:null;
 const time=(seconds:unknown)=>{const n=safeNum(seconds);return n==null?'Indisponível':Math.floor(n/60)+'min '+String(Math.round(n%60)).padStart(2,'0')+'s'};
-export type VoiceEmailInput={metrics:R;byDay?:R[];byHour?:R[];byExtension?:R[];ratings:Rating[];from:string;to:string;verified:boolean};
+export type VoiceEmailInput={metrics:R;byDay?:R[];byHour?:R[];byExtension?:R[];ratings:Rating[];chatMetrics?:R;from:string;to:string;verified:boolean};
 export function calculateChannelNotes(rows:Rating[]) {
  const map={} as R;
  for(const channel of ['voz','chat']){
@@ -50,7 +50,7 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
  const kpis={from:input.from,to:input.to,provider:'Zenvia Voice',total:m.total,inbound:m.inbound,outbound:m.outbound,
   answered:m.answered,unanswered:m.unanswered,inProgress:m.inProgress,unclassified:m.unclassified,
   talkSeconds:safeNum(m.talkSeconds),tmaSeconds:safeNum(m.tmaSeconds),tmeSeconds:safeNum(m.tmeSeconds),
-  queueCalls:m.queueCalls??null,quality,byDay:days,byHour:hours,byExtension:extensions.slice(0,30)};
+  queueCalls:m.queueCalls??null,quality,chatMetrics:input.chatMetrics||null,byDay:days,byHour:hours,byExtension:extensions.slice(0,30)};
  const csat=(q:R)=>q.total?q.csatPercent+'% ('+q.positive+'/'+q.total+' notas de 8 a 10)':'Sem avaliações no período';
  const text='\n\nVOZ × CHAT · Indicadores reais do Suporte\n'+
   'Período: '+input.from+' a '+input.to+'\n'+
@@ -58,6 +58,7 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
   '; não atendidas: '+m.unanswered+'; em andamento: '+m.inProgress+'; sem classificação: '+m.unclassified+'\n'+
   'Tempo falado: '+time(m.talkSeconds)+'; TMA: '+time(m.tmaSeconds)+'; TME de fila: '+time(m.tmeSeconds)+'\n'+
   'Pico de inícios: '+(hours[0]?.hour??'Sem dados')+'\n'+
+  'Chat TMA medido: '+time(input.chatMetrics?.tmaSeconds)+'; Chat TME medido: '+time(input.chatMetrics?.tmeSeconds)+' ('+(input.chatMetrics?.tickets??0)+' tickets).\n'+
   'CSAT Voz: '+csat(quality.voz)+'; CSAT Chat: '+csat(quality.chat)+'\n'+
   'CSAT = notas de 8 a 10 / todas as notas válidas (1 a 10). Notas 1 a 7 são negativas; ausência de nota não equivale a zero.\n'+
   'Fontes: ligações Zenvia; notas Movidesk e avaliações manuais com deduplicação por ticket e canal.';
@@ -66,10 +67,10 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
   '<h2 style="font-size:18px;margin:0">Voz × Chat · Qualidade do Suporte</h2>'+
   '<p style="font-size:12px;color:#64748b">Ligações: Zenvia · Avaliações: Movidesk e manuais</p>'+
   '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr><th>Indicador</th><th>Voz</th><th>Chat</th></tr></thead><tbody>'+
-  cells(['Quantidade',m.total,'Dados de chat do relatório existente'])+
+  cells(['Quantidade',m.total,input.chatMetrics?.tickets??'Indisponível'])+
   cells(['Atendidas',m.answered,'—'])+cells(['Não atendidas',m.unanswered,'—'])+
-  cells(['TMA',time(m.tmaSeconds),'Conforme módulo de chat'])+
-  cells(['TME',time(m.tmeSeconds),'Conforme módulo de chat'])+
+  cells(['TMA',time(m.tmaSeconds),time(input.chatMetrics?.tmaSeconds)])+
+  cells(['TME',time(m.tmeSeconds),time(input.chatMetrics?.tmeSeconds)])+
   cells(['CSAT (8–10)',csat(quality.voz),csat(quality.chat)])+
   cells(['Avaliações válidas',quality.voz.total,quality.chat.total])+'</tbody></table>'+
   '<h3 style="font-size:14px">Ramal · chamadas · atendidas · tempo falado</h3>'+
