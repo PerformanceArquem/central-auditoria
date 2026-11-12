@@ -54,10 +54,11 @@ export default async function handler(req,res){
    }
    throw new Error('Limite de leitura atingido; reduzir janela do relatório');
   }
-  const [tickets,appointments,sync]=await Promise.all([
+  const [tickets,appointments,sync,historyState]=await Promise.all([
     all('audit_direct_tickets','ticket_id,payload,created_at_source,closed_at_source,last_update_source',{'payload->>ownerTeam':'eq.Produção - CPO'}),
     all('audit_direct_appointments','appointment_key,ticket_id,collaborator_name,sector,activity,appointment_date,duration_minutes'),
-    all('audit_recent_reconcile_state','completed,last_error,last_success_at,period_start,period_end',{'job_name':'eq.movidesk_recent_reconcile'})
+    all('audit_recent_reconcile_state','completed,last_error,last_success_at,period_start,period_end',{'job_name':'eq.movidesk_recent_reconcile'}),
+    all('audit_direct_sync_state','completed,last_error,last_success_at,processed_tickets',{'id':'eq.movidesk_backfill'})
   ]);
   const known=new Map(tickets.map(x=>[String(x.ticket_id),x]));
   // Ignorar datas futuras: lançamento futuro não é evidência de atividade já realizada.
@@ -107,6 +108,10 @@ export default async function handler(req,res){
   // Sem registros: usar a data de abertura; não classificar ticket recém-aberto como atrasado.
   // Último apontamento: usar o registro mais recente realmente importado.
   const rec=sync[0]||{};
+  const historical=historyState[0]||{};
+  // Importacao historica concluida indica que o job terminou, mas nao comprova
+  // cobertura integral de cada chamado. Nao altera a elegibilidade dos alertas.
+  const historicalJobComplete=historical.completed===true&&!historical.last_error;
   // O estado 'completed' isolado nao prova atualidade da conciliacao.
   // Falhar fechado quando a ultima execucao bem-sucedida nao for recente
   // ou o periodo coberto nao alcancar o dia anterior em Sao Paulo.
@@ -148,7 +153,7 @@ export default async function handler(req,res){
      weekday,count:weekdayStats.get(i)||0,days:countByWeekday.get(i)||0,
      average:(countByWeekday.get(i)||0)?Number(((weekdayStats.get(i)||0)/countByWeekday.get(i)).toFixed(1)):0
    })),dailyRows:current.dailyRows,
-   legacyAlerts:{thresholdDays:withoutAppointmentDays,coverageReady,coverage:{from:/^\d{4}-\d{2}-\d{2}$/.test(firstCovered)?firstCovered:null,to:/^\d{4}-\d{2}-\d{2}$/.test(lastCovered)?lastCovered:null,reason:coverageReason},counts:{old90:old.length,withoutForecast30:withoutForecast.length,
+   legacyAlerts:{thresholdDays:withoutAppointmentDays,coverageReady,historicalImport:{jobCompleted:historicalJobComplete,processedTickets:Number(historical.processed_tickets)||0,completeCoverageVerified:false},coverage:{from:/^\d{4}-\d{2}-\d{2}$/.test(firstCovered)?firstCovered:null,to:/^\d{4}-\d{2}-\d{2}$/.test(lastCovered)?lastCovered:null,reason:coverageReason},counts:{old90:old.length,withoutForecast30:withoutForecast.length,
      withoutAppointmentCount:coverageReady?withoutAppointment.length:null,withoutAction7:stalled.length},
      old:old.slice(0,100).map(toLegacy),withoutForecast:withoutForecast.slice(0,100).map(toLegacy),
      withoutAppointment:withoutAppointment.slice(0,100).map(toLegacy),withoutAction:stalled.slice(0,100).map(toLegacy)},
