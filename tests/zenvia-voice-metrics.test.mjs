@@ -54,7 +54,7 @@ test('requires session and admin role before requesting voice data',async()=>{
  finally{allowed=true;}
 });
 test('rejects date errors before any Zenvia request',async()=>{
- for(const query of [{start:'2026-11-30',end:'2026-11-01'},{start:'bad',end:'2026-11-10'},
+ for(const query of [{start:'2026-11-30',end:'2026-11-01'},{start:'bad',end:'2026-11-10'},{start:'2026-02-30',end:'2026-11-10'},
  {start:'2026-01-01',end:'2026-11-11'}]){
   const r=await invoke(query);assert.equal(r.code,400);
   assert.equal(calls.some(x=>x.url.hostname==='voice-api.zenvia.com'),false);
@@ -68,7 +68,9 @@ test('reports inbound/outbound KPIs and never exposes personal information or cr
  assert.equal(r.body.summary.outbound,2);
  assert.equal(r.body.summary.answered,2);
  assert.equal(r.body.summary.unanswered,2);
- assert.equal(r.body.summary.tmaSeconds,90);
+ assert.equal(r.body.summary.tmaSeconds,85);
+ assert.equal(r.body.summary.durationSeconds,180);
+ assert.equal(r.body.summary.talkSeconds,170);
  assert.equal(r.body.summary.tmeSeconds,null);
  assert.equal(r.body.byDay.length,2);
  assert.equal(r.body.byExtension.length,2);
