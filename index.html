@@ -1174,13 +1174,15 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
   <h3>Chamados antigos, sem previsão e sem apontamento recente — Produção</h3>
   <p class="subtle">Baseado no mesmo histórico de chamados e apontamentos do sistema. Chamados antigos: 90+ dias abertos. Sem previsão: abertos há 30+ dias sem SLA de solução. Sem apontamento recente: sem registro na base ou com último apontamento há 30+ dias. <b>Falta de apontamento não comprova falta de trabalho.</b></p>
   <div id="pdLegacyKpis" class="kpis" style="margin:12px 0"></div>
+  <p id="pdCoverageNote" class="subtle" aria-live="polite">Aguardando conferência da cobertura de apontamentos.</p>
   <div class="row noprint" style="align-items:flex-end;margin:10px 0">
     <div class="fg"><label for="pdLegacyFilter">Filtrar pendências</label><select id="pdLegacyFilter">
       <option value="old">Mais antigos (90+ dias)</option>
       <option value="withoutForecast">Sem previsão (30+ dias)</option>
-      <option value="withoutAppointment">Sem apontamento recente (30+ dias)</option>
+      <option value="withoutAppointment">Sem apontamento recente (prazo configurável)</option>
       <option value="withoutAction">Sem ação (7+ dias)</option>
     </select></div>
+    <div class="fg"><label for="pdNoAppointmentDays">Dias sem apontamento</label><input id="pdNoAppointmentDays" type="number" min="1" max="365" step="1" value="30" style="max-width:120px" title="Prazo de referência, de 1 a 365 dias"></div>
   </div>
   <div class="tw"><table id="pdLegacy"><thead><tr><th>Chamado</th><th>Cliente</th><th>Assunto</th><th>Responsável</th><th>Status</th><th>Tempo em aberto</th><th>Último apontamento</th><th>Dias sem apontamento</th><th>Previsão</th></tr></thead><tbody></tbody></table></div>
   <p class="subtle">A situação dos tickets é atual, não uma fotografia histórica. Chamados podem aparecer em mais de uma categoria. O número abre diretamente o Movidesk.</p>
@@ -5629,13 +5631,16 @@ const fmt=minutes=>{let n=Math.max(0,Math.round(Number(minutes)||0));return Math
 const dateBR=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const ptDate=v=>String(v||'').split('-').reverse().join('/');
 const ticketLink=id=>/^\d+$/.test(String(id))?'<a href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(id)+'" target="_blank" rel="noopener noreferrer">#'+esc(id)+'</a>':esc(id||'—');
-let started=false,busy=false;
+let started=false,busy=false,rerun=false;
 function table(id,rows){el(id).querySelector('tbody').innerHTML=rows.join('')||'<tr><td colspan="8">Nenhum registro disponível para o período.</td></tr>'}
 function say(t){el('pdStatus').textContent=t}
 async function api(){
   const session=await window.tmAuth?.getSession?.();
   if(!session?.access_token)throw new Error('Faça login novamente para consultar os dados.');
-  const response=await fetch('/api/audit-production-metrics',{
+  const input=el('pdNoAppointmentDays');
+  const raw=String(input?.value??'');
+  if(!/^[1-9][0-9]{0,2}$/.test(raw)||Number(raw)>365)throw new Error('Informe um prazo entre 1 e 365 dias.');
+  const response=await fetch('/api/audit-production-metrics?withoutAppointmentDays='+encodeURIComponent(raw),{
     method:'GET',cache:'no-store',credentials:'same-origin',
     headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'}
   });
@@ -5667,12 +5672,27 @@ function render(d){
  table('pdPeople',(n.peopleRows||[]).map(t=>'<tr><td>'+esc(t.name)+'</td><td>'+fmt(t.minutes)+'</td><td>'+esc(t.appointments)+'</td><td>'+esc(t.tickets)+'</td></tr>'));
  table('pdDailyJourney',(d.dailyRows||[]).map(x=>'<tr><td>'+esc(ptDate(x.date))+'</td><td>'+esc(x.person)+'</td><td>'+fmt(x.minutes)+'</td><td>'+(x.workday?fmt(x.referenceMinutes):'—')+'</td><td>'+(x.workday?fmt(x.minimumMinutes):'—')+'</td><td>'+(x.percent==null?'—':esc(x.percent)+'%')+'</td><td>'+(x.minimumGap==null?'—':fmt(x.minimumGap))+'</td><td>'+(x.journeyGap==null?'—':fmt(x.journeyGap))+'</td><td>'+(x.extraMinutes==null?'—':fmt(x.extraMinutes))+'</td><td>'+esc(x.status)+'</td></tr>'));
  const legacy=d.legacyAlerts||{counts:{}},lc=legacy.counts||{};
- const newKpis=[['Antigos 90+ dias',lc.old90||0],['Sem previsão 30+ dias',lc.withoutForecast30||0],['Sem apontamento recente',lc.withoutAppointment30||0],['Sem ação 7+ dias',lc.withoutAction7||0]];
+ const threshold=Number(legacy.thresholdDays)||30;
+ const newKpis=[['Antigos 90+ dias',lc.old90||0],['Sem previsão 30+ dias',lc.withoutForecast30||0],['Sem apontamento recente '+threshold+'+ dias',legacy.coverageReady===true?lc.withoutAppointmentCount||0:'Conciliação pendente'],['Sem ação 7+ dias',lc.withoutAction7||0]];
  el('pdLegacyKpis').innerHTML=newKpis.map(([name,n])=>'<div class="card"><div class="subtle">'+esc(name)+'</div><h3>'+esc(n)+'</h3></div>').join('');
+ const cov=legacy.coverage||{};
+ const windowLabel=cov.from&&cov.to?'Janela conciliada: '+ptDate(cov.from)+' a '+ptDate(cov.to)+'. ':'Janela conciliada não confirmada. ';
+ const hist=legacy.historicalImport||{};
+ const historyLabel=hist.jobCompleted===true
+   ?' Importação histórica processada ('+Number(hist.processedTickets||0)+' chamados), sem comprovação de cobertura integral.'
+   :' Importação histórica não confirmada.';
+ el('pdCoverageNote').textContent=windowLabel+(legacy.coverageReady===true
+   ?'Prazo de '+threshold+' dias coberto pela conciliação; ausência de lançamento não comprova falta de trabalho.'
+   :'Alerta suspenso: '+String(cov.reason||'cobertura não comprovada')+'.')+historyLabel;
  window.productionLegacyRows=legacy;
+ // Alerta de ausência de apontamento exige histórico conciliado.
+ const missingFilter=el('pdLegacyFilter');
+ const missingOption=missingFilter.querySelector('option[value="withoutAppointment"]');
+ if(missingOption)missingOption.disabled=legacy.coverageReady!==true;
+ if(legacy.coverageReady!==true && missingFilter.value==='withoutAppointment')missingFilter.value='old';
  window.productionLegacyRender=()=>{
    const key=el('pdLegacyFilter').value;
-   table('pdLegacy',(window.productionLegacyRows?.[key]||[]).map(x=>'<tr><td>'+ticketLink(x.id)+'</td><td>'+esc(x.client)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.owner)+'</td><td>'+esc(x.status)+'</td><td>'+(x.ageDays==null?'—':esc(x.ageDays)+' dias')+'</td><td>'+esc(x.noAppointmentEver?'Nenhum registro importado':(x.daysWithoutAppointment==null?'—':'Último registro disponível'))+'</td><td>'+(x.noAppointmentEver?'Sem registro':x.daysWithoutAppointment==null?'—':esc(x.daysWithoutAppointment)+' dias')+'</td><td>'+esc(x.withoutForecast?'Sem previsão':ptDate(x.sla))+'</td></tr>'));
+   table('pdLegacy',(window.productionLegacyRows?.[key]||[]).map(x=>'<tr><td>'+ticketLink(x.id)+'</td><td>'+esc(x.client)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.owner)+'</td><td>'+esc(x.status)+'</td><td>'+(x.ageDays==null?'—':esc(x.ageDays)+' dias')+'</td><td>'+esc(x.noAppointmentEver?'Nenhum registro importado':(x.lastAppointment?ptDate(x.lastAppointment):'Data não disponível'))+'</td><td>'+(x.noAppointmentEver?'Sem registro':x.daysWithoutAppointment==null?'—':esc(x.daysWithoutAppointment)+' dias')+'</td><td>'+esc(x.withoutForecast?'Sem previsão':ptDate(x.sla))+'</td></tr>'));
  };
  window.productionLegacyRender();
  const hours=(d.hourly||[]).filter(x=>x.count>0),maximum=Math.max(1,...hours.map(x=>x.count));
@@ -5682,23 +5702,49 @@ function render(d){
  table('pdTopTickets',(n.tasks||[]).slice(0,25).map(x=>'<tr><td>'+ticketLink(x.id)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.category)+'</td><td>'+fmt(x.minutes)+'</td><td>'+esc(x.appointments)+'</td></tr>'));
  say('Fonte: Supabase / Movidesk · '+from+' a '+to+'. '+(d.partial?'Conciliação em andamento: resultados parciais.':'Período conciliado.')+' Alertas de SLA e andamento representam a situação atual dos chamados.');
 }
+function clearProductionView(){
+  // Falha de sessao ou consulta: nao manter indicadores antigos como se estivessem atualizados.
+  const cardIds=['pdKpis','pdLegacyKpis','pdPeakBars'];
+  for(const id of cardIds){const node=el(id);if(node)node.replaceChildren();}
+  const tableIds=['pdCompare','pdAlerts','pdProjects','pdPeople','pdDailyJourney','pdLegacy','pdWeekdays','pdGaps','pdTopTickets'];
+  for(const id of tableIds){
+    const body=el(id)?.querySelector('tbody');
+    if(body)body.replaceChildren();
+  }
+  const note=el('pdCoverageNote');
+  if(note)note.textContent='Dados indisponiveis: cobertura de apontamentos nao verificada.';
+  window.productionLegacyRows=null;
+  window.productionLegacyRender=null;
+  const filter=el('pdLegacyFilter');
+  const option=filter?.querySelector('option[value="withoutAppointment"]');
+  if(option)option.disabled=true;
+  if(filter?.value==='withoutAppointment')filter.value='old';
+}
 async function load(){
-  if(busy)return;
+  if(busy){rerun=true;return;}
   busy=true;
+  clearProductionView();
   const button=el('pdRefresh');
   button.disabled=true;
   button.textContent='↻ Atualizando...';
   say('Consultando diretamente o Supabase: chamados, horas e alertas da Produção...');
   try{
     const data=await api();
+    // Mudanca de prazo durante a consulta: descartar resposta anterior e consultar novamente.
+    if(String(el('pdNoAppointmentDays')?.value??'')!==String(data.legacyAlerts?.thresholdDays)){
+      rerun=true;
+      return;
+    }
     render(data);
     say(el('pdStatus').textContent+' Atualizado às '+
       new Date(data.generatedAt||Date.now()).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'})+'.');
   }catch(e){
+    clearProductionView();
     console.error('Falha ao atualizar a Produção:',e);
-    say('Não foi possível atualizar a Produção: '+e.message);
+    say('Dados da Produção indisponíveis. Não utilize indicadores de consultas anteriores. '+e.message);
   }finally{
     busy=false;button.disabled=false;button.textContent='↻ Atualizar Produção';
+    if(rerun){rerun=false;void load();}
   }
 }
 window.productionAuditInit=()=>{
@@ -5707,6 +5753,7 @@ window.productionAuditInit=()=>{
     started=true;
     el('pdRefresh').addEventListener('click',load);
     el('pdLegacyFilter').addEventListener('change',()=>window.productionLegacyRender?.());
+    el('pdNoAppointmentDays').addEventListener('change',load);
   }
   load();
 };

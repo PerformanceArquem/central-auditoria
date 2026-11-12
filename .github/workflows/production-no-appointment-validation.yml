@@ -1,0 +1,31 @@
+name: Validate no-appointment alert filters
+
+on:
+  pull_request:
+    paths:
+      - 'api/audit-production-metrics.js'
+      - 'index.html'
+      - 'tests/production-no-appointment.test.mjs'
+      - '.github/workflows/production-no-appointment-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-no-appointment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate API syntax
+        run: |
+          cp api/audit-production-metrics.js /tmp/audit-production-metrics.mjs
+          node --check /tmp/audit-production-metrics.mjs
+      - name: Test configurable no-appointment warnings
+        run: node --test tests/production-no-appointment.test.mjs
