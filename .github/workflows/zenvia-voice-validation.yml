@@ -1,0 +1,23 @@
+name: Validate Zenvia voice metrics
+on:
+  pull_request:
+    paths:
+      - 'lib/zenvia-voice.js'
+      - 'tests/zenvia-voice-metrics.test.mjs'
+      - 'index.html'
+      - '.github/workflows/zenvia-voice-validation.yml'
+  push:
+    branches:
+      - feature/zenvia-voice-metrics-20261112
+jobs:
+  voice-metrics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          cp lib/zenvia-voice.js /tmp/audit-zenvia-voice.mjs
+          node --check /tmp/audit-zenvia-voice.mjs
+          node --test tests/zenvia-voice-metrics.test.mjs
