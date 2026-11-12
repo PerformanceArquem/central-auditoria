@@ -36,7 +36,7 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
   throw Error('Limite de paginação Zenvia excedido');
  };
  const metrics={total:0,inbound:0,outbound:0,answered:0,unanswered:0,inProgress:0,unclassified:0,
-  durationSeconds:0,talkSeconds:0,tmaSeconds:null as number|null,tmeSeconds:null as number|null,
+  durationSeconds:0,talkSeconds:0 as number|null,tmaSeconds:null as number|null,tmeSeconds:null as number|null,
   tmaSamples:0,tmaMissingSamples:0,
   queueCalls:null as number|null,queueMissingWait:null as number|null};
  const day=new Map<string,R>(),hour=new Map<string,number>(),extension=new Map<string,R>(),
@@ -65,7 +65,7 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
     const talk=measuredSeconds(leg.duracao_falada_segundos);
     if(status==='answered'){
       if(talk==null)metrics.tmaMissingSamples++;
-      else {metrics.tmaSamples++;metrics.talkSeconds+=talk;}
+      else {metrics.tmaSamples++;metrics.talkSeconds=(metrics.talkSeconds??0)+talk;}
       metrics.durationSeconds+=positive(leg.duracao_segundos);
     }
     const cell=day.get(d)||{date:d,total:0,answered:0,unanswered:0,inProgress:0,unclassified:0};
@@ -98,7 +98,8 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
  }
  // Sem duracao falada para TODAS as chamadas atendidas, não publicar TMA parcial.
  metrics.tmaSeconds=metrics.answered&&metrics.tmaMissingSamples===0?
-   Math.round(metrics.talkSeconds/metrics.answered):null;
+   Math.round((metrics.talkSeconds??0)/metrics.answered):null;
+ if(metrics.tmaMissingSamples)metrics.talkSeconds=null;
  metrics.queueCalls=queueConfigured?qCount:null;
  metrics.queueMissingWait=queueConfigured?qMissing:null;
  metrics.tmeSeconds=queueConfigured&&qCount&&!qMissing?Math.round(qSum/qCount):null;
