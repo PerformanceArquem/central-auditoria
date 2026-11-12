@@ -42,9 +42,9 @@ Deno.test('Zenvia inbound/outbound metrics and TMA require complete provider pag
  const outgoing=[{id:1,data_criacao:'2026-11-10T10:00:00-03:00',ativa:false,ramal_id_origem:430,
   destino:{status:'atendida',duracao_falada_segundos:90,duracao_segundos:110}}];
  const incoming=[{id:2,data_inicio:'2026-11-10T11:00:00-03:00',ramal_id:430,status:'nao_atendida'}];
- const mock=async(url:string,opts:RequestInit):Promise<Response>=>{
-   if(opts.method!=='GET')throw Error('write request');
-   const parsed=new URL(url);
+ const mock=async(input:string|URL|Request,opts?:RequestInit):Promise<Response>=>{
+   if(opts?.method!=='GET')throw Error('write request');
+   const parsed=new URL(String(input));
    const rows=parsed.pathname==='/chamada/relatorio'?outgoing:incoming;
    return new Response(JSON.stringify({sucesso:true,dados:{relatorio:rows,total:rows.length}}),{status:200});
  };
