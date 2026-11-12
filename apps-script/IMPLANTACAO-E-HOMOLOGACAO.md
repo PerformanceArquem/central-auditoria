@@ -17,18 +17,18 @@ Atualizar o gerador de anexos **sem modificar a autenticação, segredos, URL p�
 5. Executar **sem envio** no editor, na ordem:
    - `arquemValidarPublicacaoSemEnvio()`
    - `arquemHomologarSecoesSemEnvio()`
-   - `arquemHomologarKeilaSemEnvio()` — deve retornar 2 anexos, com exemplos de movimentações
+   - `arquemHomologarKeilaSemEnvio()` — deve retornar 2 anexos, sem incluir detalhes de movimentações nos arquivos
    - `arquemHomologarCSATSemEnvio()` — deve retornar 2 anexos e classificar nota **8** como positiva.
-6. Conferir se `arquemCapacidadesAnexos_()` retorna `paperTemplateConfigured: true`, `keilaProductionReady: true` e `csatNotesReady: true`. A versão de Rastreabilidade exigida pelo backend é **arquem-8-keila-movements**.
+6. Conferir se `arquemCapacidadesAnexos_()` retorna `paperTemplateConfigured: true`, `keilaProductionReady: true` e `csatNotesReady: true`. A versão de Rastreabilidade exigida pelo backend é **arquem-9-keila-totals-only**.
 7. Implantar uma **nova versão da implantação existente** (e não uma URL separada), preservando o acesso já autorizado. Depois consultar a ação de leitura `attachment_probe` no backend; ela não envia mensagens.
-8. Testar geração e conteúdo dos PDF/XLSX com dados **fictícios** antes de autorizar disparo real. Validar: páginas e tabelas da Produção, abas Resumo/Entradas/Saídas/Movimentações, links; abas CSAT - Notas e notas 8–10.
+8. Testar geração e conteúdo dos PDF/XLSX com dados **fictícios** antes de autorizar disparo real. Validar: **Keila** com PDF contendo somente Entradas/Saídas e XLSX com aba **Resumo** e gráfico comparativo, sem IDs, nomes, clientes, responsáveis, movimentações detalhadas ou abas ocultas; **CSAT de Suporte** continua com notas 8–10 e abas próprias, somente para destinatários autorizados.
 9. Só depois, validar um envio de e-mail **expressamente autorizado**, com proteção por período e destinatário, sem reenvio automático de mensagens antigas.
 
 ## Regras operacionais
 - Envio matinal em **lotes de até 2 relatórios**, entre 08h45 e 08h59, segunda–sexta, exceto feriados cadastrados.
 - Relatórios diários tomam o último dia útil como referência. O trabalho de fins de semana/feriados deve continuar discriminado, sem criar jornada obrigatória.
 - CSAT positivo: notas 8, 9 e 10; negativas: 1–7. Carla e Kassio recebem CSAT do Suporte e o detalhamento de avaliações disponibilizado pela origem.
-- Rastreabilidade da Keila: entradas e saídas com cada movimentação, sem métricas de Qualidade/CSAT nesse relatório.
+- Rastreabilidade da Keila: exclusivamente **totais de entradas e saídas e gráfico comparativo**. Detalhes de movimentações permanecem na Central de Auditoria e **não podem integrar** e-mail, PDF ou Excel. Sem horas, apontamentos, responsáveis, clientes, chamados ou CSAT.
 - O parcial da equipe às 12h é uma rotina separada.
 
 ## Restrições
