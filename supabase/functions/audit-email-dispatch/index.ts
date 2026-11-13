@@ -951,7 +951,8 @@ async function sendMail(email: string, subject: string, text: string, html?: str
   const allowVoiceEmails=new Map<string,string>([
     ['a4748115-e1d6-42dc-a8d1-706b8129219f','suportegestao@arquem.com.br'],
     ['40752b0b-c2a4-4031-9496-733b6f846d76','financeiro@arquem.com.br'],
-    ['1b8168c6-bec0-4f6d-a3f9-feaec63ed147','canestraro@arquem.com.br']
+    ['1b8168c6-bec0-4f6d-a3f9-feaec63ed147','canestraro@arquem.com.br'],
+    ['8f44d5bc-0cd8-45da-97b2-c2407663083a','canestraro@arquem.com.br']
   ]);
   const eligible=!!reportData &&
     allowVoiceEmails.get(String(reportData.recipientId))===String(email).trim().toLowerCase();
