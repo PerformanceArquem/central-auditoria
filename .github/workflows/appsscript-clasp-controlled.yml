@@ -11,6 +11,7 @@ on:
       - 'apps-script/ci-clasp-safe-overlays.mjs'
       - 'apps-script/ci-clasp-dopost-contract.mjs'
       - 'apps-script/ci-clasp-dopost-voice-guard-dryrun.mjs'
+      - 'apps-script/ci-clasp-voice-guard-order.mjs'
       - '.github/workflows/appsscript-clasp-controlled.yml'
   workflow_dispatch:
     inputs:
@@ -113,6 +114,12 @@ jobs:
           set -euo pipefail
           node apps-script/ci-clasp-dopost-voice-guard-dryrun.mjs \
             "$RUNNER_TEMP/pdf-xlsx-overlay-test-only" \
+            "$RUNNER_TEMP/voice-safe-final-test-only" \
+            "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
+      - name: Ensure unapproved voice report cannot reach attachments before guard
+        run: |
+          set -euo pipefail
+          node apps-script/ci-clasp-voice-guard-order.mjs \
             "$RUNNER_TEMP/voice-safe-final-test-only" \
             "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
   zenvia-isolated-tests:
