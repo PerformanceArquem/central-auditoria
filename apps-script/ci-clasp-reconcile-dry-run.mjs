@@ -47,9 +47,9 @@ const append='\n### Reconciliação simulada (NÃO publicada)\n\n'+
 '- Funções exclusivas do arquivo de anexos preservadas: '+uniqueLegacy.length+'\n'+
 '- Nomes duplicados após reconciliação simulada: 0\n'+
 '- Análise sintática dos arquivos JavaScript: aprovada\n'+
-'- Contrato de funções globais preservado: '+afterNames.size+' nomes únicos\\n'+
-'- Funções críticas confirmadas: '+critical.length+'\\n'+
-'- Manifesto Apps Script preservado byte a byte\\n'+
+'- Contrato de funções globais preservado: '+afterNames.size+' nomes únicos\n'+
+'- Funções críticas confirmadas: '+critical.length+'\n'+
+'- Manifesto Apps Script preservado byte a byte\n'+
 '- Código-fonte remoto: NÃO foi enviado ao GitHub nem incluído em artefatos\n'+
 '- Execução de funções, e-mails, push ou deployment: NENHUM\n\n'+
 '**Atenção:** passar na análise sintática não valida operações do Google, PDF, Excel, destinatários nem rotina das 09h. Origem remota permanece intacta.\n';
