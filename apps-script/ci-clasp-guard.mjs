@@ -20,9 +20,25 @@ function snapshot(dir){
  for(const p of paths){h.update(p);h.update('\0');h.update(readFileSync(join(dir,p)));h.update('\0');}
  return {paths,sha:h.digest('hex')};
 }
+function duplicateTopLevelFunctions(dir,paths){
+ const declarations=new Map();
+ for(const path of paths.filter(p=>p.endsWith('.js')||p.endsWith('.gs'))){
+  const source=readFileSync(join(dir,path),'utf8');
+  for(const match of source.matchAll(/^function\s+([A-Za-z_$][\w$]*)\s*\(/gm)){
+   const name=match[1];
+   const matches=declarations.get(name)||[];
+   matches.push(path);
+   declarations.set(name,matches);
+  }
+ }
+ return [...declarations.entries()].filter(([,paths])=>paths.length>1).sort(([a],[b])=>a.localeCompare(b));
+}
 if(mode==='audit'){
  const d=snapshot(remote);
  appendFileSync(other,'### Auditoria read-only\n\nArquivos: '+d.paths.length+'\n\nSHA-256: '+d.sha+'\n\nArquivos: '+d.paths.join(', ')+'\n');
+ const duplicates=duplicateTopLevelFunctions(remote,d.paths);
+ appendFileSync(other,'\n### Verificação de funções top-level duplicadas\n\n'+(duplicates.length?duplicates.map(([name,paths])=>'- \`'+name+'\`: '+paths.map(p=>'\`'+p+'\`').join(', ')).join('\n'):'Nenhuma declaração duplicada encontrada pelo verificador estático.')+'\n');
+ console.log('Funções top-level duplicadas identificadas: '+duplicates.length);
  console.log('Auditoria de '+d.paths.length+' arquivos; SHA-256: '+d.sha);
 }else if(mode==='compare'){
  if(snapshot(remote).sha!==other)throw Error('Código remoto alterado desde a auditoria.');
