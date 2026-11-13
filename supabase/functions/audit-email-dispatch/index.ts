@@ -963,12 +963,12 @@ async function sendMail(email: string, subject: string, text: string, html?: str
     if(!token)throw new Error('Envio Zenvia bloqueado: segredo do Supabase ausente');
     const from=String(reportData.from||''),to=String(reportData.to||'');
     const [voice,ratings,chatMetrics]=await Promise.all([
-      readZenviaEmailMetrics(from,to,token,E('ZENVIA_VOICE_QUEUE_ID')),
+      readZenviaEmailMetrics(from,to,token,E('ZENVIA_VOICE_QUEUE_ID'),fetch,E('ZENVIA_SUPPORT_EXTENSION_IDS')),
       supportRatings(from,to),measuredChatForEmail(from,to)
     ]);
     const section=prepareVoiceEmail({metrics:voice.metrics,byDay:voice.byDay,
       byHour:voice.byHour,byExtension:voice.byExtension,ratings,chatMetrics,from,to,
-      verified:voice.coverageVerified});
+      verified:voice.coverageVerified,support:voice.support});
     text+=section.text;
     html=html?(/<\/body>/i.test(html)?html.replace(/<\/body>/i,section.html+'</body>'):html+section.html):section.html;
     reportData={...reportData,zenviaVoice:section.kpis};
