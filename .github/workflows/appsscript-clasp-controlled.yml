@@ -5,6 +5,7 @@ on:
     paths:
       - 'apps-script/ci-clasp-guard.mjs'
       - 'apps-script/ci-clasp-compare-reference.mjs'
+      - 'apps-script/ci-clasp-reconcile-dry-run.mjs'
       - '.github/workflows/appsscript-clasp-controlled.yml'
   workflow_dispatch:
     inputs:
@@ -66,6 +67,14 @@ jobs:
           node apps-script/ci-clasp-compare-reference.mjs \
             "$RUNNER_TEMP/remote-script" "$GITHUB_WORKSPACE" \
             "$GITHUB_WORKSPACE/reference-pr68" "$GITHUB_STEP_SUMMARY"
+      - name: Simulate consolidation without publishing or exporting source
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/js-parser"
+          npm install --prefix "$RUNNER_TEMP/js-parser" --no-save --silent acorn@8.15.0
+          node apps-script/ci-clasp-reconcile-dry-run.mjs \
+            "$RUNNER_TEMP/remote-script" "$RUNNER_TEMP/reconciled-test-only" \
+            "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
   publish:
     if: ${{ inputs.operation == 'publish' && github.ref_name == 'main' }}
     runs-on: ubuntu-latest
