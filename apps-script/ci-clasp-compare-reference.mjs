@@ -33,4 +33,5 @@ appendFileSync(summaryPath,'\n### Comparação conservadora com referências Git
 appendFileSync(summaryPath,'Comparação textual de trechos de função; não prova equivalência funcional. Nenhum código-fonte ou credencial remota é exibido.\n\n');
 appendFileSync(summaryPath,'| Função | Remotas iguais? | Zenvia vs main | Zenvia vs PR68 | Anexos vs main | Anexos vs PR68 |\n|---|---|---|---|---|---|\n');
 for(const row of rows)appendFileSync(summaryPath,'| '+row.name+' | '+row.versionsMatch+' | '+row.zenviaMain+' | '+row.zenviaPR68+' | '+row.anexosMain+' | '+row.anexosPR68+' |\n');
+for(const row of rows) console.log('REFERÊNCIA '+row.name+' remotoIgual='+row.versionsMatch+' zenviaMain='+row.zenviaMain+' zenviaPR68='+row.zenviaPR68+' anexosMain='+row.anexosMain+' anexosPR68='+row.anexosPR68);
 console.log('Comparação segura concluída: '+rows.length+' funções duplicadas. Resultado no resumo do job.');
