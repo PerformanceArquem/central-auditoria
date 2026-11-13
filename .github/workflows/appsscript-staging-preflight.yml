@@ -23,16 +23,20 @@ jobs:
         env:
           STAGING_ID: ${{ inputs.staging_script_id }}
           STAGING_ENABLED: ${{ vars.APPS_SCRIPT_STAGING_ENABLED }}
+          APPROVED_STAGING_ID: ${{ vars.APPS_SCRIPT_STAGING_ID }}
           STAGING_AUTH: ${{ secrets.CLASPRC_STAGING_JSON }}
         run: |
           set -euo pipefail
           PROD_ID='1WUhIenOGO-B_jAkYgECmpBq-jMeeFrTghwElVyBdKLTTICWnFzgkWmm8'
           test -n "$STAGING_ID" || exit 1
           test "$STAGING_ID" != "$PROD_ID" || { echo "::error::Production Apps Script ID is forbidden"; exit 1; }
+          test -n "${APPROVED_STAGING_ID:-}" || { echo "::error::Approved staging project ID is not configured"; exit 1; }
+          test "$APPROVED_STAGING_ID" != "$PROD_ID" || { echo "::error::Staging allowlist cannot point to production"; exit 1; }
+          test "$STAGING_ID" = "$APPROVED_STAGING_ID" || { echo "::error::Unapproved staging project ID"; exit 1; }
           [[ "$STAGING_ID" =~ ^[a-zA-Z0-9_-]{20,}$ ]] || { echo "::error::Invalid staging script ID"; exit 1; }
           test "$STAGING_ENABLED" = true || { echo "::error::Staging has not been enabled"; exit 1; }
           test -n "${STAGING_AUTH:-}" || { echo "::error::Missing dedicated staging credentials"; exit 1; }
-          echo "Staging ID distinct from production; dedicated credentials configured." >> "$GITHUB_STEP_SUMMARY"
+          echo "Staging ID matches configured allowlist, differs from production; dedicated credentials configured." >> "$GITHUB_STEP_SUMMARY"
       - run: npm install --global @google/clasp@3.4.1
       - name: Authenticate dedicated staging account
         env:
