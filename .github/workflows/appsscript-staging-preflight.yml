@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       staging_script_id:
-        description: "Existing separate STAGING Apps Script project ID"
+        description: "Confirmed Arquem STAGING Apps Script ID (production ID forbidden)"
         required: true
         type: string
 permissions:
@@ -23,7 +23,7 @@ jobs:
         env:
           STAGING_ID: ${{ inputs.staging_script_id }}
           STAGING_ENABLED: ${{ vars.APPS_SCRIPT_STAGING_ENABLED }}
-          APPROVED_STAGING_ID: ${{ vars.APPS_SCRIPT_STAGING_ID }}
+          APPROVED_STAGING_ID: '1-C80Yc4KZIzWQJNVF2gcDwHGNkkgLGz9SVdWfA-ubCrfVgaVtopo2tVe'
           STAGING_AUTH: ${{ secrets.CLASPRC_STAGING_JSON }}
         run: |
           set -euo pipefail
