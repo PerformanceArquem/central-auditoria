@@ -1,0 +1,108 @@
+name: Apps Script - audit and manual approved publish
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        required: true
+        type: choice
+        options: [audit, publish]
+        default: audit
+      expected_remote_sha256:
+        required: false
+        type: string
+      approved_source_sha256:
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: arquem-appsscript-production
+  cancel-in-progress: false
+env:
+  SCRIPT_ID: 1WUhIenOGO-B_jAkYgECmpBq-jMeeFrTghwElVyBdKLTTICWnFzgkWmm8
+jobs:
+  audit:
+    if: ${{ inputs.operation == 'audit' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@3.4.1
+      - name: Authenticate without logging tokens
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "${CLASPRC_JSON:-}" || { echo "::error::Configure CLASPRC_JSON"; exit 1; }
+          umask 077
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+      - name: Read-only snapshot
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/remote-script"
+          cd "$RUNNER_TEMP/remote-script"
+          printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
+          clasp pull
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" audit "$PWD" "$GITHUB_STEP_SUMMARY"
+  publish:
+    if: ${{ inputs.operation == 'publish' && github.ref_name == 'main' }}
+    runs-on: ubuntu-latest
+    environment: apps-script-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Fail closed unless configured and reviewed
+        env:
+          EXPECTED_REMOTE: ${{ inputs.expected_remote_sha256 }}
+          APPROVED_SOURCE: ${{ inputs.approved_source_sha256 }}
+          RELEASE_ENABLED: ${{ vars.APPS_SCRIPT_RELEASE_ENABLED }}
+        run: |
+          set -euo pipefail
+          test "$RELEASE_ENABLED" = 'true' || { echo "::error::Production release is disabled"; exit 1; }
+          [[ "$EXPECTED_REMOTE" =~ ^[0-9a-f]{64}$ ]] || exit 1
+          [[ "$APPROVED_SOURCE" =~ ^[0-9a-f]{64}$ ]] || exit 1
+          test -f apps-script/deploy-source/appsscript.json || { echo "::error::Reviewed source tree missing"; exit 1; }
+          node --check < apps-script/central-auditoria-emails-completo.gs
+          node --test tests/appsscript-complete-integration.test.mjs tests/appsscript-keila-dry-run.test.mjs tests/appsscript-zenvia-package-parity.test.mjs
+      - run: npm install --global @google/clasp@3.4.1
+      - name: Authenticate
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "${CLASPRC_JSON:-}" || exit 1
+          umask 077
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+      - name: Compare remote files and reviewed source
+        env:
+          EXPECTED_REMOTE: ${{ inputs.expected_remote_sha256 }}
+          APPROVED_SOURCE: ${{ inputs.approved_source_sha256 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/remote-script"
+          cd "$RUNNER_TEMP/remote-script"
+          printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
+          clasp pull
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" verify "$PWD" "$GITHUB_WORKSPACE/apps-script/deploy-source" "$EXPECTED_REMOTE" "$APPROVED_SOURCE"
+      - name: Publish ONLY after environment approval and exact hash match
+        env:
+          EXPECTED_REMOTE: ${{ inputs.expected_remote_sha256 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/push" "$RUNNER_TEMP/recheck"
+          cp -a apps-script/deploy-source/. "$RUNNER_TEMP/push/"
+          ( cd "$RUNNER_TEMP/recheck" && printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json && clasp pull )
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" compare "$RUNNER_TEMP/recheck" "$EXPECTED_REMOTE"
+          cd "$RUNNER_TEMP/push"
+          printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
+          clasp push --force
+          clasp create-version "Arquem manual approved release"
+          echo "Code and version created. Existing /exec deployment NOT updated; visually homologate PDF/XLSX first." >> "$GITHUB_STEP_SUMMARY"
