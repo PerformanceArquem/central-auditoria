@@ -37,6 +37,11 @@ function doPost(e) {
           !dados.reportData || dados.reportData.schema !== 'arquem-mail-v1') {
         throw new Error('Dados ou gerador de anexos inválidos');
       }
+      // Bloqueio adicional: não enviar relatório de voz sem homologação real
+      // do PDF e do Excel no mesmo modelo corporativo desta implantação.
+      if (dados.reportData.zenviaVoice && arquemCapacidadesAnexos_().zenviaVoiceReady !== true) {
+        throw new Error('Voz e Chat: PDF e Excel ainda não homologados');
+      }
       anexos = arquemCreateReportAttachments_(dados.reportData);
       if (!Array.isArray(anexos) || anexos.length !== 2) {
         throw new Error('É necessário gerar PDF e Excel');
@@ -182,8 +187,15 @@ function arquemCapacidadesAnexos_() {
         checkedAt>=file.getLastUpdated().getTime();
     }catch(_){ready=false;}
   }
+  const zenviaCheckedAt=Date.parse(props.getProperty('ARQUEM_ZENVIA_VOICE_VALIDATED_AT')||'');
+  const zenviaReady=ready &&
+    props.getProperty('ARQUEM_ZENVIA_VOICE_VALIDATED_VERSION')==='arquem-voice-chat-v1' &&
+    props.getProperty('ARQUEM_ZENVIA_VOICE_VALIDATED_TEMPLATE_ID')===id &&
+    Number.isFinite(zenviaCheckedAt) &&
+    zenviaCheckedAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
   return {sucesso:true,attachmentsVersion:'arquem-3-keila-quality',formats:['pdf','xlsx'],
-    paperTemplateConfigured:ready,
+    paperTemplateConfigured:ready,zenviaVoiceReady:zenviaReady,
+    zenviaVoiceVersion:'arquem-voice-chat-v1',
     keilaQualityReady:ready &&
       props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_VERSION')==='arquem-3-keila-quality' &&
       props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_TEMPLATE_ID')===id &&
@@ -296,6 +308,113 @@ function arquemSanearPacote_(value) {
   }
   return value;
 }
+// Mesmo bloco de Voz x Chat no corpo, PDF e XLSX. Sem telefones e gravações.
+// Segurança: recusar métricas inconciliáveis; null significa indisponível, nunca zero.
+function arquemVozChatDados_(raw) {
+  if(!raw || typeof raw!=='object')throw new Error('Pacote de Voz x Chat inválido');
+  const count={};
+  ['total','inbound','outbound','answered','unanswered','inProgress','unclassified'].forEach(k=>{
+    const n=Number(raw[k]);
+    if(raw[k]==null || !Number.isInteger(n) || n<0)
+      throw new Error('Indicador Zenvia inválido: '+k);
+    count[k]=n;
+  });
+  if(count.total!==count.inbound+count.outbound ||
+     count.total!==count.answered+count.unanswered+count.inProgress+count.unclassified)
+    throw new Error('Totais do canal de voz sem conciliação');
+  const duration=x=>{
+    if(x==null||x==='')return 'Indisponível';
+    const n=Number(x);
+    if(!Number.isFinite(n)||n<0)throw new Error('Duração de canal inválida');
+    return String(Math.floor(n/60)).padStart(2,'0')+':'+String(Math.round(n%60)).padStart(2,'0');
+  };
+  const quality=(raw.quality||{});
+  const scores={};
+  ['voz','chat'].forEach(channel=>{
+    const q=quality[channel]||{};
+    const total=Number(q.total),positive=Number(q.positive);
+    if(q.total==null||q.positive==null||!Number.isInteger(total)||
+       !Number.isInteger(positive)||total<0||positive<0||positive>total)
+      throw new Error('Avaliações '+channel+' inválidas');
+    scores[channel]={
+      total,positive,negative:total-positive,
+      csat:total?(positive/total*100).toFixed(2)+'%':'Sem avaliações'
+    };
+  });
+  const ch=raw.chatMetrics||{};
+  const daily=Array.isArray(raw.byDay)?raw.byDay:[];
+  const byExtension=Array.isArray(raw.byExtension)?raw.byExtension:[];
+  if(daily.length>370||byExtension.length>30)
+    throw new Error('Detalhamento de voz excede limites seguros');
+  const days=daily.map(x=>{
+    const date=String(x.date||'');
+    const total=Number(x.total),answered=Number(x.answered);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isInteger(total)||
+      !Number.isInteger(answered)||total<0||answered<0||answered>total)
+      throw new Error('Registro diário de Voz inválido');
+    return [date,total,answered];
+  });
+  const ramais=byExtension.map(x=>{
+    const id=String(x.extension||'');
+    const total=Number(x.total),answered=Number(x.answered);
+    if(!/^\d{1,12}$/.test(id)||!Number.isInteger(total)||!Number.isInteger(answered)||
+       total<0||answered<0||answered>total)throw new Error('Registro de ramal inválido');
+    return [id,total,answered,duration(x.talkSeconds)];
+  });
+  const overview=[
+    ['Recebidas',count.inbound,'—'],['Efetuadas',count.outbound,'—'],
+    ['Total de atendimentos',count.total,ch.tickets==null?'Indisponível':Number(ch.tickets)],
+    ['Atendidas',count.answered,'—'],['Não atendidas',count.unanswered,'—'],
+    ['Em andamento',count.inProgress,'—'],['Sem classificação',count.unclassified,'—'],
+    ['TMA',duration(raw.tmaSeconds),duration(ch.tmaSeconds)],
+    ['TME',duration(raw.tmeSeconds),duration(ch.tmeSeconds)],
+    ['Tempo falado',duration(raw.talkSeconds),'—'],
+    ['Notas 1–7',scores.voz.negative,scores.chat.negative],
+    ['Notas 8–10',scores.voz.positive,scores.chat.positive],
+    ['Avaliações válidas',scores.voz.total,scores.chat.total],
+    ['CSAT',scores.voz.csat,scores.chat.csat]
+  ];
+  return {overview,days,ramais,
+    note:'CSAT: notas 8–10 / notas válidas (1–10); sem avaliações não equivale a zero. Tempos: Zenvia (voz) e base medida do chat. TME de voz só com fila validada.'};
+}
+
+// Homologação real de PDF e XLSX, com dados artificiais e sem disparo.
+function arquemHomologarVozChatSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const templateId=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
+  if(!templateId)throw new Error('Modelo corporativo timbrado nao configurado');
+  const template=DriveApp.getFileById(templateId);
+  if(template.getMimeType()!==MimeType.GOOGLE_DOCS)
+    throw new Error('O modelo de papel timbrado nao e um Google Docs');
+  const packet={
+    schema:'arquem-mail-v1',title:'Homologação Voz e Chat — sem envio',
+    from:'2026-11-10',to:'2026-11-11',metrics:{minutes:300,appointments:5,tickets:3},
+    collaborators:[],daily:[],tickets:[],customers:[],activities:[],
+    zenviaVoice:{
+      total:4,inbound:2,outbound:2,answered:2,unanswered:1,inProgress:1,unclassified:0,
+      tmaSeconds:85,tmeSeconds:null,talkSeconds:170,
+      chatMetrics:{tickets:3,tmaSeconds:45,tmeSeconds:12},
+      quality:{voz:{total:2,positive:1},chat:{total:3,positive:2}},
+      byDay:[{date:'2026-11-10',total:4,answered:2}],
+      byExtension:[{extension:'430',total:4,answered:2,talkSeconds:170}]
+    }
+  };
+  const attachments=arquemCreateReportAttachments_(packet);
+  if(attachments.length!==2 ||
+     !/\.pdf$/i.test(attachments[0].getName()) ||
+     !/\.xlsx$/i.test(attachments[1].getName()) ||
+     attachments.some(x=>x.getBytes().length===0))
+    throw new Error('Arquivos de Voz e Chat nao foram gerados corretamente');
+  // Os arquivos devem conter o mesmo bloco. O teste detalhado de conteúdo
+  // requer inspeção da exportação PDF e XLSX no ambiente de homologação.
+  props.setProperties({
+    ARQUEM_ZENVIA_VOICE_VALIDATED_VERSION:'arquem-voice-chat-v1',
+    ARQUEM_ZENVIA_VOICE_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_ZENVIA_VOICE_VALIDATED_TEMPLATE_ID:templateId
+  },false);
+  return {ok:true,sent:false,files:attachments.map(x=>({name:x.getName(),size:x.getBytes().length}))};
+}
+
 function arquemCreateReportAttachments_(packet) {
   if (!packet || packet.schema !== 'arquem-mail-v1') throw new Error('Pacote de relatório inválido');
   packet=arquemSanearPacote_(packet);
@@ -311,6 +430,7 @@ function arquemCreateReportAttachments_(packet) {
     throw new Error('Limite de dados excedido para anexos');
   if (rows.reduce((sum,arr)=>sum+arr.length,0)>950)
     throw new Error('Quantidade total de linhas excede o limite seguro dos anexos');
+  if(packet.zenviaVoice)arquemVozChatDados_(packet.zenviaVoice);
   const keep = [];
   try {
     const pdf = arquemPdf_(packet, keep);
@@ -460,6 +580,23 @@ function arquemPdf_(p, keep) {
     });
     body.appendParagraph('Clique no número do chamado no PDF para abrir o Movidesk.');
   }
+  if(p.zenviaVoice){
+    const v=arquemVozChatDados_(p.zenviaVoice);
+    arquemAddHeading_(body,'Voz × Chat · Indicadores de atendimento');
+    arquemEstilizarTabelaPdf_(body.appendTable(
+      [['Indicador','Voz','Chat']].concat(v.overview.map(x=>x.map(String)))));
+    if(v.days.length){
+      arquemAddHeading_(body,'Volume de chamadas por dia');
+      arquemEstilizarTabelaPdf_(body.appendTable(
+        [['Data','Ligações','Atendidas']].concat(v.days.map(x=>x.map(String)))));
+    }
+    if(v.ramais.length){
+      arquemAddHeading_(body,'Chamadas por ramal');
+      arquemEstilizarTabelaPdf_(body.appendTable(
+        [['Ramal','Ligações','Atendidas','Tempo falado (mm:ss)']].concat(v.ramais.map(x=>x.map(String)))));
+    }
+    body.appendParagraph(v.note);
+  }
   arquemAddHeading_(body,'Observações metodológicas');
   body.appendParagraph(p.productionFlow?
     'Contagens de chamados distintos por direção; um chamado pode entrar e sair no mesmo período. Finalizações não são transferências. Verifique a cobertura da sincronização.':
@@ -546,6 +683,18 @@ function arquemXlsx_(p, keep) {
       .setOption('legend',{position:'none'})
       .build();
     cust.insertChart(chart);
+  }
+  if(p.zenviaVoice){
+    const v=arquemVozChatDados_(p.zenviaVoice);
+    arquemCreateSheet_(ss,'Voz e Chat',
+      ['Indicador','Voz','Chat'],v.overview);
+    arquemCreateSheet_(ss,'Voz por dia',
+      ['Data','Chamadas','Atendidas'],v.days);
+    arquemCreateSheet_(ss,'Voz por ramal',
+      ['Ramal','Chamadas','Atendidas','Tempo falado (mm:ss)'],v.ramais);
+    const notes=arquemCreateSheet_(ss,'Metodologia canais',
+      ['Regra','Descrição'],[['CSAT e qualidade',v.note]]);
+    notes.getRange(2,2).setWrap(true);
   }
   SpreadsheetApp.flush();
   const url='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(ss.getId())+
