@@ -9,6 +9,7 @@ on:
       - 'apps-script/ci-clasp-no-email-dryrun-guard.mjs'
       - 'apps-script/ci-clasp-release-gap-audit.mjs'
       - 'apps-script/ci-clasp-safe-overlays.mjs'
+      - 'apps-script/ci-clasp-dopost-contract.mjs'
       - '.github/workflows/appsscript-clasp-controlled.yml'
   workflow_dispatch:
     inputs:
@@ -98,6 +99,13 @@ jobs:
             "$RUNNER_TEMP/reconciled-test-only" \
             "$GITHUB_WORKSPACE/reference-pr68/apps-script/central-auditoria-emails-completo.gs" \
             "$RUNNER_TEMP/pdf-xlsx-overlay-test-only" \
+            "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
+      - name: Compare official doPost and PR68 contracts without executing code
+        run: |
+          set -euo pipefail
+          node apps-script/ci-clasp-dopost-contract.mjs \
+            "$RUNNER_TEMP/remote-script" \
+            "$GITHUB_WORKSPACE/reference-pr68/apps-script/central-auditoria-emails-completo.gs" \
             "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
   zenvia-isolated-tests:
     if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
