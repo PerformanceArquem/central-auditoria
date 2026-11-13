@@ -412,19 +412,40 @@ function arquemHomologarVozChatSemEnvio() {
     }
   };
   const attachments=arquemCreateReportAttachments_(packet);
-  if(attachments.length!==2 ||
-     !/\.pdf$/i.test(attachments[0].getName()) ||
-     !/\.xlsx$/i.test(attachments[1].getName()) ||
-     attachments.some(x=>x.getBytes().length===0))
-    throw new Error('Arquivos de Voz e Chat nao foram gerados corretamente');
-  // Os arquivos devem conter o mesmo bloco. O teste detalhado de conteúdo
-  // requer inspeção da exportação PDF e XLSX no ambiente de homologação.
+  const evidence=arquemValidarAnexosVozChat_(attachments);
+  // O PDF tem formato válido; legibilidade/layout exigem homologação visual separada.
   props.setProperties({
     ARQUEM_ZENVIA_VOICE_VALIDATED_VERSION:'arquem-voice-chat-v1',
     ARQUEM_ZENVIA_VOICE_VALIDATED_AT:new Date().toISOString(),
     ARQUEM_ZENVIA_VOICE_VALIDATED_TEMPLATE_ID:templateId
   },false);
-  return {ok:true,sent:false,files:attachments.map(x=>({name:x.getName(),size:x.getBytes().length}))};
+  return {ok:true,sent:false,validation:evidence,files:attachments.map(x=>({name:x.getName(),size:x.getBytes().length}))};
+}
+
+// Validação das exportações reais antes de confirmar Voz × Chat no gerador.
+function arquemValidarAnexosVozChat_(attachments) {
+  if(!Array.isArray(attachments)||attachments.length!==2)
+    throw new Error('Homologação exige exatamente PDF e Excel');
+  const pdf=attachments.find(x=>/\.pdf$/i.test(x.getName())&&x.getContentType()==='application/pdf');
+  const xlsx=attachments.find(x=>/\.xlsx$/i.test(x.getName()));
+  if(!pdf||!xlsx||attachments.some(x=>x.getBytes().length<100))
+    throw new Error('PDF ou XLSX ausente/incompleto');
+  const header=pdf.getBytes().slice(0,5).map(b=>String.fromCharCode(b&255)).join('');
+  if(header!=='%PDF-')throw new Error('Arquivo PDF inválido');
+  let files;
+  try{files=Utilities.unzip(xlsx);}catch(_){throw new Error('XLSX exportado não é ZIP válido');}
+  const parts={};
+  files.forEach(f=>{parts[f.getName()]=f.getDataAsString('UTF-8');});
+  const workbook=parts['xl/workbook.xml']||'';
+  const texts=Object.keys(parts).filter(n=>/^xl\/(sharedStrings\.xml|worksheets\/sheet\d+\.xml)$/.test(n))
+    .map(n=>parts[n]).join(' ');
+  const requiredSheets=['Voz e Chat','Voz por dia','Voz por ramal','Metodologia canais'];
+  if(requiredSheets.some(name=>!workbook.includes('name="'+name+'"')))
+    throw new Error('XLSX sem abas de Voz × Chat');
+  if(['CSAT','TMA','TME','Avaliações válidas','Notas 8'].some(label=>!texts.includes(label)))
+    throw new Error('XLSX sem indicadores obrigatórios de Voz × Chat');
+  return {pdfBytes:pdf.getBytes().length,xlsxBytes:xlsx.getBytes().length,
+    sheets:requiredSheets,validated:true};
 }
 
 function arquemCreateReportAttachments_(packet) {
