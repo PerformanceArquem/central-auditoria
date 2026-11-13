@@ -1,0 +1,49 @@
+name: Publish isolated Intelligence triage mail extension
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/deploy-intelligence-triage.yml', 'apps-script/intelligence-triage-mail.gs', 'scripts/install-triage-extension.mjs']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: keila-webapp-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test triage rules and script syntax
+        run: |
+          node --test tests/triage-daily.test.mjs
+          node --check < apps-script/intelligence-triage-mail.gs
+      - name: Install official Apps Script CLI
+        run: npm install --no-save @google/clasp@3.4.1
+      - name: Configure existing authorized account
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          test -n "$CLASPRC_JSON" || { echo '::error::CLASPRC_JSON ausente'; exit 1; }
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+      - name: Preserve live project and append triage extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/triage-script"
+          cd "$RUNNER_TEMP/triage-script"
+          printf '%s' '{"scriptId":"1WUhIenOGO-B_jAkYgECmpBq-jMeeFrTghwElVyBdKLTTICWnFzgkWmm8"}' > .clasp.json
+          CLI="$GITHUB_WORKSPACE/node_modules/.bin/clasp"
+          "$CLI" pull
+          node "$GITHUB_WORKSPACE/scripts/install-triage-extension.mjs" "$PWD" "$GITHUB_WORKSPACE/apps-script/intelligence-triage-mail.gs"
+          "$CLI" push --force
+          "$CLI" deploy --deploymentId 'AKfycbxneXcD3j5v3_UL7AnlweC6wo7pTfXzYxSMsDwHkvz9JtCpRbmRa3C9HC22JSjZ0Mus' --description 'Triagem Inteligencia PDF XLSX 2026-11-13'
+          echo 'Extensão publicada no Web App existente. Nenhum e-mail enviado por este fluxo.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove temporary credential
+        if: always()
+        run: rm -f "$HOME/.clasprc.json"
+
