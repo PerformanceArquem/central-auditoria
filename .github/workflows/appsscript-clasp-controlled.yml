@@ -53,6 +53,18 @@ jobs:
           printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
           clasp pull
           node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" audit "$PWD" "$GITHUB_STEP_SUMMARY"
+      - name: Checkout PR68 as data only (never execute its code)
+        uses: actions/checkout@v4
+        with:
+          ref: integration/zenvia-voice-chat-reports-20261112
+          path: reference-pr68
+          persist-credentials: false
+      - name: Compare remote declarations against reviewed references
+        run: |
+          set -euo pipefail
+          node apps-script/ci-clasp-compare-reference.mjs \
+            "$RUNNER_TEMP/remote-script" "$GITHUB_WORKSPACE" \
+            "$GITHUB_WORKSPACE/reference-pr68" "$GITHUB_STEP_SUMMARY"
   publish:
     if: ${{ inputs.operation == 'publish' && github.ref_name == 'main' }}
     runs-on: ubuntu-latest
