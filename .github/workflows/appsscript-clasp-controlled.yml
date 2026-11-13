@@ -82,6 +82,28 @@ jobs:
           node apps-script/ci-clasp-no-email-dryrun-guard.mjs \
             "$RUNNER_TEMP/reconciled-test-only" "$GITHUB_STEP_SUMMARY" \
             "$RUNNER_TEMP/js-parser"
+  zenvia-isolated-tests:
+    if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Zenvia PR68 without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          ref: integration/zenvia-voice-chat-reports-20261112
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Zenvia attachment and Keila tests with simulated services
+        run: |
+          set -euo pipefail
+          node --test \\
+            tests/appsscript-zenvia-export-validation.test.mjs \\
+            tests/appsscript-zenvia-package-parity.test.mjs \\
+            tests/appsscript-complete-integration.test.mjs \\
+            tests/appsscript-keila-dry-run.test.mjs
   publish:
     if: ${{ inputs.operation == 'publish' && github.ref_name == 'main' }}
     runs-on: ubuntu-latest
