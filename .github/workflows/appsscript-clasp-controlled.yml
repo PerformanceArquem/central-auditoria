@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'apps-script/ci-clasp-guard.mjs'
+      - 'apps-script/ci-clasp-compare-reference.mjs'
       - '.github/workflows/appsscript-clasp-controlled.yml'
   workflow_dispatch:
     inputs:
