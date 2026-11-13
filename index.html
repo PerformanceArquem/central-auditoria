@@ -1266,8 +1266,10 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    <div><label for="zvEnd">Data final</label><input id="zvEnd" type="date"></div>
    <button type="button" id="zvRefresh" class="b">↻ Consultar Zenvia</button>
    <button type="button" id="zvCheck" class="b">Verificar conexão</button>
+   <button type="button" id="zvFindQueues" class="b">Localizar filas</button>
   </div>
   <p id="zvStatus" role="status" class="subtle">Conecte a API Zenvia para consultar os indicadores do canal de voz.</p>
+  <div id="zvQueues" class="subtle" role="status"></div>
   <div id="zvKpis" class="kpis" style="margin:12px 0"></div>
   <p class="subtle">TMA = tempo médio falado nas ligações atendidas. TME é calculado apenas com os tempos de espera reais da fila configurada, quando houver cobertura integral; registros sem tempo de espera suspendem o indicador.</p>
   <div class="grid2">
@@ -6047,11 +6049,39 @@ window.clientImpactInit=()=>{
   }catch(e){el('zvStatus').textContent='Diagnóstico indisponível: '+e.message;}
   finally{loading=false;button.disabled=false;}
  }
+ async function discoverQueues(){
+  const button=el('zvFindQueues');button.disabled=true;
+  el('zvQueues').textContent='Consultando filas nas URAs Zenvia...';
+  try{
+   const session=await window.tmAuth?.getSession?.();
+   if(!session?.access_token)throw Error('Faça login na Central de Auditoria');
+   const q=new URLSearchParams({mode:'zenvia',check:'queues',
+     start:el('zvStart').value,end:el('zvEnd').value});
+   const response=await fetch('/api/audit-production-metrics?'+q,{
+    headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok||data.ok!==true||!Array.isArray(data.queues))
+    throw Error(data.error||'Não foi possível consultar as filas');
+   const area=el('zvQueues');area.replaceChildren();
+   const title=document.createElement('strong');
+   title.textContent=data.queues.length?'Filas candidatas nas URAs (confirme qual atende o Suporte):':'Nenhuma fila encontrada nas URAs desta conta.';
+   area.appendChild(title);
+   const ul=document.createElement('ul');
+   for(const item of data.queues){
+    const li=document.createElement('li');
+    li.textContent='Fila '+String(item.id)+' · URAs: '+(item.uras||[]).join(', ');
+    ul.appendChild(li);
+   }
+   area.appendChild(ul);
+  }catch(error){el('zvQueues').textContent='Descoberta indisponível: '+error.message;}
+  finally{button.disabled=false;}
+ }
  window.zenviaVoiceInit=()=>{
   if(initialized)return;initialized=true;
   const today=dateToday();el('zvEnd').value=today;el('zvStart').value=today.slice(0,7)+'-01';
   el('zvRefresh').addEventListener('click',load);
   el('zvCheck').addEventListener('click',diagnose);
+  el('zvFindQueues').addEventListener('click',discoverQueues);
   for(const id of ['zvStart','zvEnd'])el(id).addEventListener('change',reset);
  };
 })();
