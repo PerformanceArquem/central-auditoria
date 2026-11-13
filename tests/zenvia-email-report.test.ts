@@ -121,3 +121,40 @@ Deno.test('per-extension durations are unavailable with a missing answered talk 
  assertEquals(q?.talkSeconds,null);
  if(!email.html.includes('Indisponível'))throw Error('Incomplete ramal talk duration must not become 0');
 });
+
+Deno.test('support recorte is calculated only with explicitly approved extension IDs',async()=>{
+ const outgoing=[
+  {id:50,data_criacao:'2026-11-10T09:00:00-03:00',ramal_id_origem:430,
+   destino:{status:'atendida',duracao_falada_segundos:90}},
+  {id:51,data_criacao:'2026-11-10T11:00:00-03:00',ramal_id_origem:431,
+   destino:{status:'atendida',duracao_falada_segundos:45}}
+ ];
+ const mock=async(input:string|URL|Request):Promise<Response>=>{
+  const rows=new URL(String(input)).pathname==='/chamada/relatorio'?outgoing:[];
+  return new Response(JSON.stringify({sucesso:true,dados:{relatorio:rows,total:rows.length}}),{status:200});
+ };
+ const base=await readZenviaEmailMetrics('2026-11-10','2026-11-11','fixture-token','',mock);
+ assertEquals(base.support.configured,false);
+ assertEquals(base.support.metrics,null);
+ const filtered=await readZenviaEmailMetrics('2026-11-10','2026-11-11','fixture-token','',mock,'430');
+ assertEquals(filtered.metrics.total,2);
+ assertEquals(filtered.support.metrics?.total,1);
+ assertEquals(filtered.support.metrics?.answered,1);
+ assertEquals(filtered.support.metrics?.tmaSeconds,90);
+ const block=prepareVoiceEmail({verified:true,metrics:filtered.metrics,support:filtered.support,
+  ratings:[],from:'2026-11-10',to:'2026-11-11'});
+ assertEquals(block.kpis.supportMetrics?.total,1);
+ if(!block.html.includes('ramais homologados'))throw Error('Missing Support scope');
+ const unset=prepareVoiceEmail({verified:true,metrics:base.metrics,support:base.support,
+  ratings:[],from:'2026-11-10',to:'2026-11-11'});
+ assertEquals(unset.kpis.supportMetrics,null);
+ if(!unset.html.includes('Não homologado'))throw Error('Missing invalid scope marker');
+});
+Deno.test('wrong or duplicate support extension configuration never activates sector metrics',async()=>{
+ const mock=async():Promise<Response>=>new Response(JSON.stringify({sucesso:true,dados:{relatorio:[],total:0}}),{status:200});
+ for(const ids of ['430,430','430,no','']) {
+  const result=await readZenviaEmailMetrics('2026-11-10','2026-11-11','fixture-token','',mock,ids);
+  assertEquals(result.support.configured,false);
+  assertEquals(result.support.metrics,null);
+ }
+});
