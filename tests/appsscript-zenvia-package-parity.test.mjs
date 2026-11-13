@@ -20,3 +20,20 @@ test('envio do pacote completo exige homologação real de Voz x Chat',()=>{
   assert.match(complete,/ARQUEM_ZENVIA_VOICE_VALIDATED_VERSION/);
   assert.match(complete,/MailApp\.sendEmail\(/);
 });
+
+
+test('Voz e Chat exige duas etapas e revisão visual antes de anunciar capacidade',()=>{
+  for(const source of [extension,complete]){
+    assert.match(source,/function arquemHomologarVozChatSemEnvio\(/);
+    assert.match(source,/function arquemAprovarHomologacaoVozChatSemEnvio\(/);
+    assert.match(source,/ARQUEM_ZENVIA_VOICE_VISUAL_APPROVED:'false'/);
+    assert.match(source,/ARQUEM_ZENVIA_VOICE_VISUAL_APPROVED:'true'/);
+    assert.match(source,/getProperty\('ARQUEM_ZENVIA_VOICE_VISUAL_APPROVED'\)==='true'/);
+    const staging=source.slice(source.indexOf('function arquemHomologarVozChatSemEnvio()'),
+      source.indexOf('function arquemAprovarHomologacaoVozChatSemEnvio()'));
+    assert.doesNotMatch(staging,/ARQUEM_ZENVIA_VOICE_VALIDATED_AT:/,
+      'A geração de amostras não deve habilitar a integração');
+    assert.match(staging,/DriveApp\.createFile\(/);
+    assert.match(staging,/pendingVisualReview:true/);
+  }
+});
