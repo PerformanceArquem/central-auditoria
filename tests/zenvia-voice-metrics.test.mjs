@@ -33,6 +33,11 @@ const fetch=async(input,opts={})=>{
  if(url.hostname==='voice-api.zenvia.com'){
   assert.equal(opts.method,'GET');
   assert.equal(opts.headers['Access-Token'],'fixture-token');
+  if(/^\/fila\/\d+$/.test(url.pathname)){
+    const id=url.pathname.split('/').pop();
+    return json({sucesso:true,dados:{id:Number(id),nome:id==='430'?'Suporte':'Comercial',
+      ramais:[{login:'private@company.com',ramal:'7777'}]}});
+  }
   if(url.pathname==='/ura/relatorio'){
    const support=[{acao:'fila',acao_dados:{fila_id:'430'}},{acao:'tts',acao_dados:{mensagem:'privado'}}];
    const data=uraFormat==='malformed'?'[invalid':
@@ -274,15 +279,17 @@ test('queue discovery uses read-only URA reports without sensitive data or auto-
  assert.equal(r.body.discovery,true);
  assert.equal(r.body.requiresConfirmation,true);
  assert.deepEqual(JSON.parse(JSON.stringify(r.body.queues)),[
-  {id:'430',uras:['Atendimento Suporte']},
-  {id:'431',uras:['Atendimento Comercial']}
+  {id:'430',name:'Suporte',verified:true,uras:['Atendimento Suporte']},
+  {id:'431',name:'Comercial',verified:true,uras:['Atendimento Comercial']}
  ]);
  assert.equal(r.body.queueConfigured,undefined);
  assert.equal(r.body.summary,undefined);
  const source=JSON.stringify(r.body);
  assert.equal(source.includes('privado'),false);
+ assert.equal(source.includes('private@company.com'),false);
+ assert.equal(source.includes('7777'),false);
  assert.equal(source.includes('fixture-token'),false);
- assert.equal(calls.filter(x=>x.url.hostname==='voice-api.zenvia.com').length,1);
+ assert.equal(calls.filter(x=>x.url.hostname==='voice-api.zenvia.com').length,3);
  assert.equal(calls.some(x=>x.url.pathname==='/ura/relatorio'),true);
 });
 test('queue discovery requires admin and does not access Zenvia for unauthorized users',async()=>{
@@ -316,4 +323,13 @@ test('queue discovery fails closed for malformed URA instead of falsely reportin
   assert.equal(r.code,502);
   assert.equal(r.body.queues,undefined);
  }finally{uraFormat='array';}
+});
+
+test('queue discovery never returns extensions or other private queue metadata',async()=>{
+ const r=await invoke({start:'2026-11-10',end:'2026-11-11',check:'queues'});
+ assert.equal(r.code,200);
+ assert.equal(r.body.queues[0].name,'Suporte');
+ assert.equal(r.body.queues[0].verified,true);
+ assert.equal(JSON.stringify(r.body).includes('private@company.com'),false);
+ assert.equal(JSON.stringify(r.body).includes('7777'),false);
 });
