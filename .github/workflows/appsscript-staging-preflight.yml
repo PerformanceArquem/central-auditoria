@@ -1,4 +1,5 @@
 name: Apps Script - isolated staging preflight (no publish)
+# Read-only recheck following staging environment variable configuration.
 on:
   push:
     branches: [main]
