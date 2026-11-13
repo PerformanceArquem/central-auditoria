@@ -99,10 +99,10 @@ jobs:
       - name: Verify Zenvia attachment and Keila tests with simulated services
         run: |
           set -euo pipefail
-          node --test \\
-            tests/appsscript-zenvia-export-validation.test.mjs \\
-            tests/appsscript-zenvia-package-parity.test.mjs \\
-            tests/appsscript-complete-integration.test.mjs \\
+          node --test \
+            tests/appsscript-zenvia-export-validation.test.mjs \
+            tests/appsscript-zenvia-package-parity.test.mjs \
+            tests/appsscript-complete-integration.test.mjs \
             tests/appsscript-keila-dry-run.test.mjs
   publish:
     if: ${{ inputs.operation == 'publish' && github.ref_name == 'main' }}
