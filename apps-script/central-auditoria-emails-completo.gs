@@ -191,6 +191,7 @@ function arquemCapacidadesAnexos_() {
   const zenviaReady=ready &&
     props.getProperty('ARQUEM_ZENVIA_VOICE_VALIDATED_VERSION')==='arquem-voice-chat-v1' &&
     props.getProperty('ARQUEM_ZENVIA_VOICE_VALIDATED_TEMPLATE_ID')===id &&
+    props.getProperty('ARQUEM_ZENVIA_VOICE_VISUAL_APPROVED')==='true' &&
     Number.isFinite(zenviaCheckedAt) &&
     zenviaCheckedAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
   return {sucesso:true,attachmentsVersion:'arquem-3-keila-quality',formats:['pdf','xlsx'],
@@ -413,15 +414,45 @@ function arquemHomologarVozChatSemEnvio() {
   };
   const attachments=arquemCreateReportAttachments_(packet);
   const evidence=arquemValidarAnexosVozChat_(attachments);
-  // O PDF tem formato válido; legibilidade/layout exigem homologação visual separada.
+  // Guardar apenas amostras sintéticas para inspeção visual, nunca enviar e-mails.
+  const samples=attachments.map(blob=>{
+    const file=DriveApp.createFile(blob.copyBlob().setName('HOMOLOGACAO_ZENVIA_'+blob.getName()));
+    return {id:file.getId(),name:file.getName(),url:file.getUrl(),size:file.getSize(),mimeType:file.getMimeType()};
+  });
   props.setProperties({
+    ARQUEM_ZENVIA_VOICE_VISUAL_APPROVED:'false',
+    ARQUEM_ZENVIA_VOICE_PENDING_TEMPLATE_ID:templateId,
+    ARQUEM_ZENVIA_VOICE_PENDING_SAMPLE_IDS:samples.map(x=>x.id).join(','),
+    ARQUEM_ZENVIA_VOICE_PENDING_AT:new Date().toISOString()
+  },false);
+  return {ok:true,sent:false,ready:false,pendingVisualReview:true,validation:evidence,files:samples};
+}
+
+// Etapa manual separada: executar somente DEPOIS de inspecionar os dois
+// arquivos de homologação. Nenhuma mensagem é enviada nesta função.
+function arquemAprovarHomologacaoVozChatSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const templateId=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
+  if(!templateId || props.getProperty('ARQUEM_ZENVIA_VOICE_PENDING_TEMPLATE_ID')!==templateId)
+    throw new Error('Modelo diferente do que gerou os arquivos de homologação');
+  const ids=String(props.getProperty('ARQUEM_ZENVIA_VOICE_PENDING_SAMPLE_IDS')||'').split(',').filter(Boolean);
+  if(ids.length!==2)throw new Error('Amostras PDF e XLSX não foram geradas');
+  const files=ids.map(id=>DriveApp.getFileById(id));
+  if(!files.some(f=>f.getMimeType()==='application/pdf') ||
+     !files.some(f=>/\.xlsx$/i.test(f.getName())) ||
+     files.some(f=>f.isTrashed() || f.getSize()<100))
+    throw new Error('Amostras de homologação ausentes, vazias ou removidas');
+  const staged=Date.parse(props.getProperty('ARQUEM_ZENVIA_VOICE_PENDING_AT')||'');
+  if(!Number.isFinite(staged) || staged<DriveApp.getFileById(templateId).getLastUpdated().getTime())
+    throw new Error('Modelo editado após a geração: execute nova homologação');
+  props.setProperties({
+    ARQUEM_ZENVIA_VOICE_VISUAL_APPROVED:'true',
     ARQUEM_ZENVIA_VOICE_VALIDATED_VERSION:'arquem-voice-chat-v1',
     ARQUEM_ZENVIA_VOICE_VALIDATED_AT:new Date().toISOString(),
     ARQUEM_ZENVIA_VOICE_VALIDATED_TEMPLATE_ID:templateId
   },false);
-  return {ok:true,sent:false,validation:evidence,files:attachments.map(x=>({name:x.getName(),size:x.getBytes().length}))};
+  return {ok:true,sent:false,visualReviewApproved:true,files:files.map(f=>({name:f.getName(),url:f.getUrl()}))};
 }
-
 // Validação das exportações reais antes de confirmar Voz × Chat no gerador.
 function arquemValidarAnexosVozChat_(attachments) {
   if(!Array.isArray(attachments)||attachments.length!==2)
