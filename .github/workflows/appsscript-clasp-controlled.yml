@@ -7,6 +7,11 @@ on:
       - 'apps-script/ci-clasp-compare-reference.mjs'
       - 'apps-script/ci-clasp-reconcile-dry-run.mjs'
       - 'apps-script/ci-clasp-no-email-dryrun-guard.mjs'
+      - 'apps-script/ci-clasp-release-gap-audit.mjs'
+      - 'apps-script/ci-clasp-safe-overlays.mjs'
+      - 'apps-script/ci-clasp-dopost-contract.mjs'
+      - 'apps-script/ci-clasp-dopost-voice-guard-dryrun.mjs'
+      - 'apps-script/ci-clasp-voice-guard-order.mjs'
       - '.github/workflows/appsscript-clasp-controlled.yml'
   workflow_dispatch:
     inputs:
@@ -82,6 +87,41 @@ jobs:
           node apps-script/ci-clasp-no-email-dryrun-guard.mjs \
             "$RUNNER_TEMP/reconciled-test-only" "$GITHUB_STEP_SUMMARY" \
             "$RUNNER_TEMP/js-parser"
+      - name: Inventory release gaps against complete PR68 package (read-only)
+        run: |
+          set -euo pipefail
+          node apps-script/ci-clasp-release-gap-audit.mjs \
+            "$RUNNER_TEMP/remote-script" \
+            "$GITHUB_WORKSPACE/reference-pr68/apps-script/central-auditoria-emails-completo.gs" \
+            "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
+      - name: Simulate reviewed PDF and XLSX overlay preserving official doPost
+        run: |
+          set -euo pipefail
+          node apps-script/ci-clasp-safe-overlays.mjs \
+            "$RUNNER_TEMP/reconciled-test-only" \
+            "$GITHUB_WORKSPACE/reference-pr68/apps-script/central-auditoria-emails-completo.gs" \
+            "$RUNNER_TEMP/pdf-xlsx-overlay-test-only" \
+            "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
+      - name: Compare official doPost and PR68 contracts without executing code
+        run: |
+          set -euo pipefail
+          node apps-script/ci-clasp-dopost-contract.mjs \
+            "$RUNNER_TEMP/remote-script" \
+            "$GITHUB_WORKSPACE/reference-pr68/apps-script/central-auditoria-emails-completo.gs" \
+            "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
+      - name: Simulate protective Zenvia voice check inside official doPost (no publish)
+        run: |
+          set -euo pipefail
+          node apps-script/ci-clasp-dopost-voice-guard-dryrun.mjs \
+            "$RUNNER_TEMP/pdf-xlsx-overlay-test-only" \
+            "$RUNNER_TEMP/voice-safe-final-test-only" \
+            "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
+      - name: Ensure unapproved voice report cannot reach attachments before guard
+        run: |
+          set -euo pipefail
+          node apps-script/ci-clasp-voice-guard-order.mjs \
+            "$RUNNER_TEMP/voice-safe-final-test-only" \
+            "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
   zenvia-isolated-tests:
     if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
     runs-on: ubuntu-latest
