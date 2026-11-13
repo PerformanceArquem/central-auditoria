@@ -6007,11 +6007,15 @@ window.clientImpactInit=()=>{
    if(!response.ok||d.ok!==true)throw Error(d.error||'Falha ao consultar Zenvia');
    // Não renderizar resposta de período que foi alterado durante a requisição.
    if(start!==el('zvStart').value||end!==el('zvEnd').value)throw Error('Período alterado; consulte novamente');
-   const x=d.summary||{},rows=[
-    ['Recebidas',x.inbound],['Efetuadas',x.outbound],['Total de ligações',x.total],
+   const x=d.summary||{},support=d.support||{},supportK=support.metrics;
+   const rows=[
+    ['Recebidas · conta Zenvia',x.inbound],['Efetuadas · conta Zenvia',x.outbound],['Total de ligações · conta Zenvia',x.total],
     ['Atendidas',x.answered],['Não atendidas',x.unanswered],['Em andamento',x.inProgress],['Não classificadas',x.unclassified],
     ['TMA real',fmtSeconds(x.tmaSeconds)],['Tempo total atendido',fmtSeconds(x.durationSeconds)],
-    ['TME da fila',fmtSeconds(x.tmeSeconds)]
+    ['TME da fila',fmtSeconds(x.tmeSeconds)],
+    ['Suporte · ligações por ramais homologados',supportK?.total??'Não homologado'],
+    ['Suporte · atendidas',supportK?.answered??'Não homologado'],
+    ['Suporte · TMA',supportK?fmtSeconds(supportK.tmaSeconds):'Não homologado']
    ];
    for(const [label,value] of rows){const box=document.createElement('div');box.className='card';
     const text=document.createElement('div');text.className='subtle';text.textContent=label;
@@ -6020,7 +6024,7 @@ window.clientImpactInit=()=>{
    renderRows('zvDays',d.byDay||[],['date','total','answered','unanswered','inProgress','unclassified']);
    renderRows('zvExtensions',d.byExtension||[],['extension','total','answered','unanswered','inProgress','unclassified']);
    const queue=d.queue||{};
-   el('zvStatus').textContent='Fonte: API Zenvia Voice · '+start+' a '+end+' · '+(x.total||0)+' chamadas. '+(queue.configured?'Fila configurada: '+(queue.calls??0)+' chamadas; '+(queue.waitSampleCount??0)+' amostras válidas de espera.':'TME pendente: configure o ID da fila de Suporte no servidor.');
+   el('zvStatus').textContent='Fonte: API Zenvia Voice · '+start+' a '+end+' · '+(x.total||0)+' chamadas na conta. '+(support.configured?'Recorte do Suporte: ramais homologados.':'Recorte do Suporte pendente: configurar ramais homologados no servidor. ')+(queue.configured?'Fila configurada: '+(queue.calls??0)+' chamadas; '+(queue.waitSampleCount??0)+' amostras válidas de espera.':'TME pendente: configure o ID da fila de Suporte no servidor.');
   }catch(e){reset();el('zvStatus').textContent='Métricas indisponíveis: '+e.message;}
   finally{loading=false;button.disabled=false;}
  }
