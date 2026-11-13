@@ -68,6 +68,9 @@ Deno.serve(async req=>{
   if(body.action==='scheduled'){
    const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:config.timezone,weekday:'short',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date()).map(x=>[x.type,x.value]));
    if(['Sat','Sun'].includes(parts.weekday)||parts.hour!=='09')return json({ok:true,skipped:'Fora do horário aprovado'});
+   const today=new Intl.DateTimeFormat('en-CA',{timeZone:config.timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+   const holidays=await db('audit_email_holidays?holiday_date=eq.'+today+'&affects_delivery=eq.true&select=holiday_date');
+   if(holidays.length)return json({ok:true,skipped:'Feriado cadastrado no calendário corporativo'});
   }
   let report,prepared;
   if(body.action==='send'&&body.snapshotId){
