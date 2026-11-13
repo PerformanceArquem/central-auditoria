@@ -10,6 +10,7 @@ on:
       - 'apps-script/ci-clasp-release-gap-audit.mjs'
       - 'apps-script/ci-clasp-safe-overlays.mjs'
       - 'apps-script/ci-clasp-dopost-contract.mjs'
+      - 'apps-script/ci-clasp-dopost-voice-guard-dryrun.mjs'
       - '.github/workflows/appsscript-clasp-controlled.yml'
   workflow_dispatch:
     inputs:
@@ -106,6 +107,13 @@ jobs:
           node apps-script/ci-clasp-dopost-contract.mjs \
             "$RUNNER_TEMP/remote-script" \
             "$GITHUB_WORKSPACE/reference-pr68/apps-script/central-auditoria-emails-completo.gs" \
+            "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
+      - name: Simulate protective Zenvia voice check inside official doPost (no publish)
+        run: |
+          set -euo pipefail
+          node apps-script/ci-clasp-dopost-voice-guard-dryrun.mjs \
+            "$RUNNER_TEMP/pdf-xlsx-overlay-test-only" \
+            "$RUNNER_TEMP/voice-safe-final-test-only" \
             "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
   zenvia-isolated-tests:
     if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
