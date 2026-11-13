@@ -1,5 +1,13 @@
 name: Apps Script - audit and manual approved publish
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps-script/ci-clasp-guard.mjs'
+      - 'apps-script/ci-clasp-compare-reference.mjs'
+      - 'apps-script/ci-clasp-reconcile-dry-run.mjs'
+      - 'apps-script/ci-clasp-no-email-dryrun-guard.mjs'
+      - '.github/workflows/appsscript-clasp-controlled.yml'
   workflow_dispatch:
     inputs:
       operation:
@@ -22,7 +30,7 @@ env:
   SCRIPT_ID: 1WUhIenOGO-B_jAkYgECmpBq-jMeeFrTghwElVyBdKLTTICWnFzgkWmm8
 jobs:
   audit:
-    if: ${{ inputs.operation == 'audit' }}
+    if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,6 +56,58 @@ jobs:
           printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
           clasp pull
           node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" audit "$PWD" "$GITHUB_STEP_SUMMARY"
+      - name: Checkout PR68 as data only (never execute its code)
+        uses: actions/checkout@v4
+        with:
+          ref: integration/zenvia-voice-chat-reports-20261112
+          path: reference-pr68
+          persist-credentials: false
+      - name: Compare remote declarations against reviewed references
+        run: |
+          set -euo pipefail
+          node apps-script/ci-clasp-compare-reference.mjs \
+            "$RUNNER_TEMP/remote-script" "$GITHUB_WORKSPACE" \
+            "$GITHUB_WORKSPACE/reference-pr68" "$GITHUB_STEP_SUMMARY"
+      - name: Simulate consolidation without publishing or exporting source
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/js-parser"
+          npm install --prefix "$RUNNER_TEMP/js-parser" --no-save --silent acorn@8.15.0
+          node apps-script/ci-clasp-reconcile-dry-run.mjs \
+            "$RUNNER_TEMP/remote-script" "$RUNNER_TEMP/reconciled-test-only" \
+            "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
+      - name: Check no-email validation call graph without executing scripts
+        run: |
+          set -euo pipefail
+          node apps-script/ci-clasp-no-email-dryrun-guard.mjs \
+            "$RUNNER_TEMP/reconciled-test-only" "$GITHUB_STEP_SUMMARY" \
+            "$RUNNER_TEMP/js-parser"
+  zenvia-isolated-tests:
+    if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Zenvia PR68 without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          ref: integration/zenvia-voice-chat-reports-20261112
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Zenvia attachment and Keila tests with simulated services
+        run: |
+          set -euo pipefail
+          node --test \
+            tests/appsscript-zenvia-export-validation.test.mjs \
+            tests/appsscript-zenvia-package-parity.test.mjs \
+            tests/appsscript-complete-integration.test.mjs \
+            tests/appsscript-keila-dry-run.test.mjs \
+            tests/zenvia-voice-metrics.test.mjs \
+            tests/zenvia-email-attachments.test.mjs \
+            tests/zenvia-keila-preservation.test.mjs \
+            tests/appsscript-zenvia-sample-label-dates.test.mjs
   publish:
     if: ${{ inputs.operation == 'publish' && github.ref_name == 'main' }}
     runs-on: ubuntu-latest

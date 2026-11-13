@@ -36,19 +36,23 @@ async function snapshot(){
 }
 const esc=(x:unknown)=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 async function send(report:any,prepared?:any){
+ const prior=await db('audit_triage_dispatches?reference_date=eq.'+report.date+'&select=email,status,gmail_id');
+ if(config.recipients.every(rec=>prior.some(row=>row.email===rec.email&&row.status==='sent')))
+  return config.recipients.map(rec=>({email:rec.email,status:'already_sent',gmailId:prior.find(row=>row.email===rec.email).gmail_id}));
  const validation=prepared||await provider('triage_validate',{report});
- if(validation.rows!==report.items.length||!validation.pdfBytes||!validation.xlsxBytes||validation.sent!==false)throw Error('Validação dos anexos não confirmada');
+ if(validation.rows!==report.items.length||!validation.pdfBytes||!validation.xlsxBytes||validation.sent!==false||validation.mailReady!==true)throw Error('Validação dos anexos/envio corporativo não confirmada');
+ const {files:validatedFiles,...validationMetadata}=validation;
  const results=[];
  for(const recipient of config.recipients){
   const key='intelligence-triage:'+report.date+':'+recipient.email;
-  const claimed=await db('audit_triage_dispatches?on_conflict=dispatch_key','POST',{dispatch_key:key,reference_date:report.date,email:recipient.email,snapshot_id:report.snapshotId,status:'processing',attachment_validation:validation},'resolution=ignore-duplicates,return=representation');
+  const claimed=await db('audit_triage_dispatches?on_conflict=dispatch_key','POST',{dispatch_key:key,reference_date:report.date,email:recipient.email,snapshot_id:report.snapshotId,status:'processing',attachment_validation:validationMetadata},'resolution=ignore-duplicates,return=representation');
   if(!claimed.length){const [prior]=await db('audit_triage_dispatches?dispatch_key=eq.'+encodeURIComponent(key));results.push({email:recipient.email,status:prior?.status==='sent'?'already_sent':prior?.status||'unconfirmed'});continue;}
   try{
    const text=`${config.report}\nReferência: ${report.reference}\nSincronização: ${report.syncedAt}\nCritério: ${report.criteria}\nTotal: ${report.metrics.total}; sem previsão: ${report.metrics.withoutForecast}; maior espera: ${report.metrics.maxQueueDays} dias; média: ${report.metrics.averageQueueDays} dias.\n`+report.items.map((x:any)=>`#${x.id} | ${x.type} | ${x.client} | ${x.queueDays} dias | ${x.status} | ${x.url}`).join('\n');
    const html='<h2>'+esc(config.report)+'</h2><p>Referência: '+esc(report.reference)+'<br>Sincronização: '+esc(report.syncedAt)+'</p><p>'+esc(report.criteria)+'</p><p>Total: '+report.metrics.total+' · Sem previsão: '+report.metrics.withoutForecast+' · Maior espera: '+report.metrics.maxQueueDays+' dias · Média: '+report.metrics.averageQueueDays+' dias</p><table><tr><th>Chamado</th><th>Tipo</th><th>Cliente</th><th>Assunto</th><th>Dias</th><th>Responsável</th><th>Status</th></tr>'+report.items.map((x:any)=>'<tr><td><a href="'+x.url+'">#'+x.id+'</a></td>'+[x.type,x.client,x.subject,x.queueDays,x.owner,x.status].map(v=>'<td>'+esc(v)+'</td>').join('')+'</tr>').join('')+'</table>';
-   const result=await provider('triage_send',{email:recipient.email,assunto:config.report+' | '+report.date,texto:text,html,dispatchKey:key,report,files:validation.files});
-   if(result.anexos!==2||!result.gmailId)throw Error('Confirmação Gmail/anexos incompleta');
-   await db('audit_triage_dispatches?dispatch_key=eq.'+encodeURIComponent(key),'PATCH',{status:'sent',sent_at:new Date().toISOString(),gmail_id:result.gmailId,provider_result:result});results.push({email:recipient.email,status:'sent',gmailId:result.gmailId});
+   const result=await provider('triage_send',{email:recipient.email,assunto:config.report+' | '+report.date,texto:text,html,dispatchKey:key,report,files:validatedFiles});
+   if(result.anexos!==2||!result.providerId||result.accepted!==true)throw Error('Aceite corporativo/anexos incompleto');
+   await db('audit_triage_dispatches?dispatch_key=eq.'+encodeURIComponent(key),'PATCH',{status:'sent',sent_at:new Date().toISOString(),provider_id:result.providerId,provider_result:result});results.push({email:recipient.email,status:'sent',providerId:result.providerId});
   }catch(e){await db('audit_triage_dispatches?dispatch_key=eq.'+encodeURIComponent(key),'PATCH',{status:'uncertain',error:String(e)});results.push({email:recipient.email,status:'uncertain'});}
  }return results;
 }

@@ -1,39 +1,38 @@
 /* Extensão isolada. Chamado somente após autenticação pelo doPost existente. */
 function arquemTriageAction_(d) {
+  try{return arquemTriageActionInner_(d);}catch(e){
+    console.error('Triagem: '+String(e.message));
+    return {sucesso:false,erro:'Triagem: '+String(e.message).slice(0,240)};
+  }
+}
+function arquemTriageActionInner_(d) {
   if(!d.report||d.report.schema!=='arquem-triage-v1'||!Array.isArray(d.report.items))throw Error('Relatório de triagem inválido');
   const p=d.report;
   if(p.items.length>500||p.metrics.total!==p.items.length)throw Error('Lista integral inconsistente');
   const expected=['zanona@arquem.com.br','inteligencia.gerencia@arquem.com.br','canestraro@arquem.com.br'];
   if(d.action==='triage_validate') {
+    if(MailApp.getRemainingDailyQuota()<3)throw Error('Cota corporativa insuficiente para os três destinatários');
     const files=arquemTriageAttachments_(p);
-    return {sucesso:true,sent:false,rows:p.items.length,pdfBytes:files[0].getBytes().length,xlsxBytes:files[1].getBytes().length,
+    return {sucesso:true,sent:false,mailReady:true,rows:p.items.length,pdfBytes:files[0].getBytes().length,xlsxBytes:files[1].getBytes().length,
       files:files.map(x=>({name:x.getName(),mime:x.getContentType(),base64:Utilities.base64Encode(x.getBytes())}))};
   }
   if(d.action!=='triage_send'||expected.indexOf(d.email)<0||d.dispatchKey!=='intelligence-triage:'+p.date+':'+d.email)throw Error('Destinatário/chave inválido');
-  const sender=Session.getEffectiveUser().getEmail();
-  if(sender!=='performance@arquem.com.br')throw Error('Conta corporativa remetente divergente');
   const lock=LockService.getScriptLock();lock.waitLock(30000);
   try {
     const digest=Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,d.dispatchKey)).replace(/=/g,'').slice(0,20);
     const marker='ARQTRIAGE'+digest,prop='TRIAGE_'+digest;
     const props=PropertiesService.getScriptProperties();
-    function confirmed(){
-      const threads=GmailApp.search('in:sent "'+marker+'" to:'+d.email,0,10);
-      for(const thread of threads)for(const m of thread.getMessages())if(m.getBody().indexOf(marker)>=0&&m.getTo().indexOf(d.email)>=0){
-        const a=m.getAttachments({includeInlineImages:false});
-        if(a.length!==2)throw Error('Mensagem existente sem dois anexos');
-        return m.getId();
-      }return null;
-    }
-    const old=confirmed();if(old)return {sucesso:true,anexos:2,gmailId:old,deduplicated:true};
+    const previous=props.getProperty(prop);
+    if(previous&&previous.indexOf('sent:')===0)return {sucesso:true,anexos:2,providerId:previous.slice(5),accepted:true,deduplicated:true};
     if(props.getProperty(prop))throw Error('Disparo já iniciado: conferir Gmail antes de repetir');
     if(!Array.isArray(d.files)||d.files.length!==2)throw Error('Anexos previamente validados ausentes');
     const attachments=d.files.map(x=>Utilities.newBlob(Utilities.base64Decode(x.base64),x.mime,x.name));
     arquemTriageCheckBlobs_(attachments);
     props.setProperty(prop,new Date().toISOString());
-    GmailApp.sendEmail(d.email,d.assunto,d.texto+'\n\nRegistro: '+marker,{name:'Central de Auditoria',htmlBody:d.html+'<p style="color:#777;font-size:10px">Registro: '+marker+'</p>',attachments:attachments});
-    for(let i=0;i<4;i++){Utilities.sleep(1500);const id=confirmed();if(id){props.setProperty(prop,'sent:'+id);return {sucesso:true,anexos:2,gmailId:id};}}
-    throw Error('Envio iniciado; confirmação Gmail pendente. Não reenviar automaticamente.');
+    MailApp.sendEmail({to:d.email,subject:d.assunto,body:d.texto+'\n\nRegistro: '+marker,name:'Central de Auditoria',htmlBody:d.html+'<p style="color:#777;font-size:10px">Registro: '+marker+'</p>',attachments:attachments});
+    const providerId='mailapp:'+digest;
+    props.setProperty(prop,'sent:'+providerId);
+    return {sucesso:true,anexos:2,providerId:providerId,accepted:true};
   }finally{lock.releaseLock();}
 }
 function arquemTriageCheckBlobs_(files){
@@ -55,7 +54,7 @@ function arquemTriageAttachments_(p){
   body.appendParagraph('Tipos: '+Object.keys(p.metrics.types).map(k=>k+': '+p.metrics.types[k]).join(' | '));
   p.items.forEach((x,i)=>{
     if(i>0)body.appendHorizontalRule();
-    const title=body.appendParagraph('#'+x.id+' · '+x.type+' · '+x.queueDays+' dias na fila');title.setBold(true);title.editAsText().setLinkUrl(0,String(x.id).length,x.url);
+    const title=body.appendParagraph('#'+x.id+' · '+x.type+' · '+x.queueDays+' dias na fila');title.editAsText().setBold(true);title.editAsText().setLinkUrl(0,String(x.id).length,x.url);
     body.appendParagraph(x.subject);
     body.appendParagraph('Cliente: '+x.client+'\nResponsável: '+x.owner+' | Status: '+x.status+'\nEntrada na equipe: '+x.queueSince+'\nAbertura: '+x.opened+' | Previsão: '+(x.forecast||'Sem previsão')+'\nÚltima atualização: '+x.lastUpdate);
     body.appendParagraph(x.url).editAsText().setLinkUrl(x.url);
