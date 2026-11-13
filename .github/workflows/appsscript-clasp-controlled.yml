@@ -6,6 +6,7 @@ on:
       - 'apps-script/ci-clasp-guard.mjs'
       - 'apps-script/ci-clasp-compare-reference.mjs'
       - 'apps-script/ci-clasp-reconcile-dry-run.mjs'
+      - 'apps-script/ci-clasp-no-email-dryrun-guard.mjs'
       - '.github/workflows/appsscript-clasp-controlled.yml'
   workflow_dispatch:
     inputs:
@@ -75,6 +76,12 @@ jobs:
           node apps-script/ci-clasp-reconcile-dry-run.mjs \
             "$RUNNER_TEMP/remote-script" "$RUNNER_TEMP/reconciled-test-only" \
             "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
+      - name: Check no-email validation call graph without executing scripts
+        run: |
+          set -euo pipefail
+          node apps-script/ci-clasp-no-email-dryrun-guard.mjs \
+            "$RUNNER_TEMP/reconciled-test-only" "$GITHUB_STEP_SUMMARY" \
+            "$RUNNER_TEMP/js-parser"
   publish:
     if: ${{ inputs.operation == 'publish' && github.ref_name == 'main' }}
     runs-on: ubuntu-latest
