@@ -6078,7 +6078,7 @@ window.clientImpactInit=()=>{
    const report=['Zenvia Voice — Filas candidatas (confirmação obrigatória)',
     ...data.queues.map(item=>'Fila '+String(item.id)+' | Nome: '+
       (item.verified?(item.name||'Não informado'):'Não confirmado')+
-      ' | URAs: '+(item.uras||[]).join(', '))].join('\\n');
+      ' | URAs: '+(item.uras||[]).join(', '))].join('\n');
    el('zvCopyQueues').disabled=!data.queues.length;
    el('zvCopyQueues').dataset.report=report;
   }catch(error){
