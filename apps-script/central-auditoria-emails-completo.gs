@@ -570,6 +570,11 @@ function arquemPdf_(p, keep) {
     body.appendHorizontalRule();
   }
   arquemAddHeading_(body,p.title,DocumentApp.ParagraphHeading.HEADING1);
+  const syntheticSample=/homologa|dados fict[ií]cios/i.test(String(p.title||''));
+  if(syntheticSample){
+    const label=body.appendParagraph('AMOSTRA DE HOMOLOGAÇÃO — DADOS FICTÍCIOS — SEM ENVIO DE E-MAIL');
+    label.editAsText().setForegroundColor('#a36618').setBold(true);
+  }
   body.appendParagraph('Referência: '+p.from+' a '+p.to+
     (p.partial?'  |  DADOS PARCIAIS — sincronização em andamento':''));
   const m=p.metrics||{};
@@ -664,7 +669,7 @@ function arquemPdf_(p, keep) {
   arquemAddHeading_(body,'Observações metodológicas');
   body.appendParagraph(p.productionFlow?
     'Contagens de chamados distintos por direção; um chamado pode entrar e sair no mesmo período. Finalizações não são transferências. Verifique a cobertura da sincronização.':
-    'Dados da Central de Auditoria/Movidesk sincronizados. Horas apontadas não são controle de ponto. A ausência de registros não comprova ausência de trabalho. Categorias de risco podem se sobrepor.');
+    (syntheticSample?'Amostra de homologação com dados fictícios. Os números deste PDF NÃO representam registros reais sincronizados do Movidesk ou da Zenvia. Nenhum e-mail foi enviado.':'Dados da Central de Auditoria/Movidesk sincronizados. Horas apontadas não são controle de ponto. A ausência de registros não comprova ausência de trabalho. Categorias de risco podem se sobrepor.'));
   doc.saveAndClose();
   return DriveApp.getFileById(file.getId()).getAs(MimeType.PDF);
 }
@@ -672,6 +677,8 @@ function arquemXlsx_(p, keep) {
   const ss=SpreadsheetApp.create('ARQUEM_planilha_temporaria_'+Date.now());
   keep.push(ss.getId());
   const first=ss.getSheets()[0]; first.setName('Resumo');
+  // Data inicial/final como texto; nao converter data em duracao de horas.
+  first.getRange('B3:B4').setNumberFormat('@');
   arquemSheet_(first,
     ['Indicador','Resultado'],
     (p.productionFlow?[
@@ -687,7 +694,7 @@ function arquemXlsx_(p, keep) {
      ['Chamados trabalhados',Number(p.metrics&&p.metrics.tickets)||0],
      ['Conciliação',p.partial?'Dados parciais':'Dados disponíveis'],
      ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]));
-  if(!p.productionFlow)first.getRange('B4').setNumberFormat('[h]:mm:ss');
+  if(!p.productionFlow)first.getRange('B5').setNumberFormat('[h]:mm:ss');
   if(p.productionQuality){
     const qs=p.productionQuality;
     const quality=arquemCreateSheet_(ss,'Qualidade',
