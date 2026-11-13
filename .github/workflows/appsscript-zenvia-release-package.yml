@@ -1,5 +1,12 @@
 name: Preparar pacote Apps Script Zenvia - sem publicar
 on:
+  push:
+    branches:
+      - integration/zenvia-voice-chat-reports-20261112
+    paths:
+      - apps-script/**
+      - tests/appsscript-*.test.mjs
+      - .github/workflows/appsscript-zenvia-release-package.yml
   workflow_dispatch:
 
 permissions:
