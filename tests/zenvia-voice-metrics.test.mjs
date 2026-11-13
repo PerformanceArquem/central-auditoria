@@ -217,3 +217,28 @@ test('connection test UI requires login and only presents endpoint statuses',()=
  assert.ok(html.includes("el('zvCheck').addEventListener('click',diagnose)"));
  assert.ok(html.includes("new URLSearchParams({mode:'zenvia',check:'1',start,end})"));
 });
+
+test('missing talk duration must never be reported as 0s TMA',async()=>{
+ const saved=outbound[0].destino.duracao_falada_segundos;
+ delete outbound[0].destino.duracao_falada_segundos;
+ try{
+  const r=await invoke();
+  assert.equal(r.code,200);
+  assert.equal(r.body.summary.answered,2);
+  assert.equal(r.body.summary.tmaSeconds,null);
+  assert.equal(r.body.summary.talkSeconds,null);
+  assert.equal(r.body.summary.tmaMissingSamples,1);
+  assert.equal(r.body.summary.tmaSamples,1);
+ }finally{outbound[0].destino.duracao_falada_segundos=saved;}
+});
+test('real zero-duration answered call remains a valid measured sample',async()=>{
+ const saved=outbound[0].destino.duracao_falada_segundos;
+ outbound[0].destino.duracao_falada_segundos=0;
+ try{
+  const r=await invoke();
+  assert.equal(r.code,200);
+  assert.equal(r.body.summary.tmaSeconds,28);
+  assert.equal(r.body.summary.tmaMissingSamples,0);
+  assert.equal(r.body.summary.tmaSamples,2);
+ }finally{outbound[0].destino.duracao_falada_segundos=saved;}
+});
