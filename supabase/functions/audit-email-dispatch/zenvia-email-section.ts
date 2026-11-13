@@ -45,13 +45,14 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
  const hours=(input.byHour||[]).map(x=>({hour:String(x.hour||''),count:Number(x.count||0)})).sort((a,b)=>b.count-a.count);
  const extensions=(input.byExtension||[]).map(x=>({extension:String(x.extension||''),total:Number(x.total||0),
   answered:Number(x.answered||0),talkSeconds:safeNum(x.talkSeconds)})).filter(x=>/^\d{1,12}$/.test(x.extension));
- const kpis={from:input.from,to:input.to,provider:'Zenvia Voice',total:m.total,inbound:m.inbound,outbound:m.outbound,
+ const kpis={from:input.from,to:input.to,provider:'Zenvia Voice',voiceScope:'Conta Zenvia (todas as chamadas)',chatScope:'Suporte (base Movidesk)',total:m.total,inbound:m.inbound,outbound:m.outbound,
   answered:m.answered,unanswered:m.unanswered,inProgress:m.inProgress,unclassified:m.unclassified,
   talkSeconds:safeNum(m.talkSeconds),tmaSeconds:safeNum(m.tmaSeconds),tmeSeconds:safeNum(m.tmeSeconds),
   queueCalls:m.queueCalls??null,quality,chatMetrics:input.chatMetrics||null,byDay:days,byHour:hours,byExtension:extensions.slice(0,30)};
  const csat=(q:R)=>q.total?q.csatPercent+'% ('+q.positive+'/'+q.total+' notas de 8 a 10)':'Sem avaliações no período';
- const text='\n\nVOZ × CHAT · Indicadores reais do Suporte\n'+
+ const text='\n\nVOZ ZENVIA (CONTA) × CHAT (SUPORTE) · Escopos distintos\n'+
   'Período: '+input.from+' a '+input.to+'\n'+
+  'Atenção: chamadas de voz representam a conta inteira da Zenvia, não apenas o Suporte. TME da fila é específico quando configurado.\n'+
   'Voz recebidas: '+m.inbound+'; efetuadas: '+m.outbound+'; atendidas: '+m.answered+
   '; não atendidas: '+m.unanswered+'; em andamento: '+m.inProgress+'; sem classificação: '+m.unclassified+'\n'+
   'Tempo falado: '+time(m.talkSeconds)+'; TMA: '+time(m.tmaSeconds)+'; TME de fila: '+time(m.tmeSeconds)+'\n'+
@@ -62,8 +63,8 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
   'Fontes: ligações Zenvia; notas Movidesk e avaliações manuais com deduplicação por ticket e canal.';
  const cells=(values:unknown[])=>'<tr>'+values.map(x=>'<td style="border-bottom:1px solid #e2e8f0;padding:8px 10px">'+esc(x)+'</td>').join('')+'</tr>';
  const html='<section style="border-top:3px solid #2457d6;padding:18px 0;margin-top:24px;font-family:Arial,sans-serif;color:#17345d">'+
-  '<h2 style="font-size:18px;margin:0">Voz × Chat · Qualidade do Suporte</h2>'+
-  '<p style="font-size:12px;color:#64748b">Ligações: Zenvia · Avaliações: Movidesk e manuais</p>'+
+  '<h2 style="font-size:18px;margin:0">Voz Zenvia (conta) × Chat (Suporte)</h2>'+
+  '<p style="font-size:12px;color:#64748b">Voz = conta Zenvia (todos os setores); Chat = Suporte. TME da fila é específico quando configurado. Avaliações: Movidesk e manuais</p>'+
   '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr><th>Indicador</th><th>Voz</th><th>Chat</th></tr></thead><tbody>'+
   cells(['Quantidade',m.total,input.chatMetrics?.tickets??'Indisponível'])+
   cells(['Atendidas',m.answered,'—'])+cells(['Não atendidas',m.unanswered,'—'])+
