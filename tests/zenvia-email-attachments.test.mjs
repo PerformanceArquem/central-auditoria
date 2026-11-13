@@ -89,7 +89,7 @@ test('invalid counts, grades, ramal ID or durations fail before exporting files'
   {...packet,byDay:[{date:'2026-11-10',total:1,answered:2}]}
  ]) assert.throws(()=>scope.helper(changed));
 });
-test('Zenvia reporting remains disabled by default and eligible only for three recipients',()=>{
+test('Zenvia reporting remains disabled by default and restricted to authorized corporate identities',()=>{
  const dispatch=readFileSync('supabase/functions/audit-email-dispatch/index.ts','utf8');
  assert.ok(dispatch.includes("E('ZENVIA_VOICE_REPORTS_ENABLED')==='true'"));
  assert.ok(dispatch.includes("E('ZENVIA_VOICE_ATTACHMENTS_READY')!=='true'"));
@@ -108,4 +108,26 @@ test('PDF and Excel explicitly disclose different voice/account and chat/support
  assert.ok(emailSource.includes("voiceScope:'Conta Zenvia (todas as chamadas)'"));
  assert.ok(emailSource.includes("chatScope:'Suporte (base Movidesk)'"));
  assert.ok(emailSource.includes('Escopos distintos'));
+});
+
+
+test('voice metrics are restricted to exactly four approved corporate recipient records, never Keila',()=>{
+ const dispatch=readFileSync('supabase/functions/audit-email-dispatch/index.ts','utf8');
+ const begin=dispatch.indexOf('const allowVoiceEmails=new Map<string,string>([');
+ const end=dispatch.indexOf(']);',begin);
+ assert.ok(begin>=0&&end>begin,'Recipient allowlist not found');
+ const entries=[...dispatch.slice(begin,end).matchAll(/\['([0-9a-f-]{36})','([^']+)'\]/g)]
+   .map(match=>[match[1],match[2]]).sort((a,b)=>a[0].localeCompare(b[0]));
+ const expected=[
+  ['a4748115-e1d6-42dc-a8d1-706b8129219f','suportegestao@arquem.com.br'],
+  ['40752b0b-c2a4-4031-9496-733b6f846d76','financeiro@arquem.com.br'],
+  ['1b8168c6-bec0-4f6d-a3f9-feaec63ed147','canestraro@arquem.com.br'],
+  ['8f44d5bc-0cd8-45da-97b2-c2407663083a','canestraro@arquem.com.br']
+ ].sort((a,b)=>a[0].localeCompare(b[0]));
+ assert.deepEqual(entries,expected);
+ assert.ok(!dispatch.slice(begin,end).includes('a5329710-dd63-4bfd-bbd3-dc23e0efc8f0'));
+ assert.match(dispatch,/allowVoiceEmails\.get\(String\(reportData\.recipientId\)\)===String\(email\)\.trim\(\)\.toLowerCase\(\)/);
+ assert.match(dispatch,/if\(eligible&&reportData&&E\('ZENVIA_VOICE_REPORTS_ENABLED'\)==='true'\)/);
+ assert.match(dispatch,/if\(E\('ZENVIA_VOICE_ATTACHMENTS_READY'\)!=='true' \|\| E\('REPORT_ATTACHMENTS_ENABLED'\)!=='true'\)/);
+ assert.match(dispatch,/capabilities\.zenviaVoiceReady!==true \|\| capabilities\.zenviaVoiceVersion!=='arquem-voice-chat-v1'/);
 });
