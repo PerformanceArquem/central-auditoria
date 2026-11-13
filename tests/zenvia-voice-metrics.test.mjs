@@ -32,6 +32,10 @@ const fetch=async(input,opts={})=>{
  if(url.hostname==='voice-api.zenvia.com'){
   assert.equal(opts.method,'GET');
   assert.equal(opts.headers['Access-Token'],'fixture-token');
+  if(url.pathname==='/ura/relatorio')return json({sucesso:true,dados:{relatorio:[
+   {id:12,nome:'Atendimento Suporte',dados:[{acao:'fila',acao_dados:{fila_id:'430'}},{acao:'tts',acao_dados:{mensagem:'privado'}}]},
+   {id:13,nome:'Atendimento Comercial',dados:[{acao:'fila',acao_dados:{fila_id:'431'}},{acao:'fila',acao_dados:{fila_id:'../../bad'}}]}
+  ]}});
   if(broken)return json({message:'rejected'},502);
   assert.equal(url.searchParams.get('data_inicio'),'2026-11-10');
   assert.equal(url.searchParams.get('data_fim'),'2026-11-11');
@@ -256,4 +260,36 @@ test('queue readiness is separate from voice channel connection readiness',async
   assert.equal(response.body.checks.length,3);
   assert.equal(response.body.summary,undefined);
  }finally{delete scope.process.env.ZENVIA_VOICE_QUEUE_ID;}
+});
+
+test('queue discovery uses read-only URA reports without sensitive data or auto-configuration',async()=>{
+ const r=await invoke({start:'2026-11-10',end:'2026-11-11',check:'queues'});
+ assert.equal(r.code,200);
+ assert.equal(r.body.discovery,true);
+ assert.equal(r.body.requiresConfirmation,true);
+ assert.deepEqual(JSON.parse(JSON.stringify(r.body.queues)),[
+  {id:'430',uras:['Atendimento Suporte']},
+  {id:'431',uras:['Atendimento Comercial']}
+ ]);
+ assert.equal(r.body.queueConfigured,undefined);
+ assert.equal(r.body.summary,undefined);
+ const source=JSON.stringify(r.body);
+ assert.equal(source.includes('privado'),false);
+ assert.equal(source.includes('fixture-token'),false);
+ assert.equal(calls.filter(x=>x.url.hostname==='voice-api.zenvia.com').length,1);
+ assert.equal(calls.some(x=>x.url.pathname==='/ura/relatorio'),true);
+});
+test('queue discovery requires admin and does not access Zenvia for unauthorized users',async()=>{
+ allowed=false;
+ try{
+  const r=await invoke({start:'2026-11-10',end:'2026-11-11',check:'queues'});
+  assert.equal(r.code,403);
+  assert.equal(calls.some(x=>x.url.hostname==='voice-api.zenvia.com'),false);
+ }finally{allowed=true;}
+});
+test('admin UI only displays candidate queue IDs and URA labels as text',()=>{
+ const html=readFileSync('index.html','utf8');
+ assert.ok(html.includes('id="zvFindQueues"'));
+ assert.ok(html.includes("new URLSearchParams({mode:'zenvia',check:'queues'"));
+ assert.ok(html.includes("li.textContent='Fila '"));
 });
