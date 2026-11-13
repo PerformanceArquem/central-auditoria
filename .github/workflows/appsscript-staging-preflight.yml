@@ -1,0 +1,58 @@
+name: Apps Script - isolated staging preflight (no publish)
+on:
+  workflow_dispatch:
+    inputs:
+      staging_script_id:
+        description: "Existing separate STAGING Apps Script project ID"
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  staging-preflight:
+    runs-on: ubuntu-latest
+    environment: apps-script-staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Reject production ID and missing staging authorization
+        env:
+          STAGING_ID: ${{ inputs.staging_script_id }}
+          STAGING_ENABLED: ${{ vars.APPS_SCRIPT_STAGING_ENABLED }}
+          STAGING_AUTH: ${{ secrets.CLASPRC_STAGING_JSON }}
+        run: |
+          set -euo pipefail
+          PROD_ID='1WUhIenOGO-B_jAkYgECmpBq-jMeeFrTghwElVyBdKLTTICWnFzgkWmm8'
+          test -n "$STAGING_ID" || exit 1
+          test "$STAGING_ID" != "$PROD_ID" || { echo "::error::Production Apps Script ID is forbidden"; exit 1; }
+          [[ "$STAGING_ID" =~ ^[a-zA-Z0-9_-]{20,}$ ]] || { echo "::error::Invalid staging script ID"; exit 1; }
+          test "$STAGING_ENABLED" = true || { echo "::error::Staging has not been enabled"; exit 1; }
+          test -n "${STAGING_AUTH:-}" || { echo "::error::Missing dedicated staging credentials"; exit 1; }
+          echo "Staging ID distinct from production; dedicated credentials configured." >> "$GITHUB_STEP_SUMMARY"
+      - run: npm install --global @google/clasp@3.4.1
+      - name: Authenticate dedicated staging account
+        env:
+          STAGING_AUTH: ${{ secrets.CLASPRC_STAGING_JSON }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$STAGING_AUTH" > "$HOME/.clasprc.json"
+      - name: Inspect staging project only (read-only)
+        env:
+          STAGING_ID: ${{ inputs.staging_script_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/apps-script-staging-audit"
+          cd "$RUNNER_TEMP/apps-script-staging-audit"
+          printf '{"scriptId":"%s"}\n' "$STAGING_ID" > .clasp.json
+          clasp pull
+          test -f appsscript.json || { echo "::error::Staging manifest absent"; exit 1; }
+          echo "Staging project read successfully. No source pushed or deployment updated." >> "$GITHUB_STEP_SUMMARY"
+      - name: Explicitly state the safety limit
+        run: |
+          echo "PREFLIGHT_ONLY=true; NO_CLASP_PUSH=true; NO_EMAILS=true"
