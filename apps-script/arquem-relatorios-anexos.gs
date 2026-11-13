@@ -299,7 +299,7 @@ function arquemVozChatDados_(raw) {
     ['CSAT',scores.voz.csat,scores.chat.csat]
   ];
   return {overview,days,ramais,
-    note:'CSAT: notas 8–10 / notas válidas (1–10); sem avaliações não equivale a zero. Tempos: Zenvia (voz) e base medida do chat. TME de voz só com fila validada.'};
+    note:'Escopos distintos: voz representa toda a conta Zenvia (todos os setores); chat representa o Suporte. TME de voz é específico da fila apenas quando validada. CSAT: notas 8–10 / notas válidas (1–10); sem avaliações não equivale a zero.'};
 }
 
 // Homologação real de PDF e XLSX, com dados artificiais e sem disparo.
@@ -506,9 +506,9 @@ function arquemPdf_(p, keep) {
   }
   if(p.zenviaVoice){
     const v=arquemVozChatDados_(p.zenviaVoice);
-    arquemAddHeading_(body,'Voz × Chat · Indicadores de atendimento');
+    arquemAddHeading_(body,'Voz (conta Zenvia) × Chat (Suporte)');
     arquemEstilizarTabelaPdf_(body.appendTable(
-      [['Indicador','Voz','Chat']].concat(v.overview.map(x=>x.map(String)))));
+      [['Indicador','Voz · conta Zenvia','Chat · Suporte']].concat(v.overview.map(x=>x.map(String)))));
     if(v.days.length){
       arquemAddHeading_(body,'Volume de chamadas por dia');
       arquemEstilizarTabelaPdf_(body.appendTable(
