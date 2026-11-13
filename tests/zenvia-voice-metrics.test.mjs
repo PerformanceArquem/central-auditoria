@@ -190,7 +190,9 @@ test('admin connection diagnostic tests Zenvia endpoints without exposing calls'
  const response=await invoke({start:'2026-11-10',end:'2026-11-11',check:'1'});
  assert.equal(response.code,200);
  assert.equal(response.body.diagnostic,true);
- assert.equal(response.body.ready,true);
+ assert.equal(response.body.voiceReady,true);
+ assert.equal(response.body.queueReady,false);
+ assert.equal(response.body.ready,false);
  assert.equal(response.body.checks.length,2);
  assert.equal(response.body.queueConfigured,false);
  assert.equal(response.body.summary,undefined);
@@ -241,4 +243,17 @@ test('real zero-duration answered call remains a valid measured sample',async()=
   assert.equal(r.body.summary.tmaMissingSamples,0);
   assert.equal(r.body.summary.tmaSamples,2);
  }finally{outbound[0].destino.duracao_falada_segundos=saved;}
+});
+
+test('queue readiness is separate from voice channel connection readiness',async()=>{
+ scope.process.env.ZENVIA_VOICE_QUEUE_ID='430';
+ try{
+  const response=await invoke({start:'2026-11-10',end:'2026-11-11',check:'1'});
+  assert.equal(response.code,200);
+  assert.equal(response.body.voiceReady,true);
+  assert.equal(response.body.queueReady,true);
+  assert.equal(response.body.ready,true);
+  assert.equal(response.body.checks.length,3);
+  assert.equal(response.body.summary,undefined);
+ }finally{delete scope.process.env.ZENVIA_VOICE_QUEUE_ID;}
 });
