@@ -1,5 +1,9 @@
 name: Apps Script - audit and manual approved publish
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps-script/ci-clasp-guard.mjs'
   workflow_dispatch:
     inputs:
       operation:
@@ -22,7 +26,7 @@ env:
   SCRIPT_ID: 1WUhIenOGO-B_jAkYgECmpBq-jMeeFrTghwElVyBdKLTTICWnFzgkWmm8
 jobs:
   audit:
-    if: ${{ inputs.operation == 'audit' }}
+    if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
