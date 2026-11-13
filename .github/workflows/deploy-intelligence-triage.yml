@@ -1,8 +1,5 @@
 name: Publish isolated Intelligence triage mail extension
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/deploy-intelligence-triage.yml', 'apps-script/intelligence-triage-mail.gs', 'scripts/install-triage-extension.mjs']
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,7 +16,7 @@ jobs:
           persist-credentials: false
       - name: Test triage rules and script syntax
         run: |
-          node --test tests/triage-daily.test.mjs
+          node --test tests/triage-daily.test.mjs tests/triage-mail-idempotency.test.mjs
           node --check < apps-script/intelligence-triage-mail.gs
       - name: Install official Apps Script CLI
         run: npm install --no-save @google/clasp@3.4.1

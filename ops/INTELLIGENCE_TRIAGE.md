@@ -8,11 +8,13 @@ O backend isolado é intelligence-triage-report. Usa REPORT_CRON_SECRET para aut
 
 Horário: 09h America/Sao_Paulo, segunda a sexta; feriados com affects_delivery no calendário corporativo são respeitados. O job independente começa inativo. Não alterar os jobs antigos para habilitar este relatório.
 
-Idempotência: chave única por data e destinatário. Estados processing/uncertain exigem conferência no Gmail antes de qualquer repetição. Não apagar linhas para tentar de novo sem conferir o provedor. O Web App acrescenta outro controle por Script Properties e consulta Gmail antes do envio.
+Idempotência: chave única por data e destinatário. Estados processing/uncertain exigem conferência no Gmail antes de qualquer repetição. Não apagar linhas para tentar de novo sem conferir o provedor. O Web App acrescenta outro controle por Script Properties e bloqueio mútuo; uma chamada após o aceite retorna o mesmo providerId sem enviar novamente.
+
+O envio usa MailApp, o mesmo serviço autorizado das rotinas existentes. provider_id registra o aceite desse serviço; não representa um Gmail message ID nem confirmação de entrega ao destinatário. gmail_id é preenchido quando a mensagem é conferida no Gmail. A primeira edição de 13/11/2026 foi conferida no Gmail com PDF e XLSX e registrada como enviada para os três destinatários.
 
 ## Publicação do e-mail
 
-O workflow deploy-intelligence-triage.yml baixa o projeto Apps Script existente, reconhece o ponto de autenticação e acrescenta a extensão sem substituir os geradores dos demais relatórios. Falha antes de escrever quando não reconhece a instalação. A versão do clasp é fixa.
+O workflow manual deploy-intelligence-triage.yml baixa o projeto Apps Script existente, reconhece o ponto de autenticação e acrescenta a extensão sem substituir os geradores dos demais relatórios. Falha antes de escrever quando não reconhece a instalação. A versão do clasp é fixa. Não dispara automaticamente a cada alteração de código enquanto a autenticação do publicador não for renovada.
 
 Em 13/11/2026 a primeira execução parou no clasp pull com invalid_grant / invalid_rapt (reauthentication required), antes de qualquer push/deploy do Apps Script. É necessário renovar a autenticação da conta proprietária e atualizar a credencial protegida CLASPRC_JSON no GitHub. Não colocar credenciais em issues, chats ou arquivos do repositório.
 
