@@ -6069,7 +6069,7 @@ window.clientImpactInit=()=>{
    const ul=document.createElement('ul');
    for(const item of data.queues){
     const li=document.createElement('li');
-    li.textContent='Fila '+String(item.id)+' · URAs: '+(item.uras||[]).join(', ');
+    li.textContent='Fila '+String(item.id)+' · '+(item.verified?(item.name||'Nome não informado'):'Não confirmada')+' · URAs: '+(item.uras||[]).join(', ');
     ul.appendChild(li);
    }
    area.appendChild(ul);
