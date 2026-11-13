@@ -333,3 +333,13 @@ test('queue discovery never returns extensions or other private queue metadata',
  assert.equal(JSON.stringify(r.body).includes('private@company.com'),false);
  assert.equal(JSON.stringify(r.body).includes('7777'),false);
 });
+
+test('candidate queue report can only be copied after a successful authenticated search',()=>{
+ const html=readFileSync('index.html','utf8');
+ assert.ok(html.includes('id="zvCopyQueues"'));
+ assert.match(html,/id="zvCopyQueues"[^>]*disabled/);
+ assert.ok(html.includes("el('zvCopyQueues').disabled=!data.queues.length"));
+ assert.ok(html.includes("el('zvCopyQueues').addEventListener('click',async()=>"));
+ assert.ok(html.includes("await navigator.clipboard.writeText(value)"));
+ assert.ok(!html.includes('Access-Token:'));
+});
