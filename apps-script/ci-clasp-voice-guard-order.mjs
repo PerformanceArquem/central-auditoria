@@ -22,7 +22,7 @@ function walk(n,parents=[]){
  }
  for(const [key,v] of Object.entries(n)){
   if(key==='start'||key==='end')continue;
-  if(Array.isArray(v))for(const item of v)if(item&&typeof item==='object'&&typeof item.type==='string')walk(item,[...parents,n]);
+  if(Array.isArray(v)){for(const item of v)if(item&&typeof item==='object'&&typeof item.type==='string')walk(item,[...parents,n]);}
   else if(v&&typeof v==='object'&&typeof v.type==='string')walk(v,[...parents,n]);
  }
 }
