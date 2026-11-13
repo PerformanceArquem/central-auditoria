@@ -49,5 +49,7 @@ if(mode==='audit'){
  if(current.sha!==expectedRemote)throw Error('Remoto divergiu da auditoria.');
  if(source.sha!==expectedSource)throw Error('Origem revisada divergiu do hash aprovado.');
  if(current.paths.join('|')!==source.paths.join('|'))throw Error('Lista de arquivos difere; possível exclusão de função.');
+ const remaining=duplicateTopLevelFunctions(other,source.paths);
+ if(remaining.length)throw Error('Publicação bloqueada: '+remaining.length+' funções top-level duplicadas na origem revisada: '+remaining.map(([name,paths])=>name+' ['+paths.join(', ')+']').join('; '));
  console.log('Hashes e inventário dos arquivos validados.');
 }else throw Error('Modo inválido');
