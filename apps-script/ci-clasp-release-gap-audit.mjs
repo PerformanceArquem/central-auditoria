@@ -49,6 +49,8 @@ const summary=[
  '- Nomes de funções com múltiplas definições remotas: '+duplicates.size,
  '',
  'Funções ausentes no oficial: '+(absent.join(', ')||'nenhuma')+'.',
+ 'Funções comuns que exigem comparação da implementação: '+(modified.join(', ')||'nenhuma')+'.',
+ 'Funções exclusivas do projeto oficial a preservar: '+(remoteOnly.join(', ')||'nenhuma')+'.',
  '',
  '**Não é plano de publicação automático.** Comparação textual conservadora de declarações AST; não verifica inicializadores globais, dependências entre arquivos, permissões, anexos reais nem comportamento. Nunca substituir o conjunto oficial pelo pacote da PR sem preservar as funções exclusivas e reconciliar as duplicações. Nenhum código ou segredo foi exportado.',
  ''
