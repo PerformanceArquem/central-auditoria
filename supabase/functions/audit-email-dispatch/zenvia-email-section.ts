@@ -63,7 +63,7 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
   'Fontes: ligações Zenvia; notas Movidesk e avaliações manuais com deduplicação por ticket e canal.';
  const cells=(values:unknown[])=>'<tr>'+values.map(x=>'<td style="border-bottom:1px solid #e2e8f0;padding:8px 10px">'+esc(x)+'</td>').join('')+'</tr>';
  const html='<section style="border-top:3px solid #2457d6;padding:18px 0;margin-top:24px;font-family:Arial,sans-serif;color:#17345d">'+
-  '<h2 style="font-size:18px;margin:0">Voz Zenvia (conta) × Chat (Suporte)</h2>'+
+  '<h2 style="font-size:18px;margin:0">Voz × Chat · Zenvia (conta) e Chat (Suporte)</h2>'+
   '<p style="font-size:12px;color:#64748b">Voz = conta Zenvia (todos os setores); Chat = Suporte. TME da fila é específico quando configurado. Avaliações: Movidesk e manuais</p>'+
   '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr><th>Indicador</th><th>Voz</th><th>Chat</th></tr></thead><tbody>'+
   cells(['Quantidade',m.total,input.chatMetrics?.tickets??'Indisponível'])+
