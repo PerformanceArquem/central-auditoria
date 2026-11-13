@@ -23,7 +23,7 @@ const packet={
 const row=(list,key)=>Array.from(list.find(x=>x[0]===key)||[]);
 test('PDF and spreadsheet use one shared voice/chat helper',()=>{
  assert.ok(apps.includes('if(p.zenviaVoice){'));
- assert.ok(apps.includes("arquemAddHeading_(body,'Voz × Chat · Indicadores de atendimento')"));
+ assert.ok(apps.includes("arquemAddHeading_(body,'Voz (conta Zenvia) × Chat (Suporte)')"));
  for(const tab of ['Voz e Chat','Voz por dia','Voz por ramal','Metodologia canais'])
    assert.ok(apps.includes("'"+tab+"'"),'Missing Excel tab '+tab);
  assert.ok(apps.includes('if(packet.zenviaVoice)arquemVozChatDados_(packet.zenviaVoice)'));
@@ -62,4 +62,15 @@ test('Zenvia reporting remains disabled by default and eligible only for three r
  assert.ok(dispatch.includes("E('REPORT_ATTACHMENTS_ENABLED')!=='true'"));
  assert.equal((dispatch.match(/allowVoiceEmails\.get\(/g)||[]).length,1);
  assert.ok(dispatch.includes('readZenviaEmailMetrics(from,to,token'));
+});
+
+test('PDF and Excel explicitly disclose different voice/account and chat/support scopes',()=>{
+ assert.ok(apps.includes("['Indicador','Voz · conta Zenvia','Chat · Suporte']"));
+ const summary=scope.helper(packet);
+ assert.ok(summary.note.includes('toda a conta Zenvia'));
+ assert.ok(summary.note.includes('chat representa o Suporte'));
+ const emailSource=readFileSync('supabase/functions/audit-email-dispatch/zenvia-email-section.ts','utf8');
+ assert.ok(emailSource.includes("voiceScope:'Conta Zenvia (todas as chamadas)'"));
+ assert.ok(emailSource.includes("chatScope:'Suporte (base Movidesk)'"));
+ assert.ok(emailSource.includes('Escopos distintos'));
 });
