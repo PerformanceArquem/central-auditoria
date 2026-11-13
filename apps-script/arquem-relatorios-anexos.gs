@@ -285,7 +285,18 @@ function arquemVozChatDados_(raw) {
        total<0||answered<0||answered>total)throw new Error('Registro de ramal inválido');
     return [id,total,answered,duration(x.talkSeconds)];
   });
+  const support=raw.supportMetrics;
+  if(support!=null){
+    if(typeof support!=='object'||!Number.isInteger(Number(support.total))||
+      Number(support.total)<0||Number(support.total)>count.total||
+      !Number.isInteger(Number(support.answered))||
+      Number(support.answered)<0||Number(support.answered)>Number(support.total))
+      throw new Error('Recorte Suporte inválido');
+  }
   const overview=[
+    ['Suporte · ligações nos ramais homologados',support==null?'Não homologado':Number(support.total),'—'],
+    ['Suporte · atendidas',support==null?'Não homologado':Number(support.answered),'—'],
+    ['Suporte · TMA',support==null?'Não homologado':duration(support.tmaSeconds),'—'],
     ['Recebidas',count.inbound,'—'],['Efetuadas',count.outbound,'—'],
     ['Total de atendimentos',count.total,ch.tickets==null?'Indisponível':Number(ch.tickets)],
     ['Atendidas',count.answered,'—'],['Não atendidas',count.unanswered,'—'],
