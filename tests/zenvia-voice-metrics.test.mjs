@@ -21,6 +21,7 @@ let calls=[];
 const json=(data,status=200)=>({ok:status>=200&&status<300,status,json:async()=>data});
 let allowed=true,token=true,broken=false,waitMissing=false,shortPages=false,missingSecondPage=false;
 let uraFormat='array';
+let extensionRows=[{login:'private@company.com',ramal:'7777'}];
 const queueCalls=[
  {id:41,data_inicio:'2026-11-10T14:00:00-03:00',tempo_espera:40},
  {id:42,data_inicio:'2026-11-11T15:00:00-03:00',tempo_espera:80}
@@ -36,7 +37,7 @@ const fetch=async(input,opts={})=>{
   if(/^\/fila\/\d+$/.test(url.pathname)){
     const id=url.pathname.split('/').pop();
     return json({sucesso:true,dados:{id:Number(id),nome:id==='430'?'Suporte':'Comercial',
-      ramais:[{login:'private@company.com',ramal:'7777'}]}});
+      ramais:extensionRows}});
   }
   if(url.pathname==='/ura/relatorio'){
    const support=[{acao:'fila',acao_dados:{fila_id:'430'}},{acao:'tts',acao_dados:{mensagem:'privado'}}];
@@ -384,4 +385,38 @@ test('support missing call duration must not fabricate TMA',async()=>{
   assert.equal(r.body.support.metrics.tmaSeconds,null);
   assert.equal(r.body.support.metrics.tmaMissingSamples,1);
  }finally{inbound[0].duracao_falada_segundos=old;delete scope.process.env.ZENVIA_SUPPORT_EXTENSION_IDS;}
+});
+
+test('approved support numbers resolve to IDs in the configured queue without leaking private metadata',async()=>{
+ scope.process.env.ZENVIA_SUPPORT_EXTENSION_NUMBERS='7614,7701';
+ scope.process.env.ZENVIA_VOICE_QUEUE_ID='430';
+ const old=extensionRows;
+ extensionRows=[{id:2000,ramal:'7614',login:'private@company.com',webphone_key:'private-key'},
+  {id:2001,ramal:'7701',bina:'+5511999999999'},{id:2002,ramal:'7777'}];
+ try{
+  const r=await invoke({start:'2026-11-10',end:'2026-11-11',check:'queues'});
+  assert.equal(r.body.supportDiscovery.complete,true);
+  assert.deepEqual(JSON.parse(JSON.stringify(r.body.supportDiscovery.matches)),[
+   {number:'7614',id:'2000',ambiguous:false},{number:'7701',id:'2001',ambiguous:false}]);
+  const output=JSON.stringify(r.body);
+  for(const privateValue of ['private@company.com','private-key','+5511999999999','7777'])
+   assert.equal(output.includes(privateValue),false);
+ }finally{extensionRows=old;delete scope.process.env.ZENVIA_SUPPORT_EXTENSION_NUMBERS;delete scope.process.env.ZENVIA_VOICE_QUEUE_ID;}
+});
+
+test('missing or ambiguous support numbers cannot complete discovery',async()=>{
+ scope.process.env.ZENVIA_SUPPORT_EXTENSION_NUMBERS='7614,7701';
+ scope.process.env.ZENVIA_VOICE_QUEUE_ID='430';
+ const old=extensionRows;
+ try{
+  for(const rows of [[{id:2000,ramal:'7614'}],[{id:2000,ramal:'7614'},{id:2001,ramal:'7614'}]]){
+   extensionRows=rows;
+   const r=await invoke({start:'2026-11-10',end:'2026-11-11',check:'queues'});
+   assert.equal(r.body.supportDiscovery.complete,false);
+   assert.equal(r.body.supportDiscovery.matches[1].id,null);
+  }
+  scope.process.env.ZENVIA_SUPPORT_EXTENSION_NUMBERS='7614,7614';
+  const r=await invoke({start:'2026-11-10',end:'2026-11-11',check:'queues'});
+  assert.equal(r.body.supportDiscovery,null);
+ }finally{extensionRows=old;delete scope.process.env.ZENVIA_SUPPORT_EXTENSION_NUMBERS;delete scope.process.env.ZENVIA_VOICE_QUEUE_ID;}
 });
