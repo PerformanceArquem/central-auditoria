@@ -7,7 +7,7 @@ const esc=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 const safeNum=(n:unknown)=>{if(n==null||n==='')return null;const v=Number(n);return Number.isFinite(v)&&v>=0?v:null};
 const percent=(numerator:number,denominator:number)=>denominator?Math.round(numerator/denominator*10000)/100:null;
 const time=(seconds:unknown)=>{const n=safeNum(seconds);return n==null?'Indisponível':Math.floor(n/60)+'min '+String(Math.round(n%60)).padStart(2,'0')+'s'};
-export type VoiceEmailInput={metrics:R;byDay?:R[];byHour?:R[];byExtension?:R[];ratings:Rating[];chatMetrics?:R;from:string;to:string;verified:boolean};
+export type VoiceEmailInput={metrics:R;support?:{configured:boolean;scope:string;metrics:R|null};byDay?:R[];byHour?:R[];byExtension?:R[];ratings:Rating[];chatMetrics?:R;from:string;to:string;verified:boolean};
 export function calculateChannelNotes(rows:Rating[]) {
  const map={} as R;
  for(const channel of ['voz','chat']){
@@ -40,6 +40,12 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
  if(Number(m.total)!==Number(m.inbound)+Number(m.outbound)||
     Number(m.total)!==Number(m.answered)+Number(m.unanswered)+Number(m.inProgress)+Number(m.unclassified))
   throw Error('Contagens Zenvia não conciliadas');
+ const support=input.support?.configured===true&&input.support.metrics?
+   input.support.metrics:null;
+ if(support&&(Number(support.total)>Number(m.total)||
+   Number(support.total)!==Number(support.inbound)+Number(support.outbound)||
+   Number(support.total)!==Number(support.answered)+Number(support.unanswered)+Number(support.inProgress)+Number(support.unclassified)))
+  throw Error('Recorte Suporte sem conciliação');
  const quality=calculateChannelNotes(input.ratings);
  const days=(input.byDay||[]).map(x=>({date:String(x.date||''),total:Number(x.total||0),answered:Number(x.answered||0)}));
  const hours=(input.byHour||[]).map(x=>({hour:String(x.hour||''),count:Number(x.count||0)})).sort((a,b)=>b.count-a.count);
@@ -48,11 +54,14 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
  const kpis={from:input.from,to:input.to,provider:'Zenvia Voice',voiceScope:'Conta Zenvia (todas as chamadas)',chatScope:'Suporte (base Movidesk)',total:m.total,inbound:m.inbound,outbound:m.outbound,
   answered:m.answered,unanswered:m.unanswered,inProgress:m.inProgress,unclassified:m.unclassified,
   talkSeconds:safeNum(m.talkSeconds),tmaSeconds:safeNum(m.tmaSeconds),tmeSeconds:safeNum(m.tmeSeconds),
-  queueCalls:m.queueCalls??null,quality,chatMetrics:input.chatMetrics||null,byDay:days,byHour:hours,byExtension:extensions.slice(0,30)};
+  queueCalls:m.queueCalls??null,supportMetrics:support?{...support}:null,quality,chatMetrics:input.chatMetrics||null,byDay:days,byHour:hours,byExtension:extensions.slice(0,30)};
  const csat=(q:R)=>q.total?q.csatPercent+'% ('+q.positive+'/'+q.total+' notas de 8 a 10)':'Sem avaliações no período';
  const text='\n\nVOZ ZENVIA (CONTA) × CHAT (SUPORTE) · Escopos distintos\n'+
   'Período: '+input.from+' a '+input.to+'\n'+
   'Atenção: chamadas de voz representam a conta inteira da Zenvia, não apenas o Suporte. TME da fila é específico quando configurado.\n'+
+  (support?'Recorte homologado Suporte: '+support.total+' chamadas; '+support.answered+
+   ' atendidas; TMA: '+time(support.tmaSeconds)+'.\n':
+   'Recorte Suporte indisponível: ramais ainda não homologados.\n')+
   'Voz recebidas: '+m.inbound+'; efetuadas: '+m.outbound+'; atendidas: '+m.answered+
   '; não atendidas: '+m.unanswered+'; em andamento: '+m.inProgress+'; sem classificação: '+m.unclassified+'\n'+
   'Tempo falado: '+time(m.talkSeconds)+'; TMA: '+time(m.tmaSeconds)+'; TME de fila: '+time(m.tmeSeconds)+'\n'+
@@ -75,6 +84,10 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
   cells(['Notas 1–7',quality.voz.negative,quality.chat.negative])+
   cells(['Notas 8–10',quality.voz.positive,quality.chat.positive])+
   cells(['Superadores',quality.voz.superadoresPercent==null?'Sem avaliações':quality.voz.superadoresPercent+'%',quality.chat.superadoresPercent==null?'Sem avaliações':quality.chat.superadoresPercent+'%'])+'</tbody></table>'+
+  '<h3 style="font-size:14px">Suporte · ramais homologados</h3>'+
+  (support?'<p>'+esc(support.total)+' chamadas · '+esc(support.answered)+
+   ' atendidas · TMA '+esc(time(support.tmaSeconds))+'</p>':
+   '<p>Não homologado — ramais de Suporte não configurados.</p>')+
   '<h3 style="font-size:14px">Chamadas por dia</h3>'+ 
   '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr><th>Dia</th><th>Total</th><th>Atendidas</th></tr></thead><tbody>'+ 
   (days.length?days.slice(0,31).map(x=>cells([x.date,x.total,x.answered])).join(''):cells(['Sem dados','—','—']))+'</tbody></table>'+ 
