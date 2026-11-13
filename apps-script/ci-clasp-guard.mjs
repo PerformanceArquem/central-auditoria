@@ -39,6 +39,7 @@ if(mode==='audit'){
  const duplicates=duplicateTopLevelFunctions(remote,d.paths);
  appendFileSync(other,'\n### Verificação de funções top-level duplicadas\n\n'+(duplicates.length?duplicates.map(([name,paths])=>'- \`'+name+'\`: '+paths.map(p=>'\`'+p+'\`').join(', ')).join('\n'):'Nenhuma declaração duplicada encontrada pelo verificador estático.')+'\n');
  console.log('Funções top-level duplicadas identificadas: '+duplicates.length);
+ for(const [name, locations] of duplicates) console.log('DUPLICADA '+name+' em '+locations.join(', '));
  console.log('Auditoria de '+d.paths.length+' arquivos; SHA-256: '+d.sha);
 }else if(mode==='compare'){
  if(snapshot(remote).sha!==other)throw Error('Código remoto alterado desde a auditoria.');
