@@ -103,7 +103,10 @@ jobs:
             tests/appsscript-zenvia-export-validation.test.mjs \
             tests/appsscript-zenvia-package-parity.test.mjs \
             tests/appsscript-complete-integration.test.mjs \
-            tests/appsscript-keila-dry-run.test.mjs
+            tests/appsscript-keila-dry-run.test.mjs \
+            tests/zenvia-voice-metrics.test.mjs \
+            tests/zenvia-email-attachments.test.mjs \
+            tests/zenvia-keila-preservation.test.mjs
   publish:
     if: ${{ inputs.operation == 'publish' && github.ref_name == 'main' }}
     runs-on: ubuntu-latest
