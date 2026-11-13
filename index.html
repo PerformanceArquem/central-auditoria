@@ -1267,6 +1267,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    <button type="button" id="zvRefresh" class="b">↻ Consultar Zenvia</button>
    <button type="button" id="zvCheck" class="b">Verificar conexão</button>
    <button type="button" id="zvFindQueues" class="b">Localizar filas</button>
+   <button type="button" id="zvCopyQueues" class="b" disabled>Copiar filas identificadas</button>
   </div>
   <p id="zvStatus" role="status" class="subtle">Conecte a API Zenvia para consultar os indicadores do canal de voz.</p>
   <div id="zvQueues" class="subtle" role="status"></div>
@@ -6073,7 +6074,18 @@ window.clientImpactInit=()=>{
     ul.appendChild(li);
    }
    area.appendChild(ul);
-  }catch(error){el('zvQueues').textContent='Descoberta indisponível: '+error.message;}
+   // Resultado em texto simples, sem chave de acesso ou dados pessoais.
+   const report=['Zenvia Voice — Filas candidatas (confirmação obrigatória)',
+    ...data.queues.map(item=>'Fila '+String(item.id)+' | Nome: '+
+      (item.verified?(item.name||'Não informado'):'Não confirmado')+
+      ' | URAs: '+(item.uras||[]).join(', '))].join('\\n');
+   el('zvCopyQueues').disabled=!data.queues.length;
+   el('zvCopyQueues').dataset.report=report;
+  }catch(error){
+   el('zvCopyQueues').disabled=true;
+   delete el('zvCopyQueues').dataset.report;
+   el('zvQueues').textContent='Descoberta indisponível: '+error.message;
+  }
   finally{button.disabled=false;}
  }
  window.zenviaVoiceInit=()=>{
@@ -6082,6 +6094,14 @@ window.clientImpactInit=()=>{
   el('zvRefresh').addEventListener('click',load);
   el('zvCheck').addEventListener('click',diagnose);
   el('zvFindQueues').addEventListener('click',discoverQueues);
+  el('zvCopyQueues').addEventListener('click',async()=>{
+   const value=el('zvCopyQueues').dataset.report||'';
+   if(!value)return;
+   try{
+    await navigator.clipboard.writeText(value);
+    el('zvStatus').textContent='IDs e nomes das filas copiados, sem dados de chamadas ou credenciais.';
+   }catch(_){el('zvStatus').textContent='Não foi possível copiar. Selecione as filas exibidas e copie manualmente.';}
+  });
   for(const id of ['zvStart','zvEnd'])el(id).addEventListener('change',reset);
  };
 })();
