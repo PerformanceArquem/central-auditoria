@@ -6,6 +6,7 @@ on:
       - 'apps-script/central-auditoria-emails-completo.gs'
       - 'tests/appsscript-keila-dry-run.test.mjs'
       - 'tests/appsscript-complete-integration.test.mjs'
+      - 'tests/appsscript-zenvia-package-parity.test.mjs'
   pull_request:
     paths:
       - 'apps-script/central-auditoria-emails-completo.gs'
@@ -24,4 +25,22 @@ jobs:
       - name: Check full Apps Script syntax
         run: node --check < apps-script/central-auditoria-emails-completo.gs
       - name: Validate authenticated capabilities and dry run without Gmail
-        run: node --test tests/appsscript-complete-integration.test.mjs tests/appsscript-keila-dry-run.test.mjs
+        run: node --test tests/appsscript-complete-integration.test.mjs tests/appsscript-keila-dry-run.test.mjs tests/appsscript-zenvia-package-parity.test.mjs
+      - name: Preparar pacote Apps Script Zenvia sem publicar
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'integration/zenvia-voice-chat-reports-20261112' }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp apps-script/central-auditoria-emails-completo.gs release/central-auditoria-emails-completo.gs
+          cp apps-script/HOMOLOGACAO-ZENVIA-VOZ-CHAT.md release/LEIA-ANTES-DE-PUBLICAR.md
+          sha256sum release/central-auditoria-emails-completo.gs > release/SHA256SUMS.txt
+          printf '%s\n' "Repo: ${GITHUB_REPOSITORY}" "Commit: ${GITHUB_SHA}" "Amostra para homologação. Não foi publicado." > release/ORIGEM.txt
+      - name: Anexar pacote para homologação manual
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'integration/zenvia-voice-chat-reports-20261112' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: arquem-zenvia-appsscript-homologacao
+          path: release/
+          retention-days: 7
+          if-no-files-found: error
+

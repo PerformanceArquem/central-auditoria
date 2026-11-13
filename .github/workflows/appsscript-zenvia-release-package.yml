@@ -1,0 +1,56 @@
+name: Preparar pacote Apps Script Zenvia - sem publicar
+on:
+  push:
+    branches:
+      - integration/zenvia-voice-chat-reports-20261112
+    paths:
+      - apps-script/**
+      - tests/appsscript-*.test.mjs
+      - .github/workflows/appsscript-zenvia-release-package.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zenvia-appsscript-package
+  cancel-in-progress: false
+
+jobs:
+  package:
+    if: ${{ github.ref_name == 'integration/zenvia-voice-chat-reports-20261112' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar código revisado
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar scripts completos e anexos de Voz x Chat
+        run: |
+          set -euo pipefail
+          node --check < apps-script/central-auditoria-emails-completo.gs
+          node --test tests/appsscript-complete-integration.test.mjs tests/appsscript-keila-dry-run.test.mjs tests/appsscript-zenvia-package-parity.test.mjs tests/appsscript-zenvia-sample-label-dates.test.mjs tests/zenvia-email-attachments.test.mjs tests/zenvia-keila-preservation.test.mjs
+      - name: Preparar pacote isolado
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp apps-script/central-auditoria-emails-completo.gs release/central-auditoria-emails-completo.gs
+          cp apps-script/HOMOLOGACAO-ZENVIA-VOZ-CHAT.md release/LEIA-ANTES-DE-PUBLICAR.md
+          sha256sum release/central-auditoria-emails-completo.gs > release/SHA256SUMS.txt
+          printf '%s\n' "Origem: ${GITHUB_REPOSITORY}" "Commit: ${GITHUB_SHA}" "Sem instalação ou implantação automática." > release/ORIGEM.txt
+      - name: Disponibilizar pacote de homologação
+        uses: actions/upload-artifact@v4
+        with:
+          name: arquem-zenvia-appsscript-homologacao
+          path: release/
+          retention-days: 7
+          if-no-files-found: error
+
+# Revalidação do pacote na branch revisada (13/11/2026).
+# Este workflow NÃO executa clasp push, não acessa segredos, não atualiza
+# o Apps Script publicado e não envia e-mails. Uso restrito à branch revisada.
