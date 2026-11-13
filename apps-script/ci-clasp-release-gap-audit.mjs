@@ -55,5 +55,16 @@ const summary=[
  '**Não é plano de publicação automático.** Comparação textual conservadora de declarações AST; não verifica inicializadores globais, dependências entre arquivos, permissões, anexos reais nem comportamento. Nunca substituir o conjunto oficial pelo pacote da PR sem preservar as funções exclusivas e reconciliar as duplicações. Nenhum código ou segredo foi exportado.',
  ''
 ].join('\n');
+// Exibir apenas nomes e a classificacao por arquivo, jamais o conteudo remoto.
+for(const name of modified){
+ const locations=[];
+ for(const filename of remoteFiles){
+  const declarations=extract(readFileSync(join(remoteDir,filename),'utf8'));
+  if(!declarations.has(name))continue;
+  locations.push(filename+':'+(declarations.get(name)===pr.get(name)?'same':'different'));
+ }
+ console.log('RELEASE_GAP_DIFFERENT '+name+' '+locations.join(' '));
+}
+for(const name of remoteOnly)console.log('RELEASE_GAP_OFFICIAL_ONLY '+name);
 appendFileSync(summaryPath,'\n'+summary);
 console.log('RELEASE_GAP_AUDIT_OK remoteFiles='+remoteFiles.length+' officialNames='+remote.size+' prNames='+pr.size+' absent='+absent.length+' modified='+modified.length+' same='+same.length+' remoteOnly='+remoteOnly.length+' duplicateNames='+duplicates.size);
