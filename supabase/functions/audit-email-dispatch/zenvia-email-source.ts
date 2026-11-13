@@ -10,7 +10,7 @@ const positive=(n:unknown)=>{const x=Number(n);return Number.isFinite(x)&&x>0?Ma
 const measuredSeconds=(n:unknown)=>{if(n==null||n==='')return null;const x=Number(n);return Number.isFinite(x)&&x>=0?Math.round(x):null};
 type R=Record<string,any>;
 const addDate=(date:string,n:number)=>new Date(Date.parse(date+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);
-export async function readZenviaEmailMetrics(from:string,to:string,token:string,queueId='',http:typeof fetch=fetch){
+export async function readZenviaEmailMetrics(from:string,to:string,token:string,queueId='',http:typeof fetch=fetch,supportExtensionIds=''){
  if(!validDay(from)||!validDay(to)||from>to||!token)throw Error('Zenvia sem período ou token válidos');
  if(Date.parse(to+'T12:00:00Z')-Date.parse(from+'T12:00:00Z')>370*86400000)
   throw Error('Período Zenvia muito longo');
@@ -42,6 +42,14 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
  const day=new Map<string,R>(),hour=new Map<string,number>(),extension=new Map<string,R>(),
    known=new Set<string>();
  const queueConfigured=/^[1-9]\d{0,11}$/.test(queueId);
+ const rawExtensions=supportExtensionIds.trim();
+ const ids=rawExtensions?rawExtensions.split(',').map(x=>x.trim()):[];
+ const mappingValid=ids.length>0&&ids.length<=100&&ids.every(x=>/^[0-9]{1,12}$/.test(x))&&
+  new Set(ids).size===ids.length;
+ const supportSet=mappingValid?new Set(ids):null;
+ const supportMetrics={total:0,inbound:0,outbound:0,answered:0,unanswered:0,
+  inProgress:0,unclassified:0,talkSeconds:0 as number|null,tmaSeconds:null as number|null,
+  tmaSamples:0,tmaMissingSamples:0};
  let qCount=0,qMissing=0,qSum=0;
  for(let part=from;part<=to;part=addDate(part,31)){
   const end=addDate(part,30)<to?addDate(part,30):to;
@@ -73,6 +81,13 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
     const hh=/^\d{4}-\d{2}-\d{2}T(\d{2}):/.exec(timestamp)?.[1];
     if(hh&&Number(hh)<24)hour.set(hh,(hour.get(hh)||0)+1);
     const ext=String(direction==='outbound'?row.ramal_id_origem??'':row.ramal_id??'');
+    if(supportSet?.has(ext)){
+      supportMetrics.total++;supportMetrics[direction]++;supportMetrics[status]++;
+      if(status==='answered'){
+        if(talk==null)supportMetrics.tmaMissingSamples++;
+        else {supportMetrics.tmaSamples++;supportMetrics.talkSeconds=(supportMetrics.talkSeconds??0)+talk;}
+      }
+    }
     if(/^\d{1,12}$/.test(ext)){
       const e=extension.get(ext)||{extension:ext,total:0,answered:0,unanswered:0,talkSeconds:0 as number|null,missingTalkSamples:0};
       e.total++;
@@ -108,7 +123,11 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
  metrics.queueCalls=queueConfigured?qCount:null;
  metrics.queueMissingWait=queueConfigured?qMissing:null;
  metrics.tmeSeconds=queueConfigured&&qCount&&!qMissing?Math.round(qSum/qCount):null;
- return {metrics,byDay:[...day.values()].sort((a,b)=>a.date.localeCompare(b.date)),
+ supportMetrics.tmaSeconds=supportMetrics.answered>0&&!supportMetrics.tmaMissingSamples?
+   Math.round((supportMetrics.talkSeconds??0)/supportMetrics.answered):null;
+ if(supportMetrics.tmaMissingSamples)supportMetrics.talkSeconds=null;
+ return {support:{configured:!!supportSet,scope:supportSet?'Ramais de Suporte homologados':'Não homologado',
+    metrics:supportSet?supportMetrics:null},metrics,byDay:[...day.values()].sort((a,b)=>a.date.localeCompare(b.date)),
   byHour:[...hour].map(([hour,count])=>({hour,count})).sort((a,b)=>b.count-a.count),
   byExtension:[...extension.values()].map(x=>({...x,talkSeconds:x.missingTalkSamples?null:x.talkSeconds} as R))
     .sort((a,b)=>Number((b as R).total)-Number((a as R).total)).slice(0,30),
