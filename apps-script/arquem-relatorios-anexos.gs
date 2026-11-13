@@ -250,7 +250,8 @@ function arquemVozChatDados_(raw) {
     if(x==null||x==='')return 'Indisponível';
     const n=Number(x);
     if(!Number.isFinite(n)||n<0)throw new Error('Duração de canal inválida');
-    return String(Math.floor(n/60)).padStart(2,'0')+':'+String(Math.round(n%60)).padStart(2,'0');
+    const rounded=Math.round(n);
+    return String(Math.floor(rounded/60)).padStart(2,'0')+':'+String(rounded%60).padStart(2,'0');
   };
   const quality=(raw.quality||{});
   const scores={};
@@ -621,15 +622,7 @@ function arquemXlsx_(p, keep) {
   }
   if(p.zenviaVoice){
     const v=arquemVozChatDados_(p.zenviaVoice);
-    arquemCreateSheet_(ss,'Voz e Chat',
-      ['Indicador','Voz','Chat'],v.overview);
-    arquemCreateSheet_(ss,'Voz por dia',
-      ['Data','Chamadas','Atendidas'],v.days);
-    arquemCreateSheet_(ss,'Voz por ramal',
-      ['Ramal','Chamadas','Atendidas','Tempo falado (mm:ss)'],v.ramais);
-    const notes=arquemCreateSheet_(ss,'Metodologia canais',
-      ['Regra','Descrição'],[['CSAT e qualidade',v.note]]);
-    notes.getRange(2,2).setWrap(true);
+    arquemVozChatPlanilhas_(ss,v);
   }
   SpreadsheetApp.flush();
   const url='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(ss.getId())+
@@ -642,6 +635,28 @@ function arquemXlsx_(p, keep) {
     throw new Error('Exportação XLSX falhou: HTTP '+response.getResponseCode());
   return response.getBlob().setContentType(
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+// Durações numéricas em frações de dia: evita que Sheets leia mm:ss como hh:mm.
+function arquemVozChatPlanilhas_(ss,v){
+  const durationLabels=new Set(['Suporte · TMA','TMA','TME','Tempo falado']);
+  const numericDuration=value=>{
+    const match=/^(\d+):(\d{2})$/.exec(String(value));
+    return match?(Number(match[1])*60+Number(match[2]))/86400:value;
+  };
+  const overview=v.overview.map(row=>durationLabels.has(row[0])?
+    row.map((value,i)=>i?numericDuration(value):value):row);
+  const summary=arquemCreateSheet_(ss,'Voz e Chat',['Indicador','Voz','Chat'],overview);
+  v.overview.forEach((row,i)=>{
+    if(durationLabels.has(row[0]))summary.getRange(i+2,2,1,2).setNumberFormat('[m]:ss');
+  });
+  arquemCreateSheet_(ss,'Voz por dia',['Data','Chamadas','Atendidas'],v.days);
+  const extensions=arquemCreateSheet_(ss,'Voz por ramal',
+    ['Ramal','Chamadas','Atendidas','Tempo falado (mm:ss)'],
+    v.ramais.map(row=>row.map((value,i)=>i===3?numericDuration(value):value)));
+  if(v.ramais.length)extensions.getRange(2,4,v.ramais.length,1).setNumberFormat('[m]:ss');
+  const notes=arquemCreateSheet_(ss,'Metodologia canais',
+    ['Regra','Descrição'],[['CSAT e qualidade',v.note]]);
+  notes.getRange(2,2).setWrap(true);
 }
 function arquemCreateSheet_(ss,title,headers,rows){
   const sh=ss.insertSheet(title);

@@ -21,6 +21,41 @@ const packet={
  byExtension:[{extension:'430',total:4,answered:2,talkSeconds:170}]
 };
 const row=(list,key)=>Array.from(list.find(x=>x[0]===key)||[]);
+
+test('Excel durations preserve seconds numerically instead of becoming hours',()=>{
+ const sheets=new Map();
+ const excel={};
+ vm.runInNewContext(apps,excel);
+ excel.arquemCreateSheet_=(_ss,title,headers,rows)=>{
+  const sheet={rows,formats:[],getRange(...range){return {
+   setNumberFormat(format){sheet.formats.push({range,format});},setWrap(){}
+  };}};
+  sheets.set(title,sheet);return sheet;
+ };
+ const data=scope.helper({...packet,tmeSeconds:95,talkSeconds:90061,
+  supportMetrics:{total:2,answered:1,tmaSeconds:85}});
+ excel.arquemVozChatPlanilhas_({},data);
+ const summary=sheets.get('Voz e Chat');
+ for(const [label,column,seconds] of [
+  ['Suporte · TMA',1,85],['TMA',1,85],['TMA',2,45],
+  ['TME',1,95],['TME',2,12],['Tempo falado',1,90061]
+ ]){
+  const value=row(summary.rows,label)[column];
+  assert.equal(typeof value,'number');
+  assert.ok(Math.abs(value*86400-seconds)<1e-8,label);
+  const index=summary.rows.findIndex(r=>r[0]===label)+2;
+  assert.ok(summary.formats.some(f=>f.range[0]===index&&f.format==='[m]:ss'));
+ }
+ assert.equal(row(summary.rows,'CSAT')[1],'50.00%');
+ const ext=sheets.get('Voz por ramal');
+ assert.ok(Math.abs(ext.rows[0][3]*86400-170)<1e-8);
+ assert.equal(ext.formats[0].format,'[m]:ss');
+});
+
+test('PDF durations carry rounded seconds into minutes',()=>{
+ const data=scope.helper({...packet,tmaSeconds:59.8});
+ assert.equal(row(data.overview,'TMA')[1],'01:00');
+});
 test('PDF and spreadsheet use one shared voice/chat helper',()=>{
  assert.ok(apps.includes('if(p.zenviaVoice){'));
  assert.ok(apps.includes("arquemAddHeading_(body,'Voz (conta Zenvia) × Chat (Suporte)')"));
