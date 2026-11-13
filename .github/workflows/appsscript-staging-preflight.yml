@@ -1,5 +1,9 @@
 name: Apps Script - isolated staging preflight (no publish)
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/appsscript-staging-preflight.yml'
   workflow_dispatch:
     inputs:
       staging_script_id:
@@ -21,7 +25,7 @@ jobs:
           node-version: '22'
       - name: Reject production ID and missing staging authorization
         env:
-          STAGING_ID: ${{ inputs.staging_script_id }}
+          STAGING_ID: ${{ github.event_name == 'push' && '1-C80Yc4KZIzWQJNVF2gcDwHGNkkgLGz9SVdWfA-ubCrfVgaVtopo2tVe' || inputs.staging_script_id }}
           STAGING_ENABLED: ${{ vars.APPS_SCRIPT_STAGING_ENABLED }}
           APPROVED_STAGING_ID: '1-C80Yc4KZIzWQJNVF2gcDwHGNkkgLGz9SVdWfA-ubCrfVgaVtopo2tVe'
           STAGING_AUTH: ${{ secrets.CLASPRC_STAGING_JSON }}
@@ -47,7 +51,7 @@ jobs:
           printf '%s' "$STAGING_AUTH" > "$HOME/.clasprc.json"
       - name: Inspect staging project only (read-only)
         env:
-          STAGING_ID: ${{ inputs.staging_script_id }}
+          STAGING_ID: ${{ github.event_name == 'push' && '1-C80Yc4KZIzWQJNVF2gcDwHGNkkgLGz9SVdWfA-ubCrfVgaVtopo2tVe' || inputs.staging_script_id }}
         run: |
           set -euo pipefail
           umask 077
