@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import './appsscript-zenvia-export-validation.test.mjs';
 
 const extension=readFileSync('apps-script/arquem-relatorios-anexos.gs','utf8');
 const complete=readFileSync('apps-script/central-auditoria-emails-completo.gs','utf8');
