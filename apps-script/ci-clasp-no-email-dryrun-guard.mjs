@@ -36,7 +36,7 @@ function inspect(fn){
   }
   for(const [key,value] of Object.entries(node)){
    if(['start','end','loc'].includes(key))continue;
-   if(Array.isArray(value))for(const child of value){if(child&&typeof child.type==='string')traverse(child);}
+   if(Array.isArray(value)){for(const child of value)if(child&&typeof child.type==='string')traverse(child);}
    else if(value&&typeof value.type==='string')traverse(value);
   }
  };
