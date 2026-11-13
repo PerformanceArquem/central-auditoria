@@ -20,6 +20,7 @@ const inbound=[
 let calls=[];
 const json=(data,status=200)=>({ok:status>=200&&status<300,status,json:async()=>data});
 let allowed=true,token=true,broken=false,waitMissing=false,shortPages=false,missingSecondPage=false;
+let uraFormat='array';
 const queueCalls=[
  {id:41,data_inicio:'2026-11-10T14:00:00-03:00',tempo_espera:40},
  {id:42,data_inicio:'2026-11-11T15:00:00-03:00',tempo_espera:80}
@@ -32,10 +33,15 @@ const fetch=async(input,opts={})=>{
  if(url.hostname==='voice-api.zenvia.com'){
   assert.equal(opts.method,'GET');
   assert.equal(opts.headers['Access-Token'],'fixture-token');
-  if(url.pathname==='/ura/relatorio')return json({sucesso:true,dados:{relatorio:[
-   {id:12,nome:'Atendimento Suporte',dados:[{acao:'fila',acao_dados:{fila_id:'430'}},{acao:'tts',acao_dados:{mensagem:'privado'}}]},
-   {id:13,nome:'Atendimento Comercial',dados:[{acao:'fila',acao_dados:{fila_id:'431'}},{acao:'fila',acao_dados:{fila_id:'../../bad'}}]}
-  ]}});
+  if(url.pathname==='/ura/relatorio'){
+   const support=[{acao:'fila',acao_dados:{fila_id:'430'}},{acao:'tts',acao_dados:{mensagem:'privado'}}];
+   const data=uraFormat==='malformed'?'[invalid':
+     uraFormat==='json'?JSON.stringify(support):support;
+   return json({sucesso:true,dados:{relatorio:[
+    {id:12,nome:'Atendimento Suporte',dados:data},
+    {id:13,nome:'Atendimento Comercial',dados:[{acao:'fila',acao_dados:{fila_id:'431'}},{acao:'fila',acao_dados:{fila_id:'../../bad'}}]}
+   ]}});
+  }
   if(broken)return json({message:'rejected'},502);
   assert.equal(url.searchParams.get('data_inicio'),'2026-11-10');
   assert.equal(url.searchParams.get('data_fim'),'2026-11-11');
@@ -292,4 +298,22 @@ test('admin UI only displays candidate queue IDs and URA labels as text',()=>{
  assert.ok(html.includes('id="zvFindQueues"'));
  assert.ok(html.includes("new URLSearchParams({mode:'zenvia',check:'queues'"));
  assert.ok(html.includes("li.textContent='Fila '"));
+});
+
+test('queue discovery handles official URA actions encoded as JSON string',async()=>{
+ uraFormat='json';
+ try{
+  const r=await invoke({start:'2026-11-10',end:'2026-11-11',check:'queues'});
+  assert.equal(r.code,200);
+  assert.equal(r.body.queues.length,2);
+  assert.equal(r.body.queues[0].id,'430');
+ }finally{uraFormat='array';}
+});
+test('queue discovery fails closed for malformed URA instead of falsely reporting no queues',async()=>{
+ uraFormat='malformed';
+ try{
+  const r=await invoke({start:'2026-11-10',end:'2026-11-11',check:'queues'});
+  assert.equal(r.code,502);
+  assert.equal(r.body.queues,undefined);
+ }finally{uraFormat='array';}
 });
