@@ -14,7 +14,9 @@ if(!post)throw Error('Missing protected doPost');
 const actions={guard:[],attachments:[],email:[]};
 function walk(n,parents=[]){
  if(!n||typeof n!=='object')return;
- if(n.type==='IfStatement'&&src.slice(n.start,n.end).includes('Anexos Zenvia Voz x Chat nao homologados nesta implantacao'))
+ if(n.type==='IfStatement'&&n.consequent?.type==='BlockStatement'&&
+    n.consequent.body.some(stmt=>stmt.type==='ThrowStatement'&&
+      src.slice(stmt.start,stmt.end).includes('Anexos Zenvia Voz x Chat nao homologados nesta implantacao')))
   actions.guard.push({n,parents});
  if(n.type==='CallExpression'){
   if(n.callee.type==='Identifier'&&n.callee.name==='arquemCreateReportAttachments_')actions.attachments.push({n,parents});
@@ -28,7 +30,7 @@ function walk(n,parents=[]){
 }
 walk(post);
 if(actions.guard.length!==1||actions.attachments.length!==1||actions.email.length!==1)
- throw Error('Expected exactly one voice guard, attachment call and sendEmail call');
+ throw Error('Expected guard=1, attachments=1, sends=1; counts '+JSON.stringify(Object.fromEntries(Object.entries(actions).map(([k,v])=>[k,v.length]))));
 const g=actions.guard[0].n,a=actions.attachments[0].n,e=actions.email[0].n;
 if(!(post.start<g.start&&g.end<=a.start&&a.end<e.start))throw Error('Guard not strictly before attachment generation and mail submission');
 const test=src.slice(g.test.start,g.test.end);
