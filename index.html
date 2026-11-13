@@ -6039,9 +6039,11 @@ window.clientImpactInit=()=>{
     rate_limited:'limite de consultas',provider_error:'erro do provedor',
     invalid_schema:'formato de resposta incompatível',unreachable:'sem resposta'};
    const labels={inbound:'Recebidas',outbound:'Efetuadas',queue:'Fila'};
-   el('zvStatus').textContent=(d.checks||[]).map(x=>
-    (labels[x.channel]||'Origem')+': '+(translations[x.status]||'indisponível')).join(' · ')+
-    (d.queueConfigured?'':' · TME pendente: fila não configurada');
+   const voiceState=d.voiceReady?'Voz: conexão validada':'Voz: conexão pendente';
+   const queueState=d.queueReady?'Fila: conexão validada':d.queueConfigured?
+    'Fila: validação pendente':'Fila: ID não configurado — TME indisponível';
+   el('zvStatus').textContent=[voiceState,queueState,...(d.checks||[]).map(x=>
+    (labels[x.channel]||'Origem')+': '+(translations[x.status]||'indisponível'))].join(' · ');
   }catch(e){el('zvStatus').textContent='Diagnóstico indisponível: '+e.message;}
   finally{loading=false;button.disabled=false;}
  }
