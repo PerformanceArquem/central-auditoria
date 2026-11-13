@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check < apps-script/central-auditoria-emails-completo.gs
-          node --test tests/appsscript-complete-integration.test.mjs tests/appsscript-keila-dry-run.test.mjs tests/appsscript-zenvia-package-parity.test.mjs
+          node --test tests/appsscript-complete-integration.test.mjs tests/appsscript-keila-dry-run.test.mjs tests/appsscript-zenvia-package-parity.test.mjs tests/appsscript-zenvia-sample-label-dates.test.mjs tests/zenvia-email-attachments.test.mjs tests/zenvia-keila-preservation.test.mjs
       - name: Preparar pacote isolado
         run: |
           set -euo pipefail
