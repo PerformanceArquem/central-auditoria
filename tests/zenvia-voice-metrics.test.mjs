@@ -343,3 +343,45 @@ test('candidate queue report can only be copied after a successful authenticated
  assert.ok(html.includes("await navigator.clipboard.writeText(value)"));
  assert.ok(!html.includes('Access-Token:'));
 });
+
+test('support statistics stay unavailable until validated extension mapping is configured',async()=>{
+ const r=await invoke();
+ assert.equal(r.code,200);
+ assert.equal(r.body.support.configured,false);
+ assert.equal(r.body.support.metrics,null);
+ assert.equal(r.body.summary.total,6);
+});
+test('validated support extensions only count their own calls without changing global numbers',async()=>{
+ scope.process.env.ZENVIA_SUPPORT_EXTENSION_IDS='2000';
+ try{
+  const r=await invoke();
+  assert.equal(r.code,200);
+  assert.equal(r.body.support.configured,true);
+  assert.equal(r.body.support.metrics.total,2);
+  assert.equal(r.body.support.metrics.answered,2);
+  assert.equal(r.body.support.metrics.tmaSeconds,85);
+  assert.equal(r.body.summary.total,6);
+  assert.equal(r.body.summary.tmaSeconds,85);
+  assert.equal(JSON.stringify(r.body).includes('ZENVIA_SUPPORT_EXTENSION_IDS'),false);
+ }finally{delete scope.process.env.ZENVIA_SUPPORT_EXTENSION_IDS;}
+});
+test('invalid or duplicate extension configuration cannot mark support metrics as ready',async()=>{
+ for(const id of ['2000,2000','2000,not-a-ramal','']){
+  scope.process.env.ZENVIA_SUPPORT_EXTENSION_IDS=id;
+  const r=await invoke();
+  assert.equal(r.code,200);
+  assert.equal(r.body.support.configured,false);
+  assert.equal(r.body.support.metrics,null);
+ }
+ delete scope.process.env.ZENVIA_SUPPORT_EXTENSION_IDS;
+});
+test('support missing call duration must not fabricate TMA',async()=>{
+ scope.process.env.ZENVIA_SUPPORT_EXTENSION_IDS='2000';
+ const old=inbound[0].duracao_falada_segundos;
+ delete inbound[0].duracao_falada_segundos;
+ try{
+  const r=await invoke();
+  assert.equal(r.body.support.metrics.tmaSeconds,null);
+  assert.equal(r.body.support.metrics.tmaMissingSamples,1);
+ }finally{inbound[0].duracao_falada_segundos=old;delete scope.process.env.ZENVIA_SUPPORT_EXTENSION_IDS;}
+});
