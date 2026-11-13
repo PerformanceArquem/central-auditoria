@@ -51,5 +51,6 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+# Revalidação do pacote na branch revisada (13/11/2026).
 # Este workflow NÃO executa clasp push, não acessa segredos, não atualiza
 # o Apps Script publicado e não envia e-mails. Uso restrito à branch revisada.
