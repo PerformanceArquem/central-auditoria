@@ -1433,17 +1433,17 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
   <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="b" id="emailReportReleaseOpen">Liberar relatórios</button><button type="button" class="s" id="emailAdminOpen">Gerenciar destinatários</button></div></div>
   <div id="emailReportReleasePanel" class="hide" style="margin-top:16px;border:1px solid #d6e1f0;border-radius:12px;padding:16px">
     <div class="row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-      <div><h3 style="margin:0">Liberação de relatórios para envio</h3><p class="subtle" style="margin:4px 0">Autorize ou suspenda categorias por destinatário, sem alterar e-mails, setores ou frequências. Nenhuma mensagem é disparada ao salvar.</p></div>
-      <button type="button" class="s" id="emailReleaseRefresh">↻ Atualizar permissões</button>
+      <div><h3 style="margin:0">Liberação de relatórios para envio</h3><p class="subtle" style="margin:4px 0">Autorize categorias e frequências de envio para cada destinatário. E-mails e setores não serão alterados. Nenhuma mensagem é disparada ao salvar.</p></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center"><input type="search" id="emailReleaseSearch" placeholder="Buscar nome, e-mail ou setor" aria-label="Buscar destinatários" style="min-width:240px;max-width:100%"><select id="emailReleaseFilter" aria-label="Filtrar destinatários"><option value="all">Todos</option><option value="active">Ativos</option><option value="inactive">Inativos</option><option value="blocked">Sem relatórios gerenciais</option></select><button type="button" class="s" id="emailReleaseRefresh">↻ Atualizar permissões</button></div>
     </div>
     <p class="coverage-note" id="emailReleaseStatus" role="status">Abra o módulo para consultar as autorizações.</p>
     <div class="tw" style="max-height:520px;overflow:auto">
       <table>
-        <thead><tr><th>Destinatário</th><th>Escopo</th><th>Gerenciais / setoriais</th><th>Fluxo da Produção</th><th>Situação</th><th>Liberação</th></tr></thead>
-        <tbody id="emailReleaseRows"><tr><td colspan="6">Nenhum cadastro carregado.</td></tr></tbody>
+        <thead><tr><th>Destinatário</th><th>Escopo</th><th>Frequências autorizadas</th><th>Conteúdo do relatório</th><th>Gerenciais / setoriais</th><th>Fluxo da Produção</th><th>Situação</th><th>Liberação</th></tr></thead>
+        <tbody id="emailReleaseRows"><tr><td colspan="8">Nenhum cadastro carregado.</td></tr></tbody>
       </table>
     </div>
-    <p class="subtle" style="margin-top:10px">Entradas e saídas da Produção: liberação exclusiva para o cadastro da Keila e dependente das validações do relatório. Cobranças recorrentes não são habilitadas neste módulo.</p>
+    <details style="margin-top:12px;padding:12px;border:1px solid #d6e1f0;border-radius:10px;background:#f8faff"><summary style="cursor:pointer;font-weight:600">O que está incluído nos relatórios existentes?</summary><div style="padding:10px 0 0;line-height:1.7"><p><b>Gerenciais e setoriais:</b> consolidados por setor, chamados, apontamentos, produtividade, atrasos, comparativos e indicadores que o gerador oficial disponibiliza conforme o perfil do destinatário.</p><p><b>Fluxo da Produção:</b> entradas e saídas, horas e qualidade, restrito ao cadastro autorizado.</p><p><b>Seções configuráveis:</b> detalhamento diário, empresas com maior consumo de horas e distribuição por atividades (no Excel). As seleções são aplicadas no conteúdo correspondente do e-mail e dos anexos pela Edge Function atualizada.</p><p><b>Demais gráficos e indicadores:</b> continuam vinculados ao relatório geral. A seleção individual desses itens ainda não foi implementada.</p><p><b>Segurança:</b> esta tela administra o cadastro de permissões. A aplicação efetiva no envio automático e manual depende também da validação da Edge Function.</p></div></details><p class="subtle" style="margin-top:10px">Entradas e saídas da Produção: liberação exclusiva para o cadastro da Keila e dependente das validações do relatório. Cobranças recorrentes não são habilitadas neste módulo.</p>
   </div>
   <div id="emailAdminPanel" class="hide">
     <p id="emailAdminStatus" role="status" class="coverage-note">Aguardando abertura.</p>
@@ -3082,9 +3082,10 @@ document.getElementById('alarmReviewRows')?.addEventListener('click',async event
  $('alarmEmailStatus').textContent='Reiteração preparada, ainda NÃO enviada. Confira o chamado, atualize a prévia e confirme o envio, se necessário.';
 });
 
-function alarmReminderStatusForTicket(id) {
- const sent=alarmEmailHistory.filter(r=>r.status==='sent'&&(r.ticket_ids||[]).map(String).includes(String(id))).sort((a,b)=>Date.parse(a.sent_at||a.created_at)-Date.parse(b.sent_at||b.created_at));
- const uncertain=alarmEmailHistory.some(r=>r.status!=='sent'&&(r.ticket_ids||[]).map(String).includes(String(id)));
+function alarmReminderStatusForTicket(id,recipient="") {
+ const history=recipient?alarmEmailHistory.filter(r=>String(r.recipient||'').toLowerCase()===String(recipient).toLowerCase()):alarmEmailHistory;
+ const sent=history.filter(r=>r.status==='sent'&&(r.ticket_ids||[]).map(String).includes(String(id))).sort((a,b)=>Date.parse(a.sent_at||a.created_at)-Date.parse(b.sent_at||b.created_at));
+ const uncertain=history.some(r=>r.status!=='sent'&&(r.ticket_ids||[]).map(String).includes(String(id)));
  if(uncertain)return {label:'Verificar envio anterior',eligible:false,count:sent.length};
  if(!sent.length)return {label:'Sem cobrança confirmada',eligible:false,count:0};
  const last=sent[sent.length-1],at=Date.parse(last.sent_at||last.created_at);
@@ -3092,7 +3093,7 @@ function alarmReminderStatusForTicket(id) {
  if(sent.length>=limit+1)return {label:'Limite de '+limit+' reiterações atingido',eligible:false,count:sent.length};
  if(!Number.isFinite(at))return {label:'Revisar data da última cobrança',eligible:false,count:sent.length};
  const due=new Date(at+days*86400000);
- if(Date.now()<due.getTime())return {label:'Próxima revisão: '+alarmEmailTime(due.toISOString()),eligible:false,count:sent.length};
+ if(Date.now()<due.getTime())return {label:'Próxima revisão: '+alarmEmailTime(due.toISOString()),eligible:false,count:sent.length,nextReviewAt:due.toISOString()};
  return {label:'Elegível para revisão humana · '+sent.length+'ª cobrança registrada',eligible:true,count:sent.length};
 }
 async function alarmReminderPolicyLoad() {
@@ -3152,7 +3153,7 @@ function alarmEmailHistoryRender(){
   const state=r.status==='sent'?'ok':r.status==='uncertain'?'alert-warn':'alert-warn';
   return '<tr><td>'+esc(alarmEmailTime(sentDate))+'</td><td>'+esc(r.recipient)+'</td>'+
     '<td><span class="pill '+state+'">'+esc(alarmEmailHistoryStatus(r.status))+'</span></td>'+
-    '<td>'+links+'</td><td>'+ids.length+'</td><td>'+esc(ids.map(id=>'#'+id+': '+alarmReminderStatusForTicket(id).label).join(' · '))+'</td><td title="'+esc(r.id||'')+'">'+esc(String(r.request_id||r.id||'').slice(0,8))+'</td></tr>';
+    '<td>'+links+'</td><td>'+ids.length+'</td><td>'+esc(ids.map(id=>'#'+id+': '+alarmReminderStatusForTicket(id,r.recipient).label).join(' · '))+'</td><td title="'+esc(r.id||'')+'">'+esc(String(r.request_id||r.id||'').slice(0,8))+'</td></tr>';
  }).join('')||'<tr><td colspan="7">Nenhum registro corresponde ao filtro.</td></tr>';
 }
 function alarmEmailHistoryExport(){
@@ -3200,10 +3201,17 @@ async function alarmEmailHistoryLoad(){
 }
 function alarmEmailTicketBadge(id){
  const relevant=alarmEmailHistory.filter(r=>(r.ticket_ids||[]).map(String).includes(String(id)));
- const sent=relevant.find(r=>r.status==='sent');
- if(sent){const review=alarmReminderStatusForTicket(id);return ' <span class="pill ok" title="'+esc('Aceite pelo Gmail em '+alarmEmailTime(sent.sent_at||sent.created_at)+' · '+review.label)+'">✉ E-mail enviado · '+review.count+' cobrança(s)</span>';}
- if(relevant.length)return ' <span class="pill alert-warn" title="Envio não confirmado: consulte o relatório de e-mails.">✉ Verificar envio</span>';
- return '';
+ const sent=relevant.filter(r=>r.status==='sent');
+ const uncertain=relevant.some(r=>r.status!=='sent');
+ if(uncertain)return ' <span class="pill alert-warn" title="Existe tentativa sem confirmação. Consulte o histórico antes de preparar novo envio.">✉ Verificar envio anterior</span>';
+ if(!sent.length)return '';
+ const recipients=[...new Set(sent.map(r=>String(r.recipient||'').toLowerCase()))];
+ const reviews=recipients.map(recipient=>alarmReminderStatusForTicket(id,recipient));
+ const ready=reviews.some(r=>r.eligible);
+ const dates=reviews.map(r=>r.nextReviewAt).filter(Boolean).sort();
+ const next=dates[0];
+ const label=ready?'Revisão de reforço disponível':next?'Revisar em '+alarmEmailTime(next):reviews[0]?.label||'Consultar histórico';
+ return ' <span class="pill ok">✉ Já cobrado · '+sent.length+' cobrança(s)</span> <span class="pill '+(ready?'alert-warn':'')+'" title="O reforço exige rechecagem do chamado e sua aprovação. Nenhum envio automático.">'+esc(label)+'</span>';
 }
 
 const alarmSelected=new Set();
@@ -3283,10 +3291,12 @@ async function emailAttachmentCheck(){
    const formats=Array.isArray(data.formats)?data.formats.filter(x=>x==='pdf'||x==='xlsx'):[];
    const ready=data.ready===true,enabled=data.enabled===true;
    const keilaReady=data.keilaGeneratorReady===true;
+   const sectionsReady=data.sectionPermissionsSupported===true;
+   const sectionLabel=sectionsReady?'Seleção de Dia a dia, Empresas e Atividades: suportada.':'Seleção de conteúdo: NÃO confirmada pelo Apps Script instalado; envios personalizados serão bloqueados.';
    const general=ready&&enabled?'PDF e Excel corporativos: gerador ativo.':ready?'PDF e Excel corporativos: homologados, mas o envio de anexos está desativado.':'PDF e Excel corporativos: pendentes — '+String(data.status||'revisar o serviço e o papel timbrado')+'.';
    const specific=keilaReady?'Relatório Keila: versão com qualidade homologada.':'Relatório Keila: a homologação específica de qualidade ainda não foi confirmada pelo Web App.';
-   status.textContent=general+' '+specific+' Consulta sem envio de e-mails.'+(formats.length?' Formatos: '+formats.join(' e ')+'.':'');
-   status.style.color=keilaReady&&ready&&enabled?'#167052':'#936018';
+   status.textContent=general+' '+specific+' '+sectionLabel+' Consulta sem envio de e-mails.'+(formats.length?' Formatos: '+formats.join(' e ')+'.':'');
+   status.style.color=keilaReady&&ready&&enabled&&sectionsReady?'#167052':'#936018';
  }catch(e){
    status.textContent='Não foi possível validar os anexos: '+String(e?.message||e)+'. Nenhum e-mail foi enviado.';
    status.style.color='#a23737';
@@ -5274,9 +5284,20 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   // Módulo de liberação: altera somente allowed_report_types após validação de administrador.
   const releaseSay=message=>{$('emailReleaseStatus').textContent=message};
   const flowRecipientId='a5329710-dd63-4bfd-bbd3-dc23e0efc8f0';
+  const recipientAllowsInRelease=x=>x.allowed_report_types==null||(Array.isArray(x.allowed_report_types)&&x.allowed_report_types.includes('general'));
   function renderReportRelease(){
     const active=records.filter(x=>x.active).length;
-    $('emailReleaseRows').innerHTML=records.map(x=>{
+    const search=String($('emailReleaseSearch')?.value||'').trim().toLocaleLowerCase('pt-BR');
+    const filter=String($('emailReleaseFilter')?.value||'all');
+    const visible=records.filter(x=>{
+      const allowed=recipientAllowsInRelease(x);
+      if(filter==='active'&&!x.active)return false;
+      if(filter==='inactive'&&x.active)return false;
+      if(filter==='blocked'&&allowed)return false;
+      const haystack=[x.name,x.email,x.sector,...(Array.isArray(x.sectors)?x.sectors:[])].join(' ').toLocaleLowerCase('pt-BR');
+      return !search||haystack.includes(search);
+    });
+    $('emailReleaseRows').innerHTML=visible.map(x=>{
       const rules=x.allowed_report_types;
       const legacy=rules==null;
       const general=legacy||Array.isArray(rules)&&rules.includes('general');
@@ -5285,13 +5306,21 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const id=esc(x.id);
       return '<tr data-release-recipient="'+id+'">'+
         '<td><strong>'+esc(x.name)+'</strong><small style="display:block;color:var(--muted)">'+esc(x.email)+'</small></td>'+
-        '<td>'+esc(x.scope==='management'?'Gestão':'Setorial')+'</td>'+
-        '<td><label><input type="checkbox" data-release-code="general" '+(general?'checked ':'')+(!x.active?'disabled ':'')+'> Liberado</label></td>'+
+        '<td>'+esc(x.scope==='management'?'Gestão':'Setorial')+'</td>'+ 
+         '<td><div style="display:grid;grid-template-columns:repeat(2,minmax(85px,1fr));gap:5px">'+
+          [['daily_enabled','Diário'],['weekly_enabled','Semanal'],['monthly_enabled','Mensal'],['annual_enabled','Anual']].map(([field,label])=>
+            '<label style="white-space:nowrap"><input type="checkbox" data-release-frequency="'+field+'" '+(x[field]===true?'checked ':'')+(!x.active?'disabled ':'')+'> '+label+'</label>'
+          ).join('')+'</div></td>'+
+        '<td>'+(flowEligible?'Somente rastreabilidade da Produção':('<div style="display:grid;gap:5px">'+
+          [['daily_detail','Dia a dia'],['customers','Empresas por horas'],['activities','Atividades / Excel']].map(([field,label])=>
+            '<label style="white-space:nowrap"><input type="checkbox" data-release-section="'+field+'" '+(x.report_sections?.[field]!==false?'checked ':'')+(!x.active?'disabled ':'')+'> '+label+'</label>'
+          ).join('')+'</div>'))+'</td>'+
+        '<td>'+(flowEligible?'Não se aplica':'<label><input type="checkbox" data-release-code="general" '+(general?'checked ':'')+(!x.active?'disabled ':'')+'> Liberado</label>')+'</td>'+
         '<td>'+(flowEligible?'<label><input type="checkbox" data-release-code="production_flow" '+(flow?'checked ':'')+(!x.active?'disabled ':'')+'> Liberado</label>':'Exclusivo Keila')+'</td>'+
         '<td>'+(x.active?'Ativo':'Inativo')+(legacy?' · regras anteriores':' · personalizado')+'</td>'+
         '<td><button type="button" class="s" data-release-save="'+id+'" '+(!x.active?'disabled':'')+'>Salvar liberação</button></td></tr>';
-    }).join('')||'<tr><td colspan="6">Nenhum destinatário cadastrado.</td></tr>';
-    releaseSay(records.length+' destinatários cadastrados; '+active+' ativos. Alterações são individuais e exigem salvar.');
+    }).join('')||'<tr><td colspan="8">Nenhum destinatário cadastrado.</td></tr>';
+    releaseSay(visible.length+' exibidos de '+records.length+' destinatários cadastrados; '+active+' ativos. Alterações são individuais e exigem salvar.');
   }
   $('emailReportReleaseOpen').addEventListener('click',async()=>{
     const panel=$('emailReportReleasePanel'),open=panel.classList.contains('hide');
@@ -5300,6 +5329,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     if(open){panel.scrollIntoView({behavior:'smooth',block:'nearest'});await reload();}
   });
   $('emailReleaseRefresh').addEventListener('click',reload);
+  $('emailReleaseSearch').addEventListener('input',renderReportRelease);
+  $('emailReleaseFilter').addEventListener('change',renderReportRelease);
   $('emailReleaseRows').addEventListener('click',async event=>{
     const btn=event.target.closest('[data-release-save]');
     if(!btn)return;
@@ -5310,22 +5341,26 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     btn.disabled=true;
     try{
       await verify();
-      // Não modificar outras autorizações (ex.: cobrança), nem o modo de agendamento.
+      // Preservar autorizações de outras categorias; frequências e conteúdo só mudam ao salvar esta linha.
       const original=Array.isArray(current.allowed_report_types)?current.allowed_report_types:null;
       // Cadastros legados (NULL) autorizavam também cobranças: preservar essa permissão.
       const preserve=(original===null?['ticket_followup']:original).filter(v=>v!=='general'&&v!=='production_flow');
-      const codes=[
-        ...preserve,
-        ...[...row.querySelectorAll('[data-release-code]:checked')].map(el=>el.getAttribute('data-release-code'))
-      ];
+      const codes=String(id)===flowRecipientId?
+        (row.querySelector('[data-release-code="production_flow"]')?.checked?['production_flow']:[]):
+        [...preserve,...[...row.querySelectorAll('[data-release-code]:checked')].map(el=>el.getAttribute('data-release-code'))];
+      const frequencyFields=['daily_enabled','weekly_enabled','monthly_enabled','annual_enabled'];
+      const frequencies=Object.fromEntries(frequencyFields.map(field=>
+        [field,Boolean(row.querySelector('[data-release-frequency="'+field+'"]')?.checked)]));
+      const sections=Object.fromEntries(['daily_detail','customers','activities'].map(field=>
+        [field,Boolean(row.querySelector('[data-release-section="'+field+'"]')?.checked)]));
       let request=client.from('audit_email_recipients')
-        .update({allowed_report_types:codes,updated_at:new Date().toISOString()})
+        .update({allowed_report_types:codes,...frequencies,report_sections:sections,updated_at:new Date().toISOString()})
         .eq('id',id).eq('active',true);
       if(current.updated_at)request=request.eq('updated_at',current.updated_at);
       const result=await request.select('id,allowed_report_types,updated_at').maybeSingle();
       if(result.error)throw result.error;
       if(!result.data)throw Error('Cadastro alterado em outra sessão. Atualize a lista antes de salvar.');
-      releaseSay('Permissões salvas para '+current.email+'. Nenhum e-mail enviado.');
+      releaseSay('Categorias, conteúdos e frequências salvos para '+current.email+'. Nenhum e-mail enviado.');
       await reload();
     }catch(error){releaseSay('Não foi possível salvar: '+(error.message||error))}
     finally{btn.disabled=false}
@@ -5362,6 +5397,13 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       if(error)throw error;
       if(!data?.ok)throw Error(data?.error||'Não foi possível consultar a prévia.');
       const m=data.metrics||{},t=data.ticketMetrics||{},p=data.ticketPreview||{};
+      const sectionNames={daily_detail:'Dia a dia',customers:'Empresas por horas',activities:'Atividades / Excel'};
+      const sections=data.reportSections||{};
+      const sectionSummary='<p style="margin:8px 0"><strong>Conteúdo autorizado:</strong> '+
+        Object.entries(sectionNames).map(([key,label])=>
+          '<span style="display:inline-block;margin:3px 5px 3px 0;padding:4px 8px;border-radius:6px;background:'+
+          (sections[key]===false?'#fff1f0':'#eef7f1')+'">'+esc(label)+': '+(sections[key]===false?'Bloqueado':'Liberado')+'</span>'
+        ).join('')+'</p>';
       const forecast=Array.isArray(data.forecastPreview)?data.forecastPreview:[];
       const hh=v=>{const n=Math.max(0,Math.round(Number(v)||0));return Math.floor(n/60)+'h'+String(n%60).padStart(2,'0')};
       const forecastSection=forecast.length?
@@ -5373,7 +5415,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
 
       const line=(item,category)=>'<tr><td style="padding:7px;border-bottom:1px solid #e5edf7"><a href="'+esc(item.url)+'" target="_blank" rel="noopener noreferrer">#'+esc(item.id)+'</a></td><td style="padding:7px;border-bottom:1px solid #e5edf7">'+esc(item.subject)+'</td><td style="padding:7px;border-bottom:1px solid #e5edf7">'+esc(item.owner)+' · '+esc(item.sector)+'</td><td style="padding:7px;border-bottom:1px solid #e5edf7">'+esc(category==='sla'?item.sla:(item.days+' dias'))+'</td></tr>';
       const examples=[...(p.overdue||[]).map(x=>line(x,'sla')),...(p.stalled||[]).map(x=>line(x,'stalled'))];
-      area.innerHTML='<strong>Prévia — '+esc(data.from)+' a '+esc(data.to)+'</strong>'+
+      area.innerHTML='<strong>Prévia — '+esc(data.from)+' a '+esc(data.to)+'</strong>'+sectionSummary+
         '<p style="margin:8px 0">Horas: '+esc(String(m.minutes??0))+' minutos · Apontamentos: '+esc(String(m.appointments??0))+
         ' · Chamados com horas: '+esc(String(m.tickets??0))+'</p>'+
         '<p>Em aberto: '+esc(String(t.open??0))+' · SLA vencido: '+esc(String(t.overdue??0))+
@@ -5861,6 +5903,7 @@ async function checkAttachments(){
    const result=await call({action:'attachment_health'});
    status.textContent='Anexos PDF/XLSX: '+(result.ready?'gerador informado como pronto':'pendentes')+
      '. '+result.status+' · Ativação automática: '+(result.enabled?'ligada':'desligada')+
+     '. Seções individuais: '+(result.sectionPermissionsSupported?'suportadas':'não confirmadas pelo Apps Script instalado')+
      '. Esta verificação não gera arquivos e não confirma a marca-d’água visual.';
  }catch(e){status.textContent='Não foi possível verificar anexos: '+e.message}
  finally{button.disabled=false}
@@ -5954,3 +5997,5 @@ window.clientImpactInit=()=>{
 <script src="/production-flow.js"></script>
 </body>
 </html>
+
+

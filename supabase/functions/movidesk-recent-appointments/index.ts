@@ -35,9 +35,26 @@ async function movidesk(params:Record<string,string>){
  const token=E('MOVIDESK_TOKEN');if(!token)throw Error('MOVIDESK_TOKEN indisponivel');
  const u=new URL(API);u.searchParams.set('token',token);
  for(const [k,v] of Object.entries(params))u.searchParams.set(k,v);
- const r=await fetch(u,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(22000)});
- if(!r.ok)throw Error('Movidesk HTTP '+r.status+' na conciliacao de apontamentos');
- return r.json();
+ // Repetir apenas falhas transitorias; nunca avancar checkpoint sem salvar o lote.
+ for(let attempt=0;attempt<3;attempt++){
+  try{
+   const r=await fetch(u,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)});
+   if(r.ok)return await r.json();
+   if(![429,500,502,503,504].includes(r.status)||attempt===2)
+    throw Error('Movidesk HTTP '+r.status+' na conciliacao de apontamentos');
+   const retryAfter=Number(r.headers.get('Retry-After'));
+   const wait=Number.isFinite(retryAfter)&&retryAfter>0
+    ? Math.min(4000,retryAfter*1000):500*2**attempt;
+   await new Promise(resolve=>setTimeout(resolve,wait));
+  }catch(error){
+   if(attempt===2||!(
+    error instanceof TypeError||
+    error instanceof DOMException&&error.name==='TimeoutError'
+   ))throw error;
+   await new Promise(resolve=>setTimeout(resolve,500*2**attempt));
+  }
+ }
+ throw Error('Tentativas Movidesk esgotadas');
 }
 async function isAdmin(req:Request){
  const auth=req.headers.get('Authorization')||'';
@@ -64,10 +81,16 @@ function extract(t:Record<string,unknown>){
  }
  return out;
 }
+const PAGE_SIZE=50;
+function reusableSnapshot(row:Record<string,unknown>,cached:Record<string,unknown>|undefined){
+ if(!cached||String(cached.id)!==String(row.id)||!Array.isArray(cached.actions))return false;
+ const remote=iso(row.lastUpdate),local=iso(cached.lastUpdate);
+ return remote!==null&&local!==null&&remote===local;
+}
 async function list(start:string,end:string,offset:number){
  // Documentação Movidesk: OData actions/any + timeAppointments/any.
  const f='actions/any(a: a/timeAppointments/any(p: p/date ge '+start+'T00:00:00.00z and p/date lt '+end+'T00:00:00.00z))';
- const items=await movidesk({'$select':'id,lastUpdate','$filter':f,'$orderby':'id asc','$top':'10','$skip':String(offset)});
+ const items=await movidesk({'$select':'id,lastUpdate','$filter':f,'$orderby':'id asc','$top':String(PAGE_SIZE),'$skip':String(offset)});
  if(!Array.isArray(items))throw Error('Resposta inesperada da pesquisa Movidesk');
  return items as Record<string,unknown>[];
 }
@@ -103,17 +126,28 @@ Deno.serve(async(req:Request)=>{
   if(c.already_completed)return reply(req,{ok:true,completed:true,from:c.claimed_start,to:c.claimed_end,note:'Janela conciliada'});
   try{
    const rows=await list(c.claimed_start,c.claimed_end,c.claimed_offset);
-   let appts=0;
+   const ids=rows.map(row=>String(row.id??''));
+   if(ids.some(id=>!/^\d+$/.test(id)))throw Error('ID inválido na página');
+   const snapshots=ids.length?await db('audit_direct_tickets?select=ticket_id,payload&ticket_id=in.('+ids.join(',')+')'):[];
+   const cached=new Map<string,Record<string,unknown>>(snapshots.map((item:Record<string,unknown>)=>[String(item.ticket_id),item.payload as Record<string,unknown>]));
+   let appts=0,processed=0,fetched=0,reused=0;
    for(const row of rows){
     const id=String(row.id??'');if(!/^\d+$/.test(id))throw Error('ID de chamado invalido');
-    const full=await movidesk({id});if(!full||String(full.id??'')!==id)throw Error('Detalhe invalido '+id);
-    appts+=await save(full);
+    let full=cached.get(id);
+    if(reusableSnapshot(row,full)){reused++;}
+    else{
+     // Keep API demand below the previous eleven calls per invocation.
+     if(fetched>=6)break;
+     full=await movidesk({id});fetched++;
+    }
+    if(!full||String(full.id??'')!==id)throw Error('Detalhe invalido '+id);
+    appts+=await save(full);processed++;
    }
-   const complete=rows.length<10;
-   const finished=await rpc('audit_recent_finish',{p_token:c.claimed_token,p_count:rows.length,p_complete:complete,p_error:null});
+   const complete=rows.length<PAGE_SIZE&&processed===rows.length;
+   const finished=await rpc('audit_recent_finish',{p_token:c.claimed_token,p_count:processed,p_complete:complete,p_error:null});
    if(finished!==true)throw Error('Checkpoint nao confirmado');
-   return reply(req,{ok:true,mode:'recent_time_appointments',saved:rows.length,appointments:appts,
-    from:c.claimed_start,to:c.claimed_end,nextOffset:c.claimed_offset+rows.length,completed:complete});
+   return reply(req,{ok:true,mode:'recent_time_appointments',saved:processed,appointments:appts,detailsFetched:fetched,snapshotsReused:reused,
+    from:c.claimed_start,to:c.claimed_end,nextOffset:c.claimed_offset+processed,completed:complete});
   }catch(e){
    await rpc('audit_recent_finish',{p_token:c.claimed_token,p_count:0,p_complete:false,p_error:String(e)}).catch(()=>{});
    throw e;

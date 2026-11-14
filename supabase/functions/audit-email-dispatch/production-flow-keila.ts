@@ -57,65 +57,53 @@ export function buildKeilaProductionFlow(rows:Row[],from:string,to:string){
  return {from,to,entered:unique(entries),exited:unique(exits),
   entryMovements:entries.length,exitMovements:exits.length,movements};
 }
-export type KeilaQualityRow={name:string;hoursMinutes:number;appointments:number;ratings:number;excellent:number;average:number|null};
+/**
+ * Email da Keila: somente duas métricas de fluxo.
+ * A rastreabilidade completa permanece na fonte de dados do sistema,
+ * nunca no e-mail ou nos anexos deste relatório.
+ */
 export function keilaProductionReport(
- data:ReturnType<typeof buildKeilaProductionFlow>,
- kind:'daily'|'weekly'|'monthly',
- quality:KeilaQualityRow[]=[]
-){
- const title='Entradas e Saídas da Produção — '+({daily:'Diário',weekly:'Semanal',monthly:'Mensal'}[kind]);
- const period=data.from.split('-').reverse().join('/')+' a '+data.to.split('-').reverse().join('/');
- const totalRatings=quality.reduce((n,r)=>n+r.ratings,0),excellent=quality.reduce((n,r)=>n+r.excellent,0);
- const qualityPercent=totalRatings?Math.round(excellent/totalRatings*10000)/100:null;
- const hh=(minutes:number)=>String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');
- const qualityLines=['','QUALIDADE E COLABORADORES',
-  'Avaliações: '+totalRatings+' | Notas de 8 a 10: '+excellent+' | Índice de qualidade: '+(qualityPercent===null?'Sem avaliações':qualityPercent.toFixed(2)+'%'),
-  'Critério: notas 1 a 7 = abaixo do padrão; 8 a 10 = excelentes. Sem avaliação não equivale a nota zero.',
-  ...quality.map(q=>q.name+' | Horas: '+hh(q.hoursMinutes)+' | Apontamentos: '+q.appointments+
-   ' | Avaliações: '+q.ratings+' | Excelentes: '+q.excellent+' | Média: '+(q.average===null?'Sem avaliações':q.average.toFixed(2)))];
- const qualityHtml='<h3 style="margin-top:24px">Qualidade e colaboradores selecionados</h3>'+
-   '<p style="font-size:12px">Avaliações: '+totalRatings+' · Excelentes (8–10): '+excellent+
-   ' · Índice: '+(qualityPercent===null?'Sem avaliações':qualityPercent.toFixed(2)+'%')+'</p>'+
-   '<p style="font-size:11px;color:#60748c">Sem avaliações não equivale a desempenho ruim. Critério: 1–7 abaixo do padrão e 8–10 excelente.</p>'+
-   '<table width="100%" style="font-size:12px;border-collapse:collapse"><tr style="background:#edf3fb"><th>Colaborador</th><th>Horas</th><th>Apontamentos</th><th>Avaliações</th><th>Excelentes</th><th>Média</th></tr>'+
-   quality.map(q=>'<tr><td>'+esc(q.name)+'</td><td>'+hh(q.hoursMinutes)+'</td><td>'+q.appointments+'</td><td>'+q.ratings+'</td><td>'+q.excellent+'</td><td>'+(q.average===null?'Sem avaliações':q.average.toFixed(2))+'</td></tr>').join('')+'</table>';
-
- const count=data.movements.length;
- const detail=data.movements.slice(0,450);
- const limited=count>450;
- const lines=[
-  'ARQUEM SISTEMAS · CENTRAL DE AUDITORIA',title,'Período: '+period,
-  'Entraram na Produção: '+data.entered+' chamados distintos',
-  'Saíram da Produção: '+data.exited+' chamados distintos por transferência',
-  'Movimentações registradas: '+data.entryMovements+' entradas / '+data.exitMovements+' saídas.',
-  'Finalizações não são contabilizadas como saídas.',
-  'Um chamado pode aparecer nos dois indicadores ou ser movimentado mais de uma vez.',
-  limited?'Atenção: detalhes limitados aos 450 primeiros eventos; totais completos.':'',
-  ...qualityLines,
-  'DETALHAMENTO',
-  ...detail.map(m=>['#'+m.id,m.direction==='entry'?'Entrada':'Saída',fmt(m.at),m.fromTeam+' → '+m.toTeam,'Responsável: '+m.responsible,'Movimentado por: '+m.actor,m.url].join(' | '))
- ].filter(Boolean);
- const table=detail.map(m=>'<tr><td style="padding:8px;border-bottom:1px solid #e5edf5"><a href="'+m.url+'">#'+esc(m.id)+'</a></td>'+
-   '<td style="padding:8px;border-bottom:1px solid #e5edf5">'+(m.direction==='entry'?'Entrada':'Saída')+'</td>'+
-   '<td style="padding:8px;border-bottom:1px solid #e5edf5">'+esc(fmt(m.at))+'</td>'+
-   '<td style="padding:8px;border-bottom:1px solid #e5edf5">'+esc(m.fromTeam)+' → '+esc(m.toTeam)+'</td>'+
-   '<td style="padding:8px;border-bottom:1px solid #e5edf5">'+esc(m.responsible)+'</td></tr>').join('');
- const html='<!doctype html><html lang="pt-BR"><body style="margin:0;background:#edf3fa;font-family:Arial,sans-serif;color:#173453">'+
- '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px"><table width="100%" style="max-width:760px;background:#fff;border-collapse:collapse">'+
- '<tr><td style="background:#142f50;color:#fff;padding:25px"><small>ARQUEM SISTEMAS · CENTRAL DE AUDITORIA</small><h1 style="font-size:22px;margin:10px 0 0">'+esc(title)+'</h1><p>Período: '+esc(period)+'</p></td></tr>'+
- '<tr><td style="padding:24px"><table role="presentation" width="100%"><tr><td style="background:#eef5ff;padding:20px"><b>ENTRARAM</b><h2>'+data.entered+'</h2></td><td style="background:#e8f7ef;padding:20px"><b>SAÍRAM POR TRANSFERÊNCIA</b><h2>'+data.exited+'</h2></td></tr></table>'+
- '<p style="font-size:12px;color:#53647c">Contagens de chamados distintos. Encerramentos não entram nas saídas. '+data.entryMovements+' movimentações de entrada e '+data.exitMovements+' de saída.</p>'+
- (limited?'<p><b>Detalhamento limitado a 450 eventos; totais completos.</b></p>':'')+
- qualityHtml+
- '<h3>Chamados e movimentações</h3><table width="100%" style="font-size:12px;border-collapse:collapse"><tr style="background:#edf3fb"><th>Chamado</th><th>Movimento</th><th>Data</th><th>Origem / destino</th><th>Responsável</th></tr>'+table+'</table>'+
- '</td></tr><tr><td style="background:#f5f8fc;padding:18px;color:#60748c;font-size:11px">ARQUEM SISTEMAS · Gestão de Qualidade</td></tr></table></td></tr></table></body></html>';
- // O gerador existente cria PDF e Excel a partir deste pacote corporativo.
- const packet={schema:'arquem-mail-v1',title,from:data.from,to:data.to,partial:false,historicalIncomplete:false,
-  metrics:{tickets:new Set(data.movements.map(m=>m.id)).size,appointments:0,minutes:0,entered:data.entered,exited:data.exited,entryMovements:data.entryMovements,exitMovements:data.exitMovements},
-  collaborators:quality.map(q=>({name:q.name,sector:'Setores selecionados',minutes:q.hoursMinutes,minimumMinutes:0,targetMinutes:0,minimumGap:0,targetGap:0,ruleSource:'Apontamentos importados'})),customers:[],activities:[],daily:[],
-  productionQuality:quality.map(q=>({name:q.name,hoursMinutes:q.hoursMinutes,appointments:q.appointments,ratings:q.ratings,excellent:q.excellent,average:q.average})),
-  productionFlow:{entered:data.entered,exited:data.exited,entryMovements:data.entryMovements,exitMovements:data.exitMovements},
-  tickets:detail.map(m=>({id:m.id,client:m.client,owner:m.responsible,status:(m.direction==='entry'?'Entrada':'Saída')+' · '+fmt(m.at)+' · '+m.fromTeam+' → '+m.toTeam,ageDays:0,url:m.url})),
-  forecastVariances:[]};
- return {title,text:lines.join('\n'),html,packet,limited};
+  data:ReturnType<typeof buildKeilaProductionFlow>,
+  kind:'daily'|'weekly'|'monthly'
+) {
+  const title='Rastreabilidade dos chamados da Produção — '+({daily:'Diário',weekly:'Semanal',monthly:'Mensal'}[kind]);
+  const period=data.from.split('-').reverse().join('/')+' a '+data.to.split('-').reverse().join('/');
+  const entered=data.entered,exited=data.exited;
+  const scale=Math.max(entered,exited,1);
+  const width=(n:number)=>Math.round(n/scale*100);
+  const text=[
+    'ARQUEM SISTEMAS · CENTRAL DE AUDITORIA',
+    title,'Período: '+period,
+    'ENTRADAS: '+entered,
+    'SAÍDAS: '+exited
+  ].join('\n');
+  const html='<!doctype html><html lang="pt-BR"><body style="margin:0;background:#edf3fa;font-family:Arial,sans-serif;color:#173453">'+
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">'+
+    '<table width="100%" style="max-width:640px;background:#fff;border-collapse:collapse">'+
+    '<tr><td style="background:#142f50;color:#fff;padding:24px"><small>ARQUEM SISTEMAS · CENTRAL DE AUDITORIA</small>'+
+    '<h1 style="font-size:22px;margin:8px 0 0">Rastreabilidade dos chamados da Produção</h1>'+
+    '<p style="font-size:13px;margin-bottom:0">Período: '+esc(period)+'</p></td></tr>'+
+    '<tr><td style="padding:28px">'+
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'+
+    '<td style="width:50%;background:#edf4ff;padding:18px"><b>ENTRADAS</b><h2 style="font-size:36px;margin:10px 0">'+entered+'</h2></td>'+
+    '<td style="width:50%;background:#e9f8f1;padding:18px"><b>SAÍDAS</b><h2 style="font-size:36px;margin:10px 0">'+exited+'</h2></td>'+
+    '</tr></table>'+
+    '<h3 style="margin:24px 0 14px;font-size:16px">Comparativo</h3>'+
+    '<table role="presentation" width="100%" cellpadding="6" cellspacing="0">'+
+    '<tr><td width="82">Entradas</td><td><div style="height:22px;background:#e5ebf2">'+
+    '<div style="height:22px;width:'+width(entered)+'%;background:#2b64b6"></div></div></td><td width="48" align="right"><b>'+entered+'</b></td></tr>'+
+    '<tr><td>Saídas</td><td><div style="height:22px;background:#e5ebf2">'+
+    '<div style="height:22px;width:'+width(exited)+'%;background:#21886b"></div></div></td><td align="right"><b>'+exited+'</b></td></tr>'+
+    '</table></td></tr></table></td></tr></table></body></html>';
+  const packet={
+    schema:'arquem-mail-v1',
+    title,from:data.from,to:data.to,partial:false,historicalIncomplete:false,
+    metrics:{entered,exited},
+    productionFlow:{entered,exited,movements:data.movements.map(m=>({
+      id:m.id,direction:m.direction,at:m.at,subject:m.subject,client:m.client,
+      fromTeam:m.fromTeam,toTeam:m.toTeam,responsible:m.responsible,actor:m.actor
+    }))},
+    collaborators:[],customers:[],activities:[],daily:[],tickets:[],forecastVariances:[]
+  };
+  return {title,text,html,packet,limited:false};
 }

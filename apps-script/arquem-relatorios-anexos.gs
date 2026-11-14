@@ -85,14 +85,52 @@ function arquemHomologarKeilaSemEnvio() {
   const keila=arquemTesteKeilaSemEnvio();
   if(keila.ok!==true || keila.sent!==false || !Array.isArray(keila.files) ||
      keila.files.length!==2 || keila.hasProductionFlow!==true ||
-     keila.hasProductionQuality!==true)
+     keila.entradasSaidasOnly!==true)
     throw new Error('Relatório da Keila não passou na homologação PDF/XLSX');
   props.setProperties({
-    ARQUEM_KEILA_QUALITY_VALIDATED_AT:new Date().toISOString(),
-    ARQUEM_KEILA_QUALITY_VALIDATED_TEMPLATE_ID:props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID') || '',
-    ARQUEM_KEILA_QUALITY_VALIDATED_VERSION:'arquem-3-keila-quality'
+    ARQUEM_KEILA_FLOW_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_KEILA_FLOW_VALIDATED_TEMPLATE_ID:props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID') || '',
+    ARQUEM_KEILA_FLOW_VALIDATED_VERSION:'arquem-8-keila-movements'
   },false);
-  return {ok:true,sent:false,qualityReady:true,files:keila.files};
+  return {ok:true,sent:false,productionReady:true,files:keila.files};
+}
+/**
+ * Homologacao das permissoes individuais SEM envio de e-mail.
+ * Execute uma vez depois de instalar a versao 4 e de validar o modelo timbrado.
+ * O gerador recusa abas vedadas e verifica PDF/XLSX antes de liberar o recurso.
+ */
+function arquemHomologarSecoesSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const template=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
+  if(!template)throw new Error('Modelo timbrado obrigatorio para homologar as secoes.');
+  const approved=arquemValidarPublicacaoSemEnvio();
+  if(approved.ok!==true || approved.sent!==false)
+    throw new Error('Anexos corporativos ainda nao homologados.');
+  const packet={
+    schema:'arquem-mail-v1',title:'TESTE SEM ENVIO - Permissoes individuais',
+    from:'2026-11-02',to:'2026-11-08',
+    partial:false,historicalIncomplete:false,
+    metrics:{minutes:480,appointments:1,tickets:1},
+    reportSections:{daily_detail:false,customers:false,activities:false},
+    collaborators:[],
+    daily:[{date:'2026-11-05',person:'Colaborador demonstrativo',sector:'Suporte',minutes:480}],
+    customers:[{name:'Empresa demonstrativa',minutes:480,tickets:1}],
+    activities:[{name:'Atividade demonstrativa',minutes:480}],
+    tickets:[]
+  };
+  const files=arquemCreateReportAttachments_(packet);
+  if(!Array.isArray(files)||files.length!==2)throw new Error('Anexos personalizados incompletos.');
+  const pdf=files.find(x=>x.getContentType()==='application/pdf');
+  const excel=files.find(x=>String(x.getName()).endsWith('.xlsx'));
+  if(!pdf||!excel||pdf.getBytes().length<2000||excel.getBytes().length<1500)
+    throw new Error('PDF ou Excel personalizado invalido.');
+  props.setProperties({
+    ARQUEM_SECTIONS_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_SECTIONS_VALIDATED_TEMPLATE_ID:template,
+    ARQUEM_SECTIONS_VALIDATED_VERSION:'arquem-4-report-sections'
+  },false);
+  return {ok:true,sent:false,sectionPermissionsSupported:true,
+    files:files.map(x=>({name:x.getName(),bytes:x.getBytes().length}))};
 }
 /**
  * Retornado pelo doPost apos a validacao do segredo existente.
@@ -111,13 +149,26 @@ function arquemCapacidadesAnexos_() {
         checkedAt>=file.getLastUpdated().getTime();
     }catch(_){ready=false;}
   }
-  return {sucesso:true,attachmentsVersion:'arquem-3-keila-quality',formats:['pdf','xlsx'],
+  const sectionsAt=Date.parse(props.getProperty('ARQUEM_SECTIONS_VALIDATED_AT')||'');
+  const sectionPermissionsSupported=ready &&
+    props.getProperty('ARQUEM_SECTIONS_VALIDATED_VERSION')==='arquem-4-report-sections' &&
+    props.getProperty('ARQUEM_SECTIONS_VALIDATED_TEMPLATE_ID')===id &&
+    Number.isFinite(sectionsAt) &&
+    sectionsAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
+  return {sucesso:true,attachmentsVersion:'arquem-8-keila-movements',formats:['pdf','xlsx'],
+    postCloseAdjustmentsSupported:ready&&props.getProperty('ARQUEM_TIMING_VALIDATED_VERSION')==='arquem-post-close-v1',
+    sectionPermissionsSupported,
+    csatNotesReady:ready &&
+      props.getProperty('ARQUEM_CSAT_VALIDATED_VERSION')==='arquem-7-csat-notas' &&
+      props.getProperty('ARQUEM_CSAT_VALIDATED_TEMPLATE_ID')===id &&
+      Number.isFinite(Date.parse(props.getProperty('ARQUEM_CSAT_VALIDATED_AT')||'')) &&
+      Date.parse(props.getProperty('ARQUEM_CSAT_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime(),
     paperTemplateConfigured:ready,
-    keilaQualityReady:ready &&
-      props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_VERSION')==='arquem-3-keila-quality' &&
-      props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_TEMPLATE_ID')===id &&
-      Number.isFinite(Date.parse(props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_AT')||'')) &&
-      Date.parse(props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime()};
+    keilaProductionReady:ready &&
+      props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_VERSION')==='arquem-8-keila-movements' &&
+      props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_TEMPLATE_ID')===id &&
+      Number.isFinite(Date.parse(props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_AT')||'')) &&
+      Date.parse(props.getProperty('ARQUEM_KEILA_FLOW_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime()};
 }
 
 /**
@@ -131,19 +182,22 @@ function arquemTesteKeilaSemEnvio() {
     title:'Homologação — Entradas e Saídas da Produção — Keila',
     from:'2026-11-02',to:'2026-11-08',
     partial:false,historicalIncomplete:false,
-    metrics:{tickets:2,appointments:0,minutes:0},
-    productionFlow:{entered:2,exited:1,entryMovements:3,exitMovements:1},
-    productionQuality:[
-      {name:'Colaborador de teste A',hoursMinutes:3964,appointments:20,ratings:5,excellent:4,average:8.8},
-      {name:'Colaborador de teste B',hoursMinutes:480,appointments:5,ratings:0,excellent:0,average:null}
-    ],
-    collaborators:[],daily:[],customers:[],activities:[],forecastVariances:[],
-    tickets:[
-      {id:'100769',client:'Empresa demonstrativa',owner:'Responsável demonstrativo',
-        status:'Entrada · Suporte → Produção',ageDays:0,url:'https://arquem.movidesk.com/Ticket/Edit/100769'},
-      {id:'100769',client:'Empresa demonstrativa',owner:'Responsável demonstrativo',
-        status:'Saída · Produção → Suporte',ageDays:0,url:'https://arquem.movidesk.com/Ticket/Edit/100769'}
-    ]
+    metrics:{entered:2,exited:1},
+    productionFlow:{entered:2,exited:1,movements:[
+      {id:'101001',direction:'entry',at:'2026-11-05T12:05:00.000Z',
+        subject:'Chamado fictício de teste 1',client:'Cliente demonstrativo',
+        fromTeam:'Inteligência',toTeam:'Produção - CPO',
+        responsible:'Pessoa demonstrativa',actor:'Agente demonstrativo'},
+      {id:'101002',direction:'entry',at:'2026-11-05T12:10:00.000Z',
+        subject:'Chamado fictício de teste 2',client:'Cliente demonstrativo',
+        fromTeam:'Suporte',toTeam:'Produção - CPO',
+        responsible:'Pessoa demonstrativa',actor:'Agente demonstrativo'},
+      {id:'101001',direction:'exit',at:'2026-11-05T16:45:00.000Z',
+        subject:'Chamado fictício de teste 1',client:'Cliente demonstrativo',
+        fromTeam:'Produção - CPO',toTeam:'Sucesso do Cliente',
+        responsible:'Outra pessoa demonstrativa',actor:'Agente demonstrativo'}
+    ]},
+    collaborators:[],daily:[],customers:[],activities:[],forecastVariances:[],tickets:[]
   };
   const attachments=arquemCreateReportAttachments_(packet);
   if(!Array.isArray(attachments)||attachments.length!==2)throw new Error('O teste Keila deve criar PDF e XLSX.');
@@ -151,13 +205,56 @@ function arquemTesteKeilaSemEnvio() {
   const xlsx=attachments.find(b=>b.getName().endsWith('.xlsx'));
   if(!pdf||!xlsx||pdf.getBytes().length<2000||xlsx.getBytes().length<1500)
     throw new Error('Homologação Keila: PDF ou Excel ausente/vazio.');
-  const outcome={ok:true,sent:false,report:'Keila - qualidade e movimentações',
-    hasProductionFlow:true,hasProductionQuality:true,
+  const outcome={ok:true,sent:false,report:'Keila - Rastreabilidade da Produção',
+    hasProductionFlow:true,entradasSaidasOnly:true,
     files:attachments.map(b=>({name:b.getName(),type:b.getContentType(),bytes:b.getBytes().length}))};
   console.log(JSON.stringify(outcome));
   return outcome;
 }
 
+/**
+ * Validação independente do CSAT 8–10 nos anexos.
+ * Usa dados fictícios, não envia e-mails e elimina os arquivos temporários.
+ */
+function arquemTesteCSATSemEnvio() {
+  const ratings=[
+    {date:'2026-11-11',ticketId:'101901',collaborator:'Atendente demonstrativo A',channel:'chat',score:7,source:'movidesk'},
+    {date:'2026-11-11',ticketId:'101902',collaborator:'Atendente demonstrativo B',channel:'voz',score:8,source:'movidesk'},
+    {date:'2026-11-11',ticketId:'101903',collaborator:'Atendente demonstrativo C',channel:'chat',score:10,source:'manual'}
+  ];
+  const positives=ratings.filter(x=>x.score>=8&&x.score<=10).length;
+  if(positives!==2)throw new Error('CSAT: nota 8 deve contar como positiva');
+  const packet={
+    schema:'arquem-mail-v1',title:'HOMOLOGAÇÃO SEM ENVIO — CSAT Suporte',
+    from:'2026-11-11',to:'2026-11-11',partial:false,historicalIncomplete:false,
+    metrics:{minutes:120,appointments:3,tickets:3},csat:{excelente:2,total:3,csatPercent:66.67},
+    csatRatings:ratings,collaborators:[],daily:[],customers:[],activities:[],tickets:[],forecastVariances:[]
+  };
+  const files=arquemCreateReportAttachments_(packet);
+  if(!Array.isArray(files)||files.length!==2 ||
+    !files.some(x=>x.getContentType()==='application/pdf'&&x.getBytes().length>2000) ||
+    !files.some(x=>x.getName().endsWith('.xlsx')&&x.getBytes().length>1500))
+    throw new Error('CSAT: exportação PDF e Excel não validada');
+  return {ok:true,sent:false,positiveNotes:positives,totalNotes:ratings.length,
+    files:files.map(x=>({name:x.getName(),bytes:x.getBytes().length}))};
+}
+/**
+ * Registra a aprovação do novo CSAT depois de gerar anexos reais, sem enviar e-mail.
+ */
+function arquemHomologarCSATSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const corp=arquemValidarPublicacaoSemEnvio();
+  if(corp.ok!==true||corp.sent!==false)throw new Error('Papel timbrado corporativo não validado');
+  const check=arquemTesteCSATSemEnvio();
+  if(check.ok!==true||check.sent!==false||check.positiveNotes!==2)
+    throw new Error('CSAT 8–10 não homologado');
+  props.setProperties({
+    ARQUEM_CSAT_VALIDATED_VERSION:'arquem-7-csat-notas',
+    ARQUEM_CSAT_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_CSAT_VALIDATED_TEMPLATE_ID:props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||''
+  },false);
+  return {ok:true,sent:false,csatNotesReady:true,files:check.files};
+}
 function arquemTesteAnexosSemEnvio() {
   const packet={
     schema:'arquem-mail-v1',title:'Relatório de validação — Produção',
@@ -188,6 +285,19 @@ function arquemTesteAnexosSemEnvio() {
   }))};
   console.log(JSON.stringify(result));
   return result;
+}
+function arquemHomologarAjustesSemEnvio() {
+  const packet={schema:'arquem-mail-v1',title:'HOMOLOGAÇÃO SEM ENVIO — Ajustes posteriores',from:'2026-11-11',to:'2026-11-11',
+    metrics:{minutes:60,appointments:1,tickets:1},collaborators:[],daily:[],customers:[],activities:[],tickets:[],
+    timing:{notice:'As horas permanecem na data do trabalho. A identificação posterior não comprova quando a pessoa registrou o apontamento.',adjustments:[
+      {date:'2026-11-10',person:'Pessoa demonstrativa',ticketId:'101901',previousMinutes:60,currentMinutes:90,deltaMinutes:30,observedAt:'2026-11-12T12:00:00Z',inCurrentPeriod:false},
+      {date:'2026-11-10',person:'Pessoa demonstrativa',ticketId:'101902',previousMinutes:60,currentMinutes:30,deltaMinutes:-30,observedAt:'2026-11-12T12:00:00Z',inCurrentPeriod:false}
+    ]}};
+  const files=arquemCreateReportAttachments_(packet);
+  if(files.length!==2||!files.some(x=>x.getContentType()==='application/pdf'&&x.getBytes().length>2000)||!files.some(x=>x.getName().endsWith('.xlsx')&&x.getBytes().length>1500))throw new Error('Ajustes posteriores: arquivos não homologados');
+  PropertiesService.getScriptProperties().setProperty('ARQUEM_TIMING_VALIDATED_VERSION','arquem-post-close-v1');
+  const result={ok:true,sent:false,postCloseAdjustmentsSupported:true,files:files.map(x=>({name:x.getName(),bytes:x.getBytes().length}))};
+  console.log(JSON.stringify(result));return result;
 }
 
 /**
@@ -228,13 +338,48 @@ function arquemSanearPacote_(value) {
 function arquemCreateReportAttachments_(packet) {
   if (!packet || packet.schema !== 'arquem-mail-v1') throw new Error('Pacote de relatório inválido');
   packet=arquemSanearPacote_(packet);
+  // Defense in depth: even a stale or malformed sender must not leak revoked
+  // sections in PDF tables, Excel tabs, charts, or serialized attachments.
+  const permissions=packet.reportSections||{};
+  if(permissions && typeof permissions==='object'){
+    if(permissions.daily_detail===false)packet.daily=[];
+    if(permissions.customers===false)packet.customers=[];
+    if(permissions.activities===false)packet.activities=[];
+  }
+  if(packet.productionFlow){
+    // A Rastreabilidade agora exige todas as movimentações nos anexos, nunca somente os totais.
+    const flow=packet.productionFlow;
+    const movements=flow.movements;
+    if(!Array.isArray(movements) || movements.length>500)
+      throw new Error('Rastreabilidade: movimentações ausentes ou acima do limite de 500 por anexo');
+    const clean=movements.map(m=>{
+      const id=String(m.id||'');
+      if(!/^\d{1,12}$/.test(id) || !['entry','exit'].includes(m.direction))
+        throw new Error('Movimentação com chamado ou direção inválida');
+      const date=String(m.at||'');
+      if(!/^\d{4}-\d\d-\d\dT/.test(date)||!Number.isFinite(Date.parse(date)))
+        throw new Error('Movimentação com data/hora inválida');
+      const value=(x,n)=>String(x||'Não informado').slice(0,n);
+      return {id,direction:m.direction,at:date,subject:value(m.subject,240),
+        client:value(m.client,150),fromTeam:value(m.fromTeam,100),toTeam:value(m.toTeam,100),
+        responsible:value(m.responsible,120),actor:value(m.actor,120)};
+    });
+    const entries=new Set(clean.filter(m=>m.direction==='entry').map(m=>m.id)).size;
+    const exits=new Set(clean.filter(m=>m.direction==='exit').map(m=>m.id)).size;
+    if(entries!==(Number(flow.entered)||0)||exits!==(Number(flow.exited)||0))
+      throw new Error('Totais de rastreabilidade não conferem com o detalhamento');
+    packet.productionFlow={entered:entries,exited:exits,movements:clean};
+    packet.metrics={entered:entries,exited:exits};
+    ['productionWorkload','productionQuality','collaborators','daily','tickets',
+     'customers','activities','forecastVariances'].forEach(key=>{packet[key]=[];});
+  }
   const title = String(packet.title || 'Relatório gerencial').slice(0,120);
   const from = String(packet.from || ''), to = String(packet.to || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) ||
       !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) throw new Error('Datas inválidas');
   const rows = [
     packet.collaborators || [], packet.daily || [], packet.tickets || [],
-    packet.customers || [], packet.activities || []
+    packet.customers || [], packet.activities || [], packet.csatRatings || [], (packet.timing&&packet.timing.adjustments)||[]
   ];
   if (rows.some(arr => !Array.isArray(arr) || arr.length > 500))
     throw new Error('Limite de dados excedido para anexos');
@@ -321,8 +466,35 @@ function arquemPdf_(p, keep) {
   arquemAddHeading_(body,'Resumo executivo');
   if(p.productionFlow){
     const flow=p.productionFlow;
-    body.appendParagraph('Entraram na Produção: '+Number(flow.entered||0)+' chamados  |  Saíram por transferência: '+Number(flow.exited||0)+' chamados');
-    body.appendParagraph('Movimentações: '+Number(flow.entryMovements||0)+' entradas e '+Number(flow.exitMovements||0)+' saídas. Encerramentos não são contabilizados como saídas.');
+    arquemEstilizarTabelaPdf_(body.appendTable([
+      ['ENTRADAS','SAÍDAS'],
+      [String(Number(flow.entered)||0),String(Number(flow.exited)||0)]
+    ]));
+    const movements=flow.movements||[];
+    const dateBR=(s)=>Utilities.formatDate(new Date(s),'America/Sao_Paulo','dd/MM/yyyy HH:mm');
+    const addSection=(direction,title)=>{
+      const items=movements.filter(m=>m.direction===direction);
+      arquemAddHeading_(body,title);
+      body.appendParagraph(items.length+' movimentações · '+
+        new Set(items.map(m=>m.id)).size+' chamados distintos.');
+      const rows=[['Chamado / data','Assunto / cliente','Setores e responsáveis']];
+      items.forEach(m=>rows.push([
+        '#'+m.id+'\n'+dateBR(m.at),
+        m.subject+'\nCliente: '+m.client,
+        'Origem: '+m.fromTeam+'\nDestino: '+m.toTeam+
+        '\nResponsável: '+m.responsible+'\nMovimentado por: '+m.actor
+      ]));
+      if(!items.length)rows.push(['—','Nenhuma movimentação','—']);
+      const table=body.appendTable(rows);
+      arquemEstilizarTabelaPdf_(table);
+      items.forEach((m,i)=>table.getCell(i+1,0).editAsText()
+        .setLinkUrl(0,m.id.length+1,'https://arquem.movidesk.com/Ticket/Edit/'+m.id));
+    };
+    addSection('entry','Entradas na Produção — chamados detalhados');
+    addSection('exit','Saídas da Produção — chamados detalhados');
+    body.appendParagraph('Entradas e saídas são transferências identificadas no histórico do Movidesk. Encerramentos não contam como saídas.');
+    doc.saveAndClose();
+    return DriveApp.getFileById(file.getId()).getAs(MimeType.PDF);
   }else{
     body.appendParagraph('Horas apontadas: '+arquemH_(m.minutes)+'  |  Apontamentos: '+
       (m.appointments||0)+'  |  Chamados trabalhados: '+(m.tickets||0));
@@ -331,7 +503,13 @@ function arquemPdf_(p, keep) {
     const warning=body.appendParagraph('ATENÇÃO: histórico do Movidesk em importação. Comparativos anuais são preliminares.');
     warning.editAsText().setForegroundColor('#a36618').setBold(true);
   }
-  if(p.productionQuality){
+  if(p.productionFlow && Array.isArray(p.productionWorkload)){
+    arquemAddHeading_(body,'Equipe · horas e apontamentos');
+    const lines=[['Colaborador','Horas','Apontamentos']];
+    p.productionWorkload.slice(0,100).forEach(x=>lines.push([
+      String(x.name||''),arquemH_(x.hoursMinutes),String(x.appointments||0)]));
+    arquemEstilizarTabelaPdf_(body.appendTable(lines));
+  } else if(p.productionQuality){
     arquemAddHeading_(body,'Qualidade dos colaboradores');
     const qs=p.productionQuality;
     const ratings=qs.reduce((sum,x)=>sum+Number(x.ratings||0),0);
@@ -353,6 +531,22 @@ function arquemPdf_(p, keep) {
       String(x.name||''),String(x.sector||''),arquemH_(x.minutes),arquemH_(x.minimumMinutes),
       arquemH_(x.targetMinutes),arquemH_(x.minimumGap),arquemH_(x.targetGap)]));
     arquemEstilizarTabelaPdf_(body.appendTable(lines));
+  }
+  if ((p.csatRatings||[]).length) {
+    arquemAddHeading_(body,'CSAT do Suporte · notas por atendimento');
+    const items=p.csatRatings,stat=p.csat||{};
+    body.appendParagraph('Notas positivas: 8 a 10. Avaliações detalhadas: '+items.length+
+      ' | Positivas: '+(stat.excelente||0)+
+      ' | CSAT: '+(stat.csatPercent==null?'Sem avaliações':stat.csatPercent+'%'));
+    const rows=[['Data','Chamado','Colaborador','Canal','Nota','Fonte']];
+    items.forEach(x=>rows.push([String(x.date||''),'#'+String(x.ticketId||''),
+      String(x.collaborator||''),String(x.channel||''),String(x.score??''),String(x.source||'')]));
+    const table=body.appendTable(rows);
+    arquemEstilizarTabelaPdf_(table);
+    items.forEach((x,i)=>{
+      const id=String(x.ticketId||'');
+      if(/^\d+$/.test(id))table.getCell(i+1,1).editAsText().setLinkUrl('https://arquem.movidesk.com/Ticket/Edit/'+id);
+    });
   }
   if ((p.daily||[]).length) {
     arquemAddHeading_(body,'Horas por colaborador · dia a dia');
@@ -389,6 +583,23 @@ function arquemPdf_(p, keep) {
     });
     body.appendParagraph('Clique no número do chamado no PDF para abrir o Movidesk.');
   }
+  if(p.timing){
+    arquemAddHeading_(body,'Posição dos apontamentos e ajustes posteriores');
+    body.appendParagraph(String(p.timing.notice||''));
+    const adjustments=p.timing.adjustments||[];
+    if(adjustments.length){
+      const rows=[['Data do trabalho','Colaborador / chamado','Antes → atual','Diferença','Identificado em']];
+      adjustments.slice(0,100).forEach(x=>rows.push([
+        String(x.date||''),String(x.person||'')+' / #'+String(x.ticketId||''),
+        arquemH_(x.previousMinutes)+' → '+arquemH_(x.currentMinutes),
+        (x.deltaMinutes<0?'-':'+')+arquemH_(Math.abs(x.deltaMinutes)),
+        Utilities.formatDate(new Date(x.observedAt),'America/Sao_Paulo','dd/MM/yyyy HH:mm')
+      ]));
+      arquemEstilizarTabelaPdf_(body.appendTable(rows));
+      body.appendParagraph('Identificado na atualização dos dados; a data exata do lançamento não é fornecida. As horas permanecem na data original do trabalho e não são somadas novamente ao dia atual.');
+      if(adjustments.length>100)body.appendParagraph('Exibidos 100 de '+adjustments.length+' ajustes.');
+    }
+  }
   arquemAddHeading_(body,'Observações metodológicas');
   body.appendParagraph(p.productionFlow?
     'Contagens de chamados distintos por direção; um chamado pode entrar e sair no mesmo período. Finalizações não são transferências. Verifique a cobertura da sincronização.':
@@ -404,11 +615,8 @@ function arquemXlsx_(p, keep) {
     ['Indicador','Resultado'],
     (p.productionFlow?[
       ['Relatório',p.title],['Início',p.from],['Fim',p.to],
-      ['Entraram na Produção',Number(p.productionFlow.entered)||0],
-      ['Saíram por transferência',Number(p.productionFlow.exited)||0],
-      ['Movimentações de entrada',Number(p.productionFlow.entryMovements)||0],
-      ['Movimentações de saída',Number(p.productionFlow.exitMovements)||0],
-      ['Critério','Chamados distintos; finalizações excluídas das saídas']
+      ['Entradas',Number(p.productionFlow.entered)||0],
+      ['Saídas',Number(p.productionFlow.exited)||0]
     ]:[['Relatório',p.title],['Início',p.from],['Fim',p.to],
      ['Horas apontadas',arquemExcelHora_(p.metrics&&p.metrics.minutes)],
      ['Apontamentos',Number(p.metrics&&p.metrics.appointments)||0],
@@ -416,6 +624,40 @@ function arquemXlsx_(p, keep) {
      ['Conciliação',p.partial?'Dados parciais':'Dados disponíveis'],
      ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]));
   if(!p.productionFlow)first.getRange('B4').setNumberFormat('[h]:mm:ss');
+  if(p.productionFlow){
+    const chart=first.newChart().setChartType(Charts.ChartType.BAR)
+      .addRange(first.getRange(5,1,2,2)).setPosition(9,4,0,0)
+      .setOption('title','Entradas x Saídas da Produção')
+      .setOption('legend',{position:'none'}).build();
+    first.insertChart(chart);
+  }
+  if(p.productionFlow){
+    const flow=p.productionFlow;
+    const moves=flow.movements||[];
+    const headers=['Chamado','Assunto','Cliente','Data/hora Brasília','Movimentação','Origem','Destino','Responsável','Movimentado por','Link Movidesk'];
+    const toRow=m=>['#'+m.id,m.subject,m.client,
+      Utilities.formatDate(new Date(m.at),'America/Sao_Paulo','dd/MM/yyyy HH:mm'),
+      m.direction==='entry'?'Entrada':'Saída',m.fromTeam,m.toTeam,m.responsible,m.actor,
+      'https://arquem.movidesk.com/Ticket/Edit/'+m.id];
+    const sections=[['Entradas',moves.filter(m=>m.direction==='entry')],
+      ['Saídas',moves.filter(m=>m.direction==='exit')],['Movimentações',moves]];
+    sections.forEach(pair=>{
+      const rows=pair[1],sheet=arquemCreateSheet_(ss,pair[0],headers,rows.map(toRow));
+      if(rows.length){
+        const refs=rows.map(m=>[SpreadsheetApp.newRichTextValue().setText('#'+m.id)
+          .setLinkUrl('https://arquem.movidesk.com/Ticket/Edit/'+m.id).build()]);
+        sheet.getRange(2,1,refs.length,1).setRichTextValues(refs).setFontColor('#2467a8');
+        sheet.getRange(2,10,refs.length,1).setFontColor('#2467a8');
+      }
+    });
+  }
+  if(!p.productionFlow){
+  if(p.productionFlow && Array.isArray(p.productionWorkload)){
+    const work=arquemCreateSheet_(ss,'Equipe Produção',
+      ['Colaborador','Horas apontadas','Apontamentos'],
+      p.productionWorkload.map(x=>[x.name,arquemExcelHora_(x.hoursMinutes),Number(x.appointments)||0]));
+    arquemFormatarHoras_(work,[2],p.productionWorkload.length);
+  }
   if(p.productionQuality){
     const qs=p.productionQuality;
     const quality=arquemCreateSheet_(ss,'Qualidade',
@@ -434,11 +676,28 @@ function arquemXlsx_(p, keep) {
     (p.productionQuality?[]:(p.collaborators||[])).map(x=>[x.name,x.sector,arquemExcelHora_(x.minutes),arquemExcelHora_(x.minimumMinutes),
      arquemExcelHora_(x.targetMinutes),arquemExcelHora_(x.minimumGap),arquemExcelHora_(x.targetGap),x.ruleSource||'Padrão']));
   arquemFormatarHoras_(people,[3,4,5,6,7],p.productionQuality?0:(p.collaborators||[]).length);
+  if((p.csatRatings||[]).length){
+    const items=p.csatRatings;
+    const sheet=arquemCreateSheet_(ss,'CSAT - Notas',
+      ['Data','Chamado','Colaborador','Canal','Nota','Classificação','Fonte','Link Movidesk'],
+      items.map(x=>[x.date,'#'+x.ticketId,x.collaborator,x.channel,Number(x.score),
+        Number(x.score)>=8?'Positiva (8–10)':'Abaixo do padrão (1–7)',x.source,
+        /^\d+$/.test(String(x.ticketId))?'https://arquem.movidesk.com/Ticket/Edit/'+x.ticketId:'']));
+    const links=items.map(x=>{
+      const id=String(x.ticketId||''),rt=SpreadsheetApp.newRichTextValue().setText('#'+id);
+      if(/^\d+$/.test(id))rt.setLinkUrl('https://arquem.movidesk.com/Ticket/Edit/'+id);
+      return [rt.build()];
+    });
+    sheet.getRange(2,2,links.length,1).setRichTextValues(links).setFontColor('#2467a8');
+  }
+  const authorizedSections=p.reportSections||{};
+  if(authorizedSections.daily_detail!==false){
   const daySheet=arquemCreateSheet_(ss,'Dia a dia',
     ['Data','Colaborador','Setor','Horas','Jornada','Mínimo','Situação'],
     (p.daily||[]).map(x=>[x.date,x.person,x.sector,arquemExcelHora_(x.minutes),
       arquemExcelHora_(x.referenceMinutes),arquemExcelHora_(x.minimumMinutes),x.status]));
   arquemFormatarHoras_(daySheet,[4,5,6],(p.daily||[]).length);
+  }
   const ticketSheet=arquemCreateSheet_(ss,'Chamados',
     ['Chamado','Cliente','Responsável','Status','Idade (dias)','Link Movidesk'],
     (p.tickets||[]).map(x=>['#'+String(x.id||''),x.client,x.owner,x.status,x.ageDays,x.url]));
@@ -454,14 +713,11 @@ function arquemXlsx_(p, keep) {
     ticketSheet.getRange(2,1,linked.length,1).setRichTextValues(linked).setFontColor('#2467a8');
     ticketSheet.getRange(2,6,rows.length,1).setFontColor('#2467a8');
   }
+  if(authorizedSections.customers!==false){
   const cust=arquemCreateSheet_(ss,'Empresas',
     ['Empresa','Horas','Chamados','Apontamentos'],
     (p.customers||[]).map(x=>[x.name,arquemExcelHora_(x.minutes),x.tickets,x.appointments]));
   arquemFormatarHoras_(cust,[2],(p.customers||[]).length);
-  const acts=arquemCreateSheet_(ss,'Atividades',
-    ['Atividade','Horas'],
-    (p.activities||[]).map(x=>[x.name,arquemExcelHora_(x.minutes)]));
-  arquemFormatarHoras_(acts,[2],(p.activities||[]).length);
   if((p.customers||[]).length>1){
     // Chart values use numeric hours to preserve comparability; displayed HHhMM remains in the table.
     cust.getRange(1,5).setValue('Horas (numérico)');
@@ -475,6 +731,67 @@ function arquemXlsx_(p, keep) {
       .setOption('legend',{position:'none'})
       .build();
     cust.insertChart(chart);
+  }
+  }
+  if(authorizedSections.activities!==false){
+    const acts=arquemCreateSheet_(ss,'Atividades',
+      ['Atividade','Horas'],
+      (p.activities||[]).map(x=>[x.name,arquemExcelHora_(x.minutes)]));
+    arquemFormatarHoras_(acts,[2],(p.activities||[]).length);
+  }
+  // Defesa adicional: um relatório personalizado nunca pode exportar uma aba
+  // cuja autorização foi revogada, mesmo se a montagem da planilha mudar.
+  if(p.reportSections && typeof p.reportSections==='object'){
+    const restricted=[
+      ['daily_detail','Dia a dia'],
+      ['customers','Empresas'],
+      ['activities','Atividades']
+    ];
+    restricted.forEach(entry=>{
+      const key=entry[0],sheet=entry[1];
+      if(p.reportSections[key]===false && ss.getSheetByName(sheet))
+        throw new Error('Exportação bloqueada: aba não autorizada '+sheet);
+    });
+  }
+  }
+  // Verificação antes de exportar: não aceitar uma planilha sem todas as abas e linhas exigidas.
+  if(p.productionFlow){
+    const moves=p.productionFlow.movements||[];
+    for(const pair of [['Entradas','entry'],['Saídas','exit'],['Movimentações',null]]){
+      const sh=ss.getSheetByName(pair[0]);
+      const expected=pair[1]?moves.filter(x=>x.direction===pair[1]).length:moves.length;
+      if(!sh||sh.getLastRow()!==expected+1)
+        throw new Error('Rastreabilidade: aba incompleta '+pair[0]);
+    }
+  }
+  if(Array.isArray(p.csatRatings)&&p.csatRatings.length){
+    const sh=ss.getSheetByName('CSAT - Notas');
+    if(!sh||sh.getLastRow()!==p.csatRatings.length+1)
+      throw new Error('CSAT: nem todas as notas foram exportadas');
+    const graded=sh.getRange(2,6,p.csatRatings.length,1).getValues();
+    for(let i=0;i<graded.length;i++){
+      const want=Number(p.csatRatings[i].score)>=8?'Positiva (8–10)':'Abaixo do padrão (1–7)';
+      if(graded[i][0]!==want)throw new Error('CSAT: classificação divergente na planilha');
+    }
+  }
+  if(p.timing&&!p.productionFlow){
+    const timingSheet=arquemCreateSheet_(ss,'Posição dos dados',['Informação','Descrição'],[
+      ['Data do trabalho',String(p.timing.notice||'')],
+      ['Identificação dos ajustes','Data de identificação na atualização dos dados. Não comprova quando a pessoa lançou o apontamento.'],
+      ['Acumulados','As horas permanecem na data original e não são somadas novamente ao dia atual.']
+    ]);
+    timingSheet.getRange('B2:B4').setWrap(true);timingSheet.setColumnWidth(2,500);
+    const changes=p.timing.adjustments||[];
+    if(changes.length){
+      const sh=arquemCreateSheet_(ss,'Ajustes posteriores',
+        ['Data do trabalho','Colaborador','Chamado','Antes','Atual','Diferença','Identificado em','Tratamento'],
+        changes.map(x=>[x.date,x.person,'#'+x.ticketId,arquemExcelHora_(x.previousMinutes),arquemExcelHora_(x.currentMinutes),
+          (x.deltaMinutes<0?'-':'+')+arquemH_(Math.abs(x.deltaMinutes)),
+          Utilities.formatDate(new Date(x.observedAt),'America/Sao_Paulo','dd/MM/yyyy HH:mm'),
+          x.inCurrentPeriod?'Incluído no período deste relatório':'Atualiza o período original; não somar ao dia atual']));
+      arquemFormatarHoras_(sh,[4,5],changes.length);
+      if(sh.getLastRow()!==changes.length+1)throw new Error('Ajustes posteriores: planilha incompleta');
+    }
   }
   SpreadsheetApp.flush();
   const url='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(ss.getId())+
@@ -515,3 +832,5 @@ function arquemSheet_(sh,headers,rows){
   }
   return sh;
 }
+
+
