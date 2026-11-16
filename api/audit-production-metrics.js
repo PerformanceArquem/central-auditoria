@@ -1,3 +1,4 @@
+import zenviaVoiceHandler from '../lib/zenvia-voice.js';
 import {triageReport} from '../lib/intelligence-triage.js';
 // Relatório mensal automático da Produção a partir das tabelas consolidadas.
 // Leitura somente, acesso administrativo obrigatório, sem chaves no navegador.
@@ -13,6 +14,7 @@ const workingDays=(a,b)=>{let n=0;for(let d=a;d<=b;d=addDays(d,1)){const w=new D
 const currentDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const fail=(res,status,message)=>res.status(status).json({ok:false,error:message});
 export default async function handler(req,res){
+ if(req.query?.mode==='zenvia')return zenviaVoiceHandler(req,res);
  res.setHeader('Cache-Control','private, no-store');
  if(req.method!=='GET')return fail(res,405,'Método não permitido');
  const base=(process.env.SUPABASE_URL||'').replace(/\/$/,'');
