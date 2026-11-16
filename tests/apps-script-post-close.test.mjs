@@ -64,4 +64,44 @@ for(const path of paths){
     assert.match(source,/Ajustes pós-fechamento/);
     assert.match(source,/setRichTextValues\(linked\)/);
   });
+  test(path+' holds capability closed until technical and visual signoff',()=>{
+    const source=readFileSync(path,'utf8');
+    const start=source.indexOf('function arquemCapacidadesAnexos_()');
+    const end=source.indexOf('function arquemTesteKeilaSemEnvio()',start);
+    assert.ok(start>=0 && end>start);
+    const approvals={
+      ARQUEM_PAPEL_TIMBRADO_DOC_ID:'template-123',
+      ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID:'template-123',
+      ARQUEM_ATTACHMENTS_VALIDATED_AT:'2026-11-16T11:00:00.000Z',
+      ARQUEM_POST_CLOSE_VALIDATED_VERSION:'post-close-v1',
+      ARQUEM_POST_CLOSE_VALIDATED_TEMPLATE_ID:'template-123',
+      ARQUEM_POST_CLOSE_VALIDATED_AT:'2026-11-16T12:00:00.000Z'
+    };
+    const context=vm.createContext({
+      PropertiesService:{getScriptProperties:()=>({
+        getProperty:key=>approvals[key]||''
+      })},
+      DriveApp:{getFileById:()=>({
+        getMimeType:()=> 'application/vnd.google-apps.document',
+        getLastUpdated:()=>new Date('2026-11-16T10:00:00.000Z')
+      })},
+      MimeType:{GOOGLE_DOCS:'application/vnd.google-apps.document'}
+    });
+    vm.runInContext(source.slice(start,end),context);
+    const check=()=>context.arquemCapacidadesAnexos_();
+    assert.equal(check().paperTemplateConfigured,true);
+    assert.equal(check().postCloseAdjustmentsSupported,false);
+    approvals.ARQUEM_POST_CLOSE_VISUAL_APPROVED_VERSION='post-close-v1';
+    approvals.ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID='template-123';
+    approvals.ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT='2026-11-16T11:59:59.000Z';
+    assert.equal(check().postCloseAdjustmentsSupported,false,'visual approval before technical check invalid');
+    approvals.ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT='2026-11-16T12:01:00.000Z';
+    assert.equal(check().postCloseAdjustmentsSupported,true,'both approvals enable capability');
+    approvals.ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID='different-template';
+    assert.equal(check().postCloseAdjustmentsSupported,false,'different approved template must fail closed');
+    approvals.ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID='template-123';
+    approvals.ARQUEM_POST_CLOSE_VALIDATED_AT='2026-11-16T12:02:00.000Z';
+    assert.equal(check().postCloseAdjustmentsSupported,false,'fresh technical check invalidates visual approval');
+  });
+
 }
