@@ -559,7 +559,7 @@ function arquemXlsx_(p, keep) {
      ['Chamados trabalhados',Number(p.metrics&&p.metrics.tickets)||0],
      ['Conciliação',p.partial?'Dados parciais':'Dados disponíveis'],
      ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]));
-  if(!p.productionFlow)first.getRange('B4').setNumberFormat('[h]:mm:ss');
+  if(!p.productionFlow)first.getRange('B5').setNumberFormat('[h]:mm:ss');
   if(p.productionQuality){
     const qs=p.productionQuality;
     const quality=arquemCreateSheet_(ss,'Qualidade',
@@ -590,12 +590,13 @@ function arquemXlsx_(p, keep) {
       ['Chamado','Data do trabalho','Colaborador','Antes','Depois','Diferença','Identificado em','No período'],
       timing.items.map(x=>[
         x.ticketId?'#'+x.ticketId:'—',x.date,x.person,
-        x.previous/1440,x.current/1440,x.delta/1440,x.observedAt,
+        x.previous/1440,x.current/1440,
+        (x.delta<0?'-':'+')+arquemH_(Math.abs(x.delta)),x.observedAt,
         x.inCurrentPeriod?'Sim':'Não'
       ]));
     const row=timing.items.length;
     if(row){
-      sheet.getRange(2,4,row,3).setNumberFormat('[h]:mm:ss;[Red]-[h]:mm:ss');
+      sheet.getRange(2,4,row,2).setNumberFormat('[h]:mm:ss');
       const linked=timing.items.map(x=>{
         const txt=x.ticketId?'#'+x.ticketId:'—';
         const b=SpreadsheetApp.newRichTextValue().setText(txt);
@@ -604,7 +605,7 @@ function arquemXlsx_(p, keep) {
       });
       sheet.getRange(2,1,row,1).setRichTextValues(linked);
     }
-    first.getRange(9,1,3,2).setValues([
+    first.getRange(10,1,3,2).setValues([
       ['Ajustes pós-fechamento',timing.total],
       ['Situação da conciliação',timing.status],
       ['Critério','Diferenças permanecem na data original do trabalho']
