@@ -613,16 +613,19 @@ function arquemXlsx_(p, keep) {
   if(p.timing){
     const timing=arquemAssinarAjustes_(p);
     const sheet=arquemCreateSheet_(ss,'Ajustes pós-fechamento',
-      ['Chamado','Data do trabalho','Colaborador','Antes','Depois','Diferença','Identificado em','No período'],
+      ['Chamado','Data do trabalho','Colaborador','Antes','Depois','Diferença','Diferença (min)','Identificado em','No período'],
       timing.items.map(x=>[
         x.ticketId?'#'+x.ticketId:'—',x.date,x.person,
         x.previous/1440,x.current/1440,
-        (x.delta<0?'-':'+')+arquemH_(Math.abs(x.delta)),x.observedAt,
+        (x.delta<0?'-':'+')+arquemH_(Math.abs(x.delta)),x.delta,x.observedAt,
         x.inCurrentPeriod?'Sim':'Não'
       ]));
     const row=timing.items.length;
     if(row){
       sheet.getRange(2,4,row,2).setNumberFormat('[h]:mm:ss');
+      // A duração assinada fica em minutos numéricos para permitir SUM/AVG no Excel.
+      // O texto HH:MM:SS adjacente mantém a leitura de horas negativas sem ####.
+      sheet.getRange(2,7,row,1).setNumberFormat('+0 "min";-0 "min";0 "min"');
       const linked=timing.items.map(x=>{
         const txt=x.ticketId?'#'+x.ticketId:'—';
         const b=SpreadsheetApp.newRichTextValue().setText(txt);
