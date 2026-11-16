@@ -15,7 +15,10 @@ const sources=new Map(original.map(f=>[f,readFileSync(join(remoteDir,f),'utf8')]
 const canonicalFns=new Map(functions(sources.get(zenvia)).map(f=>[f.name,f]));
 const legacyFns=functions(sources.get(legacy));
 const duplicated=legacyFns.filter(f=>canonicalFns.has(f.name));
-if(duplicated.length!==18)throw Error('Duplicate count has changed from reviewed audit: '+duplicated.length);
+// Two explicitly reviewed states are safe: legacy double definitions (18), or
+// already reconciled remote source (0). Every other count fails closed.
+if(duplicated.length!==18 && duplicated.length!==0)
+ throw Error('Unreviewed duplicate count: '+duplicated.length);
 const uniqueLegacy=legacyFns.filter(f=>!canonicalFns.has(f.name)).map(f=>f.name);
 let cleaned=sources.get(legacy);
 for(const f of duplicated.sort((a,b)=>b.start-a.start))cleaned=cleaned.slice(0,f.start)+cleaned.slice(f.end);
@@ -27,6 +30,10 @@ const lostNames=[...beforeNames].filter(name=>!afterNames.has(name));
 const newNames=[...afterNames].filter(name=>!beforeNames.has(name));
 if(lostNames.length||newNames.length)throw Error('Contrato de funções alterado: removidas='+lostNames.length+' adicionadas='+newNames.length);
 const critical=['doPost','arquemCreateReportAttachments_','arquemCapacidadesAnexos_','arquemHomologarKeilaSemEnvio','arquemValidarPublicacaoSemEnvio'];
+// The reviewed candidate has six JavaScript files and exactly 38 global
+// functions. A zero-duplicate result alone is NOT proof of correctness.
+if(original.length!==6 || afterNames.size!==38)
+ throw Error('Unexpected inventory: files='+original.length+' functions='+afterNames.size);
 const missingCritical=critical.filter(name=>!afterNames.has(name));
 if(missingCritical.length)throw Error('Funções críticas não encontradas: '+missingCritical.join(', '));
 const remainingFns=new Map();
