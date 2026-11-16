@@ -844,6 +844,14 @@
 #emailAdminPanel .row label{display:inline-flex;align-items:center;gap:6px}
 #emailAdminPanel .row input[type=checkbox]{width:auto}
 #emailAdminPanel td button{white-space:nowrap}
+.email-delivery-control{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;margin:16px 0 20px;padding:20px 22px;border:1px solid #cbd9e8;border-radius:14px;background:#f5f8fc}
+.email-delivery-control h3{margin:0 0 7px}.email-delivery-control p{margin:6px 0 0;max-width:690px}
+.email-delivery-actions{display:flex;align-items:center;gap:16px}.email-delivery-switch{display:inline-flex;align-items:center;gap:11px;font-weight:700;cursor:pointer}
+.email-delivery-switch input{appearance:none!important;width:60px!important;height:34px!important;padding:3px!important;margin:0!important;border:0!important;border-radius:20px!important;background:#64748b!important;cursor:pointer;transition:background .15s}
+.email-delivery-switch input::before{content:'';display:block;width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 1px 4px #0003;transition:transform .15s}
+.email-delivery-switch input:checked{background:#1769d2!important}.email-delivery-switch input:checked::before{transform:translateX(26px)}
+.email-delivery-switch input:focus-visible{outline:3px solid #94bfff!important;outline-offset:4px}.email-delivery-switch input:disabled{opacity:.55;cursor:wait}
+#emailDeliveryStatus{font-weight:700;color:#334155}#emailDeliveryStatus[data-paused=false]{color:#1769d2}
 @media print{#emailAdminCard{display:none!important}}
 </style>
 <style id="audit-navigation-folders-style">
@@ -1458,6 +1466,10 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                 <div class="mh"><div><div class="eyebrow">RELATÓRIOS · ADMINISTRAÇÃO</div><h2>Central de e-mails e destinatários</h2><p>Gerencie relatórios automáticos, testes individuais e histórico de envio sem misturar com as configurações técnicas.</p></div></div>
                 <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
   <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="b" id="emailReportReleaseOpen">Liberar relatórios</button><button type="button" class="s" id="emailAdminOpen">Gerenciar destinatários</button></div></div>
+  <section class="email-delivery-control" aria-labelledby="emailDeliveryTitle">
+    <div><h3 id="emailDeliveryTitle">Envio de e-mails</h3><div id="emailDeliveryStatus" role="status" aria-live="polite">Consultando situação dos e-mails…</div><p id="emailDeliveryHint" class="subtle">Chave geral para relatórios, Triagem e envios manuais.</p></div>
+    <div class="email-delivery-actions"><label class="email-delivery-switch"><input id="emailDeliveryToggle" type="checkbox" role="switch" aria-label="Envio de e-mails" aria-describedby="emailDeliveryHint" aria-checked="false" disabled><span>Ligar / desligar</span></label><button type="button" class="s" id="emailDeliveryRefresh" aria-label="Atualizar situação dos e-mails">↻ Atualizar</button></div>
+  </section>
   <div id="emailReportReleasePanel" class="hide" style="margin-top:16px;border:1px solid #d6e1f0;border-radius:12px;padding:16px">
     <div class="row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div><h3 style="margin:0">Liberação de relatórios para envio</h3><p class="subtle" style="margin:4px 0">Autorize ou suspenda categorias por destinatário, sem alterar e-mails, setores ou frequências. Nenhuma mensagem é disparada ao salvar.</p></div>
@@ -6170,5 +6182,6 @@ window.clientImpactInit=()=>{
 </script>
 
 <script src="/production-flow.js"></script>
+<script src="/email-delivery-control.js"></script>
 </body>
 </html>
