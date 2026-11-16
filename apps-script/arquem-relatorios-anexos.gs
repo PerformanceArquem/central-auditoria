@@ -321,9 +321,20 @@ function arquemPrepararRevisaoVisualAjustesSemEnvio() {
   if(!tech.technicalValidation || tech.postCloseAdjustmentsSupported!==false)
     throw new Error('Teste técnico não passou ou não respeitou o bloqueio de envio');
   const blobs=arquemCreateReportAttachments_(arquemAmostraAjustes_());
-  const saved=blobs.map(b=>folder.createFile(b));
-  return {ok:true,sent:false,visualApprovalRequired:true,
-    files:saved.map(f=>({name:f.getName(),url:f.getUrl(),id:f.getId()}))};
+  if(blobs.length!==2 ||
+     !blobs.some(b=>b.getContentType()==='application/pdf') ||
+     !blobs.some(b=>/\\.xlsx$/i.test(b.getName())))
+    throw new Error('A revisão visual exige exatamente um PDF e um Excel');
+  const saved=[];
+  try {
+    for(const blob of blobs)saved.push(folder.createFile(blob));
+    return {ok:true,sent:false,visualApprovalRequired:true,
+      files:saved.map(f=>({name:f.getName(),url:f.getUrl(),id:f.getId()}))};
+  } catch(e) {
+    // Se a segunda gravação falhar, descartar a primeira imediatamente.
+    saved.forEach(f=>{try{f.setTrashed(true);}catch(_){}});
+    throw e;
+  }
 }
 
 function arquemHomologarAjustesSemEnvio() {
