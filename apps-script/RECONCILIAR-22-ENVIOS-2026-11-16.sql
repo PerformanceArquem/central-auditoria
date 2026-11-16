@@ -5,6 +5,37 @@
 -- Registros com status failed podem representar falha após aceite pelo provedor;
 -- mesmo sem provider_id/sent_at é obrigatória conciliação com a conta remetente correta.
 
+-- 0. Inventário sem divulgar endereços: auditar por data do RELATÓRIO,
+-- não por created_at (uma tentativa ou reserva pode ser criada em outro dia).
+select
+  count(*) as reservas,
+  count(distinct d.dispatch_key) as chaves_distintas,
+  count(distinct d.recipient_id) as perfis,
+  count(distinct lower(trim(r.email))) as emails_distintos,
+  count(*) filter (where d.provider_id is not null or d.sent_at is not null) as com_indicio_de_entrega,
+  count(*) filter (where d.reviewed_at is not null or d.review_note is not null) as com_revisao
+from public.audit_email_sector_dispatches d
+join public.audit_email_recipients r on r.id=d.recipient_id
+where d.period_to=date '2026-11-15'
+  and d.report_kind in ('daily','weekly')
+  and d.dispatch_key not like 'preliminary:%';
+
+-- 0b. Perfis que compartilham e-mail: sem retornar o endereço.
+-- Mesma caixa NÃO significa relatório repetido: comparar escopo e setores.
+select
+  array_agg(r.name order by r.name) as perfis,
+  array_agg(distinct r.scope) as escopos,
+  count(distinct d.recipient_id) as quantidade_perfis,
+  count(*) as reservas
+from public.audit_email_sector_dispatches d
+join public.audit_email_recipients r on r.id=d.recipient_id
+where d.period_to=date '2026-11-15'
+  and d.report_kind in ('daily','weekly')
+  and d.dispatch_key not like 'preliminary:%'
+group by lower(trim(r.email))
+having count(distinct d.recipient_id)>1
+order by quantidade_perfis desc;
+
 -- 1. Resumo das reservas e carimbos de entrega por período.
 select
   d.report_kind, d.period_from, d.period_to, d.status,
@@ -14,8 +45,9 @@ select
   min(d.created_at) as primeira_reserva,
   max(d.created_at) as ultima_reserva
 from public.audit_email_sector_dispatches d
-where d.created_at >= timestamptz '2026-11-16 00:00:00+00'
-  and d.created_at < timestamptz '2026-11-17 00:00:00+00'
+where d.period_to=date '2026-11-15'
+  and d.report_kind in ('daily','weekly')
+  and d.dispatch_key not like 'preliminary:%'
 group by d.report_kind,d.period_from,d.period_to,d.status
 order by d.report_kind,d.period_from,d.status;
 
@@ -38,8 +70,9 @@ select
   d.error_message
 from public.audit_email_sector_dispatches d
 join public.audit_email_recipients r on r.id=d.recipient_id
-where d.created_at >= timestamptz '2026-11-16 00:00:00+00'
-  and d.created_at < timestamptz '2026-11-17 00:00:00+00'
+where d.period_to=date '2026-11-15'
+  and d.report_kind in ('daily','weekly')
+  and d.dispatch_key not like 'preliminary:%'
   and d.status='failed'
 order by d.report_kind,r.name,d.period_from;
 
