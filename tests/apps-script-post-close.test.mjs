@@ -197,6 +197,11 @@ test('recovery audit remains authenticated, read-only and never dispatches email
   assert.match(code,/readOnly:true/);
   assert.match(code,/manualVerificationRequired:true/);
   assert.match(code,/automaticRetryAllowed:false/);
+  assert.ok(code.includes('limit=101'),'query must fetch one extra record to detect truncation');
+  assert.ok(code.includes('const truncated=(rows as R[]).length>100'));
+  assert.ok(code.includes('records,total:records.length,truncated,complete:!truncated'));
+  assert.ok(code.includes('possible_delivery_needs_verification'));
+  assert.ok(code.includes('unconfirmed_failure_needs_verification'));
   assert.equal(code.includes('sendMail('),false);
   assert.equal(code.includes("method:'PATCH'"),false);
   assert.equal(code.includes("method:'POST'"),false);
