@@ -37,6 +37,12 @@ function doPost(e) {
           !dados.reportData || dados.reportData.schema !== 'arquem-mail-v1') {
         throw new Error('Dados ou gerador de anexos inválidos');
       }
+      // Defense in depth: an authenticated direct caller must not bypass
+      // the post-close approval enforced independently by Supabase.
+      if (dados.reportData.timing &&
+          arquemCapacidadesAnexos_().postCloseAdjustmentsSupported !== true) {
+        throw new Error('Ajustes posteriores ao fechamento não homologados');
+      }
       anexos = arquemCreateReportAttachments_(dados.reportData);
       if (!Array.isArray(anexos) || anexos.length !== 2) {
         throw new Error('É necessário gerar PDF e Excel');
