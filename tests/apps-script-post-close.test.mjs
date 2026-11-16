@@ -251,3 +251,39 @@ test('final Apps Script doPost rejects unapproved post-close reports before Mail
   assert.equal(invoke().sucesso,true);
   assert.equal(sent,1,'approved report may proceed through final mail handler');
 });
+
+for(const path of paths){
+  test(path+' capabilities are disabled until final attachment flag is true',()=>{
+    const source=readFileSync(path,'utf8');
+    const begin=source.indexOf('function arquemCapacidadesAnexos_()');
+    const end=source.indexOf('\n/**',begin);
+    assert.ok(begin>=0&&end>begin,'capability declaration must exist');
+    const settings={
+      ARQUEM_PAPEL_TIMBRADO_DOC_ID:'fixture-template',
+      ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID:'fixture-template',
+      ARQUEM_ATTACHMENTS_VALIDATED_AT:'2026-11-16T10:00:00Z',
+      ARQUEM_POST_CLOSE_VALIDATED_VERSION:'post-close-v1',
+      ARQUEM_POST_CLOSE_VALIDATED_TEMPLATE_ID:'fixture-template',
+      ARQUEM_POST_CLOSE_VALIDATED_AT:'2026-11-16T10:05:00Z',
+      ARQUEM_POST_CLOSE_VISUAL_APPROVED_VERSION:'post-close-v1',
+      ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID:'fixture-template',
+      ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT:'2026-11-16T10:06:00Z'
+    };
+    const ctx=vm.createContext({
+      PropertiesService:{getScriptProperties:()=>({getProperty:key=>settings[key]||''})},
+      DriveApp:{getFileById:()=>({
+        getMimeType:()=> 'GOOGLE_DOCS',
+        getLastUpdated:()=>new Date('2026-11-16T09:00:00Z')
+      })},
+      MimeType:{GOOGLE_DOCS:'GOOGLE_DOCS'}
+    });
+    vm.runInContext(source.slice(begin,end),ctx);
+    let cap=ctx.arquemCapacidadesAnexos_();
+    assert.equal(cap.paperTemplateConfigured,false);
+    assert.equal(cap.postCloseAdjustmentsSupported,false);
+    settings.ARQUEM_ATTACHMENTS_VALIDATED='true';
+    cap=ctx.arquemCapacidadesAnexos_();
+    assert.equal(cap.paperTemplateConfigured,true);
+    assert.equal(cap.postCloseAdjustmentsSupported,true);
+  });
+}
