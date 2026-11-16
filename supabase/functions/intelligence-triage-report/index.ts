@@ -1,4 +1,5 @@
 import {triagePresentation} from './presentation.ts';
+import {assertEmailDeliveryEnabled} from '../_shared/email-delivery-control.ts';
 import config from '../../../config/intelligence-triage.json' with {type:'json'};
 import {classify,summarize} from './model.mjs';
 const env=(k:string)=>Deno.env.get(k)?.trim()||'';
@@ -13,6 +14,7 @@ async function md(params:Record<string,string>){
  const r=await fetch(u,{signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('Movidesk HTTP '+r.status);return await r.json();
 }
 async function provider(action:string,payload:Record<string,unknown>={}){
+ if(action==='triage_send')await assertEmailDeliveryEnabled(path=>db(path));
  const endpoint=new URL(env('GMAIL_WEBAPP_URL'));if(endpoint.hostname!=='script.google.com'||endpoint.protocol!=='https:'||!endpoint.pathname.endsWith('/exec'))throw Error('Web App corporativo inválido');
  const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({token:env('GMAIL_MAIL_SECRET'),action,...payload}),signal:AbortSignal.timeout(60000)});
  if(!r.ok)throw Error('Gmail Web App HTTP '+r.status);const result=await r.json();if(result.sucesso!==true)throw Error('Gmail Web App: '+String(result.erro||'recusado'));return result;
@@ -37,6 +39,7 @@ async function snapshot(){
 }
 const esc=(x:unknown)=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 async function send(report:any,prepared?:any){
+ await assertEmailDeliveryEnabled(path=>db(path));
  const prior=await db('audit_triage_dispatches?reference_date=eq.'+report.date+'&select=email,status,gmail_id');
  if(config.recipients.every(rec=>prior.some(row=>row.email===rec.email&&row.status==='sent')))
   return config.recipients.map(rec=>({email:rec.email,status:'already_sent',gmailId:prior.find(row=>row.email===rec.email).gmail_id}));
