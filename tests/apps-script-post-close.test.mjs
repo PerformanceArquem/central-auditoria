@@ -322,7 +322,7 @@ test('dispatch observability distinguishes attempts from provider acceptance and
   assert.ok(source.includes('attempts:handled'));
   assert.ok(source.includes("providerAccepted:dispatchResults.filter(x=>x.status==='sent').length"));
   assert.ok(source.includes("failed:dispatchResults.filter(x=>x.status==='failed').length"));
-  assert.ok(source.includes("skipped:dispatchResults.filter(x=>x.status==='skipped'||x.skipped!=null).length"));
+  assert.ok(source.includes("skipped:dispatchResults.filter(x=>x.status==='skipped'||('skipped' in x && x.skipped!=null)).length"));
   assert.ok(source.includes('inboxDeliveryVerified:false'));
   assert.ok(source.includes('handled,deliverySummary'));
   assert.ok(source.includes('results:dispatchResults'));
