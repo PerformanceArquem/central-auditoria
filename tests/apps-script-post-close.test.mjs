@@ -62,7 +62,7 @@ for(const path of paths){
     assert.match(source,/postCloseAdjustmentsSupported:false/);
     assert.match(source,/function arquemPrepararRevisaoVisualAjustesSemEnvio\(/);
     assert.match(source,/ARQUEM_HOMOLOGACAO_FOLDER_ID/);
-    assert.match(source,/folder\.createFile\(b\)/);
+    assert.match(source,/folder\.createFile\(blob\)/);
     assert.match(source,/props\.deleteProperty\('ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT'\)/);
     assert.match(source,/function arquemHomologarAjustesSemEnvio\(/);
     assert.match(source,/Ajustes identificados após o fechamento/);
