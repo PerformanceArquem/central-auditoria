@@ -313,7 +313,7 @@ function arquemAjustesValidos_(packet) {
   const t=packet.timing;
   if (!t || typeof t!=='object' || !Array.isArray(t.adjustments) ||
       t.adjustments.length>100) throw new Error('Ajustes posteriores inválidos');
-  const total=Number(t.adjustmentCount);
+  const total=t.adjustmentCount==null?t.adjustments.length:Number(t.adjustmentCount);
   if (!Number.isSafeInteger(total) || total<0 || total<t.adjustments.length)
     throw new Error('Contagem de ajustes inválida');
   const formatDate=s=>String(s||'').slice(0,10);
@@ -322,6 +322,7 @@ function arquemAjustesValidos_(packet) {
         !/^\d{4}-\d{2}-\d{2}$/.test(String(x.date||'')) ||
         !Number.isFinite(Number(x.previousMinutes)) ||
         !Number.isFinite(Number(x.currentMinutes)) ||
+        Number(x.previousMinutes)<0 || Number(x.currentMinutes)<0 ||
         !Number.isFinite(Number(x.deltaMinutes)) ||
         Math.abs(Number(x.currentMinutes)-Number(x.previousMinutes)-Number(x.deltaMinutes))>0.01 ||
         !Number.isFinite(Date.parse(String(x.observedAt||''))))
@@ -343,7 +344,7 @@ function arquemAssinarAjustes_(packet) {
   const adjustments=arquemAjustesValidos_(packet);
   if (!adjustments) return null;
   const notice='Horas atribuídas à data original do trabalho. Ajustes identificados após o fechamento não são somados novamente ao dia da atualização.';
-  return {notice, ...adjustments};
+  return {...adjustments, notice:adjustments.notice?String(adjustments.notice)+' '+notice:notice};
 }
 function arquemHomologarAjustesSemEnvio() {
   const props=PropertiesService.getScriptProperties();
