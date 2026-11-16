@@ -420,6 +420,10 @@ function arquemPrepararRevisaoVisualAjustesSemEnvio() {
 
 function arquemHomologarAjustesSemEnvio() {
   const props=PropertiesService.getScriptProperties();
+  // Fail closed immediately: even a failed new validation invalidates old visual approval.
+  props.deleteProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT');
+  props.deleteProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_VERSION');
+  props.deleteProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID');
   const id=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
   if (!id) throw new Error('Papel timbrado obrigatório para homologar ajustes');
   // Revalida os anexos regulares e o modelo antes de homologar a extensão.
@@ -434,9 +438,6 @@ function arquemHomologarAjustesSemEnvio() {
     throw new Error('PDF/XLSX inválidos na homologação de ajustes');
   // A geração técnica não autoriza anúncios de capacidade antes da revisão
   // humana dos dois anexos reais. Uma homologação nova invalida a anterior.
-  props.deleteProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT');
-  props.deleteProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_VERSION');
-  props.deleteProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID');
   props.setProperties({
     ARQUEM_POST_CLOSE_VALIDATED_VERSION:'post-close-v1',
     ARQUEM_POST_CLOSE_VALIDATED_AT:new Date().toISOString(),
