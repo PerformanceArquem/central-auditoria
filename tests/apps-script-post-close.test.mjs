@@ -22,6 +22,11 @@ for(const path of paths){
     const context=vm.createContext({});
     vm.runInContext(source.slice(begin,end),context);
     assert.equal(context.arquemAjustesValidos_(sample).total,1);
+    const preview=context.arquemAmostraAjustes_();
+    assert.equal(preview.timing.adjustmentCount,2);
+    assert.equal(context.arquemAjustesValidos_(preview).items.length,2);
+    assert.deepEqual(Array.from(context.arquemAjustesValidos_(preview).items,x=>x.delta),[30,-30]);
+    assert.ok(preview.timing.adjustments.every(x=>x.person.startsWith('Pessoa demonstrativa')));
     assert.equal(context.arquemAjustesValidos_(sample).items[0].delta,30);
     assert.match(context.arquemAssinarAjustes_(sample).notice,/data original/);
     const unavailable={timing:{status:'unavailable',adjustments:[]}};
