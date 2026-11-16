@@ -104,13 +104,15 @@ function arquemCapacidadesAnexos_() {
   const checkedId=props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID');
   const checkedAt=Date.parse(props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED_AT')||'');
   let ready=false;
+  let templateUpdatedAt=NaN;
   // Never advertise readiness when the final doPost would reject attachments.
   if(props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED')==='true' &&
      id && checkedId===id && Number.isFinite(checkedAt)){
     try{
       const file=DriveApp.getFileById(id);
+      templateUpdatedAt=file.getLastUpdated().getTime();
       ready=file.getMimeType()===MimeType.GOOGLE_DOCS &&
-        checkedAt>=file.getLastUpdated().getTime();
+        Number.isFinite(templateUpdatedAt) && checkedAt>=templateUpdatedAt;
     }catch(_){ready=false;}
   }
   const postCheckedAt=Date.parse(props.getProperty('ARQUEM_POST_CLOSE_VALIDATED_AT')||'');
@@ -119,7 +121,7 @@ function arquemCapacidadesAnexos_() {
     props.getProperty('ARQUEM_POST_CLOSE_VALIDATED_VERSION')==='post-close-v1' &&
     props.getProperty('ARQUEM_POST_CLOSE_VALIDATED_TEMPLATE_ID')===id &&
     Number.isFinite(postCheckedAt) &&
-    postCheckedAt>=DriveApp.getFileById(id).getLastUpdated().getTime() &&
+    postCheckedAt>=templateUpdatedAt &&
     props.getProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_VERSION')==='post-close-v1' &&
     props.getProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID')===id &&
     Number.isFinite(postVisualAt) && postVisualAt>=postCheckedAt;
@@ -130,7 +132,7 @@ function arquemCapacidadesAnexos_() {
       props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_VERSION')==='arquem-3-keila-quality' &&
       props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_TEMPLATE_ID')===id &&
       Number.isFinite(Date.parse(props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_AT')||'')) &&
-      Date.parse(props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime()};
+      Date.parse(props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_AT')||'')>=templateUpdatedAt};
 }
 
 /**
