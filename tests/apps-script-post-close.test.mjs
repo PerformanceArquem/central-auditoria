@@ -189,8 +189,10 @@ test('recovery audit remains authenticated, read-only and never dispatches email
   assert.match(code,/readOnly:true/);
   assert.match(code,/manualVerificationRequired:true/);
   assert.match(code,/automaticRetryAllowed:false/);
-  assert.doesNotMatch(code,/sendMail\\s*\\(/);
-  assert.doesNotMatch(code,/method:'PATCH'|method:'POST'|method:'DELETE'/);
-  assert.match(source,/action === 'dispatch_health' \\|\\| action === 'recovery_audit'/);
-  assert.match(source,/if \\(!await isAdmin\\(req\\)\\)/);
+  assert.equal(code.includes('sendMail('),false);
+  assert.equal(code.includes("method:'PATCH'"),false);
+  assert.equal(code.includes("method:'POST'"),false);
+  assert.equal(code.includes("method:'DELETE'"),false);
+  assert.ok(source.includes("action === 'dispatch_health' || action === 'recovery_audit'"));
+  assert.ok(source.includes('if (!await isAdmin(req))'));
 });
