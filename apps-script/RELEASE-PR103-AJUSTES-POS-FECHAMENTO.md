@@ -43,3 +43,10 @@
 - Diário + semanal: Alan, Arthur, Carla, Cassiano, Cristiano, Kassio, Kleber, Laís, Letícia, Lucas Vieira
 - Semanal: Keila e Direção
 - A presença de um registro `failed` no banco não é prova, isoladamente, de não entrega por outro remetente.
+
+## Atenção: a auditoria da main não inclui automaticamente a PR #103
+
+O workflow `.github/workflows/appsscript-clasp-controlled.yml` da branch `main` executa `clasp pull` da fonte oficial **somente para leitura**, mas usa a referência `integration/zenvia-voice-chat-reports-20261112` (PR #68) nos passos de comparação de código e simulação de overlays. Portanto, **resultado verde da operação `audit` não prova que os commits da PR #103 (incluindo a proteção no `doPost` e a flag `ARQUEM_ATTACHMENTS_VALIDATED`) estejam na árvore publicada**.
+
+Antes de `publish`, o responsável deve comparar o resumo obtido do workflow com o HEAD aprovado da PR #103, verificar que o pacote revisado contém as proteções da PR #103 e preservar funções existentes em produção (Triagem, Zenvia, Keila, envio e capacidades). O publish da `main` depende da árvore `apps-script/deploy-source`, dos dois hashes e da aprovação do ambiente. **Não adicionar arquivos alternativos com funções duplicadas**. Mesmo um `clasp push` bem-sucedido não atualiza a implantação Web App `/exec` já existente: esta exige homologação visual e publicação controlada à parte.
+
