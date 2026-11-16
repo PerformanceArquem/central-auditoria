@@ -187,11 +187,11 @@ for(const path of paths){
 
 test('recovery audit preserves main administrative email delivery control',()=>{
   const source=readFileSync('supabase/functions/audit-email-dispatch/index.ts','utf8');
-  assert.match(source,/import \\{assertEmailDeliveryEnabled,emailDeliveryAdmin\\}/);
-  assert.match(source,/if\\(action==='email_delivery_control'\\)/);
-  assert.match(source,/await emailDeliveryAdmin\\(payload,req,db,E,validUrl\\(\\)\\)/);
+  assert.ok(source.includes('import {assertEmailDeliveryEnabled,emailDeliveryAdmin}'));
+  assert.ok(source.includes("if(action==='email_delivery_control')"));
+  assert.ok(source.includes('await emailDeliveryAdmin(payload,req,db,E,validUrl())'));
   assert.equal(source.split('await assertEmailDeliveryEnabled(db)').length-1,2);
-  assert.match(source,/if \\(action === 'recovery_audit'\\)/);
+  assert.ok(source.includes("if (action === 'recovery_audit')"));
 });
 
 test('recovery audit remains authenticated, read-only and never dispatches email',()=>{
