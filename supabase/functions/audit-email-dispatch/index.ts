@@ -9,6 +9,7 @@ import {KEILA_PRODUCTION_FLOW_RECIPIENT_ID,buildKeilaProductionFlow,keilaProduct
 import {composeTicketCharge} from "./ticket-charge.ts";
 import {chargeTicketLookup} from "./ticket-charge-lookup.ts";
 import {corporateCopy,corporatePacket,corporateFallbackHtml,assertCorporateCopy} from "./corporate-mail-policy.ts";
+import {assertEmailDeliveryEnabled,emailDeliveryAdmin} from "../_shared/email-delivery-control.ts";
 // Central de Auditoria — Supabase direto -> Google Apps Script/Gmail
 // Compatível com as ações existentes: status e test (admin JWT).
 // NUNCA colocar credenciais no HTML. Nenhum disparo automático sem flags explícitas.
@@ -952,6 +953,7 @@ async function voiceChatPreview(payload:R){
 }
 
 async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R) {
+  await assertEmailDeliveryEnabled(db);
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
   if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
   if(reportData&&!reportData.productionFlow){
@@ -1011,6 +1013,7 @@ async function sendMail(email: string, subject: string, text: string, html?: str
     if(customSections && capabilities.sectionPermissionsSupported!==true)
       throw new Error('Envio bloqueado: Apps Script instalado não confirma suporte às seções personalizadas. Atualize e homologue os anexos.');
   }
+  await assertEmailDeliveryEnabled(db);
   const res = await fetch(endpoint, {
     method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ token: E('GMAIL_MAIL_SECRET'), email, assunto: cleanSubject,
@@ -2345,6 +2348,11 @@ async function handleRequest(req: Request): Promise<Response> {
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
+    if(action==='email_delivery_control'){
+      if(!await isAdmin(req))return json({ok:false,error:'Acesso reservado ao administrador autenticado'},403);
+      try{return json(await emailDeliveryAdmin(payload,req,db,E,validUrl()));}
+      catch(ex){return json({ok:false,error:err(ex)},409);}
+    }
     if (action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'recovery_audit' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
       return action === 'voice_chat_preview' ? await voiceChatPreview(payload)
