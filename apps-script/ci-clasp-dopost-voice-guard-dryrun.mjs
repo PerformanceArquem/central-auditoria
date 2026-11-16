@@ -62,7 +62,7 @@ for(const [file,src] of all)for(const [name,n] of funcs(src,file)){
  if(inventory.has(name))throw Error('Duplicate global: '+name);
  inventory.set(name,file);
 }
-if(inventory.size!==38)throw Error('Expected all 38 function names intact');
+if(inventory.size!==39)throw Error('Expected all 39 function names intact');
 mkdirSync(outputDir,{recursive:true});
 for(const [file,src] of all)writeFileSync(join(outputDir,file),src,{mode:0o600});
 const manifest=readFileSync(join(inputDir,'appsscript.json'));
@@ -71,7 +71,7 @@ if(!readFileSync(join(outputDir,'appsscript.json')).equals(manifest))throw Error
 appendFileSync(summaryPath,'\n### Protetor de anexos de Voz x Chat — apenas simulacao\n\n'+
  '- doPost oficial preservado integralmente, com insercao de guarda antes do gerador de anexos\n'+
  '- Ausencia de capacidade Zenvia e versao esperada bloqueia geracao\n'+
- '- 38 funcoes globais, 0 duplicadas; manifesto intocado\n'+
+ '- 39 funcoes globais, 0 duplicadas; manifesto intocado\n'+
  '- Nenhum script executado, e-mail enviado, push ou deploy efetuado\n'+
  '- Nao equivale a homologacao com servicos Google reais\n');
-console.log('DOPOST_VOICE_GUARD_DRYRUN_OK globalFunctions=38 changedOnly=doPost otherFunctionsPreserved=true manifestUnchanged=true');
+console.log('DOPOST_VOICE_GUARD_DRYRUN_OK globalFunctions=39 changedOnly=doPost otherFunctionsPreserved=true manifestUnchanged=true');
