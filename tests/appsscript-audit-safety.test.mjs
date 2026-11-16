@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
-const script=new URL('../scripts/audit-appsscript-project.mjs',import.meta.url).pathname;
+const script=fileURLToPath(new URL('../scripts/audit-appsscript-project.mjs',import.meta.url));
 const workflow=await readFile(new URL('../.github/workflows/audit-appsscript-installation.yml',import.meta.url),'utf8');
 test('pipeline somente leitura e não publica nem executa scripts',()=>{
  assert.match(workflow,/clasp" pull/);
