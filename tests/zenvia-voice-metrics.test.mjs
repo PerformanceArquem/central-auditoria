@@ -31,9 +31,11 @@ const fetch=async(input,opts={})=>{
  calls.push({url,opts});
  if(url.pathname.endsWith('/auth/v1/user'))return json({id:'user-123'});
  if(url.pathname.endsWith('/rest/v1/audit_users'))return json([{role:allowed?'admin':'operator',is_active:true}]);
+ if(url.pathname.endsWith('/rest/v1/audit_email_recipients'))return json([{email:'bruno@example.invalid',collaborator_name:'Bruno Oliveira'}]);
  if(url.hostname==='voice-api.zenvia.com'){
   assert.equal(opts.method,'GET');
   assert.equal(opts.headers['Access-Token'],'fixture-token');
+  if(url.pathname==='/ramal/relatorio')return json({sucesso:true,dados:{relatorio:[{id:2000,login:'bruno@example.invalid',webphone_key:'never-return-key',bina:'+55111111111'},{id:2001,nome:'Cesar',login:'private@example.invalid'}]}});
   if(/^\/fila\/\d+$/.test(url.pathname)){
     const id=url.pathname.split('/').pop();
     return json({sucesso:true,dados:{id:Number(id),nome:id==='430'?'Suporte':'Comercial',
@@ -420,3 +422,6 @@ test('missing or ambiguous support numbers cannot complete discovery',async()=>{
   assert.equal(r.body.supportDiscovery,null);
  }finally{extensionRows=old;delete scope.process.env.ZENVIA_SUPPORT_EXTENSION_NUMBERS;delete scope.process.env.ZENVIA_VOICE_QUEUE_ID;}
 });
+
+test('person names replace raw extension IDs without exposing logins or phone credentials',async()=>{const r=await invoke();assert.equal(r.body.byExtension.find(p=>p.extension==='2000').name,'Bruno Oliveira');const output=JSON.stringify(r.body);for(const secret of ['bruno@example.invalid','private@example.invalid','never-return-key','+55111111111'])assert.equal(output.includes(secret),false);});
+test('internal service authentication is read only and does not require a user session',async()=>{const r=await invoke(undefined,'Bearer fixture-service');assert.equal(r.code,200);assert.equal(calls.some(x=>x.url.pathname.endsWith('/auth/v1/user')),false);});

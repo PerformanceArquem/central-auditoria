@@ -1,0 +1,17 @@
+name: Validate real voice and chat reports
+on:
+  pull_request:
+    paths: ['index.html', 'lib/zenvia-voice.js', 'supabase/functions/audit-email-dispatch/**', 'tests/voice-chat-report.test.mjs']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test tests/zenvia-voice-metrics.test.mjs tests/voice-chat-report.test.mjs tests/email-admin-ui.test.mjs
