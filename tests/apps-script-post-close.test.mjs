@@ -205,6 +205,10 @@ test('recovery audit remains authenticated, read-only and never dispatches email
   assert.ok(code.includes('records,total:records.length,truncated,complete:!truncated'));
   assert.ok(code.includes('possible_delivery_needs_verification'));
   assert.ok(code.includes('unconfirmed_failure_needs_verification'));
+  assert.ok(code.includes("failureCategory:"));
+  assert.ok(code.includes("'attachments_not_approved'"));
+  assert.ok(code.includes("'provider_or_delivery_failure'"));
+  assert.ok(!code.includes('failure:String(x.error_message'), 'provider errors must not be returned verbatim');
   assert.equal(code.includes('sendMail('),false);
   assert.equal(code.includes("method:'PATCH'"),false);
   assert.equal(code.includes("method:'POST'"),false);
