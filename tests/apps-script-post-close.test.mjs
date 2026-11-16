@@ -145,6 +145,7 @@ for(const path of paths){
     assert.ok(start>=0 && end>start);
     const approvals={
       ARQUEM_PAPEL_TIMBRADO_DOC_ID:'template-123',
+      ARQUEM_ATTACHMENTS_VALIDATED:'true',
       ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID:'template-123',
       ARQUEM_ATTACHMENTS_VALIDATED_AT:'2026-11-16T11:00:00.000Z',
       ARQUEM_POST_CLOSE_VALIDATED_VERSION:'post-close-v1',
