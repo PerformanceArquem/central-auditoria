@@ -1265,17 +1265,19 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    <div><label for="zvStart">Data inicial</label><input id="zvStart" type="date"></div>
    <div><label for="zvEnd">Data final</label><input id="zvEnd" type="date"></div>
    <button type="button" id="zvRefresh" class="b">↻ Consultar Zenvia</button>
+   <button type="button" id="zvReportPreview" class="b">Conferir relatório Voz × Chat</button>
    <button type="button" id="zvCheck" class="b">Verificar conexão</button>
    <button type="button" id="zvFindQueues" class="b">Localizar filas</button>
    <button type="button" id="zvCopyQueues" class="b" disabled>Copiar filas identificadas</button>
   </div>
   <p id="zvStatus" role="status" class="subtle">Conecte a API Zenvia para consultar os indicadores do canal de voz.</p>
+  <div id="zvReportStatus" role="status"></div><iframe id="zvReportFrame" title="Prévia do relatório Voz e Chat" sandbox="" style="display:none;width:100%;height:650px;border:1px solid #d8e1ec"></iframe>
   <div id="zvQueues" class="subtle" role="status"></div>
   <div id="zvKpis" class="kpis" style="margin:12px 0"></div>
   <p class="subtle">TMA = tempo médio falado nas ligações atendidas. TME é calculado apenas com os tempos de espera reais da fila configurada, quando houver cobertura integral; registros sem tempo de espera suspendem o indicador.</p>
   <div class="grid2">
    <div class="card"><h3>Volume por dia</h3><div class="tablewrap"><table><thead><tr><th>Data</th><th>Ligações</th><th>Atendidas</th><th>Não atendidas</th><th>Em andamento</th><th>Sem classificação</th></tr></thead><tbody id="zvDays"></tbody></table></div></div>
-   <div class="card"><h3>Distribuição por ramal</h3><div class="tablewrap"><table><thead><tr><th>Ramal</th><th>Ligações</th><th>Atendidas</th><th>Não atendidas</th><th>Em andamento</th><th>Sem classificação</th></tr></thead><tbody id="zvExtensions"></tbody></table></div></div>
+   <div class="card"><h3>Distribuição por pessoa</h3><div class="tablewrap"><table><thead><tr><th>Nome</th><th>Ligações</th><th>Atendidas</th><th>Não atendidas</th><th>Em andamento</th><th>Sem classificação</th></tr></thead><tbody id="zvExtensions"></tbody></table></div></div>
   </div>
  </div>
 </div>
@@ -6022,7 +6024,7 @@ window.clientImpactInit=()=>{
     const h=document.createElement('h3');h.textContent=String(value??'Indisponível');
     box.append(text,h);el('zvKpis').appendChild(box);}
    renderRows('zvDays',d.byDay||[],['date','total','answered','unanswered','inProgress','unclassified']);
-   renderRows('zvExtensions',d.byExtension||[],['extension','total','answered','unanswered','inProgress','unclassified']);
+   renderRows('zvExtensions',d.byExtension||[],['name','total','answered','unanswered','inProgress','unclassified']);
    const queue=d.queue||{};
    el('zvStatus').textContent='Fonte: API Zenvia Voice · '+start+' a '+end+' · '+(x.total||0)+' chamadas na conta. '+(support.configured?'Recorte do Suporte: ramais homologados.':'Recorte do Suporte pendente: configurar ramais homologados no servidor. ')+(queue.configured?'Fila configurada: '+(queue.calls??0)+' chamadas; '+(queue.waitSampleCount??0)+' amostras válidas de espera.':'TME pendente: configure o ID da fila de Suporte no servidor.');
   }catch(e){reset();el('zvStatus').textContent='Métricas indisponíveis: '+e.message;}
@@ -6111,6 +6113,18 @@ window.clientImpactInit=()=>{
   const today=dateToday();el('zvEnd').value=today;el('zvStart').value=today.slice(0,7)+'-01';
   el('zvRefresh').addEventListener('click',load);
   el('zvCheck').addEventListener('click',diagnose);
+  el('zvReportPreview').addEventListener('click',async()=>{
+   const button=el('zvReportPreview');button.disabled=true;el('zvReportStatus').textContent='Preparando prévia sem envio...';
+   try{
+    const client=window.tmEmailAdminClient;if(!client)throw Error('Faça login novamente');
+    const {data,error}=await client.functions.invoke('audit-email-dispatch',{body:{action:'voice_chat_preview',recipientId:'a4748115-e1d6-42dc-a8d1-706b8129219f',from:el('zvStart').value,to:el('zvEnd').value,createFiles:true}});
+    if(error||!data?.ok)throw Error(data?.error||error?.message||'Prévia indisponível');
+    el('zvReportFrame').srcdoc=data.html;el('zvReportFrame').style.display='block';
+    el('zvReportStatus').replaceChildren(document.createTextNode('Prévia com dados reais. Nenhum email enviado. '));
+    for(const file of data.files||[]){const link=document.createElement('a');link.href=file.url;link.textContent=file.name;link.target='_blank';link.rel='noopener';el('zvReportStatus').append(link,document.createTextNode(' · '));}
+   }catch(e){el('zvReportStatus').textContent='Prévia indisponível: '+e.message;}
+   finally{button.disabled=false;}
+  });
   el('zvFindQueues').addEventListener('click',discoverQueues);
   el('zvCopyQueues').addEventListener('click',async()=>{
    const value=el('zvCopyQueues').dataset.report||'';
