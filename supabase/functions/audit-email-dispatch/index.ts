@@ -1087,11 +1087,12 @@ async function adminAction(payload: R) {
       return json({ok:false,error:'Data final inválida'},400);
     const [rows,recipients] = await Promise.all([
       db('audit_email_sector_dispatches?period_to=eq.'+encodeURIComponent(start)+
-        '&status=eq.failed&select=dispatch_key,recipient_id,report_kind,period_from,period_to,status,provider_id,sent_at,attempt_count,error_message,reviewed_at&order=report_kind.asc,period_from.asc&limit=100'),
+        '&status=eq.failed&select=dispatch_key,recipient_id,report_kind,period_from,period_to,status,provider_id,sent_at,attempt_count,error_message,reviewed_at&order=report_kind.asc,period_from.asc&limit=101'),
       db('audit_email_recipients?select=id,name&limit=200')
     ]);
     const names=new Map<string,string>((recipients as R[]).map(x=>[String(x.id),safe(x.name)]));
-    const records=(rows as R[]).filter(x=>['daily','weekly'].includes(String(x.report_kind)) &&
+    const truncated=(rows as R[]).length>100;
+    const records=(rows as R[]).slice(0,100).filter(x=>['daily','weekly'].includes(String(x.report_kind)) &&
        !String(x.dispatch_key||'').startsWith('preliminary:')).map(x=>({
       recipient:names.get(String(x.recipient_id))||'Destinatário não identificado',
       kind:String(x.report_kind),from:String(x.period_from),to:String(x.period_to),
@@ -1099,11 +1100,13 @@ async function adminAction(payload: R) {
       providerMarked:!!x.provider_id,deliveryMarked:!!x.sent_at,
       reviewRecorded:!!x.reviewed_at,
       failure:String(x.error_message||'').slice(0,180),
+      recoveryClass:x.provider_id||x.sent_at?'possible_delivery_needs_verification':
+        'unconfirmed_failure_needs_verification',
       requiresProviderReconciliation:true,
       automaticRetryAllowed:false
     }));
     return json({ok:true,sent:false,readOnly:true,periodEnd:start,
-      records,total:records.length,
+      records,total:records.length,truncated,complete:!truncated,
       manualVerificationRequired:true,
       note:'Conferir Gmail remetente, homologação de PDF/XLSX e aprovação do Apps Script antes de qualquer reenvio.'});
   }
