@@ -4,13 +4,13 @@
 - Supabase `audit-email-dispatch` v143: a função bloqueia `timing` se o gerador responder sem `postCloseAdjustmentsSupported: true`.
 - Registros `audit_email_sector_dispatches`: 10 `daily` e 12 `weekly` em `failed`, mensagem "Gerador ainda não homologado para observações de ajustes posteriores ao fechamento".
 - Foram observados 3 envios de Triagem da Inteligência com anexos no Gmail conectado, distintos dos 22 relatórios setoriais.
-- Os 6 checks da PR #103 passaram. Checks Node/Deno **não** substituem testes reais de Google Docs/Sheets/Drive.
+- Os 7 checks do commit `7d840f9de9727966a8e0af7eef4e9cfe32b2d61a` da PR #103 passaram. Checks Node/Deno **não** substituem testes reais de Google Docs/Sheets/Drive.
 - O projeto Apps Script oficial é `Central de Auditoria - Emails`. O acesso Google Drive a metadados não autoriza alterar conteúdo do projeto Apps Script.
 - O workflow `.github/workflows/appsscript-clasp-controlled.yml` tem modo `audit` sem escrita, e `publish` exige hashes revisados, árvore completa, autorização e aprovação do ambiente. `clasp push` **não** muda automaticamente a implantação Web App `/exec`.
 
 ## Bloqueio de publicação confirmado na PR #103 (16/11/2026)
 
-- Os **sete checks** do commit `59ea66730d6279a3abbb7a82b00fe8e8cee407e1` concluíram com sucesso; isso cobre o código em revisão, **não** a instalação Google Apps Script.
+- Os **sete checks** do commit `7d840f9de9727966a8e0af7eef4e9cfe32b2d61a` concluíram com sucesso; isso cobre o código em revisão, **não** a instalação Google Apps Script.
 - A PR está aberta para revisão, porém ainda não há avaliações registradas por revisores.
 - O workflow `.github/workflows/appsscript-clasp-controlled.yml` exige `apps-script/deploy-source/appsscript.json` com a **árvore exata da fonte instalada reconciliada e aprovada**. Esse arquivo **não existe na branch de revisão**: o passo `publish` falharia antes de qualquer escrita. **Não** preencher com arquivo sintético ou publicar os dois scripts alternativos lado a lado.
 - Mesmo com árvore revisada e hashes aceitos, o fluxo `clasp push` + `clasp create-version` **não troca a implantação Web App `/exec` existente**; registrar e atualizar a implantação somente após a revisão visual PDF/XLSX e aprovação autorizada.
@@ -50,3 +50,14 @@ O workflow `.github/workflows/appsscript-clasp-controlled.yml` da branch `main` 
 
 Antes de `publish`, o responsável deve comparar o resumo obtido do workflow com o HEAD aprovado da PR #103, verificar que o pacote revisado contém as proteções da PR #103 e preservar funções existentes em produção (Triagem, Zenvia, Keila, envio e capacidades). O publish da `main` depende da árvore `apps-script/deploy-source`, dos dois hashes e da aprovação do ambiente. **Não adicionar arquivos alternativos com funções duplicadas**. Mesmo um `clasp push` bem-sucedido não atualiza a implantação Web App `/exec` já existente: esta exige homologação visual e publicação controlada à parte.
 
+
+## Evidência executada: auditoria oficial #43925902801 (16/11/2026)
+
+- Execução manual da operação **audit** em `main` (`02de5b0`), [GitHub Actions #43925902801](https://github.com/PerformanceArquem/central-auditoria/actions/runs/43925902801). Jobs **audit** e **zenvia-isolated-tests** aprovados; job **publish** ignorado intencionalmente.
+- `clasp pull` autenticado consultou 7 arquivos; SHA-256 do snapshot remoto: `03df0fda5a747f486ea27428929c8902624eb87adff15082afad3bbb36edff67`. **Usar somente como referência desta auditoria:** conferir novamente antes da publicação, porque o remoto pode mudar.
+- Simulação da reconciliação: **39 funções globais**, nenhuma duplicada, sem perda de declarações. Inventário PR68: 26 funções de referência; 5 implementações diferentes no remoto, 13 funções exclusivas da instalação — não sobrescrever automaticamente.
+- Simulação de overlay PDF/XLSX: **2 funções substituídas, 37 preservadas**, `doPost` e manifesto oficiais intactos. Guardas de Zenvia antes dos anexos e do envio. **69 testes isolados aprovados**.
+- O script `ci-clasp-safe-overlays.mjs` da PR #103 foi alinhado ao inventário de 39 funções, commit `7d840f9`, com teste regressivo. Isso não compõe automaticamente a fonte aprovada `apps-script/deploy-source`.
+- O teste de read-only **não** produziu nem aprovou PDFs/XLSX reais, não comprovou capacidade `postCloseAdjustmentsSupported=true` no Web App `/exec`, não atualizou o Apps Script e não enviou mensagens.
+
+**Gate restante:** revisão técnica independente da PR, conciliação específica da PR #103 na fonte instalada completa, pacote de deploy com manifesto verdadeiro e hash aprovado, geração e revisão visual de anexos em projeto Google autorizado, publicação controlada e piloto idempotente. Não utilizar o SHA remoto como autorização automática nem destravar os 22 envios sem essas evidências.
