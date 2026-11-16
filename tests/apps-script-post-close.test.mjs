@@ -26,6 +26,26 @@ for(const path of paths){
     assert.match(context.arquemAssinarAjustes_(sample).notice,/data original/);
     const unavailable={timing:{status:'unavailable',adjustments:[]}};
     assert.equal(context.arquemAjustesValidos_(unavailable).total,0);
+    for(const status of ['no_comparison','restricted','unavailable']){
+      const packet={timing:{status,notice:'Sem conciliação disponível',adjustments:[],adjustmentCount:0}};
+      assert.equal(context.arquemAjustesValidos_(packet).items.length,0);
+      assert.match(context.arquemAssinarAjustes_(packet).notice,/data original/);
+    }
+    const negative={timing:{...sample.timing,adjustments:[
+      {...sample.timing.adjustments[0],previousMinutes:90,currentMinutes:60,deltaMinutes:-30}
+    ]}};
+    assert.equal(context.arquemAjustesValidos_(negative).items[0].delta,-30);
+    const truncated={timing:{...sample.timing,adjustmentCount:150}};
+    assert.equal(context.arquemAjustesValidos_(truncated).total,150);
+    assert.equal(context.arquemAjustesValidos_(truncated).items.length,1);
+    assert.throws(()=>context.arquemAjustesValidos_({
+      timing:{...sample.timing,adjustments:[
+        {...sample.timing.adjustments[0],date:'16/11/2026'}
+      ]}
+    }),/inválido/);
+    assert.throws(()=>context.arquemAjustesValidos_({
+      timing:{...sample.timing,adjustmentCount:0}
+    }),/inválid/);
     assert.throws(()=>context.arquemAjustesValidos_({
       timing:{status:'tracked',adjustmentCount:1,
         adjustments:[{...sample.timing.adjustments[0],deltaMinutes:60}]}
