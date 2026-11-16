@@ -309,11 +309,17 @@ function arquemPrepararRevisaoVisualAjustesSemEnvio() {
   const props=PropertiesService.getScriptProperties();
   const folderId=String(props.getProperty('ARQUEM_HOMOLOGACAO_FOLDER_ID')||'').trim();
   if (!folderId)throw new Error('Defina a pasta privada ARQUEM_HOMOLOGACAO_FOLDER_ID');
-  // O teste técnico também revoga a aprovação visual anterior.
+  const folder=DriveApp.getFolderById(folderId);
+  // Nunca gravar anexos em uma pasta com acesso público ou por link.
+  // getSharingAccess verifica o compartilhamento direto da pasta; o
+  // responsável também deve revisar permissões herdadas no Google Drive.
+  if(folder.getSharingAccess()!==DriveApp.Access.PRIVATE)
+    throw new Error('A pasta de homologação não pode permitir acesso público ou por link');
+  // O teste técnico revoga a aprovação visual anterior somente após a
+  // pasta de destino passar na checagem de privacidade.
   const tech=arquemHomologarAjustesSemEnvio();
   if(!tech.technicalValidation || tech.postCloseAdjustmentsSupported!==false)
     throw new Error('Teste técnico não passou ou não respeitou o bloqueio de envio');
-  const folder=DriveApp.getFolderById(folderId);
   const blobs=arquemCreateReportAttachments_(arquemAmostraAjustes_());
   const saved=blobs.map(b=>folder.createFile(b));
   return {ok:true,sent:false,visualApprovalRequired:true,
