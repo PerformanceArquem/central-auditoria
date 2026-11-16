@@ -76,6 +76,34 @@ for(const path of paths){
     assert.match(source,/sheet\.getRange\(2,4,row,2\)\.setNumberFormat/);
 
   });
+  test(path+' rejects public review folders before generating files',()=>{
+    const source=readFileSync(path,'utf8');
+    const start=source.indexOf('function arquemPrepararRevisaoVisualAjustesSemEnvio()');
+    const end=source.indexOf('function arquemHomologarAjustesSemEnvio()',start);
+    assert.ok(start>=0&&end>start);
+    let homologations=0,created=0;
+    const folder={getSharingAccess:()=> 'ANYONE_WITH_LINK',createFile:()=>{
+      created++;return {getName:()=> 'sample.pdf',getUrl:()=> 'private-link',getId:()=> 'private-id'};
+    }};
+    const context=vm.createContext({
+      PropertiesService:{getScriptProperties:()=>({getProperty:()=> 'test-folder-id'})},
+      DriveApp:{Access:{PRIVATE:'PRIVATE'},getFolderById:()=>folder},
+      arquemHomologarAjustesSemEnvio:()=>{homologations++;return {technicalValidation:true,postCloseAdjustmentsSupported:false};},
+      arquemCreateReportAttachments_:()=>[{}],
+      arquemAmostraAjustes_:()=>({schema:'arquem-mail-v1'})
+    });
+    vm.runInContext(source.slice(start,end),context);
+    assert.throws(()=>context.arquemPrepararRevisaoVisualAjustesSemEnvio(),/pasta.*público/);
+    assert.equal(homologations,0,'public folder must be rejected before technical state changes');
+    assert.equal(created,0,'no file may be created in public folder');
+    folder.getSharingAccess=()=> 'PRIVATE';
+    const result=context.arquemPrepararRevisaoVisualAjustesSemEnvio();
+    assert.equal(result.sent,false);
+    assert.equal(result.visualApprovalRequired,true);
+    assert.equal(homologations,1);
+    assert.equal(created,1);
+  });
+
   test(path+' holds capability closed until technical and visual signoff',()=>{
     const source=readFileSync(path,'utf8');
     const start=source.indexOf('function arquemCapacidadesAnexos_()');
