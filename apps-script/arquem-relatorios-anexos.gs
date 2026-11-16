@@ -289,10 +289,14 @@ function arquemAmostraAjustes_() {
     from:'2026-11-09',to:'2026-11-15',metrics:{minutes:480,appointments:1,tickets:1},
     collaborators:[],daily:[],tickets:[],customers:[],activities:[],
     timing:{status:'tracked',notice:'Aviso de conciliação após fechamento',
-      adjustmentCount:1,adjustments:[{
-        ticketId:'100769',date:'2026-11-10',person:'Pessoa demonstrativa',
+      adjustmentCount:2,adjustments:[{
+        ticketId:'100769',date:'2026-11-10',person:'Pessoa demonstrativa A',
         previousMinutes:60,currentMinutes:90,deltaMinutes:30,
         observedAt:'2026-11-16T10:00:00Z',inCurrentPeriod:true
+      },{
+        ticketId:'100770',date:'2026-11-11',person:'Pessoa demonstrativa B',
+        previousMinutes:90,currentMinutes:60,deltaMinutes:-30,
+        observedAt:'2026-11-16T11:00:00Z',inCurrentPeriod:true
       }]}
   };
 }
