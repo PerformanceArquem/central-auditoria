@@ -30,8 +30,7 @@ const lostNames=[...beforeNames].filter(name=>!afterNames.has(name));
 const newNames=[...afterNames].filter(name=>!beforeNames.has(name));
 if(lostNames.length||newNames.length)throw Error('Contrato de funções alterado: removidas='+lostNames.length+' adicionadas='+newNames.length);
 const critical=['doPost','arquemCreateReportAttachments_','arquemCapacidadesAnexos_','arquemHomologarKeilaSemEnvio','arquemValidarPublicacaoSemEnvio'];
-// The reviewed candidate has six JavaScript files and exactly 38 global
-// functions. A zero-duplicate result alone is NOT proof of correctness.
+// A zero-duplicate result alone is NOT proof of correctness.
 // Remote inventory verified in protected audit run 43906645766: six JS files,
 // 39 unique global functions. Keep exact inventory, critical names and duplicate checks.
 if(original.length!==6 || afterNames.size!==39)
