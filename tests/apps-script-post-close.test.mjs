@@ -219,3 +219,35 @@ test('recovery audit remains authenticated, read-only and never dispatches email
   assert.ok(source.includes("action === 'dispatch_health' || action === 'recovery_audit'"));
   assert.ok(source.includes('if (!await isAdmin(req))'));
 });
+
+
+test('final Apps Script doPost rejects unapproved post-close reports before MailApp',()=>{
+  const source=readFileSync('apps-script/central-auditoria-emails-completo.gs','utf8');
+  const start=source.indexOf('function doPost(e) {');
+  const end=source.indexOf('function resposta(obj) {',start);
+  assert.ok(start>=0&&end>start);
+  let approved=false, sent=0;
+  const props={getProperty(k){
+    if(k==='MAIL_SECRET')return 'fixture-secret';
+    if(k==='ARQUEM_ATTACHMENTS_VALIDATED')return 'true';
+    return '';
+  }};
+  const ctx=vm.createContext({
+    PropertiesService:{getScriptProperties:()=>props},
+    arquemCapacidadesAnexos_:()=>({paperTemplateConfigured:true,postCloseAdjustmentsSupported:approved}),
+    arquemCreateReportAttachments_:()=>[{name:'report.pdf'},{name:'report.xlsx'}],
+    MailApp:{getRemainingDailyQuota:()=>100,sendEmail:()=>{sent++;}},
+    resposta:obj=>obj,
+    console:{error:()=>{}}
+  });
+  vm.runInContext(source.slice(start,end),ctx);
+  const packet={schema:'arquem-mail-v1',timing:{status:'tracked',adjustments:[]}};
+  const invoke=()=>ctx.doPost({postData:{contents:JSON.stringify({
+    token:'fixture-secret',email:'test@example.org',assunto:'Relatório',texto:'Resumo',reportData:packet
+  })}});
+  assert.equal(invoke().sucesso,false);
+  assert.equal(sent,0,'never send a report with timing prior to approval');
+  approved=true;
+  assert.equal(invoke().sucesso,true);
+  assert.equal(sent,1,'approved report may proceed through final mail handler');
+});
