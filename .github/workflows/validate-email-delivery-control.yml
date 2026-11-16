@@ -1,0 +1,19 @@
+name: Validate global email switch
+on:
+  push:
+    paths: ['index.html','email-delivery-control.js','supabase/functions/_shared/email-delivery-control.ts','supabase/functions/audit-email-dispatch/index.ts','supabase/functions/intelligence-triage-report/index.ts','apps-script/email-delivery-control-guard.gs','tests/email-delivery-control.test.mjs']
+  pull_request:
+    paths: ['index.html','email-delivery-control.js','supabase/functions/_shared/email-delivery-control.ts','supabase/functions/audit-email-dispatch/index.ts','supabase/functions/intelligence-triage-report/index.ts','apps-script/email-delivery-control-guard.gs','tests/email-delivery-control.test.mjs']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: node --test tests/email-delivery-control.test.mjs tests/email-admin-ui.test.mjs
