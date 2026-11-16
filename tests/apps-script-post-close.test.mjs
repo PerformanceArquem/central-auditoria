@@ -327,3 +327,13 @@ test('dispatch observability distinguishes attempts from provider acceptance and
   assert.ok(source.includes('handled,deliverySummary'));
   assert.ok(source.includes('results:dispatchResults'));
 });
+
+test('safe release overlay uses audited 39-function source inventory without publishing',()=>{
+  const overlay=readFileSync('apps-script/ci-clasp-safe-overlays.mjs','utf8');
+  assert.ok(overlay.includes('existingNames.size!==39'));
+  assert.ok(overlay.includes('functions=39 changed=2 preserved=37'));
+  assert.ok(overlay.includes('doPostOriginal=true manifestOriginal=true'));
+  assert.ok(overlay.includes("if(finalNames.get('doPost').text!==originalDoPost.text)"));
+  assert.ok(overlay.includes("if(missing.length||added.length)throw Error"));
+  assert.doesNotMatch(overlay,/clasp\\s+(?:push|deploy|create-version)/);
+});
