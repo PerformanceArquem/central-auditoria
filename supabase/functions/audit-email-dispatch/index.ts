@@ -1880,7 +1880,7 @@ async function dispatch(payload:R = {}) {
     attempts:handled,
     providerAccepted:dispatchResults.filter(x=>x.status==='sent').length,
     failed:dispatchResults.filter(x=>x.status==='failed').length,
-    skipped:dispatchResults.filter(x=>x.status==='skipped'||x.skipped!=null).length,
+    skipped:dispatchResults.filter(x=>x.status==='skipped'||('skipped' in x && x.skipped!=null)).length,
     preliminaryAccepted:dispatchResults.filter(x=>x.status==='sent_preliminary').length,
     inboxDeliveryVerified:false
   };
