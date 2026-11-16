@@ -183,11 +183,15 @@ function arquemCapacidadesAnexos_() {
     }catch(_){ready=false;}
   }
   const postCheckedAt=Date.parse(props.getProperty('ARQUEM_POST_CLOSE_VALIDATED_AT')||'');
+  const postVisualAt=Date.parse(props.getProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT')||'');
   const postCloseReady=ready &&
     props.getProperty('ARQUEM_POST_CLOSE_VALIDATED_VERSION')==='post-close-v1' &&
     props.getProperty('ARQUEM_POST_CLOSE_VALIDATED_TEMPLATE_ID')===id &&
     Number.isFinite(postCheckedAt) &&
-    postCheckedAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
+    postCheckedAt>=DriveApp.getFileById(id).getLastUpdated().getTime() &&
+    props.getProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_VERSION')==='post-close-v1' &&
+    props.getProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID')===id &&
+    Number.isFinite(postVisualAt) && postVisualAt>=postCheckedAt;
   return {sucesso:true,attachmentsVersion:'arquem-3-keila-quality',formats:['pdf','xlsx'],
     paperTemplateConfigured:ready,
     postCloseAdjustmentsSupported:postCloseReady,
@@ -370,12 +374,18 @@ function arquemHomologarAjustesSemEnvio() {
   const xlsx=files.find(f=>f.getName().endsWith('.xlsx'));
   if (!pdf || !xlsx || pdf.getBytes().length<2000 || xlsx.getBytes().length<1500)
     throw new Error('PDF/XLSX inválidos na homologação de ajustes');
+  // A geração técnica não autoriza anúncios de capacidade antes da revisão
+  // humana dos dois anexos reais. Uma homologação nova invalida a anterior.
+  props.deleteProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT');
+  props.deleteProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_VERSION');
+  props.deleteProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID');
   props.setProperties({
     ARQUEM_POST_CLOSE_VALIDATED_VERSION:'post-close-v1',
     ARQUEM_POST_CLOSE_VALIDATED_AT:new Date().toISOString(),
     ARQUEM_POST_CLOSE_VALIDATED_TEMPLATE_ID:id
   },false);
-  return {ok:true,sent:false,postCloseAdjustmentsSupported:true,
+  return {ok:true,sent:false,technicalValidation:true,visualApprovalRequired:true,
+    postCloseAdjustmentsSupported:false,
     files:files.map(f=>({name:f.getName(),bytes:f.getBytes().length}))};
 }
 
