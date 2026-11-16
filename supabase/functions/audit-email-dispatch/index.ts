@@ -1081,8 +1081,9 @@ async function adminAction(payload: R) {
     // Admin only: read-only review of failed official dispatches.
     // Never returns recipient emails, provider credentials or the prepared report body.
     const start=String(payload.periodEnd||'2026-11-15');
-    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(start) ||
-       Number.isNaN(Date.parse(start+'T12:00:00Z')))
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(start) ||
+       Number.isNaN(Date.parse(start+'T12:00:00Z')) ||
+       new Date(start+'T12:00:00Z').toISOString().slice(0,10)!==start)
       return json({ok:false,error:'Data final inválida'},400);
     const [rows,recipients] = await Promise.all([
       db('audit_email_sector_dispatches?period_to=eq.'+encodeURIComponent(start)+
