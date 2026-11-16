@@ -1873,11 +1873,22 @@ async function dispatch(payload:R = {}) {
       }
     } catch (ex) { results.push({ recipientId: id, kind: t.kind, status: 'failed', error: err(ex) }); }
   }
-  return json({ok:![...results,...keilaFlow].some(x=>x.status==='failed'),
-    date:today,batchSize:MAX_DISPATCH_BATCH,handled,
+  // handled counts attempted reservations, NOT successful mail deliveries.
+  // Preserve the legacy fields and expose disjoint, audit-friendly outcomes.
+  const dispatchResults=[...keilaFlow,...results];
+  const deliverySummary={
+    attempts:handled,
+    providerAccepted:dispatchResults.filter(x=>x.status==='sent').length,
+    failed:dispatchResults.filter(x=>x.status==='failed').length,
+    skipped:dispatchResults.filter(x=>x.status==='skipped'||x.skipped!=null).length,
+    preliminaryAccepted:dispatchResults.filter(x=>x.status==='sent_preliminary').length,
+    inboxDeliveryVerified:false
+  };
+  return json({ok:!dispatchResults.some(x=>x.status==='failed'),
+    date:today,batchSize:MAX_DISPATCH_BATCH,handled,deliverySummary,
     pendingMayRemain:handled===MAX_DISPATCH_BATCH||results.some(x=>String(x.skipped||'').includes('Aguardando')),
     waitingForReconciliation:results.filter(x=>String(x.skipped||'').includes('Aguardando')).length,
-    results:[...keilaFlow,...results]});
+    results:dispatchResults});
 }
 // Prévia executiva semanal: apenas leitura, sem Gmail, sem fila de envio e sem cache de disparos.
 // Escopo e formatação baseados nos cadastros e no mesmo relatório corporativo da Direção.
