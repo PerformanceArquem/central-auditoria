@@ -15,7 +15,7 @@ export async function collectVoiceReport(from:string,to:string,serviceKey:string
   const end=next(start,30)<to?next(start,30):to;
   const url='https://centralauditoria.ddns.net/api/audit-production-metrics?'+new URLSearchParams({mode:'zenvia',start,end});
   const response=await http(url,{method:'GET',headers:{Authorization:'Bearer '+serviceKey,Accept:'application/json'},signal:AbortSignal.timeout(50000),redirect:'error'});
-  if(!response.ok)throw Error('Métricas de voz indisponíveis; relatório completo não liberado');
+  if(!response.ok)throw Error('Métricas de voz indisponíveis (HTTP '+response.status+'); relatório completo não liberado');
   const body=await response.json();if(body.ok!==true||body.from!==start||body.to!==end)throw Error('Período de voz divergente');
   for(const [target,source]of [[sum,body.summary],[support,body.support?.metrics]]){
    if(!source){if(target===support){supportReady=false;continue;}throw Error('Resumo de voz ausente');}
@@ -30,8 +30,9 @@ export async function collectVoiceReport(from:string,to:string,serviceKey:string
   days.push(...(body.byDay||[]));
   for(const item of body.byExtension||[]){
    if(!/^\d{1,12}$/.test(String(item.extension)))throw Error('Pessoa de voz inválida');
-   const previous=people.get(item.extension)||{extension:String(item.extension),name:String(item.name||'Nome não cadastrado'),total:0,answered:0,unanswered:0,talkSeconds:null};
+   const previous=people.get(item.extension)||{extension:String(item.extension),name:String(item.name||'Nome não cadastrado'),total:0,answered:0,unanswered:0,talkSeconds:0,missingTalkSamples:0};
    for(const k of ['total','answered','unanswered'])previous[k]+=Number(item[k]||0);
+   if(item.talkSeconds==null)previous.missingTalkSamples++;else previous.talkSeconds+=Number(item.talkSeconds);
    people.set(item.extension,previous);
   }
  }
@@ -41,7 +42,7 @@ export async function collectVoiceReport(from:string,to:string,serviceKey:string
   if(value.tmaMissingSamples)value.talkSeconds=null;
  }
  sum.tmeSeconds=queueReady&&queueCalls>0&&waitSamples===queueCalls?Math.round(weightedWait/queueCalls):null;
- return {...sum,supportMetrics:supportReady?support:null,byDay:days,byExtension:[...people.values()].sort((a,b)=>b.total-a.total).slice(0,30),source:'Zenvia Voice',coverageVerified:true};
+ return {...sum,supportMetrics:supportReady?support:null,byDay:days,byExtension:[...people.values()].map(p=>({...p,talkSeconds:p.missingTalkSamples?null:p.talkSeconds})).sort((a,b)=>b.total-a.total).slice(0,30),source:'Zenvia Voice',coverageVerified:true};
 }
 export function composeVoiceChat(voice:Row,chat:Row){
  const ratings=Object.fromEntries(['voz','chat'].map(channel=>{const q=(chat.quality||[]).find((r:Row)=>r.channel===channel)||{};return [channel,{total:Number(q.total||0),positive:Number(q.csatPositive||0)}]}));
