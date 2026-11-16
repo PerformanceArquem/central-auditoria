@@ -179,3 +179,18 @@ for(const path of paths){
   });
 
 }
+
+test('recovery audit remains authenticated, read-only and never dispatches email',()=>{
+  const source=readFileSync('supabase/functions/audit-email-dispatch/index.ts','utf8');
+  const start=source.indexOf("if (action === 'recovery_audit') {");
+  const end=source.indexOf("if (action === 'dispatch_health') {",start);
+  assert.ok(start>=0&&end>start,'read-only admin recovery action must exist');
+  const code=source.slice(start,end);
+  assert.match(code,/readOnly:true/);
+  assert.match(code,/manualVerificationRequired:true/);
+  assert.match(code,/automaticRetryAllowed:false/);
+  assert.doesNotMatch(code,/sendMail\\s*\\(/);
+  assert.doesNotMatch(code,/method:'PATCH'|method:'POST'|method:'DELETE'/);
+  assert.match(source,/action === 'dispatch_health' \\|\\| action === 'recovery_audit'/);
+  assert.match(source,/if \\(!await isAdmin\\(req\\)\\)/);
+});
