@@ -32,7 +32,9 @@ if(lostNames.length||newNames.length)throw Error('Contrato de funções alterado
 const critical=['doPost','arquemCreateReportAttachments_','arquemCapacidadesAnexos_','arquemHomologarKeilaSemEnvio','arquemValidarPublicacaoSemEnvio'];
 // The reviewed candidate has six JavaScript files and exactly 38 global
 // functions. A zero-duplicate result alone is NOT proof of correctness.
-if(original.length!==6 || afterNames.size!==38)
+// Remote inventory verified in protected audit run 43906645766: six JS files,
+// 39 unique global functions. Keep exact inventory, critical names and duplicate checks.
+if(original.length!==6 || afterNames.size!==39)
  throw Error('Unexpected inventory: files='+original.length+' functions='+afterNames.size);
 const missingCritical=critical.filter(name=>!afterNames.has(name));
 if(missingCritical.length)throw Error('Funções críticas não encontradas: '+missingCritical.join(', '));
