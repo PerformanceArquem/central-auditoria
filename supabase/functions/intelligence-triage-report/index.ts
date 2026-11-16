@@ -1,3 +1,4 @@
+import {triagePresentation} from './presentation.ts';
 import config from '../../../config/intelligence-triage.json' with {type:'json'};
 import {classify,summarize} from './model.mjs';
 const env=(k:string)=>Deno.env.get(k)?.trim()||'';
@@ -48,9 +49,8 @@ async function send(report:any,prepared?:any){
   const claimed=await db('audit_triage_dispatches?on_conflict=dispatch_key','POST',{dispatch_key:key,reference_date:report.date,email:recipient.email,snapshot_id:report.snapshotId,status:'processing',attachment_validation:validationMetadata},'resolution=ignore-duplicates,return=representation');
   if(!claimed.length){const [prior]=await db('audit_triage_dispatches?dispatch_key=eq.'+encodeURIComponent(key));results.push({email:recipient.email,status:prior?.status==='sent'?'already_sent':prior?.status||'unconfirmed'});continue;}
   try{
-   const text=`${config.report}\nReferência: ${report.reference}\nSincronização: ${report.syncedAt}\nCritério: ${report.criteria}\nTotal: ${report.metrics.total}; sem previsão: ${report.metrics.withoutForecast}; maior espera: ${report.metrics.maxQueueDays} dias; média: ${report.metrics.averageQueueDays} dias.\n`+report.items.map((x:any)=>`#${x.id} | ${x.type} | ${x.client} | ${x.queueDays} dias | ${x.status} | ${x.url}`).join('\n');
-   const html='<h2>'+esc(config.report)+'</h2><p>Referência: '+esc(report.reference)+'<br>Sincronização: '+esc(report.syncedAt)+'</p><p>'+esc(report.criteria)+'</p><p>Total: '+report.metrics.total+' · Sem previsão: '+report.metrics.withoutForecast+' · Maior espera: '+report.metrics.maxQueueDays+' dias · Média: '+report.metrics.averageQueueDays+' dias</p><table><tr><th>Chamado</th><th>Tipo</th><th>Cliente</th><th>Assunto</th><th>Dias</th><th>Responsável</th><th>Status</th></tr>'+report.items.map((x:any)=>'<tr><td><a href="'+x.url+'">#'+x.id+'</a></td>'+[x.type,x.client,x.subject,x.queueDays,x.owner,x.status].map(v=>'<td>'+esc(v)+'</td>').join('')+'</tr>').join('')+'</table>';
-   const result=await provider('triage_send',{email:recipient.email,assunto:config.report+' | '+report.date,texto:text,html,dispatchKey:key,report,files:validatedFiles});
+   const {subject,text,html}=triagePresentation(report,recipient);
+   const result=await provider('triage_send',{email:recipient.email,assunto:subject,texto:text,html,dispatchKey:key,report,files:validatedFiles});
    if(result.anexos!==2||!result.providerId||result.accepted!==true)throw Error('Aceite corporativo/anexos incompleto');
    await db('audit_triage_dispatches?dispatch_key=eq.'+encodeURIComponent(key),'PATCH',{status:'sent',sent_at:new Date().toISOString(),provider_id:result.providerId,provider_result:result});results.push({email:recipient.email,status:'sent',providerId:result.providerId});
   }catch(e){await db('audit_triage_dispatches?dispatch_key=eq.'+encodeURIComponent(key),'PATCH',{status:'uncertain',error:String(e)});results.push({email:recipient.email,status:'uncertain'});}
@@ -86,4 +86,5 @@ Deno.serve(async req=>{
   const results=await send(report,prepared);return json({ok:results.every(x=>x.status==='sent'||x.status==='already_sent'),date:report.date,total:report.items.length,results});
  }catch(e){console.error('triage-report:',e instanceof Error?e.message:'Falha');return json({ok:false,error:e instanceof Error?e.message:'Falha'},500);}
 });
+
 

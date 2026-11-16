@@ -1,0 +1,17 @@
+name: Validate corporate triage report presentation
+on:
+  pull_request:
+    paths: ['supabase/functions/intelligence-triage-report/**', 'tests/triage-presentation.test.mjs', 'AGENTS.md']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test tests/triage-presentation.test.mjs tests/triage-daily.test.mjs tests/triage-mail-idempotency.test.mjs
