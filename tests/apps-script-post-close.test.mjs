@@ -186,6 +186,13 @@ test('recovery audit remains authenticated, read-only and never dispatches email
   const end=source.indexOf("if (action === 'dispatch_health') {",start);
   assert.ok(start>=0&&end>start,'read-only admin recovery action must exist');
   const code=source.slice(start,end);
+  const datePattern=/^\\d{4}-\\d{2}-\\d{2}$/;
+  assert.equal(datePattern.test('2026-11-15'),true);
+  assert.equal(datePattern.test('15/11/2026'),false);
+  // Source must contain the literal with single escaping, not a backslash-d matcher.
+  assert.ok(code.includes(String.raw`/^\\d{4}-\\d{2}-\\d{2}$/`));
+  assert.ok(!code.includes(String.raw`/^\\\\d{4}-\\\\d{2}-\\\\d{2}$/`));
+  assert.ok(code.includes("new Date(start+'T12:00:00Z').toISOString().slice(0,10)!==start"));
   assert.match(code,/readOnly:true/);
   assert.match(code,/manualVerificationRequired:true/);
   assert.match(code,/automaticRetryAllowed:false/);
