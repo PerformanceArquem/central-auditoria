@@ -26,7 +26,7 @@ for(const [file,src] of original)for(const [name,meta] of scan(src,file)){
  if(existingNames.has(name))throw Error('Baseline still has duplicate '+name);
  existingNames.set(name,{file,text:meta.text});
 }
-if(existingNames.size!==38)throw Error('Unexpected baseline global function count: '+existingNames.size);
+if(existingNames.size!==39)throw Error('Unexpected baseline global function count: '+existingNames.size);
 const prSource=readFileSync(prFile,'utf8');
 const reviewed=scan(prSource,'PR68');
 for(const name of ['arquemPdf_','arquemXlsx_']){
@@ -67,14 +67,14 @@ if(!readFileSync(join(candidateDir,'appsscript.json')).equals(manifest))throw Er
 const notice=[
  '### Simulação de sobreposição PDF/XLSX (não publicada)',
  '',
- '- Funções globais preservadas: 38; duplicadas: 0',
+ '- Funções globais preservadas: 39; duplicadas: 0',
  '- Funções com código substituído em memória: arquemPdf_ e arquemXlsx_',
  '- Ambas reproduzem exatamente as versões revisadas na PR #68',
- '- doPost oficial e as outras 36 funções mantidos byte a byte no corpo',
+ '- doPost oficial e as outras 37 funções mantidos byte a byte no corpo',
  '- Seis arquivos JS e manifesto preservados em diretório temporário do runner',
  '- Não é fonte aprovada para publicação. doPost da PR #68 continua **não conciliada**',
  '- Não executa serviços Google, não gera PDF/XLSX reais e não envia e-mails',
  ''
 ].join('\n');
 appendFileSync(summaryPath,'\n'+notice);
-console.log('SAFE_OVERLAY_DRY_RUN_OK functions=38 changed=2 preserved=36 duplicates=0 doPostOriginal=true manifestOriginal=true');
+console.log('SAFE_OVERLAY_DRY_RUN_OK functions=39 changed=2 preserved=37 duplicates=0 doPostOriginal=true manifestOriginal=true');
