@@ -309,9 +309,9 @@ test('executive and support recipients sharing an email keep independent dispatc
   const from='2026-11-09',to='2026-11-15',kind='weekly';
   const key=(id)=>id+':'+kind+':'+from+':'+to;
   assert.notEqual(key(executiveId),key(supportId));
-  assert.match(dispatch,/const key = `\\$\\{id\\}:\\$\\{t\\.kind\\}:\\$\\{t\\.from\\}:\\$\\{t\\.to\\}`/);
-  assert.match(dispatch,/on_conflict=dispatch_key/);
-  assert.match(visual,/String\\(rec\\.id\\)===['"]1b8168c6-bec0-4f6d-a3f9-feaec63ed147['"]/);
-  assert.match(visual,/director\\?'ARQUEM':sectors\\.join\\(' \\/ '\)/);
-  assert.match(visual,/export function reportSubject\\(/);
+  assert.ok(dispatch.includes('const key = `${id}:${t.kind}:${t.from}:${t.to}`'));
+  assert.ok(dispatch.includes('on_conflict=dispatch_key'));
+  assert.ok(visual.includes("String(rec.id)==='1b8168c6-bec0-4f6d-a3f9-feaec63ed147'"));
+  assert.ok(visual.includes("director?'ARQUEM':sectors.join(' / ')"));
+  assert.ok(visual.includes('export function reportSubject('));
 });
