@@ -198,6 +198,9 @@ test('recovery audit remains authenticated, read-only and never dispatches email
   assert.match(code,/manualVerificationRequired:true/);
   assert.match(code,/automaticRetryAllowed:false/);
   assert.ok(code.includes('limit=101'),'query must fetch one extra record to detect truncation');
+  assert.ok(code.includes("const start=String(payload.periodEnd||'')"),'period must be supplied explicitly');
+  assert.ok(code.includes('dispatchKey:String(x.dispatch_key)'),'unique dispatch key required for audit');
+  assert.ok(code.includes('recipientId:String(x.recipient_id)'),'recipient identity required for unique matches');
   assert.ok(code.includes('const truncated=(rows as R[]).length>100'));
   assert.ok(code.includes('records,total:records.length,truncated,complete:!truncated'));
   assert.ok(code.includes('possible_delivery_needs_verification'));
