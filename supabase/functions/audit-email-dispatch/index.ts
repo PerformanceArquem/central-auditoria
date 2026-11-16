@@ -1087,13 +1087,12 @@ async function adminAction(payload: R) {
       return json({ok:false,error:'Data final inválida'},400);
     const [rows,recipients] = await Promise.all([
       db('audit_email_sector_dispatches?period_to=eq.'+encodeURIComponent(start)+
-        '&status=eq.failed&select=dispatch_key,recipient_id,report_kind,period_from,period_to,status,provider_id,sent_at,attempt_count,error_message,reviewed_at&order=report_kind.asc,period_from.asc&limit=101'),
+        '&status=eq.failed&report_kind=in.(daily,weekly)&dispatch_key=not.like.preliminary:*&select=dispatch_key,recipient_id,report_kind,period_from,period_to,status,provider_id,sent_at,attempt_count,error_message,reviewed_at&order=report_kind.asc,period_from.asc&limit=101'),
       db('audit_email_recipients?select=id,name&limit=200')
     ]);
     const names=new Map<string,string>((recipients as R[]).map(x=>[String(x.id),safe(x.name)]));
     const truncated=(rows as R[]).length>100;
-    const records=(rows as R[]).slice(0,100).filter(x=>['daily','weekly'].includes(String(x.report_kind)) &&
-       !String(x.dispatch_key||'').startsWith('preliminary:')).map(x=>({
+    const records=(rows as R[]).slice(0,100).map(x=>({
       dispatchKey:String(x.dispatch_key),
       recipientId:String(x.recipient_id),
       recipient:names.get(String(x.recipient_id))||'Destinatário não identificado',
