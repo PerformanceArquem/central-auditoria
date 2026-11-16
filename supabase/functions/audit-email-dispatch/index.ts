@@ -1077,6 +1077,35 @@ async function adminAction(payload: R) {
         status:'Falha na verificação do Apps Script: '+safe(err(ex))});
     }
   }
+  if (action === 'recovery_audit') {
+    // Admin only: read-only review of failed official dispatches.
+    // Never returns recipient emails, provider credentials or the prepared report body.
+    const start=String(payload.periodEnd||'2026-11-15');
+    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(start) ||
+       Number.isNaN(Date.parse(start+'T12:00:00Z')))
+      return json({ok:false,error:'Data final inválida'},400);
+    const [rows,recipients] = await Promise.all([
+      db('audit_email_sector_dispatches?period_to=eq.'+encodeURIComponent(start)+
+        '&status=eq.failed&select=dispatch_key,recipient_id,report_kind,period_from,period_to,status,provider_id,sent_at,attempt_count,error_message,reviewed_at&order=report_kind.asc,period_from.asc&limit=100'),
+      db('audit_email_recipients?select=id,name&limit=200')
+    ]);
+    const names=new Map<string,string>((recipients as R[]).map(x=>[String(x.id),safe(x.name)]));
+    const records=(rows as R[]).filter(x=>['daily','weekly'].includes(String(x.report_kind)) &&
+       !String(x.dispatch_key||'').startsWith('preliminary:')).map(x=>({
+      recipient:names.get(String(x.recipient_id))||'Destinatário não identificado',
+      kind:String(x.report_kind),from:String(x.period_from),to:String(x.period_to),
+      status:String(x.status),attempts:Number(x.attempt_count)||0,
+      providerMarked:!!x.provider_id,deliveryMarked:!!x.sent_at,
+      reviewRecorded:!!x.reviewed_at,
+      failure:String(x.error_message||'').slice(0,180),
+      requiresProviderReconciliation:true,
+      automaticRetryAllowed:false
+    }));
+    return json({ok:true,sent:false,readOnly:true,periodEnd:start,
+      records,total:records.length,
+      manualVerificationRequired:true,
+      note:'Conferir Gmail remetente, homologação de PDF/XLSX e aprovação do Apps Script antes de qualquer reenvio.'});
+  }
   if (action === 'dispatch_health') {
     // Monitor administrativo de leitura: nenhuma reserva de envio ou disparo.
     const [history, incremental, recentSync, logs, recipients] = await Promise.all([
@@ -2296,7 +2325,7 @@ async function handleRequest(req: Request): Promise<Response> {
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if (action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
+    if (action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'recovery_audit' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
       return action === 'voice_chat_preview' ? await voiceChatPreview(payload)
         : action === 'ticket_charge_capabilities' ? json({ok:true,aiAvailable:E('GEMINI_AI_DRAFT_ENABLED')==='true'&&!!E('GEMINI_API_KEY'),guidanceAvailable:true})
