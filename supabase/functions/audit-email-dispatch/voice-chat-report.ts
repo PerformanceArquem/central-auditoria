@@ -42,7 +42,7 @@ export async function collectVoiceReport(from:string,to:string,serviceKey:string
   if(value.tmaMissingSamples)value.talkSeconds=null;
  }
  sum.tmeSeconds=queueReady&&queueCalls>0&&waitSamples===queueCalls?Math.round(weightedWait/queueCalls):null;
- return {...sum,supportMetrics:supportReady?support:null,byDay:days,byExtension:[...people.values()].map(p=>({...p,talkSeconds:p.missingTalkSamples?null:p.talkSeconds})).sort((a,b)=>b.total-a.total).slice(0,30),source:'Zenvia Voice',coverageVerified:true};
+ return {...sum,supportMetrics:supportReady?support:null,byDay:days,byExtension:[...people.values()].map((p):Row=>({...p,talkSeconds:p.missingTalkSamples?null:p.talkSeconds})).sort((a,b)=>b.total-a.total).slice(0,30),source:'Zenvia Voice',coverageVerified:true};
 }
 export function composeVoiceChat(voice:Row,chat:Row){
  const ratings:Record<string,{total:number;positive:number}>=Object.fromEntries(['voz','chat'].map(channel=>{const q=(chat.quality||[]).find((r:Row)=>r.channel===channel)||{};return [channel,{total:Number(q.total||0),positive:Number(q.csatPositive||0)}]}));
