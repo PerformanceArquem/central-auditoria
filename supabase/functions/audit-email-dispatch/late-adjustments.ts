@@ -31,7 +31,7 @@ export function summarizeAdjustments(events:R[],rec:R,priorReports:R[],from:stri
  return [...items.values()].filter(x=>x.currentMinutes!==x.previousMinutes).map(x=>({...x,deltaMinutes:x.currentMinutes-x.previousMinutes}));
 }
 export async function reportTiming(packet:R,db:(path:string)=>Promise<any>,list:(table:string,suffix?:string,limit?:number)=>Promise<R[]>){
- const base={notice:TIMING_NOTICE,adjustments:[] as R[],status:'no_comparison',generatedAt:new Date().toISOString()};
+ const base={notice:TIMING_NOTICE,adjustments:[] as R[],adjustmentCount:0,status:'no_comparison',generatedAt:new Date().toISOString()};
  if(packet.productionFlow)return null;
  if(packet.reportSections?.daily_detail===false)return {...base,status:'restricted'};
  const id=String(packet.recipientId||'');
