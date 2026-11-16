@@ -394,7 +394,7 @@ function arquemPrepararRevisaoVisualAjustesSemEnvio() {
   const blobs=arquemCreateReportAttachments_(arquemAmostraAjustes_());
   if(blobs.length!==2 ||
      !blobs.some(b=>b.getContentType()==='application/pdf') ||
-     !blobs.some(b=>/\\.xlsx$/i.test(b.getName())))
+     !blobs.some(b=>/\.xlsx$/i.test(b.getName())))
     throw new Error('A revisão visual exige exatamente um PDF e um Excel');
   const saved=[];
   try {
