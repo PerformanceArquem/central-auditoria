@@ -15,7 +15,7 @@ export async function collectVoiceReport(from:string,to:string,serviceKey:string
   const end=next(start,30)<to?next(start,30):to;
   const url='https://centralauditoria.ddns.net/api/audit-production-metrics?'+new URLSearchParams({mode:'zenvia',start,end});
   const response=await http(url,{method:'GET',headers:{Authorization:'Bearer '+serviceKey,Accept:'application/json'},signal:AbortSignal.timeout(50000),redirect:'error'});
-  if(!response.ok)throw Error('Métricas de voz indisponíveis (HTTP '+response.status+'); relatório completo não liberado');
+  if(!response.ok){const reason=await response.json().catch(()=>({}));throw Error('Métricas de voz indisponíveis (HTTP '+response.status+': '+String(reason.error||'conexão recusada').slice(0,120)+'); relatório completo não liberado');}
   const body=await response.json();if(body.ok!==true||body.from!==start||body.to!==end)throw Error('Período de voz divergente');
   for(const [target,source]of [[sum,body.summary],[support,body.support?.metrics]]){
    if(!source){if(target===support){supportReady=false;continue;}throw Error('Resumo de voz ausente');}
