@@ -28,6 +28,8 @@ const directionRecipient = (rec:R) =>
 // CORS nao substitui validacao JWT/admin nem a autenticacao do Cron.
 const FRONTEND_ORIGINS = new Set([
   'https://central-auditoria-iota.vercel.app',
+  'https://centralauditoria.ddns.net',
+  'https://www.centralauditoria.ddns.net',
   ...E('REPORT_ALLOWED_ORIGINS').split(',').map(x => x.trim()).filter(Boolean)
 ]);
 function corsHeaders(req: Request): Headers {
