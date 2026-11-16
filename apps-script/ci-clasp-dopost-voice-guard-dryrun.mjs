@@ -41,21 +41,27 @@ const reference=source.slice(arg.start,arg.end);
 const nearest=match.ancestors.filter(n=>['ExpressionStatement','VariableDeclaration'].includes(n.type)).at(-1);
 if(!nearest||nearest.start<decl.body.start||nearest.end>decl.body.end)throw Error('No safe insertion statement');
 const marker='Anexos Zenvia Voz x Chat nao homologados nesta implantacao';
-if(source.slice(decl.start,decl.end).includes(marker))throw Error('Guard already present');
+const existingGuard=source.slice(decl.start,decl.end).includes(marker);
+// Never insert a second guard. Existing protection must pass the separate
+// AST ordering and fail-closed check before this workflow can succeed.
 const insert='if ('+reference+' && '+reference+'.zenviaVoice &&\n'+
  '      (typeof arquemCapacidadesAnexos_ !== "function" ||\n'+
  '       arquemCapacidadesAnexos_().zenviaVoiceReady !== true ||\n'+
  '       arquemCapacidadesAnexos_().zenviaVoiceVersion !== "arquem-voice-chat-v1")) {\n'+
  '      throw new Error("'+marker+'");\n    }\n    ';
-const patched=source.slice(0,nearest.start)+insert+source.slice(nearest.start);
+const patched=existingGuard?source:source.slice(0,nearest.start)+insert+source.slice(nearest.start);
 parseFile(patched);
 const after=funcs(patched,'Código.js');
 if(after.size!==listed.size||[...after.keys()].join('|')!==[...listed.keys()].join('|'))throw Error('Declaration inventory changed');
 const changes=[...listed.keys()].filter(n=>listed.get(n).body!==after.get(n).body);
-if(changes.length!==1||changes[0]!=='doPost')throw Error('Unexpected function body changed');
+if(existingGuard){
+ if(changes.length)throw Error('Already protected official code was modified');
+}else if(changes.length!==1||changes[0]!=='doPost')throw Error('Unexpected function body changed');
 const originalDoPost=source.slice(decl.start,decl.end);
 const patchedDoPost=after.get('doPost').body;
-if(patchedDoPost.replace(insert,'')!==originalDoPost)throw Error('Official doPost not preserved exactly apart from guard');
+if(existingGuard){
+ if(patchedDoPost!==originalDoPost)throw Error('Existing official voice guard modified');
+}else if(patchedDoPost.replace(insert,'')!==originalDoPost)throw Error('Official doPost not preserved exactly apart from guard');
 const all=new Map(original);all.set('Código.js',patched);
 const inventory=new Map();
 for(const [file,src] of all)for(const [name,n] of funcs(src,file)){
@@ -69,9 +75,9 @@ const manifest=readFileSync(join(inputDir,'appsscript.json'));
 writeFileSync(join(outputDir,'appsscript.json'),manifest,{mode:0o600});
 if(!readFileSync(join(outputDir,'appsscript.json')).equals(manifest))throw Error('Manifest changed');
 appendFileSync(summaryPath,'\n### Protetor de anexos de Voz x Chat — apenas simulacao\n\n'+
- '- doPost oficial preservado integralmente, com insercao de guarda antes do gerador de anexos\n'+
+ '- doPost oficial preservado; guarda ja existente mantida ou nova guarda simulada antes dos anexos\n'+
  '- Ausencia de capacidade Zenvia e versao esperada bloqueia geracao\n'+
  '- 39 funcoes globais, 0 duplicadas; manifesto intocado\n'+
  '- Nenhum script executado, e-mail enviado, push ou deploy efetuado\n'+
  '- Nao equivale a homologacao com servicos Google reais\n');
-console.log('DOPOST_VOICE_GUARD_DRYRUN_OK globalFunctions=39 changedOnly=doPost otherFunctionsPreserved=true manifestUnchanged=true');
+console.log('DOPOST_VOICE_GUARD_DRYRUN_OK globalFunctions=39 existingGuard='+existingGuard+' changedOnly='+(existingGuard?'none':'doPost')+' otherFunctionsPreserved=true manifestUnchanged=true');
