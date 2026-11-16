@@ -293,7 +293,7 @@ for(const path of paths){
 test('clasp dry-run supports already reconciled source only after inventory guards',()=>{
   const src=readFileSync('apps-script/ci-clasp-reconcile-dry-run.mjs','utf8');
   assert.match(src,/duplicated\.length!==18 && duplicated\.length!==0/);
-  assert.match(src,/original\.length!==6 \|\| afterNames\.size!==38/);
+  assert.match(src,/original\.length!==6 \|\| afterNames\.size!==39/);
   assert.match(src,/if\(lostNames\.length\|\|newNames\.length\)/);
   assert.match(src,/if\(missingCritical\.length\)/);
   assert.match(src,/if\(previous\)throw Error\('Duplicate remains/);
