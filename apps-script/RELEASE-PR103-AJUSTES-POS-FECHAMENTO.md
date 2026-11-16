@@ -8,6 +8,17 @@
 - O projeto Apps Script oficial é `Central de Auditoria - Emails`. O acesso Google Drive a metadados não autoriza alterar conteúdo do projeto Apps Script.
 - O workflow `.github/workflows/appsscript-clasp-controlled.yml` tem modo `audit` sem escrita, e `publish` exige hashes revisados, árvore completa, autorização e aprovação do ambiente. `clasp push` **não** muda automaticamente a implantação Web App `/exec`.
 
+## Bloqueio de publicação confirmado na PR #103 (16/11/2026)
+
+- Os **sete checks** do commit `59ea66730d6279a3abbb7a82b00fe8e8cee407e1` concluíram com sucesso; isso cobre o código em revisão, **não** a instalação Google Apps Script.
+- A PR está aberta para revisão, porém ainda não há avaliações registradas por revisores.
+- O workflow `.github/workflows/appsscript-clasp-controlled.yml` exige `apps-script/deploy-source/appsscript.json` com a **árvore exata da fonte instalada reconciliada e aprovada**. Esse arquivo **não existe na branch de revisão**: o passo `publish` falharia antes de qualquer escrita. **Não** preencher com arquivo sintético ou publicar os dois scripts alternativos lado a lado.
+- Mesmo com árvore revisada e hashes aceitos, o fluxo `clasp push` + `clasp create-version` **não troca a implantação Web App `/exec` existente**; registrar e atualizar a implantação somente após a revisão visual PDF/XLSX e aprovação autorizada.
+- A consulta administrativa `recovery_audit` continua apenas na PR; a Edge Function instalada no Supabase segue em v143.
+- Os 22 registros `failed` permanecem sem `sent_at` e `provider_id`; não executar reenvio antes da conciliação com a conta remetente e da validação dos anexos.
+
+**Ação para o operador com acesso ao projeto:** realizar auditoria `clasp pull` via workflow protegido, obter hash remoto e conciliar doPost/Triagem/Zenvia/relatórios com a versão revisada. Registrar evidência dos arquivos privados e aprovação, preparar a árvore revisada sem segredos, solicitar revisão de código e só depois acionar a publicação controlada. Preservar agendamentos e idempotência.
+
 ## Sequência segura (sem enviar e-mails até a etapa final)
 1. **Backup e inventário:** obter todas as fontes reais do Apps Script via `clasp pull` em fluxo protegido, salvando de forma privada versões e IDs de implantações. Não divulgar secrets nem o código inteiro se ele contiver credenciais.
 2. **Reconciliar origem:** as fontes `apps-script/central-auditoria-emails-completo.gs` e `apps-script/arquem-relatorios-anexos.gs` são referências alternativas: **nunca** publicar ambas como arquivos independentes quando definirem as mesmas funções. Preservar `doPost`, Zenvia, Triagem e outras extensões já existentes.
