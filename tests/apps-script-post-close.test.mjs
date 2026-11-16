@@ -337,3 +337,34 @@ test('safe release overlay uses audited 39-function source inventory without pub
   assert.ok(overlay.includes("if(missing.length||added.length)throw Error"));
   assert.doesNotMatch(overlay,/clasp\\s+(?:push|deploy|create-version)/);
 });
+
+for (const path of paths) {
+  test(path+' invalidates old visual signoff even when technical validation fails',()=>{
+    const source=readFileSync(path,'utf8');
+    const start=source.indexOf('function arquemHomologarAjustesSemEnvio()');
+    const end=source.indexOf('function arquemCreateReportAttachments_',start);
+    assert.ok(start>=0&&end>start);
+    const approvals={
+      ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT:'2026-11-16T10:00:00Z',
+      ARQUEM_POST_CLOSE_VISUAL_APPROVED_VERSION:'post-close-v1',
+      ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID:'template'
+    };
+    const deleted=[];
+    const ctx=vm.createContext({
+      PropertiesService:{getScriptProperties:()=>({
+        getProperty:key=>key==='ARQUEM_PAPEL_TIMBRADO_DOC_ID'?'template':(approvals[key]||''),
+        deleteProperty:key=>{deleted.push(key);delete approvals[key];},
+        setProperties:()=>{throw Error('Validation should not complete');}
+      })},
+      arquemValidarPublicacaoSemEnvio:()=>{throw Error('Simulated technical failure');}
+    });
+    vm.runInContext(source.slice(start,end),ctx);
+    assert.throws(()=>ctx.arquemHomologarAjustesSemEnvio(),/Simulated technical failure/);
+    assert.deepEqual(deleted,[
+      'ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT',
+      'ARQUEM_POST_CLOSE_VISUAL_APPROVED_VERSION',
+      'ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID'
+    ]);
+    assert.equal(Object.keys(approvals).length,0);
+  });
+}
