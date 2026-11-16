@@ -1295,9 +1295,10 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
     <p class="subtle">TMA e TME de referência são <b>estimativas gerenciais</b>. As notas vêm das pesquisas do Movidesk e dos registros manuais.</p>
   </div>
   <div id="sqKpis" class="kpis" style="margin:12px 0"></div>
+  <div class="card"><h3>Indicadores reais de voz · Suporte</h3><div id="sqVoiceKpis" class="kpis"></div><p id="sqVoiceStatus" class="subtle" role="status">Aguardando consulta da telefonia.</p></div>
   <div class="card"><h3>Tempos de atendimento por canal</h3>
     <div class="tw"><table id="sqTimes"><thead><tr><th>Canal</th><th>TMA de referência</th><th>TME de referência</th><th>Tempo de conversa observado</th><th>Espera observada</th></tr></thead><tbody></tbody></table></div>
-    <p class="subtle">Aferição observada somente para tickets com tempos válidos de chat. Os dados de voz são metas estimadas, sem medição automática.</p>
+    <p class="subtle">Chat: tempos válidos dos tickets Movidesk. Voz: TMA dos ramais homologados do Suporte na Zenvia; TME da fila configurada, com escopo próprio.</p>
   </div>
   <div class="card"><h3>Qualidade das avaliações</h3>
     <p class="subtle"><b>Notas importadas automaticamente do Movidesk</b>, considerando a data da resposta da pesquisa. O campo disponível é NPS (escala 0–10). Para o <b>CSAT definido pela gestão</b>, calculamos notas 9 e 10 ÷ todas as respostas válidas do canal × 100. A nota 8 não conta como positiva e a nota 0 entra como negativa. Avaliações manuais continuam disponíveis sem duplicar ticket/canal com resposta da API.</p><div id="sqCsatOverall" class="card" style="margin:10px 0" role="status">CSAT: aguardando avaliações reais.</div>
@@ -5581,6 +5582,21 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    if(!data?.ok)throw new Error(data?.error||'Operação não autorizada');
    return data;
  }
+ async function voice(from,to){
+   const days=(Date.parse(to)-Date.parse(from))/86400000+1;
+   if(!Number.isFinite(days)||days<1||days>31)throw Error('Para voz, selecione um período de até 31 dias.');
+   const session=await window.tmAuth?.getSession?.();
+   if(!session?.access_token)throw Error('Faça login na Central de Auditoria');
+   const response=await fetch('/api/audit-production-metrics?mode=zenvia&'+new URLSearchParams({start:from,end:to}),{headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
+   const d=await response.json().catch(()=>({}));
+   if(!response.ok||d.ok!==true)throw Error(d.error||'Falha na consulta da telefonia');
+   return d;
+ }
+ function paintVoice(v,error){
+   const m=v?.support?.configured?v.support.metrics:null;
+   el('sqVoiceKpis').innerHTML=m?[['Ligações do Suporte',m.total],['Atendidas',m.answered],['Não atendidas',m.unanswered],['TMA real',sec(m.tmaSeconds)],['TME da fila',sec(v.queue?.tmeSeconds)]].map(([label,value])=>'<div class="card"><div class="subtle">'+escape(label)+'</div><h3>'+escape(value??'—')+'</h3></div>').join(''):'';
+   el('sqVoiceStatus').textContent=error?'Voz indisponível: '+error:(m?'Dados reais da Zenvia no mesmo período selecionado. Contagem e TMA restritos aos ramais homologados do Suporte; TME referente à fila configurada.':'Ramais do Suporte ainda não homologados.');
+ }
  const table=(id,rows)=>{el(id).querySelector('tbody').innerHTML=rows.join('')||'<tr><td colspan="8">Nenhum registro para o período.</td></tr>'};
 
  function paintRanking(){
@@ -5635,13 +5651,15 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    finally{el('sqPeakRefresh').disabled=false}
  }
 
- function paint(d){
+ function paint(d,v,voiceError){
+   paintVoice(v,voiceError);
+   const vm=v?.support?.configured?v.support.metrics:null;
    const m=d.metrics||{},mc=d.measuredChat||{},q=d.quality||[],cfg=d.estimated||{};
    const cards=[['Horas apontadas',hhmm(m.minutes)],['Apontamentos',m.appointments||0],['Chamados distintos',m.tickets||0],['Dias úteis (referência)',d.businessDays],['Colaboradores',m.collaborators||0],['Avaliações',q.reduce((s,x)=>s+x.total,0)]];
    el('sqKpis').innerHTML=cards.map(([name,value])=>'<div class="card"><div class="subtle">'+escape(name)+'</div><h2 style="margin:7px 0">'+escape(value)+'</h2></div>').join('');
    table('sqTimes',[
     '<tr><td>Chat</td><td>'+reference(cfg.chat?.tmaMinutes)+'</td><td>'+reference(cfg.chat?.tmeMinutes)+'</td><td>'+sec(mc.tmaSeconds)+' ('+escape(mc.tmaSamples||0)+' tickets)</td><td>'+sec(mc.tmeSeconds)+' ('+escape(mc.tmeSamples||0)+' tickets)</td></tr>',
-    '<tr><td>Voz</td><td>'+reference(cfg.voz?.tmaMinutes)+'</td><td>'+reference(cfg.voz?.tmeMinutes)+'</td><td>Não disponível</td><td>Não disponível</td></tr>'
+    '<tr><td>Voz</td><td>'+reference(cfg.voz?.tmaMinutes)+'</td><td>'+reference(cfg.voz?.tmeMinutes)+'</td><td>'+sec(vm?.tmaSeconds)+'</td><td>'+sec(v?.queue?.tmeSeconds)+'</td></tr>'
    ]);
    const csat=d.csat||{};
    el('sqCsatOverall').innerHTML='<strong>CSAT geral do Suporte (voz e chat): '+(csat.percent==null?'Sem avaliações':escape(csat.percent)+'%')+'</strong><p class="subtle" style="margin:6px 0 0">'+escape(csat.positive||0)+' notas 9–10 de '+escape(csat.total||0)+' respostas válidas. API Movidesk: '+escape(csat.movidesk||0)+' · Manual: '+escape(csat.manual||0)+' · Canal não identificado: '+escape(csat.unclassified||0)+' (fora do CSAT).</p>';
@@ -5653,11 +5671,17 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    el('sqPeople').innerHTML=people.map(p=>'<option value="'+escape(p.person)+'"></option>').join('');
    table('sqRatingsTable',(d.ratings||[]).slice(0,100).map(r=>'<tr><td>'+escape(r.service_date)+'</td><td>'+escape(r.channel==='voz'?'Voz':r.channel==='chat'?'Chat':'Outros')+'</td><td>'+escape(r.collaborator_name)+'</td><td>'+(String(r.ticket_id||'').match(/^\d+$/)?'<a href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(r.ticket_id)+'" target="_blank" rel="noopener noreferrer">#'+escape(r.ticket_id)+'</a>':escape(r.ticket_id||'—'))+'</td><td>'+escape(r.score)+'</td><td>'+(Number(r.score)>=8?'Excelente':'Ruim')+'</td><td>'+escape(r.source==='movidesk'?'Movidesk · '+(r.surveyType||'pesquisa'):'Manual')+'</td></tr>'));
    latest=d;paintRanking();
-   msg('Notas importadas automaticamente dos tickets Movidesk, com complemento de avaliações manuais. Chat possui tempos medidos; voz permanece com TMA/TME estimados enquanto não houver dados da telefonia. Sincronização pode estar parcial.');
+   msg('Chat e avaliações: Movidesk e registros manuais. Voz: medição real da Zenvia, quando disponível. Referências gerenciais permanecem identificadas como estimativas. Sincronização pode estar parcial.');
  }
  async function load(){
    if(loading)return;loading=true;el('sqLoad').disabled=true;msg('Consultando chamados e apontamentos do Suporte...');
-   try{paint(await api({action:'support_quality_metrics',from:el('sqFrom').value,to:el('sqTo').value}))}
+   try{
+     const from=el('sqFrom').value,to=el('sqTo').value;
+     const [chat,phone]=await Promise.allSettled([api({action:'support_quality_metrics',from,to}),voice(from,to)]);
+     if(from!==el('sqFrom').value||to!==el('sqTo').value){msg('Período alterado; atualize os indicadores novamente.');return}
+     if(chat.status==='rejected')throw chat.reason;
+     paint(chat.value,phone.status==='fulfilled'?phone.value:null,phone.status==='rejected'?phone.reason.message:null);
+   }
    catch(e){msg('Não foi possível carregar: '+e.message)}
    finally{loading=false;el('sqLoad').disabled=false}
  }
