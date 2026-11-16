@@ -51,6 +51,11 @@ for(const path of paths){
         adjustments:[{...sample.timing.adjustments[0],deltaMinutes:60}]}
     }),/inválido/);
     assert.match(source,/postCloseAdjustmentsSupported:postCloseReady/);
+    assert.match(source,/ARQUEM_POST_CLOSE_VISUAL_APPROVED_VERSION/);
+    assert.match(source,/ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID/);
+    assert.match(source,/postVisualAt>=postCheckedAt/);
+    assert.match(source,/postCloseAdjustmentsSupported:false/);
+    assert.match(source,/props\.deleteProperty\('ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT'\)/);
     assert.match(source,/function arquemHomologarAjustesSemEnvio\(/);
     assert.match(source,/Ajustes identificados após o fechamento/);
     assert.match(source,/Ajustes pós-fechamento/);
