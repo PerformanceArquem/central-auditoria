@@ -288,3 +288,15 @@ for(const path of paths){
     assert.equal(cap.postCloseAdjustmentsSupported,true);
   });
 }
+
+
+test('clasp dry-run supports already reconciled source only after inventory guards',()=>{
+  const src=readFileSync('apps-script/ci-clasp-reconcile-dry-run.mjs','utf8');
+  assert.match(src,/duplicated\.length!==18 && duplicated\.length!==0/);
+  assert.match(src,/original\.length!==6 \|\| afterNames\.size!==38/);
+  assert.match(src,/if\(lostNames\.length\|\|newNames\.length\)/);
+  assert.match(src,/if\(missingCritical\.length\)/);
+  assert.match(src,/if\(previous\)throw Error\('Duplicate remains/);
+  assert.match(src,/Manifesto original foi modificado/);
+  assert.doesNotMatch(src,/clasp\s+(?:push|deploy)/);
+});
