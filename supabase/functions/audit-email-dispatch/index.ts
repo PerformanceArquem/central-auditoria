@@ -1101,7 +1101,11 @@ async function adminAction(payload: R) {
       status:String(x.status),attempts:Number(x.attempt_count)||0,
       providerMarked:!!x.provider_id,deliveryMarked:!!x.sent_at,
       reviewRecorded:!!x.reviewed_at,
-      failure:String(x.error_message||'').slice(0,180),
+      // Do not echo arbitrary provider error bodies into the dashboard.
+      failureCategory:String(x.error_message||'').includes('Gerador ainda não homologado')?
+        'attachments_not_approved':'provider_or_delivery_failure',
+      failureSummary:String(x.error_message||'').includes('Gerador ainda não homologado')?
+        'Anexos ainda não homologados':'Verificar logs restritos e o provedor',
       recoveryClass:x.provider_id||x.sent_at?'possible_delivery_needs_verification':
         'unconfirmed_failure_needs_verification',
       requiresProviderReconciliation:true,
