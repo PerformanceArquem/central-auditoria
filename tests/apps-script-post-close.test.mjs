@@ -73,6 +73,10 @@ for(const path of paths){
     assert.match(source,/first\.getRange\('B5'\)\.setNumberFormat/);
     // Signed text prevents Excel's negative-time hash rendering.
     assert.match(source,/\(x\.delta<0\?'-':'\+'\)\+arquemH_\(Math\.abs\(x\.delta\)\)/);
+    assert.match(source,/\['Chamado','Data do trabalho','Colaborador','Antes','Depois','Diferença','Diferença \(min\)','Identificado em','No período'\]/);
+    assert.match(source,/\(x\.delta<0\?'-':'\+'\)\+arquemH_\(Math\.abs\(x\.delta\)\),x\.delta,x\.observedAt/);
+    assert.match(source,/sheet\.getRange\(2,7,row,1\)\.setNumberFormat/);
+    assert.equal(context.arquemAmostraAjustes_().timing.adjustments.reduce((n,x)=>n+x.deltaMinutes,0),0);
     assert.match(source,/sheet\.getRange\(2,4,row,2\)\.setNumberFormat/);
 
   });
