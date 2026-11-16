@@ -18,6 +18,7 @@ const inbound=[
  {id:8,data_inicio:'2026-11-11T13:00:00-03:00',ramal_id:2001,status:'estado_novo',ativa:false,duracao_segundos:0}
 ];
 let calls=[];
+let internalServiceAccepted=true;
 const json=(data,status=200)=>({ok:status>=200&&status<300,status,json:async()=>data});
 let allowed=true,token=true,broken=false,waitMissing=false,shortPages=false,missingSecondPage=false;
 let uraFormat='array';
@@ -30,7 +31,7 @@ const fetch=async(input,opts={})=>{
  const url=new URL(String(input));
  calls.push({url,opts});
  if(url.pathname.endsWith('/auth/v1/user'))return json({id:'user-123'});
- if(url.pathname.endsWith('/rest/v1/audit_users'))return json([{role:allowed?'admin':'operator',is_active:true}]);
+ if(url.pathname.endsWith('/rest/v1/audit_users'))return url.searchParams.get('limit')==='0'?json([],internalServiceAccepted?200:401):json([{role:allowed?'admin':'operator',is_active:true}]);
  if(url.pathname.endsWith('/rest/v1/audit_email_recipients'))return json([{email:'bruno@example.invalid',collaborator_name:'Bruno Oliveira'}]);
  if(url.hostname==='voice-api.zenvia.com'){
   assert.equal(opts.method,'GET');
@@ -65,7 +66,7 @@ const fetch=async(input,opts={})=>{
  throw Error('Unexpected request '+url);
 };
 const scope=vm.createContext({
- fetch,URL,AbortController,setTimeout,clearTimeout,Date,Number,String,Array,Math,Error,
+ fetch,URL,AbortController,setTimeout,clearTimeout,Date,Number,String,Array,Math,Error,Buffer,
  process:{env:{SUPABASE_URL:'https://fake.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'fixture-service',ZENVIA_VOICE_ACCESS_TOKEN:'fixture-token'}}
 });
 vm.runInContext(source+'\nthis.handler=handler;',scope);
@@ -425,3 +426,6 @@ test('missing or ambiguous support numbers cannot complete discovery',async()=>{
 
 test('person names replace raw extension IDs without exposing logins or phone credentials',async()=>{const r=await invoke();assert.equal(r.body.byExtension.find(p=>p.extension==='2000').name,'Bruno Oliveira');const output=JSON.stringify(r.body);for(const secret of ['bruno@example.invalid','private@example.invalid','never-return-key','+55111111111'])assert.equal(output.includes(secret),false);});
 test('internal service authentication is read only and does not require a user session',async()=>{const r=await invoke(undefined,'Bearer fixture-service');assert.equal(r.code,200);assert.equal(calls.some(x=>x.url.pathname.endsWith('/auth/v1/user')),false);});
+
+test('internal JWT must be confirmed by the project before voice reads',async()=>{const token='header.'+Buffer.from(JSON.stringify({role:'service_role'})).toString('base64url')+'.signature';const r=await invoke(undefined,'Bearer '+token);assert.equal(r.code,200);assert.equal(calls.some(x=>x.url.pathname.endsWith('/rest/v1/audit_users')&&x.url.searchParams.get('limit')==='0'),true);});
+test('unverified internal claims cannot access voice data',async()=>{const token='header.'+Buffer.from(JSON.stringify({role:'service_role'})).toString('base64url')+'.forged';internalServiceAccepted=false;try{const r=await invoke(undefined,'Bearer '+token);assert.equal(r.code,401);assert.equal(calls.some(x=>x.url.hostname==='voice-api.zenvia.com'),false);}finally{internalServiceAccepted=true;}});
