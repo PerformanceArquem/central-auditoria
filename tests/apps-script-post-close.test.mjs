@@ -63,6 +63,13 @@ for(const path of paths){
     assert.match(source,/Ajustes identificados após o fechamento/);
     assert.match(source,/Ajustes pós-fechamento/);
     assert.match(source,/setRichTextValues\(linked\)/);
+    // Resumo: header at row 1 and history at row 9 must survive additions.
+    assert.match(source,/first\.getRange\(10,1,3,2\)\.setValues\(/);
+    assert.match(source,/first\.getRange\('B5'\)\.setNumberFormat/);
+    // Signed text prevents Excel's negative-time hash rendering.
+    assert.match(source,/\(x\.delta<0\?'-':'\+'\)\+arquemH_\(Math\.abs\(x\.delta\)\)/);
+    assert.match(source,/sheet\.getRange\(2,4,row,2\)\.setNumberFormat/);
+
   });
   test(path+' holds capability closed until technical and visual signoff',()=>{
     const source=readFileSync(path,'utf8');
