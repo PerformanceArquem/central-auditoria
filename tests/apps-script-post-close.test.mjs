@@ -89,7 +89,10 @@ for(const path of paths){
       PropertiesService:{getScriptProperties:()=>({getProperty:()=> 'test-folder-id'})},
       DriveApp:{Access:{PRIVATE:'PRIVATE'},getFolderById:()=>folder},
       arquemHomologarAjustesSemEnvio:()=>{homologations++;return {technicalValidation:true,postCloseAdjustmentsSupported:false};},
-      arquemCreateReportAttachments_:()=>[{}],
+      arquemCreateReportAttachments_:()=>[
+        {getContentType:()=> 'application/pdf',getName:()=> 'sample.pdf'},
+        {getContentType:()=> 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',getName:()=> 'sample.xlsx'}
+      ],
       arquemAmostraAjustes_:()=>({schema:'arquem-mail-v1'})
     });
     vm.runInContext(source.slice(start,end),context);
@@ -101,7 +104,38 @@ for(const path of paths){
     assert.equal(result.sent,false);
     assert.equal(result.visualApprovalRequired,true);
     assert.equal(homologations,1);
-    assert.equal(created,1);
+    assert.equal(created,2);
+  });
+
+  test(path+' removes preview PDFs if saving the Excel fails',()=>{
+    const source=readFileSync(path,'utf8');
+    const start=source.indexOf('function arquemPrepararRevisaoVisualAjustesSemEnvio()');
+    const end=source.indexOf('function arquemHomologarAjustesSemEnvio()',start);
+    let attempts=0,trashCount=0;
+    const blobs=[
+      {getContentType:()=> 'application/pdf',getName:()=> 'report.pdf'},
+      {getContentType:()=> 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+       getName:()=> 'report.xlsx'}
+    ];
+    const folder={
+      getSharingAccess:()=> 'PRIVATE',
+      createFile:blob=>{
+        attempts++;
+        if(attempts===2)throw Error('Drive quota exceeded');
+        return {setTrashed:()=>{trashCount++;},getName:()=>blob.getName(),getUrl:()=> 'private',getId:()=> 'file-1'};
+      }
+    };
+    const context=vm.createContext({
+      PropertiesService:{getScriptProperties:()=>({getProperty:()=> 'test-folder'})},
+      DriveApp:{Access:{PRIVATE:'PRIVATE'},getFolderById:()=>folder},
+      arquemHomologarAjustesSemEnvio:()=>({technicalValidation:true,postCloseAdjustmentsSupported:false}),
+      arquemCreateReportAttachments_:()=>blobs,
+      arquemAmostraAjustes_:()=>({schema:'arquem-mail-v1'})
+    });
+    vm.runInContext(source.slice(start,end),context);
+    assert.throws(()=>context.arquemPrepararRevisaoVisualAjustesSemEnvio(),/quota exceeded/);
+    assert.equal(attempts,2);
+    assert.equal(trashCount,1);
   });
 
   test(path+' holds capability closed until technical and visual signoff',()=>{
