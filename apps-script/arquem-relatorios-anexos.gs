@@ -279,15 +279,12 @@ function arquemAssinarAjustes_(packet) {
   const notice='Horas atribuídas à data original do trabalho. Ajustes identificados após o fechamento não são somados novamente ao dia da atualização.';
   return {...adjustments, notice:adjustments.notice?String(adjustments.notice)+' '+notice:notice};
 }
-function arquemHomologarAjustesSemEnvio() {
-  const props=PropertiesService.getScriptProperties();
-  const id=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
-  if (!id) throw new Error('Papel timbrado obrigatório para homologar ajustes');
-  // Revalida os anexos regulares e o modelo antes de homologar a extensão.
-  const basic=arquemValidarPublicacaoSemEnvio();
-  if (basic.ok!==true || basic.sent!==false || basic.files.length!==2)
-    throw new Error('Anexos corporativos não homologados');
-  const packet={
+/**
+ * Pacote inteiramente sintético. Não contém apontamentos de clientes reais.
+ * Usado em validação técnica e em artefatos de conferência visual.
+ */
+function arquemAmostraAjustes_() {
+  return {
     schema:'arquem-mail-v1',title:'Homologação de ajustes após fechamento',
     from:'2026-11-09',to:'2026-11-15',metrics:{minutes:480,appointments:1,tickets:1},
     collaborators:[],daily:[],tickets:[],customers:[],activities:[],
@@ -298,6 +295,36 @@ function arquemHomologarAjustesSemEnvio() {
         observedAt:'2026-11-16T10:00:00Z',inCurrentPeriod:true
       }]}
   };
+}
+/**
+ * Gera PDF e XLSX revisáveis em uma pasta privada, sem envio de e-mail.
+ * Configure ARQUEM_HOMOLOGACAO_FOLDER_ID com o ID de uma pasta restrita.
+ * Não chama GmailApp, MailApp nem o doPost do aplicativo.
+ */
+function arquemPrepararRevisaoVisualAjustesSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const folderId=String(props.getProperty('ARQUEM_HOMOLOGACAO_FOLDER_ID')||'').trim();
+  if (!folderId)throw new Error('Defina a pasta privada ARQUEM_HOMOLOGACAO_FOLDER_ID');
+  // O teste técnico também revoga a aprovação visual anterior.
+  const tech=arquemHomologarAjustesSemEnvio();
+  if(!tech.technicalValidation || tech.postCloseAdjustmentsSupported!==false)
+    throw new Error('Teste técnico não passou ou não respeitou o bloqueio de envio');
+  const folder=DriveApp.getFolderById(folderId);
+  const blobs=arquemCreateReportAttachments_(arquemAmostraAjustes_());
+  const saved=blobs.map(b=>folder.createFile(b));
+  return {ok:true,sent:false,visualApprovalRequired:true,
+    files:saved.map(f=>({name:f.getName(),url:f.getUrl(),id:f.getId()}))};
+}
+
+function arquemHomologarAjustesSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const id=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
+  if (!id) throw new Error('Papel timbrado obrigatório para homologar ajustes');
+  // Revalida os anexos regulares e o modelo antes de homologar a extensão.
+  const basic=arquemValidarPublicacaoSemEnvio();
+  if (basic.ok!==true || basic.sent!==false || basic.files.length!==2)
+    throw new Error('Anexos corporativos não homologados');
+  const packet=arquemAmostraAjustes_();
   const files=arquemCreateReportAttachments_(packet);
   const pdf=files.find(f=>f.getContentType()==='application/pdf');
   const xlsx=files.find(f=>f.getName().endsWith('.xlsx'));
