@@ -182,8 +182,15 @@ function arquemCapacidadesAnexos_() {
         checkedAt>=file.getLastUpdated().getTime();
     }catch(_){ready=false;}
   }
+  const postCheckedAt=Date.parse(props.getProperty('ARQUEM_POST_CLOSE_VALIDATED_AT')||'');
+  const postCloseReady=ready &&
+    props.getProperty('ARQUEM_POST_CLOSE_VALIDATED_VERSION')==='post-close-v1' &&
+    props.getProperty('ARQUEM_POST_CLOSE_VALIDATED_TEMPLATE_ID')===id &&
+    Number.isFinite(postCheckedAt) &&
+    postCheckedAt>=DriveApp.getFileById(id).getLastUpdated().getTime();
   return {sucesso:true,attachmentsVersion:'arquem-3-keila-quality',formats:['pdf','xlsx'],
     paperTemplateConfigured:ready,
+    postCloseAdjustmentsSupported:postCloseReady,
     keilaQualityReady:ready &&
       props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_VERSION')==='arquem-3-keila-quality' &&
       props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_TEMPLATE_ID')===id &&
@@ -296,6 +303,81 @@ function arquemSanearPacote_(value) {
   }
   return value;
 }
+
+/**
+ * Ajustes reconhecidos depois do fechamento: mantenha data de trabalho e
+ * data de observação distintas. Nunca some o delta novamente ao dia atual.
+ */
+function arquemAjustesValidos_(packet) {
+  if (!packet || !packet.timing) return null;
+  const t=packet.timing;
+  if (!t || typeof t!=='object' || !Array.isArray(t.adjustments) ||
+      t.adjustments.length>100) throw new Error('Ajustes posteriores inválidos');
+  const total=Number(t.adjustmentCount);
+  if (!Number.isSafeInteger(total) || total<0 || total<t.adjustments.length)
+    throw new Error('Contagem de ajustes inválida');
+  const formatDate=s=>String(s||'').slice(0,10);
+  const items=t.adjustments.map(x=>{
+    if (!x || typeof x!=='object' ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(String(x.date||'')) ||
+        !Number.isFinite(Number(x.previousMinutes)) ||
+        !Number.isFinite(Number(x.currentMinutes)) ||
+        !Number.isFinite(Number(x.deltaMinutes)) ||
+        Math.abs(Number(x.currentMinutes)-Number(x.previousMinutes)-Number(x.deltaMinutes))>0.01 ||
+        !Number.isFinite(Date.parse(String(x.observedAt||''))))
+      throw new Error('Registro de ajuste posterior inválido');
+    return {
+      ticketId:/^\d+$/.test(String(x.ticketId||''))?String(x.ticketId):'',
+      date:formatDate(x.date),
+      person:String(x.person||'').slice(0,120),
+      previous:Number(x.previousMinutes),
+      current:Number(x.currentMinutes),
+      delta:Number(x.deltaMinutes),
+      observedAt:String(x.observedAt),
+      inCurrentPeriod:x.inCurrentPeriod===true
+    };
+  });
+  return {notice:String(t.notice||'').slice(0,1200),status:String(t.status||'').slice(0,70),total,items};
+}
+function arquemAssinarAjustes_(packet) {
+  const adjustments=arquemAjustesValidos_(packet);
+  if (!adjustments) return null;
+  const notice='Horas atribuídas à data original do trabalho. Ajustes identificados após o fechamento não são somados novamente ao dia da atualização.';
+  return {notice, ...adjustments};
+}
+function arquemHomologarAjustesSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const id=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
+  if (!id) throw new Error('Papel timbrado obrigatório para homologar ajustes');
+  // Revalida os anexos regulares e o modelo antes de homologar a extensão.
+  const basic=arquemValidarPublicacaoSemEnvio();
+  if (basic.ok!==true || basic.sent!==false || basic.files.length!==2)
+    throw new Error('Anexos corporativos não homologados');
+  const packet={
+    schema:'arquem-mail-v1',title:'Homologação de ajustes após fechamento',
+    from:'2026-11-09',to:'2026-11-15',metrics:{minutes:480,appointments:1,tickets:1},
+    collaborators:[],daily:[],tickets:[],customers:[],activities:[],
+    timing:{status:'tracked',notice:'Aviso de conciliação após fechamento',
+      adjustmentCount:1,adjustments:[{
+        ticketId:'100769',date:'2026-11-10',person:'Pessoa demonstrativa',
+        previousMinutes:60,currentMinutes:90,deltaMinutes:30,
+        observedAt:'2026-11-16T10:00:00Z',inCurrentPeriod:true
+      }]}
+  };
+  const files=arquemCreateReportAttachments_(packet);
+  const pdf=files.find(f=>f.getContentType()==='application/pdf');
+  const xlsx=files.find(f=>f.getName().endsWith('.xlsx'));
+  if (!pdf || !xlsx || pdf.getBytes().length<2000 || xlsx.getBytes().length<1500)
+    throw new Error('PDF/XLSX inválidos na homologação de ajustes');
+  props.setProperties({
+    ARQUEM_POST_CLOSE_VALIDATED_VERSION:'post-close-v1',
+    ARQUEM_POST_CLOSE_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_POST_CLOSE_VALIDATED_TEMPLATE_ID:id
+  },false);
+  return {ok:true,sent:false,postCloseAdjustmentsSupported:true,
+    files:files.map(f=>({name:f.getName(),bytes:f.getBytes().length}))};
+}
+
 function arquemCreateReportAttachments_(packet) {
   if (!packet || packet.schema !== 'arquem-mail-v1') throw new Error('Pacote de relatório inválido');
   packet=arquemSanearPacote_(packet);
@@ -435,6 +517,30 @@ function arquemPdf_(p, keep) {
     arquemEstilizarTabelaPdf_(body.appendTable(rows));
     if(p.daily.length>90)body.appendParagraph('Exibindo os primeiros 90 de '+p.daily.length+' registros diários agrupados.');
   }
+
+  if (p.timing) {
+    const timing=arquemAssinarAjustes_(p);
+    arquemAddHeading_(body,'Ajustes identificados após o fechamento');
+    body.appendParagraph(timing.notice);
+    if(timing.status==='unavailable')
+      body.appendParagraph('Detalhamento indisponível nesta atualização; consultar a conciliação antes de concluir a análise.');
+    body.appendParagraph('Ajustes identificados: '+timing.total+
+      (timing.total>timing.items.length?' | Exibidos: '+timing.items.length:''));
+    if(timing.items.length){
+      const rows=[['Chamado','Data do trabalho','Colaborador','Antes','Depois','Diferença','Identificado em']];
+      timing.items.forEach(x=>rows.push([
+        x.ticketId?'#'+x.ticketId:'—',x.date,x.person,
+        arquemH_(x.previous),arquemH_(x.current),
+        (x.delta<0?'-':'+')+arquemH_(Math.abs(x.delta)),x.observedAt
+      ]));
+      const table=body.appendTable(rows);
+      arquemEstilizarTabelaPdf_(table);
+      timing.items.forEach((x,i)=>{
+        if(x.ticketId)table.getCell(i+1,0).editAsText()
+          .setLinkUrl('https://arquem.movidesk.com/Ticket/Edit/'+x.ticketId);
+      });
+    }
+  }
   if ((p.customers||[]).length){
     arquemAddHeading_(body,'Empresas que mais consomem tempo');
     arquemEstilizarTabelaPdf_(body.appendTable([['Empresa','Horas','Chamados']].concat(
@@ -510,6 +616,33 @@ function arquemXlsx_(p, keep) {
     (p.daily||[]).map(x=>[x.date,x.person,x.sector,arquemExcelHora_(x.minutes),
       arquemExcelHora_(x.referenceMinutes),arquemExcelHora_(x.minimumMinutes),x.status]));
   arquemFormatarHoras_(daySheet,[4,5,6],(p.daily||[]).length);
+
+  if(p.timing){
+    const timing=arquemAssinarAjustes_(p);
+    const sheet=arquemCreateSheet_(ss,'Ajustes pós-fechamento',
+      ['Chamado','Data do trabalho','Colaborador','Antes','Depois','Diferença','Identificado em','No período'],
+      timing.items.map(x=>[
+        x.ticketId?'#'+x.ticketId:'—',x.date,x.person,
+        x.previous/1440,x.current/1440,x.delta/1440,x.observedAt,
+        x.inCurrentPeriod?'Sim':'Não'
+      ]));
+    const row=timing.items.length;
+    if(row){
+      sheet.getRange(2,4,row,3).setNumberFormat('[h]:mm:ss;[Red]-[h]:mm:ss');
+      const linked=timing.items.map(x=>{
+        const txt=x.ticketId?'#'+x.ticketId:'—';
+        const b=SpreadsheetApp.newRichTextValue().setText(txt);
+        if(x.ticketId)b.setLinkUrl('https://arquem.movidesk.com/Ticket/Edit/'+x.ticketId);
+        return [b.build()];
+      });
+      sheet.getRange(2,1,row,1).setRichTextValues(linked);
+    }
+    first.getRange(9,1,3,2).setValues([
+      ['Ajustes pós-fechamento',timing.total],
+      ['Situação da conciliação',timing.status],
+      ['Critério','Diferenças permanecem na data original do trabalho']
+    ]);
+  }
   const ticketSheet=arquemCreateSheet_(ss,'Chamados',
     ['Chamado','Cliente','Responsável','Status','Idade (dias)','Link Movidesk'],
     (p.tickets||[]).map(x=>['#'+String(x.id||''),x.client,x.owner,x.status,x.ageDays,x.url]));
