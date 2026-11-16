@@ -23,7 +23,7 @@ where d.period_to=date '2026-11-15'
 -- 0b. Perfis que compartilham e-mail: sem retornar o endereço.
 -- Mesma caixa NÃO significa relatório repetido: comparar escopo e setores.
 select
-  array_agg(r.name order by r.name) as perfis,
+  array_agg(distinct r.name order by r.name) as perfis,
   array_agg(distinct r.scope) as escopos,
   count(distinct d.recipient_id) as quantidade_perfis,
   count(*) as reservas
