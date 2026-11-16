@@ -315,3 +315,15 @@ test('executive and support recipients sharing an email keep independent dispatc
   assert.ok(visual.includes("director?'ARQUEM':sectors.join(' / ')"));
   assert.ok(visual.includes('export function reportSubject('));
 });
+
+test('dispatch observability distinguishes attempts from provider acceptance and inbox delivery',()=>{
+  const source=readFileSync('supabase/functions/audit-email-dispatch/index.ts','utf8');
+  assert.ok(source.includes('const deliverySummary={'));
+  assert.ok(source.includes('attempts:handled'));
+  assert.ok(source.includes("providerAccepted:dispatchResults.filter(x=>x.status==='sent').length"));
+  assert.ok(source.includes("failed:dispatchResults.filter(x=>x.status==='failed').length"));
+  assert.ok(source.includes("skipped:dispatchResults.filter(x=>x.status==='skipped'||x.skipped!=null).length"));
+  assert.ok(source.includes('inboxDeliveryVerified:false'));
+  assert.ok(source.includes('handled,deliverySummary'));
+  assert.ok(source.includes('results:dispatchResults'));
+});
