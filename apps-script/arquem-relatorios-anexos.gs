@@ -104,7 +104,9 @@ function arquemCapacidadesAnexos_() {
   const checkedId=props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID');
   const checkedAt=Date.parse(props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED_AT')||'');
   let ready=false;
-  if(id && checkedId===id && Number.isFinite(checkedAt)){
+  // Never advertise readiness when the final doPost would reject attachments.
+  if(props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED')==='true' &&
+     id && checkedId===id && Number.isFinite(checkedAt)){
     try{
       const file=DriveApp.getFileById(id);
       ready=file.getMimeType()===MimeType.GOOGLE_DOCS &&
