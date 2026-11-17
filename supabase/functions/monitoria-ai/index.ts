@@ -2,6 +2,7 @@ import {CRITICAL,RULESET_VERSION,rulesFor} from './rules.ts';
 import {SUPPORT_SOP} from './support-sop.ts';
 import {SUPPORT_TROUBLESHOOTING} from './support-troubleshooting.ts';
 import {SUPPORT_SCRIPT} from './support-script.ts';
+import {SUPPORT_CUSTOMER_REGISTRATION} from './support-customer-registration.ts';
 import {evaluate,type Channel,type Observation} from './scoring.ts';
 import {validateAudioPayload,transcriptionRequest,extractTranscription} from './transcription.ts';
 const env=(k:string)=>Deno.env.get(k)?.trim()||'';
@@ -164,6 +165,11 @@ async function handle(req:Request){
   'Em voz, confira apresentação e identificação; em chat, considere mensagem automática quando comprovada. Não presuma que WhatsApp e chat Movidesk são o mesmo canal.',
   'Critério R01: o SLA de 1 minuto começa na RESPOSTA DO CLIENTE ao chatbot, não na transferência ou mensagem automática. Confirme ambas as marcas temporais.',
   'Critério R02: solicitar CNPJ somente QUANDO NECESSÁRIO; não penalize a ausência de pergunta se ele já estiver validado no histórico.',
+  'SUP-002 v1.0 orienta R02 e R03: distinguir cadastro vinculado ao principal, sem vínculo, principal incorreto e cliente não identificado antes de sugerir correção.',
+  'Em R03, identificar primeiro se HOUVE divergência de cadastro; sem divergência, não invente obrigação de alterar dados nem aplique desconto.',
+  'Ações de cadastro, vínculo principal, tabulação e solicitações a Financeiro/Comercial só podem ser confirmadas mediante registros do Movidesk ou canais internos fornecidos; sem esses registros, nao_verificavel.',
+  'No SUP-002, escalações para número do cliente, dados vitais e contatos duplicados são procedimentos válidos quando aplicáveis. Não penalize o escalonamento correto.',
+  'O documento SUP-002 fornecido não contém aprovação preenchida. Não o descreva como formalmente aprovado.',
   'Critério R07: só conclua violação de tempo após identificar início da espera e mensagens intermediárias em um histórico INTEGRAL; lacuna no extrato não prova silêncio.',
   'Critério R08: abrir uma escalação correta, mesmo que o problema não esteja resolvido imediatamente, NÃO é infração por si só. Penalize apenas uma falha concreta de encaminhamento, omissão ou compromisso não cumprido, com evidência.',
   'Critério R11: um anexo enviado pelo cliente não demonstra isoladamente que o agente reuniu evidências suficientes para a documentação e escalação.',
@@ -178,7 +184,7 @@ async function handle(req:Request){
   const model=available[0];
   const result=await generateWithOverloadRetry(model,apiKey,{
     systemInstruction:{parts:[{text:system}]},
-    contents:[{role:'user',parts:[{text:JSON.stringify({source:'Formulario_Monitoria_Atendimento.xlsx',version:RULESET_VERSION,channel,rubric,critical:CRITICAL,supportProcedure:SUPPORT_SOP,troubleshootingProcedure:SUPPORT_TROUBLESHOOTING,serviceScript:SUPPORT_SCRIPT,transcript})}]}],
+    contents:[{role:'user',parts:[{text:JSON.stringify({source:'Formulario_Monitoria_Atendimento.xlsx',version:RULESET_VERSION,channel,rubric,critical:CRITICAL,supportProcedure:SUPPORT_SOP,troubleshootingProcedure:SUPPORT_TROUBLESHOOTING,serviceScript:SUPPORT_SCRIPT,customerRegistrationProcedure:SUPPORT_CUSTOMER_REGISTRATION,transcript})}]}],
     generationConfig:{temperature:0.1,maxOutputTokens:4500,responseMimeType:'application/json',responseSchema:schema}
    },45000);
   if(!result.ok)return await googleFailure(result,'evaluation');
