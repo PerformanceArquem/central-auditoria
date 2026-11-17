@@ -70,8 +70,29 @@ async function audio(req,res){
  if(!token)return send(res,503,{ok:false,error:'Zenvia Voice não configurada'});
  const id=String(req.query.id||''),kind=String(req.query.kind||'outbound');
  if(!idOK(id)||!['outbound','inbound'].includes(kind))return send(res,400,{ok:false,error:'Chamada inválida'});
- if(kind==='inbound')return send(res,409,{ok:false,error:'Gravações recebidas exigem homologação de rota segura; download não habilitado'});
- const result=await provider(VOICE+'/chamada/'+id+'/gravacao',token,'audio/mpeg');
+ let result;
+ if(kind==='inbound'){
+  // A URL da gravação vem da resposta autenticada por ID, nunca de parâmetro do usuário.
+  const detail=await provider(VOICE+'/did/chamada/'+id,token);
+  if(!detail.ok)return send(res,502,{ok:false,error:'Detalhes da chamada recebida indisponíveis'});
+  const body=await detail.json().catch(()=>null);
+  const record=body?.dados;
+  if(body?.sucesso===false||String(record?.id||'')!==id)
+   return send(res,502,{ok:false,error:'Chamada não confirmada pela Zenvia'});
+  const recording=String(record.url_gravacao||'');
+  if(!recording)return send(res,404,{ok:false,error:'Esta ligação não possui gravação disponível'});
+  let u;
+  try{u=new URL(recording)}catch{return send(res,502,{ok:false,error:'Endereço da gravação inválido'})}
+  // Allow only documented recording hosts; block arbitrary hosts, ports and redirects.
+  if(u.protocol!=='https:'||u.port!==''||
+     !['api.evoline.com.br','voice-api.zenvia.com'].includes(u.hostname)||
+     u.username||u.password)
+   return send(res,409,{ok:false,error:'Hospedagem da gravação ainda não homologada'});
+  result=await fetch(u,{method:'GET',headers:{Accept:'audio/*'},redirect:'error',
+    signal:AbortSignal.timeout(25000)});
+ }else{
+  result=await provider(VOICE+'/chamada/'+id+'/gravacao',token,'audio/mpeg');
+ }
  if(!result.ok)return send(res,result.status===404?404:502,{ok:false,error:'Gravação não disponível para esta chamada'});
  const type=(result.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
  if(!['audio/mpeg','audio/mp3','audio/wav','audio/x-wav','audio/ogg','application/octet-stream'].includes(type))
