@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test pacote-real.test.mjs"
+  },
+  "dependencies": {
+    "jspdf": "2.5.1",
+    "jszip": "3.10.1",
+    "xlsx": "0.18.5"
+  }
+}

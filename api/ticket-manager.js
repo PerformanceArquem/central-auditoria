@@ -1,3 +1,9 @@
+import monitoriaReviews from '../lib/monitoria-reviews-handler.js';
+import monitoriaCandidates from '../lib/monitoria-candidates-handler.js';
+import monitoriaMovidesk from '../lib/monitoria-movidesk-handler.js';
+import monitoriaZenvia from '../lib/monitoria-zenvia-handler.js';
+import diagnostico from '../lib/diagnostico-env-handler.js';
+
 
 const MAX_BODY_TICKETS = 5;
 const MAX_TICKET_BYTES = 250000;
@@ -116,6 +122,14 @@ function parseBody(req) {
 }
 
 export default async function handler(req, res) {
+  // Reuse this single Vercel function for the temporary monitoria module.
+  // Each service enforces its own login and permissions. Never route mail actions here.
+  const monitoria = typeof req.query.monitoria === 'string' ? req.query.monitoria : '';
+  if (monitoria === 'reviews') return monitoriaReviews(req, res);
+  if (monitoria === 'candidates') return monitoriaCandidates(req, res);
+  if (monitoria === 'movidesk') return monitoriaMovidesk(req, res);
+  if (monitoria === 'zenvia') return monitoriaZenvia(req, res);
+  if (monitoria === 'diagnostico') return diagnostico(req, res);
   res.setHeader('Allow', 'GET, POST');
 
   if (!['GET', 'POST'].includes(req.method)) {

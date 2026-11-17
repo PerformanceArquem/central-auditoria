@@ -1,12 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
 process.env.SUPABASE_URL='https://example.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY='test-private-server-key';
 process.env.SUPABASE_ANON_KEY='test-anon-key';
 process.env.SUPABASE_ALLOWED_EMAILS='quality@example.com';
-const src=await fs.readFile(new URL('../api/ticket-manager.js',import.meta.url),'utf8');
-const {default:handler}=await import('data:text/javascript;base64,'+Buffer.from(src).toString('base64'));
+const {default:handler}=await import('../api/ticket-manager.js');
 function result(){
  const res={statusCode:200,headers:{},setHeader(k,v){this.headers[k]=v;return this},status(v){this.statusCode=v;return this},
  json(body){this.body=body;return this}};
