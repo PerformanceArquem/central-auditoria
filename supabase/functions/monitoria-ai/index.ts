@@ -40,6 +40,27 @@ async function googleFailure(result:Response,context:'evaluation'|'transcription
  console.error('monitoria-ai provider rejection',JSON.stringify({context,providerStatus:status,statusText,reason}));
  return response({ok:false,error:message,code,providerStatus:status,providerErrorStatus:statusText||undefined,providerReason:reason||undefined},503);
 }
+// The Google API response, not a hard-coded legacy name, determines what the current key can use.
+// Only choose Flash variants which have documented free-tier access; never switch to Pro automatically.
+const freeFlashPreference=[
+ 'gemini-3.1-flash-lite','gemini-3.8-flash','gemini-3.6-flash',
+ 'gemini-3-flash-preview','gemini-2.5-flash-lite','gemini-2.5-flash'
+];
+let modelCache:{at:number;models:string[]}|null=null;
+async function availableFlashModels(apiKey:string){
+ if(modelCache&&Date.now()-modelCache.at<300000)return modelCache.models;
+ const url='https://generativelanguage.googleapis.com/v1beta/models?pageSize=100';
+ const list=await fetch(url,{method:'GET',headers:{'x-goog-api-key':apiKey},signal:AbortSignal.timeout(12000)});
+ if(!list.ok)return {error:await googleFailure(list,'evaluation')};
+ const json=await list.json();
+ const supported=new Set((Array.isArray(json.models)?json.models:[]).filter((m:{name?:string;supportedGenerationMethods?:string[];supportedActions?:string[]})=>{
+  const actions=m.supportedGenerationMethods||m.supportedActions||[];
+  return Array.isArray(actions)&&actions.includes('generateContent');
+ }).map((m:{name:string})=>m.name.replace(/^models\//,'')));
+ const models=freeFlashPreference.filter(n=>supported.has(n));
+ modelCache={at:Date.now(),models};
+ return models;
+}
 async function admin(req:Request){
  const jwt=/^Bearer\s+(.+)$/i.exec(req.headers.get('authorization')||'')?.[1];
  const base=env('SUPABASE_URL').replace(/\/$/,'');
@@ -71,7 +92,10 @@ async function handle(req:Request){
   const apiKey=geminiKey();
   if(!apiKey)return response({ok:false,error:'A função de monitoria não encontrou a credencial Gemini entre as variáveis disponíveis neste projeto Supabase',code:'GEMINI_CREDENTIAL_NOT_VISIBLE'},503);
   try{
-   const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',{
+   const available=await availableFlashModels(apiKey);
+   if(!Array.isArray(available))return available.error;
+   if(!available.length)return response({ok:false,error:'Nenhum modelo Flash compatível com a cota gratuita foi disponibilizado pelo Google para esta chave.',code:'NO_FREE_FLASH_MODEL'},503);
+   const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+available[0]+':generateContent',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
     body:JSON.stringify(transcriptionRequest(checked.mimeType,checked.base64)),
@@ -111,7 +135,11 @@ async function handle(req:Request){
  ].join('\n');
  let raw;
  try{
-  const result=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',{
+  const available=await availableFlashModels(apiKey);
+  if(!Array.isArray(available))return available.error;
+  if(!available.length)return response({ok:false,error:'Nenhum modelo Flash compatível com a cota gratuita foi disponibilizado pelo Google para esta chave.',code:'NO_FREE_FLASH_MODEL'},503);
+  const model=available[0];
+  const result=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent',{
    method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
    body:JSON.stringify({
     systemInstruction:{parts:[{text:system}]},
