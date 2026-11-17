@@ -58,15 +58,30 @@ export async function collectVoiceReport(from:string,to:string,serviceKey:string
  sum.tmeSeconds=queueReady&&queueCalls>0&&waitSamples===queueCalls?Math.round(weightedWait/queueCalls):null;
  return {...sum,supportMetrics:supportReady?support:null,byDay:days,byExtension:[...people.values()].map((p):Row=>({...p,talkCoverageComplete:p.answered>0&&!p.missingTalkSamples})).sort((a,b)=>b.total-a.total).slice(0,30),source:'Zenvia Voice',coverageVerified:true};
 }
-export function composeVoiceChat(voice:Row,chat:Row){
+// Department roster is supplied from the existing authorized support-report configuration.
+// Match Movidesk abbreviated surnames to Zenvia full names only when the initial agrees.
+export function supportVoicePeople(people:Row[],approvedNames:string[]){
+ const canonical=(value:unknown)=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().split(/\s+/).filter(Boolean);
+ const isManager=(name:string)=>['kassio','cassio'].includes(canonical(name)[0]||'');
+ const approved=approvedNames.map(canonical).filter(tokens=>tokens.length>=2&&!['kassio','cassio'].includes(tokens[0]));
+ return people.filter(person=>{
+  const who=canonical(person.name);
+  if(who.length<2||isManager(String(person.name||'')))return false;
+  return approved.some(tokens=>who[0]===tokens[0]&&who[1][0]===tokens[1][0]&&
+   (tokens[1].length===1||who[1]===tokens[1]));
+ });
+}
+export function composeVoiceChat(voice:Row,chat:Row,approvedSupport:string[]=[]){
  const ratings:Record<string,{total:number;positive:number}>=Object.fromEntries(['voz','chat'].map(channel=>{const q=(chat.quality||[]).find((r:Row)=>r.channel===channel)||{};return [channel,{total:Number(q.total||0),positive:Number(q.csatPositive||0)}]}));
- const packet={...voice,chatSummary:chat.metrics,chatMetrics:{tickets:Number(chat.metrics?.tickets||0),...chat.measuredChat},quality:ratings};
+ const supportPeople=supportVoicePeople(Array.isArray(voice.byExtension)?voice.byExtension:[],approvedSupport);
+ const packet={...voice,byExtension:supportPeople,personScope:'Somente colaboradores do Suporte, excluindo Kassio',
+  chatSummary:chat.metrics,chatMetrics:{tickets:Number(chat.metrics?.tickets||0),...chat.measuredChat},quality:ratings};
  const rows=[['Ligações recebidas · conta Zenvia',voice.inbound,'—'],['Ligações efetuadas · conta Zenvia',voice.outbound,'—'],['Atendimentos',voice.total,packet.chatMetrics.tickets],['Atendidas',voice.answered,'—'],['Não atendidas',voice.unanswered,'—'],['TMA'+(voice.tmaMissingSamples?' (parcial: '+voice.tmaSamples+'/'+voice.answered+' chamadas)':''),duration(voice.tmaSeconds),duration(chat.measuredChat?.tmaSeconds)],['TME da fila',duration(voice.tmeSeconds),duration(chat.measuredChat?.tmeSeconds)],...['voz','chat'].map(channel=>{const q=ratings[channel];return ['CSAT · '+channel,q.total?(q.positive/q.total*100).toFixed(2)+'%':'Sem avaliações',q.total+' avaliações válidas']})];
  const note='Voz: toda a conta Zenvia. Chat: Suporte no mesmo período. A distribuição usa a identificação atual do cadastro Zenvia. '+
   (voice.tmaMissingSamples?'TMA voz é PARCIAL: '+voice.tmaSamples+' chamadas com duração entre '+voice.answered+' atendidas; tempo falado identificado é subtotal, não o total do período. ':'')+
-  'Sem medição significa indisponível, nunca zero.';
+  'A distribuição por pessoa mostra apenas a equipe autorizada do Suporte, sem Kassio; os totais acima continuam da conta inteira da Zenvia. Sem medição significa indisponível, nunca zero.';
  const heading='Voz × Chat · indicadores reais';
  const text='\n\n'+heading+'\n'+rows.map(r=>r.join(' | ')).join('\n')+'\n'+note;
- const html='<section data-voice-chat-report="v1"><h2>'+heading+'</h2><table width="100%" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:12px"><tr style="background:#173b65;color:white"><th>Indicador</th><th>Voz / resultado</th><th>Chat / referência</th></tr>'+rows.map(r=>'<tr>'+r.map(c=>'<td style="border:1px solid #d8e1ec">'+escape(c)+'</td>').join('')+'</tr>').join('')+'</table><p>'+escape(note)+'</p><h3>Distribuição por pessoa</h3><table cellpadding="5"><tr><th>Nome</th><th>Ligações</th><th>Atendidas</th></tr>'+voice.byExtension.map((p:Row)=>'<tr><td>'+escape(p.name)+'</td><td>'+p.total+'</td><td>'+p.answered+'</td></tr>').join('')+'</table></section>';
+ const html='<section data-voice-chat-report="v1"><h2>'+heading+'</h2><table width="100%" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:12px"><tr style="background:#173b65;color:white"><th>Indicador</th><th>Voz / resultado</th><th>Chat / referência</th></tr>'+rows.map(r=>'<tr>'+r.map(c=>'<td style="border:1px solid #d8e1ec">'+escape(c)+'</td>').join('')+'</tr>').join('')+'</table><p>'+escape(note)+'</p><h3>Distribuição por colaboradores do Suporte (sem Kassio)</h3><table cellpadding="5"><tr><th>Nome</th><th>Ligações</th><th>Atendidas</th></tr>'+supportPeople.map((p:Row)=>'<tr><td>'+escape(p.name)+'</td><td>'+p.total+'</td><td>'+p.answered+'</td></tr>').join('')+'</table></section>';
  return {packet,text,html};
 }
