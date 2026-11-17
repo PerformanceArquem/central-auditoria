@@ -39,6 +39,21 @@
  window.monitoriaOpenRecording=async(args)=>{
    try{await openProtectedRecording(args)}catch(e){status('Gravação: '+String(e.message||e))}
  };
+ function resetSelectedEvidence(){
+   if(localAudioUrl){URL.revokeObjectURL(localAudioUrl);localAudioUrl='';}
+   selectedAudio=null;
+   const player=$('monAudioPlayer');
+   if(player){player.pause();player.removeAttribute('src');player.hidden=true;}
+   const link=$('monDownloadAudio');if(link){link.hidden=true;link.removeAttribute('href');}
+   $('monSourceId').value='';
+   $('monTranscript').value='';
+   $('monRecordingKind').value='';
+   lastAnalysis=null;lastSavedReview=null;reviewRequestId=null;
+   $('monSave').disabled=true;
+   $('monExportReview').disabled=true;
+   resetChatCoverage();
+   const results=$('monResults');if(results)results.replaceChildren();
+ }
  let supportPeople=[];
  function showSupportPerson(index){
    const list=$('monSupportList'),select=$('monSupportSelect');
@@ -64,6 +79,7 @@
    const candidate=person.chatCandidate;
    slots.appendChild(makeSlot('Chat',candidate?'Chamado #'+candidate.ticketId+' · '+candidate.interactions+' ações; conversa não confirmada':'Sem chamado candidato','Conferir chat',async()=>{
      if(!candidate){status('Nenhum chamado candidato disponível para '+person.name);return}
+     resetSelectedEvidence();
      $('monTicketId').value=candidate.ticketId;
      $('monCollaborator').value=person.name;
      $('monSector').value='Suporte';
@@ -72,12 +88,14 @@
      await loadChat();
      $('monTranscript').scrollIntoView({behavior:'smooth',block:'center'});
    }));
-   slots.appendChild(makeSlot('Voz','Gravação ainda não vinculada ao colaborador','Localizar voz',()=>{
+   slots.appendChild(makeSlot('Voz','Gravação ainda não vinculada ao colaborador','Localizar voz',async()=>{
+     resetSelectedEvidence();
      $('monCollaborator').value=person.name;$('monSector').value='Suporte';
      $('monChannel').value='voice';channel='voice';
      $('monReviewWorkspace').open=true;
      $('monSearchCalls').scrollIntoView({behavior:'smooth',block:'center'});
-     status('Localize uma ligação da Zenvia e confirme o colaborador antes de solicitar análise pela IA.');
+     status('Consultando ligações: abra uma gravação da Zenvia para preencher automaticamente o ID. Confirme o atendente.');
+     await listCalls();
    }));
    card.append(title,slots);list.appendChild(card);
  }
@@ -387,6 +405,13 @@
  async function analyse(){
    if(!($('monConsent')?.checked)){status('Autorize explicitamente o processamento da conversa pelo Gemini.');return}
    if(!($('monSaveConsent')?.checked)){status('Para garantir o alerta imediato ao gestor em caso crítico, autorize o registro da monitoria antes da análise.');return}
+   if(!$('monSourceId').value.trim()){
+     $('monReviewWorkspace').open=true;
+     status(channel==='voice'
+       ?'Nenhuma ligação selecionada. Clique em Localizar voz, escolha uma chamada da Zenvia e abra a gravação; o ID será preenchido automaticamente.'
+       :'Nenhum chamado selecionado. Clique em Conferir chat ou informe um chamado Movidesk e abra a conversa.');
+     return;
+   }
    try{metadata()}catch(e){status(e.message);return}
    if(sourceEvidenceKind==='movidesk_ticket_actions_unverified'&&!$('monChatCoverageAck').checked){
      status('Confirme a verificação manual do extrato Movidesk antes de solicitar a nota.');
