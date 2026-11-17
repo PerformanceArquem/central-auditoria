@@ -61,3 +61,17 @@ test('rubrica da exportação totaliza 100 pontos em ambos canais',()=>{
   assert.equal(PARTIAL[channel].length,13);
  }
 });
+
+test('Movidesk sem confirmação do histórico exige ciência explícita da Qualidade',()=>{
+ const p=mock('chat');
+ p.evidenceScope='movidesk_ticket_actions_unverified';
+ assert.throws(()=>prepareReview(p,userId),/cobertura incompleta/);
+ p.evidenceAcknowledged=true;
+ const review=prepareReview(p,userId);
+ assert.equal(review.evidence_scope,'movidesk_ticket_actions_unverified');
+ assert.equal(review.evidence_acknowledged,true);
+});
+test('não permite origem de voz declarada como chat',()=>{
+ const p=mock('voice');p.evidenceScope='manual';
+ assert.throws(()=>prepareReview(p,userId),/incompatível/);
+});
