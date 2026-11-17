@@ -146,6 +146,26 @@
     const el=$('monAlertCoverage');if(el)el.textContent='Alertas indisponíveis: '+String(e.message||e);
    }finally{polling=false;}
  }
+ async function loadRoutes(){
+   try{
+    const data=await reviewsApi({kind:'routes'});
+    const el=$('monRouteList');el.replaceChildren();
+    for(const r of data.routes||[]){
+     const div=document.createElement('p');
+     div.textContent=r.sector+' → '+r.manager_user_id+(r.active?' (ativo)':' (inativo)');
+     el.appendChild(div);
+    }
+    if(!data.routes?.length)el.textContent='Nenhum vínculo cadastrado. Alertas críticos ficam pendentes para a Qualidade.';
+   }catch(e){status('Vínculos de gestores: '+String(e.message||e))}
+ }
+ async function saveRoute(){
+   try{
+    const sector=$('monRouteSector').value.trim(),managerUserId=$('monRouteUser').value.trim();
+    const data=await reviewsApi(null,{action:'route',sector,managerUserId});
+    status('Gestor vinculado a '+data.sector+'. '+data.assignedPending+' alerta(s) pendente(s) encaminhados internamente.');
+    await loadRoutes();await refreshAlerts();
+   }catch(e){status('Configuração do gestor: '+String(e.message||e))}
+ }
  async function refreshReports(){
    const from=$('monReportFrom').value,to=$('monReportTo').value;
    status('Consultando monitorias registradas…');
@@ -192,8 +212,9 @@
     ...selected.flatMap(r=>(r.criteria||[]).map(c=>[r.created_at,r.source_id,r.collaborator_name,r.channel,c.id,c.decision,c.deducted,c.evidence,c.reason]))]);
    add('Não Conformidades',[['Data','Colaborador','Setor','Canal','ID atendimento','Código crítico','Evidência','Situação'],
     ...selected.flatMap(r=>(r.critical_findings||[]).filter(c=>c.suspected).map(c=>[r.created_at,r.collaborator_name,r.sector,r.channel,r.source_id,c.code,c.evidence,r.critical_confirmed===true?'Confirmada':r.critical_confirmed===false?'Descartada':'Aguardando Qualidade']))]);
+   const byPerson=new Map();for(const r of approved){const key=r.collaborator_name||'Não identificado';const value=byPerson.get(key)||[];value.push(r);byPerson.set(key,value)}
    add('Colaboradores',[['Colaborador','Monitorias aprovadas','Média aprovada'],
-    ...Object.entries(Object.groupBy(approved,r=>r.collaborator_name||'Não identificado')).map(([person,rows])=>[person,rows.length,Math.round(rows.reduce((n,r)=>n+Number(r.score_approved||0),0)/rows.length*100)/100])]);
+    ...[...byPerson.entries()].map(([person,rows])=>[person,rows.length,Math.round(rows.reduce((n,r)=>n+Number(r.score_approved||0),0)/rows.length*100)/100])]);
    const filename='Monitoria_Arquem_'+$('monReportFrom').value+'_a_'+$('monReportTo').value+'.xlsx';
    XLSX.writeFile(wb,filename,{compression:true});
    status('Excel gerado com notas aprovadas e/ou provisórias identificadas, critérios e falhas críticas.');
@@ -256,6 +277,7 @@
  }
  async function analyse(){
    if(!($('monConsent')?.checked)){status('Autorize explicitamente o processamento da conversa pelo Gemini.');return}
+   if(!($('monSaveConsent')?.checked)){status('Para garantir o alerta imediato ao gestor em caso crítico, autorize o registro da monitoria antes da análise.');return}
    try{metadata()}catch(e){status(e.message);return}
    const transcript=$('monTranscript').value.trim();
    if(transcript.length<60){status('Informe uma transcrição completa ou importe o chat.');return}
@@ -311,6 +333,8 @@
    $('monReportReload').addEventListener('click',refreshReports);
    $('monExcel').addEventListener('click',exportExcel);
    $('monRefreshAlerts').addEventListener('click',refreshAlerts);
+   $('monSaveRoute').addEventListener('click',saveRoute);
+   $('monReloadRoutes').addEventListener('click',loadRoutes);
    $('monExportChat').addEventListener('click',()=>download('chat_monitoria.txt',$('monTranscript').value,'text/plain;charset=utf-8'));
    $('monExportReview').addEventListener('click',()=>{if(lastAnalysis)download('avaliacao_monitoria.json',JSON.stringify(lastAnalysis,null,2),'application/json')});
    $('monResults').textContent='Selecione um canal e informe a conversa para iniciar.';
