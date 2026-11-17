@@ -13,6 +13,8 @@ on:
       - 'lib/monitoria-reviews-handler.js'
       - 'lib/monitoria-review-validation.js'
       - 'tests/monitoria-reviews.test.mjs'
+      - 'tests/monitoria-candidates.test.mjs'
+      - 'lib/monitoria-candidates-handler.js'
       - 'tests/monitoria-zenvia.test.mjs'
       - 'tests/monitoria-movidesk.test.mjs'
       - 'index.html'
@@ -53,7 +55,7 @@ jobs:
       - name: Verify browser and Zenvia backend syntax
         run: node --check monitoria-ui.js && node --check monitoria-packages.js && node --check lib/monitoria-zenvia-handler.js && node --check lib/monitoria-movidesk-handler.js && node --check lib/monitoria-reviews-handler.js && node --check lib/monitoria-review-validation.js
       - name: Verify Zenvia access control and recording proxy without external requests
-        run: node --test tests/monitoria-zenvia.test.mjs tests/monitoria-movidesk.test.mjs tests/monitoria-reviews.test.mjs tests/monitoria-packages.test.mjs
+        run: node --test tests/monitoria-zenvia.test.mjs tests/monitoria-movidesk.test.mjs tests/monitoria-reviews.test.mjs tests/monitoria-candidates.test.mjs tests/monitoria-packages.test.mjs
       - name: Install isolated test-only PDF Excel ZIP libraries
         run: npm install --prefix tests/monitoria-e2e --no-audit --no-fund --ignore-scripts
       - name: Verify genuine PDF XLSX ZIP files using synthetic monitoria data
