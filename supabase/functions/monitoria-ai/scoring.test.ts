@@ -3,7 +3,7 @@ import {evaluate} from "./scoring.ts";
 
 Deno.test("pesos totais correspondem à planilha para chat e telefonia",()=>{
  for(const channel of ['chat','voice'] as const){
-  const sum=rulesFor(channel).reduce((n,r)=>n+r[channel].points,0);
+  const sum=rulesFor(channel).reduce((n,r)=>n+(r[channel].points??0),0);
   if(sum!==100)throw Error(channel+" deve totalizar 100, obteve "+sum);
  }
  if(RULES.length!==13||CRITICAL.length!==4)throw Error("Critérios divergentes da planilha");
