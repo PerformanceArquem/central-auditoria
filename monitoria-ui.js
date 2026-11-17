@@ -83,6 +83,7 @@
            $('monCollaborator').value=person.name;
            $('monSector').value='Suporte';
            $('monChannel').value='chat';channel='chat';
+           $('monReviewWorkspace').open=true;
            await loadChat();$('monTranscript').scrollIntoView({behavior:'smooth',block:'center'});
          };
          chat.appendChild(buttonChat);
@@ -94,6 +95,7 @@
        voiceButton.onclick=()=>{
          $('monCollaborator').value=person.name;$('monSector').value='Suporte';
          $('monChannel').value='voice';channel='voice';
+         $('monReviewWorkspace').open=true;
          $('monSearchCalls').scrollIntoView({behavior:'smooth',block:'center'});
          status('Selecione uma chamada da Zenvia e confirme o atendente antes de solicitar análise por IA.');
        };
