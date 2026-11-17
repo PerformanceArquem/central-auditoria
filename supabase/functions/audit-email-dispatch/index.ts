@@ -939,7 +939,19 @@ async function voiceChatSection(rec:R,from:string,to:string){
   supportQualityMetrics({from,to})
  ]);
  const chat=await chatResponse.json();if(chat.ok!==true)throw Error('Métricas do chat indisponíveis');
- return composeVoiceChat(voice,chat);
+ // The configured support team is authoritative, not the entire Zenvia account directory.
+ // For management recipients without their own roster, use the active Suporte
+ // management configuration. No roster => no people in the report (fail closed).
+ let supportRoster=Array.isArray(rec.collaborator_names)?rec.collaborator_names.filter((x:unknown)=>typeof x==='string'):[];
+ if(!supportRoster.length){
+  const managed=await list('audit_email_recipients',
+   '?select=name,sector,collaborator_names,active&sector=eq.Suporte&active=eq.true');
+  supportRoster=managed.filter(row=>Array.isArray(row.collaborator_names)&&
+    row.collaborator_names.length>=3&&
+    /gestao do suporte|relatorio setorial de suporte/.test(norm(row.name)))
+    .flatMap(row=>row.collaborator_names);
+ }
+ return composeVoiceChat(voice,chat,supportRoster);
 }
 async function voiceChatPreview(payload:R){
  const rec=(await recipientList()).find(r=>String(r.id)===String(payload.recipientId||''));
