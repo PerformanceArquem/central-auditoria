@@ -137,7 +137,7 @@
    const kind=$('monPackagePeriod').value,anchor=$('monPackageAnchor').value,collaborator=$('monPackageCollaborator').value.trim();
    if(!collaborator)throw Error('Informe o colaborador para gerar o pacote');
    const range=periods(kind,anchor);
-   const data=await fetchJson('/api/monitoria-reviews?'+new URLSearchParams({
+   const data=await fetchJson('/api/ticket-manager?monitoria=reviews&'+new URLSearchParams({
     kind:'reviews',from:range.from,to:range.to,collaborator
    }));
    if(data.partial)throw Error('Relatório parcial acima de 1.000 registros. Divida o período para não omitir notas.');
@@ -162,7 +162,7 @@
    const included=[];
    for(const r of chats){
     try{
-     const result=await fetchJson('/api/monitoria-movidesk?'+new URLSearchParams({ticketId:r.source_id}));
+     const result=await fetchJson('/api/ticket-manager?monitoria=movidesk&'+new URLSearchParams({ticketId:r.source_id}));
      if(result.partial||!result.messages?.length){missing.push(r.source_id);continue}
      zip.file('Interacoes_Movidesk/Extrato_'+safe(r.source_id)+'_'+safe(r.id)+'.pdf',chatPDF(r,result.messages));
      included.push({reviewId:r.id,sourceId:r.source_id,interactions:result.messages.length,fullChatVerified:false});

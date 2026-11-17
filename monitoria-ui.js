@@ -13,7 +13,7 @@
  async function api(params,{binary=false}={}){
    const session=await window.tmAuth?.getSession?.();
    if(!session?.access_token)throw Error('Faça login como administrador autorizado.');
-   const url='/api/monitoria-zenvia?'+new URLSearchParams(params);
+   const url='/api/ticket-manager?monitoria=zenvia&'+new URLSearchParams(params);
    const res=await fetch(url,{headers:{Authorization:'Bearer '+session.access_token},
       credentials:'same-origin',cache:'no-store'});
    if(binary){
@@ -80,7 +80,7 @@
      if(!/^\d{1,12}$/.test(ticketId))throw Error('Informe o número do chamado Movidesk.');
      const session=await window.tmAuth?.getSession?.();
      if(!session?.access_token)throw Error('Faça login como administrador autorizado.');
-     const res=await fetch('/api/monitoria-movidesk?'+new URLSearchParams({ticketId}),{
+     const res=await fetch('/api/ticket-manager?monitoria=movidesk&'+new URLSearchParams({ticketId}),{
        method:'GET',headers:{Authorization:'Bearer '+session.access_token},credentials:'same-origin',cache:'no-store'
      });
      const data=await res.json().catch(()=>({}));
@@ -105,7 +105,7 @@
  async function reviewsApi(params,body){
    const session=await window.tmAuth?.getSession?.();
    if(!session?.access_token)throw Error('Entre na Central para consultar monitorias');
-   const url='/api/monitoria-reviews'+(params?'?'+new URLSearchParams(params):'');
+   const url='/api/ticket-manager?monitoria=reviews'+(params?'&'+new URLSearchParams(params):'');
    const r=await fetch(url,{
     method:body?'POST':'GET',headers:{Authorization:'Bearer '+session.access_token,...(body?{'Content-Type':'application/json'}:{})},
     body:body?JSON.stringify(body):undefined,cache:'no-store',credentials:'same-origin'
