@@ -1034,7 +1034,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                 <a id="monDownloadAudio" href="#" hidden>Baixar áudio selecionado</a>
               </div>
               <div style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0">
-                <label>ID ligação/chamado <input id="monSourceId" maxlength="80" required placeholder="Número da ligação ou ticket"></label>
+                <label>ID ligação/chamado <input id="monSourceId" maxlength="80" required placeholder="Preenchido ao abrir chat ou gravação" aria-describedby="monSourceHint"><small id="monSourceHint" class="subtle" style="display:block;max-width:260px">Selecione um atendimento acima. O ID é preenchido automaticamente após a consulta.</small></label>
                 <label>Setor <input id="monSector" maxlength="100" value="Suporte" required></label>
                 <label>Colaborador <input id="monCollaborator" maxlength="160" required placeholder="Nome completo"></label>
                 <label>Responsável pela monitoria <input id="monReviewer" maxlength="160" required placeholder="Analista de Qualidade"></label>
