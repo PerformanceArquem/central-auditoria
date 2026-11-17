@@ -316,7 +316,7 @@
      return;
    }
    const transcript=$('monTranscript').value.trim();
-   if(transcript.length<60){status('Informe uma transcrição completa ou importe o chat.');return}
+   if(transcript.length<60){status('Informe uma transcrição completa ou consulte as interações do chamado.');return}
    const button=$('monRun');button.disabled=true;status('Conferindo sessão e solicitando avaliação ao Gemini…');
    try{
      const client=window.tmEmailAdminClient;
@@ -338,22 +338,7 @@
    if(!$('monTranscript'))return;
    $('monChannel').addEventListener('change',e=>{
       channel=e.target.value==='voice'?'voice':'chat';
-      status(channel==='voice'?'Importe a gravação e forneça transcrição para análise.':'Importe ou cole o histórico do chat.');
-   });
-   $('monAudioFile').addEventListener('change',e=>{
-      if(localAudioUrl)URL.revokeObjectURL(localAudioUrl);
-      const f=e.target.files?.[0];const player=$('monAudioPlayer');
-      if(!f){player.removeAttribute('src');return}
-      if(!f.type.startsWith('audio/')||f.size>100*1024*1024){status('Selecione um áudio de até 100 MB.');e.target.value='';return}
-      selectedAudio=f;
-      localAudioUrl=URL.createObjectURL(f);player.src=localAudioUrl;player.hidden=false;
-      const link=$('monDownloadAudio');link.href=localAudioUrl;link.download=safeName(f.name);link.hidden=false;
-      status('Áudio disponível para ouvir e baixar neste navegador. Nenhum arquivo foi enviado ao servidor.');
-   });
-   $('monChatFile').addEventListener('change',async e=>{
-     const file=e.target.files?.[0];if(!file)return;
-     if(!/\.(txt|csv)$/i.test(file.name)||file.size>150000){status('Use TXT ou CSV de até 150 KB.');return}
-     resetChatCoverage();$('monTranscript').value=await file.text();status('Conversa importada para conferência.');
+      status(channel==='voice'?'Consulte uma ligação na Zenvia e forneça a transcrição para análise.':'Consulte o chamado Movidesk ou cole o histórico do chat.');
    });
    const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
    $('monFrom').value=today;$('monTo').value=today;
