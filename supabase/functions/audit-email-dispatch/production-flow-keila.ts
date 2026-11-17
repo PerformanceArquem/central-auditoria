@@ -94,7 +94,7 @@ export function keilaProductionReport(
     '<div style="height:22px;width:'+width(entered)+'%;background:#2b64b6"></div></div></td><td width="48" align="right"><b>'+entered+'</b></td></tr>'+
     '<tr><td>Saídas</td><td><div style="height:22px;background:#e5ebf2">'+
     '<div style="height:22px;width:'+width(exited)+'%;background:#21886b"></div></div></td><td align="right"><b>'+exited+'</b></td></tr>'+
-    '</table></td></tr></table></td></tr></table></body></html>';
+    '</table><!-- ARQUEM_REPORT_EXTRA_SECTIONS --></td></tr></table></td></tr></table></body></html>';
   const packet={
     schema:'arquem-mail-v1',
     title,from:data.from,to:data.to,partial:false,historicalIncomplete:false,

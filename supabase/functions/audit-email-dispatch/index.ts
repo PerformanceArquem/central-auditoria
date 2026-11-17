@@ -965,10 +965,12 @@ async function sendMail(email: string, subject: string, text: string, html?: str
   await assertEmailDeliveryEnabled(db);
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
   if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
-  if(reportData&&!reportData.productionFlow){
+  if(reportData){
     const current=(await recipientList()).find(r=>String(r.id)===String(reportData!.recipientId||''));
     if(!current)throw Error('Destinatário atual indisponível para os comparativos.');
-    const comparisons=await comparisonData(current,String(reportData.from),String(reportData.to));
+    const comparisonRecipient=reportData.productionFlow&&Array.isArray(current.production_flow_collaborators)&&current.production_flow_collaborators.length
+      ?{...current,collaborator_name:null,collaborator_names:current.production_flow_collaborators}:current;
+    const comparisons=await comparisonData(comparisonRecipient,String(reportData.from),String(reportData.to));
     const section=renderComparisons(comparisons);text+=section.text;
     html=appendReportSection(html,section.html);
     reportData={...reportData,comparisons};
@@ -1573,7 +1575,7 @@ async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipien
    if(!inserted?.length){results.push({recipient:'Keila',kind:task.kind,skipped:'Reserva já existente'});continue;}
    try{
     await sendMail(String(rec.email),reportSubject(rec,task.kind,task.from,task.to,{sector:'Produção',detail:'Rastreabilidade · '+REPORT_LABEL[task.kind]}),
-      content.text,content.html,content.packet as R);
+      content.text,content.html,{...content.packet,recipientId:rec.id} as R);
     await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
      method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
