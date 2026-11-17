@@ -37,7 +37,7 @@
        description.textContent='#'+call.id+' · '+call.direction+' · '+call.started+' · '+call.status+' · '+call.durationSeconds+'s';
        const button=document.createElement('button');button.type='button';button.className='s';
        button.textContent='Ouvir / baixar';
-       if(call.kind==='inbound'){button.disabled=true;button.title='Rota de gravação receptiva em homologação';}
+       button.title=call.recordingAvailable?'Carregar gravação da chamada':'Consultar se existe gravação para esta chamada';
        button.addEventListener('click',async()=>{
          button.disabled=true;status('Baixando gravação autenticada da Zenvia…');
          try{
@@ -129,6 +129,8 @@
      if(!/\.(txt|csv)$/i.test(file.name)||file.size>150000){status('Use TXT ou CSV de até 150 KB.');return}
      $('monTranscript').value=await file.text();status('Conversa importada para conferência.');
    });
+   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+   $('monFrom').value=today;$('monTo').value=today;
    $('monSearchCalls')?.addEventListener('click',listCalls);
    $('monLoadChat')?.addEventListener('click',loadChat);
    $('monRun').addEventListener('click',analyse);
