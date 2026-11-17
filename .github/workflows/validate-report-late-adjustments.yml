@@ -7,6 +7,8 @@ on:
       - 'supabase/functions/audit-email-dispatch/late-adjustments.test.ts'
       - 'supabase/functions/audit-email-dispatch/production-flow-keila.ts'
       - 'supabase/functions/audit-email-dispatch/production-flow-keila.test.ts'
+      - 'apps-script/arquem-relatorios-anexos.gs'
+      - 'tests/keila-attachments-no-send.test.mjs'
       - '.github/workflows/validate-report-late-adjustments.yml'
   push:
     branches:
@@ -16,6 +18,8 @@ on:
       - 'supabase/functions/audit-email-dispatch/late-adjustments.test.ts'
       - 'supabase/functions/audit-email-dispatch/production-flow-keila.ts'
       - 'supabase/functions/audit-email-dispatch/production-flow-keila.test.ts'
+      - 'apps-script/arquem-relatorios-anexos.gs'
+      - 'tests/keila-attachments-no-send.test.mjs'
       - '.github/workflows/validate-report-late-adjustments.yml'
 
 permissions:
@@ -31,3 +35,5 @@ jobs:
           deno-version: v2.x
       - name: Test report calculations without network, mail or credentials
         run: deno test supabase/functions/audit-email-dispatch/late-adjustments.test.ts supabase/functions/audit-email-dispatch/production-flow-keila.test.ts
+      - name: Validate attachment data layout (no Gmail and no Drive)
+        run: node --test tests/keila-attachments-no-send.test.mjs
