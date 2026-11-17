@@ -91,7 +91,8 @@ test('gestor pode ouvir somente ligação de monitoria aprovada em setor vincula
   if(u.pathname==='/rest/v1/audit_monitoria_reviews'){
    assert.equal(u.searchParams.get('review_status'),'eq.approved');
    assert.equal(u.searchParams.get('source_id'),'eq.123');
-   return json([{id:'review-1',source_id:'123',sector:'Suporte',recording_kind:'outbound'}]);
+   assert.equal(u.searchParams.get('id'),'eq.123e4567-e89b-42d3-a456-426614174001');
+   return json([{id:'123e4567-e89b-42d3-a456-426614174001',source_id:'123',sector:'Suporte',recording_kind:'outbound'}]);
   }
   if(u.pathname==='/rest/v1/audit_monitoria_manager_routes')
    return json([{sector:'Suporte',manager_user_id:'user-1',active:true}]);
@@ -100,7 +101,7 @@ test('gestor pode ouvir somente ligação de monitoria aprovada em setor vincula
   throw Error('Unexpected upstream '+u.pathname);
  },'user');
  const res=response();
- await handler(req('audio',{id:'123',kind:'outbound'}),res);
+ await handler(req('audio',{id:'123',kind:'outbound',reviewId:'123e4567-e89b-42d3-a456-426614174001'}),res);
  assert.equal(res.statusCode,200);
  assert.ok(Buffer.isBuffer(res.body));
  assert.equal(seen.filter(x=>x.url.hostname==='voice-api.zenvia.com').length,1);
@@ -108,12 +109,12 @@ test('gestor pode ouvir somente ligação de monitoria aprovada em setor vincula
 test('gestor de outro setor nunca recupera o áudio protegido',async()=>{
  const seen=setup((u)=>{
   if(u.pathname==='/rest/v1/audit_monitoria_reviews')
-   return json([{id:'review-1',source_id:'123',sector:'Produção',recording_kind:'outbound'}]);
+   return json([{id:'123e4567-e89b-42d3-a456-426614174001',source_id:'123',sector:'Produção',recording_kind:'outbound'}]);
   if(u.pathname==='/rest/v1/audit_monitoria_manager_routes')
    return json([{sector:'Suporte',manager_user_id:'user-1',active:true}]);
   throw Error('Should not request recording: '+u.pathname);
  },'user');
- const res=response();await handler(req('audio',{id:'123',kind:'outbound'}),res);
+ const res=response();await handler(req('audio',{id:'123',kind:'outbound',reviewId:'123e4567-e89b-42d3-a456-426614174001'}),res);
  assert.equal(res.statusCode,403);
  assert.equal(seen.some(x=>x.url.hostname==='voice-api.zenvia.com'),false);
 });
@@ -122,7 +123,7 @@ test('gestor não pode acessar ligação sem monitoria aprovada',async()=>{
   if(u.pathname==='/rest/v1/audit_monitoria_reviews')return json([]);
   throw Error('Unexpected extra query '+u.pathname);
  },'user');
- const res=response();await handler(req('audio',{id:'123',kind:'outbound'}),res);
+ const res=response();await handler(req('audio',{id:'123',kind:'outbound',reviewId:'123e4567-e89b-42d3-a456-426614174001'}),res);
  assert.equal(res.statusCode,403);
  assert.equal(seen.some(x=>x.url.hostname==='voice-api.zenvia.com'),false);
 });
