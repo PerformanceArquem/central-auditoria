@@ -132,7 +132,15 @@ function arquemTesteKeilaSemEnvio() {
     from:'2026-11-02',to:'2026-11-08',
     partial:false,historicalIncomplete:false,
     metrics:{tickets:2,appointments:0,minutes:0},
-    productionFlow:{entered:2,exited:1,entryMovements:3,exitMovements:1},
+    productionFlow:{entered:2,exited:1,entryMovements:3,exitMovements:1,
+      movements:[
+        {id:'100769',direction:'entry',at:'2026-11-02T12:00:00Z',
+         client:'Empresa demonstrativa',subject:'Chamado de teste',fromTeam:'Suporte',
+         toTeam:'Produção - CPO',responsible:'Pessoa Teste',actor:'Gestor'},
+        {id:'100769',direction:'exit',at:'2026-11-03T12:00:00Z',
+         client:'Empresa demonstrativa',subject:'Chamado de teste',fromTeam:'Produção - CPO',
+         toTeam:'Suporte',responsible:'Pessoa Teste',actor:'Gestor'}
+      ]},
     productionQuality:[
       {name:'Colaborador de teste A',hoursMinutes:3964,appointments:20,ratings:5,excellent:4,average:8.8},
       {name:'Colaborador de teste B',hoursMinutes:480,appointments:5,ratings:0,excellent:0,average:null}
@@ -145,6 +153,8 @@ function arquemTesteKeilaSemEnvio() {
         status:'Saída · Produção → Suporte',ageDays:0,url:'https://arquem.movidesk.com/Ticket/Edit/100769'}
     ]
   };
+  if(arquemMovimentosProducao_(packet).length!==2)
+    throw new Error('Homologação Keila: movimentações não preparadas.');
   const attachments=arquemCreateReportAttachments_(packet);
   if(!Array.isArray(attachments)||attachments.length!==2)throw new Error('O teste Keila deve criar PDF e XLSX.');
   const pdf=attachments.find(b=>b.getContentType()==='application/pdf');
@@ -225,6 +235,26 @@ function arquemSanearPacote_(value) {
   }
   return value;
 }
+// Produção: movimentos individualizados; nenhum evento deve ser resumido como horas.
+function arquemMovimentosProducao_(packet) {
+  if (!packet.productionFlow) return [];
+  const raw=packet.productionFlow.movements;
+  if (!Array.isArray(raw)) return [];
+  if(raw.length>500)throw new Error('Limite de 500 movimentações excedido nos anexos.');
+  return raw.map(function(m){
+    const id=String(m.id||'');
+    if (!/^\d{1,12}$/.test(id))throw new Error('Chamado inválido na rastreabilidade da Produção');
+    const direction=m.direction==='entry'?'Entrada':m.direction==='exit'?'Saída':null;
+    if(!direction)throw new Error('Direção inválida na rastreabilidade da Produção');
+    return {
+      id:id, direction:direction, at:String(m.at||''),
+      client:String(m.client||''), subject:String(m.subject||''),
+      fromTeam:String(m.fromTeam||''), toTeam:String(m.toTeam||''),
+      responsible:String(m.responsible||''), actor:String(m.actor||''),
+      url:'https://arquem.movidesk.com/Ticket/Edit/'+id
+    };
+  });
+}
 function arquemCreateReportAttachments_(packet) {
   if (!packet || packet.schema !== 'arquem-mail-v1') throw new Error('Pacote de relatório inválido');
   packet=arquemSanearPacote_(packet);
@@ -234,7 +264,8 @@ function arquemCreateReportAttachments_(packet) {
       !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) throw new Error('Datas inválidas');
   const rows = [
     packet.collaborators || [], packet.daily || [], packet.tickets || [],
-    packet.customers || [], packet.activities || []
+    packet.customers || [], packet.activities || [],
+    (packet.productionFlow && packet.productionFlow.movements) || []
   ];
   if (rows.some(arr => !Array.isArray(arr) || arr.length > 500))
     throw new Error('Limite de dados excedido para anexos');
@@ -369,6 +400,26 @@ function arquemPdf_(p, keep) {
     arquemEstilizarTabelaPdf_(body.appendTable([['Empresa','Horas','Chamados']].concat(
       p.customers.slice(0,30).map(x=>[String(x.name||''),arquemH_(x.minutes),String(x.tickets||0)]))));
   }
+  if(p.productionFlow){
+    const movements=arquemMovimentosProducao_(p);
+    arquemAddHeading_(body,'Rastreabilidade detalhada — entradas e saídas');
+    if(movements.length){
+      const pdfRows=[['Chamado','Movimento','Data/hora','Cliente','Origem','Destino','Responsável']];
+      movements.slice(0,65).forEach(function(m){
+        pdfRows.push(['#'+m.id,m.direction,m.at,m.client,m.fromTeam,m.toTeam,m.responsible]);
+      });
+      const table=body.appendTable(pdfRows);
+      arquemEstilizarTabelaPdf_(table);
+      for(let i=0;i<Math.min(movements.length,65);i++){
+        const cell=table.getRow(i+1).getCell(0);
+        const link=cell.editAsText();
+        link.setLinkUrl(movements[i].url).setForegroundColor('#2467a8');
+      }
+      if(movements.length>65)
+        body.appendParagraph('Exibidos os primeiros 65 eventos no PDF. Consulte a planilha Excel para até 500 movimentações.');
+      body.appendParagraph('Detalhamento das transferências; encerramentos não são saídas.');
+    }else body.appendParagraph('Sem movimentações individualizadas no período.');
+  }
   if ((p.tickets||[]).length){
     arquemAddHeading_(body,p.productionFlow?'Chamados movimentados na Produção':'Chamados que exigem atenção');
     const ticketRows=p.tickets.slice(0,65);
@@ -439,6 +490,18 @@ function arquemXlsx_(p, keep) {
     (p.daily||[]).map(x=>[x.date,x.person,x.sector,arquemExcelHora_(x.minutes),
       arquemExcelHora_(x.referenceMinutes),arquemExcelHora_(x.minimumMinutes),x.status]));
   arquemFormatarHoras_(daySheet,[4,5,6],(p.daily||[]).length);
+  if(p.productionFlow){
+    const movements=arquemMovimentosProducao_(p);
+    const moveSheet=arquemCreateSheet_(ss,'Movimentações Produção',
+      ['Chamado','Tipo','Data/hora UTC','Cliente','Assunto','Setor origem','Setor destino','Responsável','Alterado por','Link Movidesk'],
+      movements.map(function(m){return ['#'+m.id,m.direction,m.at,m.client,m.subject,m.fromTeam,m.toTeam,m.responsible,m.actor,m.url];}));
+    if(movements.length){
+      const rich=movements.map(function(m){
+        return [SpreadsheetApp.newRichTextValue().setText('#'+m.id).setLinkUrl(m.url).build()];
+      });
+      moveSheet.getRange(2,1,rich.length,1).setRichTextValues(rich).setFontColor('#2467a8');
+    }
+  }
   const ticketSheet=arquemCreateSheet_(ss,'Chamados',
     ['Chamado','Cliente','Responsável','Status','Idade (dias)','Link Movidesk'],
     (p.tickets||[]).map(x=>['#'+String(x.id||''),x.client,x.owner,x.status,x.ageDays,x.url]));

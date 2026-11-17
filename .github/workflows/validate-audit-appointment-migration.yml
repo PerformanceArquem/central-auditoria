@@ -1,0 +1,44 @@
+name: Validate appointment audit migration (isolated PostgreSQL)
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/20261117133000_audit_appointment_activity_ticket_changes.sql'
+      - 'tests/audit-appointment-trigger-migration.sql'
+      - '.github/workflows/validate-audit-appointment-migration.yml'
+  push:
+    branches:
+      - 'fix/report-audit-independent-20261117'
+    paths:
+      - 'supabase/migrations/20261117133000_audit_appointment_activity_ticket_changes.sql'
+      - 'tests/audit-appointment-trigger-migration.sql'
+      - '.github/workflows/validate-audit-appointment-migration.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  migration-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-test-only
+          POSTGRES_DB: audit_migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test migration and trigger on ephemeral database only
+        env:
+          PGPASSWORD: isolated-test-only
+        run: |
+          psql --host localhost --port 5432 --username postgres --dbname audit_migration_test \
+            --set ON_ERROR_STOP=on --file tests/audit-appointment-trigger-migration.sql

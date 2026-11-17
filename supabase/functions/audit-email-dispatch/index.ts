@@ -2293,6 +2293,28 @@ async function dispatchNoonPartial() {
  return json({ok:results.every(x=>x.status!=='failed'&&x.status!=='blocked'),kind:'noon_partial',day:today,window:'09:00-11:50',latest,results});
 }
 
+// Read-only, admin-authenticated preview: never reserves dispatches or calls Gmail.
+async function timingPreview(payload:R):Promise<Response> {
+ const id=String(payload.recipientId||'');
+ const from=String(payload.from||'');
+ const to=String(payload.to||'');
+ const kind=String(payload.reportKind||'daily');
+ if(!/^[-a-f0-9]{36}$/i.test(id))return json({ok:false,error:'Destinatário inválido'},400);
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to||
+    to>dateBR()||Date.parse(to+'T12:00:00Z')-Date.parse(from+'T12:00:00Z')>31*86400000)
+  return json({ok:false,error:'Período inválido (máximo 31 dias, sem datas futuras)'},400);
+ if(!['daily','weekly','monthly'].includes(kind))return json({ok:false,error:'Tipo de relatório inválido'},400);
+ const rec=(await recipientList()).find((r:R)=>String(r.id)===id&&r.active===true);
+ if(!rec)return json({ok:false,error:'Destinatário não encontrado'},404);
+ if(!recipientAllows(rec,'general'))return json({ok:false,error:'Destinatário não autorizado para relatório geral'},403);
+ const timing=await reportTiming({recipientId:id,reportKind:kind,from,to,reportSections:reportSectionFlags(rec)},db,list);
+ const rendered=timing?timingContent(timing):{text:'',html:''};
+ return json({ok:true,sent:false,readOnly:true,recipientId:id,from,to,reportKind:kind,
+  status:timing?.status||'not_available',adjustmentCount:timing?.adjustmentCount||0,
+  notice:timing?.notice||'',adjustments:timing?.adjustments||[],
+  text:rendered.text,html:rendered.html});
+}
+
 async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'Apenas POST' }, 405);
   let payload: R = {};
@@ -2304,9 +2326,10 @@ async function handleRequest(req: Request): Promise<Response> {
       try{return json(await emailDeliveryAdmin(payload,req,db,E,validUrl()));}
       catch(ex){return json({ok:false,error:err(ex)},409);}
     }
-    if (action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
+    if (action === 'timing_preview' || action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
-      return action === 'voice_chat_preview' ? await voiceChatPreview(payload)
+      return action === 'timing_preview' ? await timingPreview(payload)
+        : action === 'voice_chat_preview' ? await voiceChatPreview(payload)
         : action === 'ticket_charge_capabilities' ? json({ok:true,aiAvailable:E('GEMINI_AI_DRAFT_ENABLED')==='true'&&!!E('GEMINI_API_KEY'),guidanceAvailable:true})
         : action === 'ticket_charge_ai_draft' ? await ticketChargeAiDraft(payload)
         : (action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_send') ? await ticketChargeAction(payload,req)

@@ -1,0 +1,39 @@
+name: Validate report late adjustments
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/audit-email-dispatch/late-adjustments.ts'
+      - 'supabase/functions/audit-email-dispatch/late-adjustments.test.ts'
+      - 'supabase/functions/audit-email-dispatch/production-flow-keila.ts'
+      - 'supabase/functions/audit-email-dispatch/production-flow-keila.test.ts'
+      - 'apps-script/arquem-relatorios-anexos.gs'
+      - 'tests/keila-attachments-no-send.test.mjs'
+      - '.github/workflows/validate-report-late-adjustments.yml'
+  push:
+    branches:
+      - 'fix/report-audit-independent-20261117'
+    paths:
+      - 'supabase/functions/audit-email-dispatch/late-adjustments.ts'
+      - 'supabase/functions/audit-email-dispatch/late-adjustments.test.ts'
+      - 'supabase/functions/audit-email-dispatch/production-flow-keila.ts'
+      - 'supabase/functions/audit-email-dispatch/production-flow-keila.test.ts'
+      - 'apps-script/arquem-relatorios-anexos.gs'
+      - 'tests/keila-attachments-no-send.test.mjs'
+      - '.github/workflows/validate-report-late-adjustments.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Test report calculations without network, mail or credentials
+        run: deno test supabase/functions/audit-email-dispatch/late-adjustments.test.ts supabase/functions/audit-email-dispatch/production-flow-keila.test.ts
+      - name: Validate attachment data layout (no Gmail and no Drive)
+        run: node --test tests/keila-attachments-no-send.test.mjs

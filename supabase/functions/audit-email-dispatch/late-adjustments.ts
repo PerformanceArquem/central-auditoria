@@ -17,7 +17,15 @@ export function summarizeAdjustments(events:R[],rec:R,priorReports:R[],from:stri
    if(!allowedAppointment(rec,snapshot))continue;
    const date=String(snapshot.appointment_date||'');
    if(!date||date>to)continue;
-   const reported=priorReports.some(p=>p.status==='sent'&&!String(p.dispatch_key||'').startsWith('preliminary:')&&p.period_from<=date&&p.period_to>=date&&Date.parse(p.sent_at)<Date.parse(event.observed_at));
+   // Prepared reports are valid audit baselines even when email delivery is paused.
+   // The time comparison prevents a newer preparation from rewriting an older baseline.
+   const reported=priorReports.some(p=>
+    (p.status==='sent'||p.status==='ready') &&
+    !String(p.dispatch_key||'').startsWith('preliminary:') &&
+    p.period_from<=date&&p.period_to>=date &&
+    Number.isFinite(Date.parse(String(p.sent_at||p.prepared_at||''))) &&
+    Date.parse(String(p.sent_at||p.prepared_at))<Date.parse(String(event.observed_at))
+   );
    if(!reported)continue;
    const belongs=(x:R|null)=>x&&x.appointment_date===date&&x.collaborator_name===snapshot.collaborator_name&&x.sector===snapshot.sector&&allowedAppointment(rec,x);
    const previous=belongs(before)?Number(before.duration_minutes)||0:0,current=belongs(after)?Number(after.duration_minutes)||0:0;
@@ -39,12 +47,18 @@ export async function reportTiming(packet:R,db:(path:string)=>Promise<any>,list:
  const recipients=await db('audit_email_recipients?id=eq.'+encodeURIComponent(id)+'&active=eq.true&select=*&limit=1');
  if(!recipients.length)return base;
  if(recipients[0].report_sections?.daily_detail===false)return {...base,status:'restricted'};
- const previous=await db('audit_email_sector_dispatches?recipient_id=eq.'+encodeURIComponent(id)+'&status=eq.sent&report_kind=eq.'+encodeURIComponent(String(packet.reportKind||'daily'))+'&select=dispatch_key,status,period_from,period_to,sent_at&order=sent_at.desc&limit=250');
- const official=previous.filter((p:R)=>!String(p.dispatch_key).startsWith('preliminary:'));
- if(!official.length)return base;
- const since=String(official[0].sent_at);
+ const reportKind=encodeURIComponent(String(packet.reportKind||'daily'));
+ const [previous,prepared]=await Promise.all([
+  db('audit_email_sector_dispatches?recipient_id=eq.'+encodeURIComponent(id)+'&status=eq.sent&report_kind=eq.'+reportKind+'&select=dispatch_key,status,period_from,period_to,sent_at&order=sent_at.desc&limit=250'),
+  db('audit_email_prepared_reports?recipient_id=eq.'+encodeURIComponent(id)+'&status=eq.ready&report_kind=eq.'+reportKind+'&select=dispatch_key,status,period_from,period_to,prepared_at&order=prepared_at.desc&limit=250')
+ ]);
+ // A PDF/Excel preview must not require an email to have been sent.
+ const baselines=[...previous,...prepared].filter((p:R)=>!String(p.dispatch_key||'').startsWith('preliminary:'));
+ const timestamps=baselines.map((p:R)=>Date.parse(String(p.sent_at||p.prepared_at||''))).filter(Number.isFinite);
+ if(!timestamps.length)return base;
+ const since=new Date(Math.min(...timestamps)).toISOString();
  const events=await list('audit_appointment_changes','?select=appointment_key,observed_at,before_data,after_data&observed_at=gt.'+encodeURIComponent(since)+'&order=observed_at.asc',25000);
- const adjustments=summarizeAdjustments(events,recipients[0],official,String(packet.from),String(packet.to));
+ const adjustments=summarizeAdjustments(events,recipients[0],baselines,String(packet.from),String(packet.to));
  return {...base,notice:base.notice+(adjustments.length>100?' Exibidos os 100 primeiros de '+adjustments.length+' ajustes.':''),status:'tracked',adjustments:adjustments.slice(0,100),adjustmentCount:adjustments.length};
 }
 export function timingContent(timing:R){
