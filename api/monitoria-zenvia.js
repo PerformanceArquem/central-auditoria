@@ -24,9 +24,42 @@ async function authorize(req){
  const response=await fetch(url,{headers:h,signal:AbortSignal.timeout(12000)});
  if(!response.ok)return {error:'Não foi possível validar permissões',status:503};
  const acl=await response.json();
- if(!Array.isArray(acl)||!acl.some(r=>String(r.role).toLowerCase()==='admin'&&r.is_active===true))
-  return {error:'Monitoria restrita aos administradores autorizados',status:403};
- return {ok:true};
+ if(!Array.isArray(acl)||!acl.some(r=>r.is_active===true))
+  return {error:'Usuário sem acesso ativo à Central',status:403};
+ const admin=acl.some(r=>String(r.role).toLowerCase()==='admin'&&r.is_active===true);
+ if(admin)return {ok:true,admin:true};
+ // Managers may open only an approved recording for their own sector.
+ // Never grant bulk call searches or access to arbitrary call identifiers.
+ if(req.query.action!=='audio')return {error:'Listagem de chamadas restrita à Qualidade',status:403};
+ const callId=String(req.query.id||''),kind=String(req.query.kind||'');
+ if(!idOK(callId)||!['outbound','inbound'].includes(kind))
+  return {error:'Identificação de gravação inválida',status:400};
+ // Route must match the user's verified account and the review's sector.
+ // Query only approved records of the requested call, then check manager routing.
+ const reviews=new URL(base+'/rest/v1/audit_monitoria_reviews');
+ reviews.searchParams.set('select','id,sector,source_id,recording_kind');
+ reviews.searchParams.set('source_id','eq.'+callId);
+ reviews.searchParams.set('recording_kind','eq.'+kind);
+ reviews.searchParams.set('channel','eq.voice');
+ reviews.searchParams.set('review_status','eq.approved');
+ reviews.searchParams.set('limit','50');
+ const matches=await fetch(reviews,{headers:h,signal:AbortSignal.timeout(12000)});
+ if(!matches.ok)return {error:'Não foi possível conferir o acesso à gravação',status:503};
+ const allowedReviews=await matches.json();
+ if(!Array.isArray(allowedReviews)||allowedReviews.length===0)
+  return {error:'Gravação sem monitoria aprovada vinculada',status:403};
+ const routes=new URL(base+'/rest/v1/audit_monitoria_manager_routes');
+ routes.searchParams.set('select','sector,manager_user_id,active');
+ routes.searchParams.set('manager_user_id','eq.'+user.id);
+ routes.searchParams.set('active','eq.true');
+ routes.searchParams.set('limit','100');
+ const routeRes=await fetch(routes,{headers:h,signal:AbortSignal.timeout(12000)});
+ if(!routeRes.ok)return {error:'Não foi possível conferir vínculo do gestor',status:503};
+ const rows=await routeRes.json();
+ const assigned=new Set(Array.isArray(rows)?rows.filter(r=>r.active===true).map(r=>r.sector):[]);
+ if(!allowedReviews.some(r=>assigned.has(r.sector)))
+  return {error:'Gravação não atribuída a este gestor',status:403};
+ return {ok:true,admin:false,scoped:true};
 }
 function normalizeCall(call,kind){
  const id=String(call?.id||'');
