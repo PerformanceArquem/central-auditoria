@@ -484,7 +484,7 @@
      status('Colaborador sorteado: '+supportPeople[index].name+'. Confira chat e voz antes da avaliação.');
    });
    $('monSearchCalls')?.addEventListener('click',listCalls);
-   $('monLoadChat')?.addEventListener('click',loadChat);
+   $('monLoadChat')?.addEventListener('click',()=>loadChat());
    $('monTranscribe')?.addEventListener('click',transcribe);
    $('monRun').addEventListener('click',analyse);
    $('monSave').addEventListener('click',async()=>{try{await saveReview()}catch(e){status('Registro: '+String(e.message||e))}});
