@@ -7,6 +7,7 @@ const esc=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 const safeNum=(n:unknown)=>{if(n==null||n==='')return null;const v=Number(n);return Number.isFinite(v)&&v>=0?v:null};
 const percent=(numerator:number,denominator:number)=>denominator?Math.round(numerator/denominator*10000)/100:null;
 const time=(seconds:unknown)=>{const n=safeNum(seconds);return n==null?'Indisponível':Math.floor(n/60)+'min '+String(Math.round(n%60)).padStart(2,'0')+'s'};
+const measuredTime=(seconds:unknown,samples:unknown,missing:unknown)=>time(seconds)+(Number(missing)>0&&Number(samples)>0?' (parcial: '+Number(samples)+' amostras; '+Number(missing)+' sem duração)':'');
 export type VoiceEmailInput={metrics:R;support?:{configured:boolean;scope:string;metrics:R|null};byDay?:R[];byHour?:R[];byExtension?:R[];ratings:Rating[];chatMetrics?:R;from:string;to:string;verified:boolean};
 export function calculateChannelNotes(rows:Rating[]) {
  const map={} as R;
@@ -50,21 +51,22 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
  const days=(input.byDay||[]).map(x=>({date:String(x.date||''),total:Number(x.total||0),answered:Number(x.answered||0)}));
  const hours=(input.byHour||[]).map(x=>({hour:String(x.hour||''),count:Number(x.count||0)})).sort((a,b)=>b.count-a.count);
  const extensions=(input.byExtension||[]).map(x=>({extension:String(x.extension||''),total:Number(x.total||0),
-  answered:Number(x.answered||0),talkSeconds:safeNum(x.talkSeconds)})).filter(x=>/^\d{1,12}$/.test(x.extension));
+  answered:Number(x.answered||0),talkSeconds:safeNum(x.talkSeconds),missingTalkSamples:Number(x.missingTalkSamples||0),talkCoverageComplete:x.talkCoverageComplete===true})).filter(x=>/^\d{1,12}$/.test(x.extension));
  const kpis={from:input.from,to:input.to,provider:'Zenvia Voice',voiceScope:'Conta Zenvia (todas as chamadas)',chatScope:'Suporte (base Movidesk)',total:m.total,inbound:m.inbound,outbound:m.outbound,
   answered:m.answered,unanswered:m.unanswered,inProgress:m.inProgress,unclassified:m.unclassified,
   talkSeconds:safeNum(m.talkSeconds),tmaSeconds:safeNum(m.tmaSeconds),tmeSeconds:safeNum(m.tmeSeconds),
+  tmaSamples:Number(m.tmaSamples||0),tmaMissingSamples:Number(m.tmaMissingSamples||0),talkCoverageComplete:m.talkCoverageComplete===true,
   queueCalls:m.queueCalls??null,supportMetrics:support?{...support}:null,quality,chatMetrics:input.chatMetrics||null,byDay:days,byHour:hours,byExtension:extensions.slice(0,30)};
  const csat=(q:R)=>q.total?q.csatPercent+'% ('+q.positive+'/'+q.total+' notas de 8 a 10)':'Sem avaliações no período';
  const text='\n\nVOZ ZENVIA (CONTA) × CHAT (SUPORTE) · Escopos distintos\n'+
   'Período: '+input.from+' a '+input.to+'\n'+
   'Atenção: chamadas de voz representam a conta inteira da Zenvia, não apenas o Suporte. TME da fila é específico quando configurado.\n'+
   (support?'Recorte homologado Suporte: '+support.total+' chamadas; '+support.answered+
-   ' atendidas; TMA: '+time(support.tmaSeconds)+'.\n':
+   ' atendidas; TMA observado: '+measuredTime(support.tmaSeconds,support.tmaSamples,support.tmaMissingSamples)+'.\n':
    'Recorte Suporte indisponível: ramais ainda não homologados.\n')+
   'Voz recebidas: '+m.inbound+'; efetuadas: '+m.outbound+'; atendidas: '+m.answered+
   '; não atendidas: '+m.unanswered+'; em andamento: '+m.inProgress+'; sem classificação: '+m.unclassified+'\n'+
-  'Tempo falado: '+time(m.talkSeconds)+'; TMA: '+time(m.tmaSeconds)+'; TME de fila: '+time(m.tmeSeconds)+'\n'+
+  'Tempo falado '+(m.talkCoverageComplete===true?'total':'identificado, subtotal parcial')+': '+measuredTime(m.talkSeconds,m.tmaSamples,m.tmaMissingSamples)+'; TMA: '+measuredTime(m.tmaSeconds,m.tmaSamples,m.tmaMissingSamples)+'; TME de fila: '+time(m.tmeSeconds)+'\n'+
   'Pico de inícios: '+(hours[0]?.hour??'Sem dados')+'\n'+
   'Chat TMA medido: '+time(input.chatMetrics?.tmaSeconds)+'; Chat TME medido: '+time(input.chatMetrics?.tmeSeconds)+' ('+(input.chatMetrics?.tickets??0)+' tickets).\n'+
   'CSAT Voz: '+csat(quality.voz)+'; CSAT Chat: '+csat(quality.chat)+'\n'+
@@ -77,7 +79,7 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
   '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr><th>Indicador</th><th>Voz</th><th>Chat</th></tr></thead><tbody>'+
   cells(['Quantidade',m.total,input.chatMetrics?.tickets??'Indisponível'])+
   cells(['Atendidas',m.answered,'—'])+cells(['Não atendidas',m.unanswered,'—'])+
-  cells(['TMA',time(m.tmaSeconds),time(input.chatMetrics?.tmaSeconds)])+
+  cells(['TMA',measuredTime(m.tmaSeconds,m.tmaSamples,m.tmaMissingSamples),time(input.chatMetrics?.tmaSeconds)])+
   cells(['TME',time(m.tmeSeconds),time(input.chatMetrics?.tmeSeconds)])+
   cells(['CSAT (8–10)',csat(quality.voz),csat(quality.chat)])+
   cells(['Avaliações válidas',quality.voz.total,quality.chat.total])+
@@ -86,14 +88,14 @@ export function prepareVoiceEmail(input:VoiceEmailInput){
   cells(['Superadores',quality.voz.superadoresPercent==null?'Sem avaliações':quality.voz.superadoresPercent+'%',quality.chat.superadoresPercent==null?'Sem avaliações':quality.chat.superadoresPercent+'%'])+'</tbody></table>'+
   '<h3 style="font-size:14px">Suporte · ramais homologados</h3>'+
   (support?'<p>'+esc(support.total)+' chamadas · '+esc(support.answered)+
-   ' atendidas · TMA '+esc(time(support.tmaSeconds))+'</p>':
+   ' atendidas · TMA observado '+esc(measuredTime(support.tmaSeconds,support.tmaSamples,support.tmaMissingSamples))+'</p>':
    '<p>Não homologado — ramais de Suporte não configurados.</p>')+
   '<h3 style="font-size:14px">Chamadas por dia</h3>'+ 
   '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr><th>Dia</th><th>Total</th><th>Atendidas</th></tr></thead><tbody>'+ 
   (days.length?days.slice(0,31).map(x=>cells([x.date,x.total,x.answered])).join(''):cells(['Sem dados','—','—']))+'</tbody></table>'+ 
   '<h3 style="font-size:14px">Ramal · chamadas · atendidas · tempo falado</h3>'+
   '<table style="border-collapse:collapse;width:100%;font-size:12px"><tbody>'+
-  (extensions.length?extensions.slice(0,10).map(x=>cells([x.extension,x.total,x.answered,time(x.talkSeconds)])).join(''):cells(['Sem ramais','—','—','—']))+
+  (extensions.length?extensions.slice(0,10).map(x=>cells([x.extension,x.total,x.answered,(x.talkCoverageComplete?'Total ':'Subtotal observado ')+measuredTime(x.talkSeconds,x.answered-x.missingTalkSamples,x.missingTalkSamples)])).join(''):cells(['Sem ramais','—','—','—']))+
   '</tbody></table><p style="font-size:11px;color:#64748b">TME só é mostrado com espera de fila comprovada. Nenhum número de telefone ou áudio incluído.</p></section>';
  return {text,html,kpis};
 }
