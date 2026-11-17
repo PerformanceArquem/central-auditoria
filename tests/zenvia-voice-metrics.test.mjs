@@ -253,6 +253,26 @@ test('missing talk duration must never be reported as 0s TMA',async()=>{
   assert.equal(r.body.summary.tmaSamples,1);
  }finally{outbound[0].destino.duracao_falada_segundos=saved;}
 });
+test('formatted Zenvia HH:MM:SS talk duration recovers valid TMA without guessing',async()=>{
+ const saved=outbound[0].destino.duracao_falada_segundos;
+ const oldText=outbound[0].destino.duracao_falada;
+ delete outbound[0].destino.duracao_falada_segundos;
+ outbound[0].destino.duracao_falada='00:01:55';
+ try{
+  const r=await invoke();
+  assert.equal(r.code,200);
+  assert.equal(r.body.summary.tmaMissingSamples,0);
+  assert.equal(r.body.summary.tmaSamples,2);
+  assert.equal(r.body.summary.tmaSeconds,85);
+  assert.equal(r.body.summary.talkSeconds,170);
+  assert.equal(r.body.summary.talkCoverageComplete,true);
+ }finally{
+  outbound[0].destino.duracao_falada_segundos=saved;
+  if(oldText===undefined)delete outbound[0].destino.duracao_falada;
+  else outbound[0].destino.duracao_falada=oldText;
+ }
+});
+
 test('real zero-duration answered call remains a valid measured sample',async()=>{
  const saved=outbound[0].destino.duracao_falada_segundos;
  outbound[0].destino.duracao_falada_segundos=0;
