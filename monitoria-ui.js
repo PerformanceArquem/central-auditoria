@@ -374,35 +374,99 @@
    XLSX.writeFile(wb,filename,{compression:true});
    status('Excel gerado com notas aprovadas e/ou provisórias identificadas, critérios e falhas críticas.');
  }
+ function refreshEvidenceViewer(matchText=''){
+   const viewer=$('monEvidenceViewer');
+   if(!viewer)return;
+   const text=String($('monTranscript')?.value||'');
+   viewer.replaceChildren();
+   const sourceNote=$('monEvidenceSourceNotice');
+   if(sourceNote)sourceNote.textContent=(channel==='voice'?'Transcrição de telefonia · ':'Interações de chat · ')+
+     (sourceEvidenceKind==='movidesk_ticket_actions_unverified'?'Extrato Movidesk: cobertura NÃO confirmada.':
+      'Confira a integridade, o início e o encerramento do atendimento antes de confirmar achados.');
+   if(!text){viewer.textContent='Carregue ou cole o atendimento para confrontar as evidências.';return false}
+   const pos=matchText?text.indexOf(matchText):-1;
+   if(pos<0){viewer.textContent=text;return false}
+   viewer.append(document.createTextNode(text.slice(0,pos)));
+   const mark=document.createElement('mark');
+   mark.textContent=text.slice(pos,pos+matchText.length);
+   mark.style.background='#ffdf7d';mark.style.color='#5c3904';mark.style.padding='2px';
+   viewer.append(mark,document.createTextNode(text.slice(pos+matchText.length)));
+   mark.scrollIntoView({behavior:'smooth',block:'center'});
+   return true;
+ }
+ function evidenceButton(textValue,label){
+   const button=document.createElement('button');
+   button.type='button';button.className='s';button.textContent=label||'Ver no atendimento';
+   button.style.fontSize='12px';button.style.marginTop='5px';
+   button.addEventListener('click',()=>{
+     if(!refreshEvidenceViewer(textValue))status('Trecho literal não encontrado no atendimento apresentado. Confirme a fonte.');
+   });
+   return button;
+ }
  function render(analysis){
    const result=$('monResults');result.replaceChildren();
+   refreshEvidenceViewer();
+   const criteria=Array.isArray(analysis.criteria)?analysis.criteria:[];
+   const critical=Array.isArray(analysis.critical)?analysis.critical:[];
+   const unverified=criteria.filter(r=>r.decision==='nao_verificavel');
    const title=document.createElement('h3');
-   title.textContent=(analysis.incomplete?'Nota provisória (não final): ':'Nota sugerida (revisão obrigatória): ')+analysis.scoreSuggestion+'/100 · '+(analysis.criticalFlag?'Possível falha crítica':analysis.incomplete?'Avaliação incompleta':'Qualidade deve validar');
+   title.textContent='IA × Atendimento · '+analysis.scoreSuggestion+'/100 ('+(analysis.incomplete?'provisória, incompleta':'sujeita à aprovação')+')';
    result.appendChild(title);
-   const subtitle=document.createElement('p');
-   const reviewed=(analysis.criteria||[]).length;
-   const missing=(analysis.criteria||[]).filter(x=>x.decision==='nao_verificavel');
-   subtitle.textContent='Todos os critérios analisados: '+reviewed+'/'+analysis.totalCriteria+' · com evidências: '+analysis.verifiedCriteria+' · pendentes de comprovação: '+missing.length+' · versão '+analysis.version+' · nota nunca é aprovação automática';
-   result.appendChild(subtitle);
-   const table=document.createElement('table');table.style.width='100%';table.style.borderCollapse='collapse';
-   const head=document.createElement('tr');
-   for(const label of ['Código','Critério','Situação','Desconto','Evidência','Justificativa / conferência']){const th=document.createElement('th');th.textContent=label;th.style.textAlign='left';th.style.borderBottom='1px solid #cbd5e1';head.appendChild(th)}
-   table.appendChild(head);
-   for(const r of analysis.criteria){
-    const tr=document.createElement('tr');
-    for(const value of [r.code,r.name,r.decision,String(r.deducted),r.evidence||'Não comprovada',r.reason||'Conferir evidência no atendimento completo e no ticket']){
-      const td=document.createElement('td');td.textContent=value;td.style.padding='8px';td.style.borderBottom='1px solid #e2e8f0';tr.appendChild(td);
-    }
-    table.appendChild(tr);
+   const overview=document.createElement('p');overview.className='subtle';
+   overview.textContent='Modelo oficial do Excel · '+criteria.length+'/'+analysis.totalCriteria+' critérios analisados · '+
+     (analysis.verifiedCriteria||0)+' comprovados · '+unverified.length+' sem comprovação · Chat/voz têm pesos próprios · Qualidade decide a nota final.';
+   result.appendChild(overview);
+   const warning=document.createElement('p');
+   warning.style.cssText='padding:10px;border:1px solid #c5d4e7;border-radius:8px;background:#f8fbff;font-size:13px';
+   warning.textContent='Nota de partida: 100. Descontos automáticos só com evidência textual válida; critérios não verificáveis NÃO significam conformidade. Falhas zeradoras exigem confirmação humana.';
+   result.appendChild(warning);
+
+   const criticalTitle=document.createElement('h4');
+   criticalTitle.textContent='🚨 Fatores zeradores — Z1 a Z4';criticalTitle.style.marginTop='15px';
+   result.appendChild(criticalTitle);
+   const criticalBox=document.createElement('div');
+   criticalBox.style.cssText='display:grid;gap:8px;margin-bottom:14px';
+   for(const c of critical){
+     const card=document.createElement('div');
+     card.style.cssText='border:1px solid '+(c.suspected?'#e3a1a1':'#d8e2ec')+';border-radius:8px;padding:9px;background:'+(c.suspected?'#fff5f5':'#f8fbff');
+     const heading=document.createElement('strong');
+     heading.textContent=c.code+' — '+c.name+' · '+(c.suspected?'POSSÍVEL FALHA CRÍTICA — conferir':'Não confirmada pelo material');
+     card.append(heading);
+     const detail=document.createElement('div');detail.style.marginTop='5px';detail.style.fontSize='12px';
+     detail.textContent=c.evidence||'Sem evidência suficiente para confirmar ou afastar a falha.';
+     card.append(detail);
+     if(c.evidence&&String($('monTranscript')?.value||'').includes(c.evidence))card.append(evidenceButton(c.evidence,'Localizar trecho crítico'));
+     criticalBox.append(card);
    }
-   result.appendChild(table);
-   if(missing.length){
-     const note=document.createElement('p');
-     note.textContent='⚠ Existem '+missing.length+' critérios ainda não verificáveis. A nota mostrada é apenas provisória e pode mudar após a Qualidade conferir conversa integral, ticket, tabulação e horários. Não aprove sem essa conferência.';
-     result.appendChild(note);
+   result.appendChild(criticalBox);
+   const sectionTitle=document.createElement('h4');sectionTitle.textContent='Comparação dos critérios e descontos';
+   result.append(sectionTitle);
+   for(const rule of criteria){
+     const card=document.createElement('article');
+     const flagged=rule.decision==='nao_conforme'||rule.decision==='parcial';
+     card.style.cssText='border-left:4px solid '+(flagged?'#bb4b4b':rule.decision==='conforme'?'#3b8062':'#a6b4c4')+';border-top:1px solid #e0e5ed;border-right:1px solid #e0e5ed;border-bottom:1px solid #e0e5ed;border-radius:7px;padding:11px;margin-bottom:10px';
+     const head=document.createElement('div');head.style.cssText='display:flex;gap:8px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap';
+     const name=document.createElement('strong');name.textContent=rule.code+' · '+rule.name;head.append(name);
+     const grade=document.createElement('span');grade.style.fontSize='12px';grade.style.fontWeight='700';
+     grade.textContent=(rule.decision==='conforme'?'Conforme':rule.decision==='parcial'?'Parcial':rule.decision==='nao_conforme'?'Não conforme':rule.decision==='nao_aplicavel'?'Não aplicável':'Não verificável')+
+      ' · desconto '+Number(rule.deducted||0).toLocaleString('pt-BR')+' / '+Number(rule.maxDeduction||0).toLocaleString('pt-BR');
+     head.append(grade);card.append(head);
+     const context=document.createElement('p');context.style.cssText='font-size:13px;margin:8px 0 5px';
+     context.textContent=rule.reason||'Necessário conferir a justificativa e os dados do atendimento.';card.append(context);
+     const evidence=document.createElement('div');evidence.style.cssText='font-size:12px;color:#52637c';
+     evidence.textContent='Evidência: '+(rule.evidence||'não comprovada no atendimento fornecido');card.append(evidence);
+     if(rule.evidence&&String($('monTranscript')?.value||'').includes(rule.evidence))card.append(evidenceButton(rule.evidence,'Localizar evidência ao lado'));
+     if(rule.decision==='nao_verificavel'){
+       const pending=document.createElement('p');pending.style.cssText='font-size:12px;margin:7px 0 0;font-weight:600';
+       pending.textContent='Pendente: conferir dados necessários antes de aprovar ou aplicar desconto.';
+       card.append(pending);
+     }
+     result.append(card);
    }
-   for(const c of analysis.critical.filter(x=>x.suspected)){
-    const alert=document.createElement('p');alert.textContent='⚠ '+c.code+' — '+c.name+': análise crítica exige validação humana. '+c.evidence;result.appendChild(alert);
+   if(unverified.length){
+     const reminder=document.createElement('p');reminder.style.cssText='padding:10px;border:1px solid #d1ad6e;border-radius:7px;background:#fff9ed';
+     reminder.textContent='⚠ '+unverified.length+' critério(s) pendente(s). Antes da aprovação, confronte a conversa integral e o ticket (cadastro, título, ações, horário, tabulação e escalação).';
+     result.append(reminder);
    }
    $('monExportReview').disabled=false;
  }
@@ -519,6 +583,8 @@
    $('monSearchCalls')?.addEventListener('click',listCalls);
    $('monLoadChat')?.addEventListener('click',()=>loadChat());
    $('monTranscribe')?.addEventListener('click',transcribe);
+   $('monTranscript')?.addEventListener('input',()=>refreshEvidenceViewer());
+   $('monEvidenceSync')?.addEventListener('click',()=>refreshEvidenceViewer());
    $('monRun').addEventListener('click',analyse);
    $('monSave').addEventListener('click',async()=>{try{await saveReview()}catch(e){status('Registro: '+String(e.message||e))}});
    $('monReportReload').addEventListener('click',refreshReports);
