@@ -5333,7 +5333,12 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   
   const matrixStatus=t=>{$('emailMatrixStatus').textContent=t};
   const matrixNorm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-  const matrixScope=r=>r.scope==='management'?'management':'sector';
+  const keilaProductionId='a5329710-dd63-4bfd-bbd3-dc23e0efc8f0';
+  const matrixProduction=r=>String(r.id)===keilaProductionId&&
+    String(r.email||'').toLowerCase()==='inteligencia.gerencia@arquem.com.br';
+  // This specific management-scoped recipient is a Production Flow report, not
+  // a general management report. Display it in the sector table without mutating scope.
+  const matrixScope=r=>matrixProduction(r)?'production_flow':r.scope==='management'?'management':'sector';
   const matrixCheck=(key,value,name)=>'<label><input type="checkbox" data-matrix="'+key+'" '+(value?'checked ':'')+'aria-label="'+esc(key+' de '+name)+'"></label>';
   function matrixSectorsPicker(r){
     const selected=Array.isArray(r.sectors)&&r.sectors.length?r.sectors:(r.sector?[r.sector]:[]);
@@ -5350,21 +5355,24 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
     const render=r=>{
       const id=esc(r.id),old=r.allowed_report_types==null;
       const general=old||(Array.isArray(r.allowed_report_types)&&r.allowed_report_types.includes('general'));
-      const isManagement=matrixScope(r)==='management';
+      const isProduction=matrixProduction(r);
+      const isManagement=matrixScope(r)==='management'||isProduction;
       const sectorLabels=Array.isArray(r.sectors)&&r.sectors.length?r.sectors.join(', '):r.sector;
       return '<tr data-matrix-id="'+id+'"><td><strong>'+esc(r.name)+'</strong><small style="display:block;color:var(--muted)">'+esc(r.email)+'</small></td>'+
-        '<td>'+(isManagement?esc(sectorLabels||'Todos os setores'):matrixSectorsPicker(r))+'</td>'+
-        '<td>'+matrixCheck('general',general,r.name)+' '+(isManagement?'Gerencial':'Setorial')+'</td>'+
+        '<td>'+(isManagement?esc(sectorLabels||'Setores do cadastro (editar em Detalhes)'):matrixSectorsPicker(r))+'</td>'+
+        '<td>'+(isProduction?
+          matrixCheck('production_flow',(r.allowed_report_types||[]).includes('production_flow'),r.name)+' Fluxo da Produção':
+          matrixCheck('general',general,r.name)+' '+(isManagement?'Gerencial':'Setorial'))+'</td>'+
         '<td>'+matrixCheck('daily_enabled',r.daily_enabled,r.name)+'</td><td>'+matrixCheck('weekly_enabled',r.weekly_enabled,r.name)+'</td>'+
         '<td>'+matrixCheck('monthly_enabled',r.monthly_enabled,r.name)+'</td><td>'+matrixCheck('annual_enabled',r.annual_enabled,r.name)+'</td>'+
         '<td>'+matrixCheck('active',r.active,r.name)+'</td>'+
         '<td><button type="button" class="s" data-matrix-save="'+id+'">Salvar</button> <button type="button" class="s" data-matrix-edit="'+id+'">Detalhes</button></td></tr>';
     };
     const mgmt=matches.filter(r=>matrixScope(r)==='management');
-    const sector=matches.filter(r=>matrixScope(r)==='sector');
+    const sector=matches.filter(r=>matrixScope(r)!=='management');
     $('emailMatrixManagementRows').innerHTML=mgmt.map(render).join('')||'<tr><td colspan="9">Nenhum destinatário gerencial cadastrado.</td></tr>';
     $('emailMatrixSectorRows').innerHTML=sector.map(render).join('')||'<tr><td colspan="9">Nenhum destinatário setorial cadastrado.</td></tr>';
-    matrixStatus(mgmt.length+' gerencial(is) e '+sector.length+' setorial(is). As alterações só entram em vigor ao salvar cada linha.');
+    matrixStatus(mgmt.length+' cadastro(s) gerenciais e '+sector.length+' setoriais/fluxo da Produção. Keila (Fluxo da Produção) aparece na tabela setorial; o cadastro gerencial dela permanece separado.');
   }
   $('emailMatrixOpen').addEventListener('click',async()=>{
     const p=$('emailMatrixPanel'),open=p.classList.contains('hide');
@@ -5406,7 +5414,8 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const checked=k=>!!row.querySelector('[data-matrix="'+k+'"]:checked');
       if(!['daily_enabled','weekly_enabled','monthly_enabled','annual_enabled'].some(checked))
         throw Error('Marque pelo menos uma frequência.');
-      const management=matrixScope(existing)==='management';
+      const production=matrixProduction(existing);
+      const management=existing.scope==='management';
       const selected=management?(Array.isArray(existing.sectors)?existing.sectors:[]):
         [...row.querySelectorAll('[data-matrix-sector]:checked')].map(x=>x.value);
       if(!management){
@@ -5418,8 +5427,10 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         throw Error('Fechamento mensal/anual exige setores selecionados.');
       const prev=Array.isArray(existing.allowed_report_types)?existing.allowed_report_types:['ticket_followup'];
       // A matriz controla somente os relatórios padrão, nunca retira permissões especiais.
-      const types=prev.filter(t=>t!=='general');
-      if(checked('general'))types.push('general');
+      const types=prev.filter(t=>production?t!=='production_flow':t!=='general');
+      if(production){
+        if(checked('production_flow'))types.push('production_flow');
+      }else if(checked('general'))types.push('general');
       const payload={allowed_report_types:[...new Set(types)],
         daily_enabled:checked('daily_enabled'),weekly_enabled:checked('weekly_enabled'),
         monthly_enabled:checked('monthly_enabled'),annual_enabled:checked('annual_enabled'),
@@ -5431,7 +5442,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         .eq('id',id).eq('updated_at',existing.updated_at).select('id');
       if(error)throw error;
       if(!data?.length)throw Error('Cadastro alterado por outro administrador. Atualize antes de salvar.');
-      matrixStatus('Permissões '+(management?'gerenciais':'setoriais')+' de '+existing.name+' salvas. Nenhum e-mail enviado.');
+      matrixStatus('Permissões '+(production?'Fluxo da Produção':management?'gerenciais':'setoriais')+' de '+existing.name+' salvas. Nenhum e-mail enviado.');
       await reload();matrixRender();
     }catch(err){matrixStatus('Não foi possível salvar: '+(err.message||err));}
     finally{button.disabled=false;}
