@@ -982,7 +982,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
               <p>Áudios e chats · avaliação sugerida pelo Gemini conforme Formulario_Monitoria_Atendimento.xlsx · revisão humana obrigatória.</p>
             </div>
             <div class="card" style="border-left:4px solid #2457d6;max-width:1100px">
-              <p class="subtle">Nesta etapa, os arquivos são selecionados localmente. O áudio pode ser ouvido e baixado, mas <strong>não é enviado à IA</strong>. Para avaliar ligações, forneça a transcrição. A integração automática com a biblioteca de gravações da Zenvia depende da confirmação de acesso à mídia.</p>
+              <p class="subtle">As gravações podem ser ouvidas e baixadas sem usar IA. A transcrição automática é opcional, exige autorização explícita e envia o áudio ao Gemini de forma temporária (até 3 MB). Revise a transcrição antes de gerar uma nota.</p>
               <div style="border:1px solid #dce5f0;border-radius:10px;padding:14px;margin:12px 0;background:#f8fbff">
                 <strong>Consultar atendimentos diretamente na Zenvia</strong>
                 <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-top:10px">
@@ -1010,8 +1010,9 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
               </div>
               <label for="monTranscript"><strong>Transcrição da ligação ou histórico do chat</strong></label>
               <textarea id="monTranscript" rows="12" style="width:100%;min-height:190px;resize:vertical" placeholder="Cole o diálogo com falas, horários e identificação dos interlocutores. Dados de chamados podem exigir comprovação no Movidesk."></textarea>
-              <p><label style="display:flex;gap:8px;align-items:flex-start"><input id="monConsent" type="checkbox"> <span>Autorizo que o texto informado seja processado pelo Gemini para gerar uma <strong>sugestão</strong> de avaliação; nenhum envio de e-mail será realizado.</span></label></p>
+              <p><label style="display:flex;gap:8px;align-items:flex-start"><input id="monConsent" type="checkbox"> <span>Autorizo o processamento externo do <strong>áudio (se solicitar a transcrição)</strong> ou do <strong>texto (se solicitar avaliação)</strong> pelo Gemini, com revisão humana obrigatória. Nenhum e-mail será enviado.</span></label></p>
               <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button id="monTranscribe" type="button" class="s">🎙 Transcrever áudio com Gemini</button>
                 <button id="monRun" type="button" class="p">✦ Avaliar com Gemini</button>
                 <button id="monExportChat" type="button" class="s">Baixar conversa TXT</button>
                 <button id="monExportReview" type="button" class="s" disabled>Baixar avaliação JSON</button>
