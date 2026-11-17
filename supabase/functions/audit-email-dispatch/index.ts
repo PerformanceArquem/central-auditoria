@@ -138,7 +138,7 @@ async function supportRatings(from: string, to: string): Promise<SupportRating[]
     list('audit_support_quality_ratings',
       `?select=ticket_id,service_date,collaborator_name,channel,score&service_date=gte.${from}&service_date=lte.${to}&score=gte.0&score=lte.10&order=service_date.desc,id.asc`)
   ]);
-  const channel = (value: unknown) => ['voz', 'chat'].includes(norm(value)) ? norm(value) : 'outros';
+  const channel = (value: unknown) => { const v=norm(value); return ['voz','telefonia','telefone','ligacao','voice'].includes(v)?'voz':v==='chat'?'chat':'outros'; };
   const imported: SupportRating[] = surveys.map(row => ({
     service_date: String(row.response_date),
     channel: channel(row.channel),
