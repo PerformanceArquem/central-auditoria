@@ -980,19 +980,21 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 
           <div id="monGlobalCriticalBanner" hidden role="alert" onclick="showTab('monitoria')" style="grid-column:1/-1;cursor:pointer;padding:10px 22px;background:#fff0ed;color:#9a1d18;font-weight:700;border-bottom:2px solid #bd2823"></div>
           <section id="t-monitoria" class="hide" aria-labelledby="monTitle">
-            <div class="mh"><div class="eyebrow">QUALIDADE · MONITORIA ASSISTIDA</div><h2 id="monTitle">Mini Central de Monitoria</h2>
-              <p>Áudios e chats · avaliação sugerida pelo Gemini conforme Formulario_Monitoria_Atendimento.xlsx · revisão humana obrigatória.</p>
+            <div class="mh"><div class="eyebrow">QUALIDADE · SUPORTE</div><h2 id="monTitle">Monitorias do Suporte</h2>
+              <p>1 chat + 1 voz por colaborador · IA sugere, Qualidade valida · sem envio de e-mails.</p>
             </div>
             <div class="card" style="border-left:4px solid #2457d6;max-width:1100px">
-              <p class="subtle">As gravações podem ser ouvidas e baixadas sem usar IA. A transcrição automática é opcional, exige autorização explícita e envia o áudio ao Gemini de forma temporária (até 3 MB). Revise a transcrição antes de gerar uma nota.</p>
               <div style="border:1px solid #dce5f0;border-radius:10px;padding:14px;margin:12px 0;background:#f8fbff">
                 <section id="monSupportCandidates" aria-label="Duas monitorias por colaborador do Suporte" style="border:1px solid #d9e4f2;border-radius:10px;padding:14px;margin:0 0 14px;background:white">
-                  <h4 style="margin:0 0 6px">Monitorias por colaborador do Suporte</h4>
-                  <p class="subtle" style="margin:0 0 10px">Uma avaliação de chat e uma de voz por colaborador. Candidatos são selecionados do banco existente; notas só são sugeridas após conferir autoria, diálogo ou gravação e autorizar a IA. Nenhum e-mail será enviado.</p>
-                  <button id="monFindSupport" type="button" class="s">Encontrar atendimentos do Suporte</button>
+                  <h3 style="margin:0 0 6px">Selecionar colaborador</h3>
+                  <p class="subtle" style="margin:0 0 10px">Abra um atendimento de chat ou localize a ligação. A nota depende da conferência das evidências.</p>
+                  <button id="monFindSupport" type="button" class="p">Consultar Suporte</button>
                   <p id="monSupportSummary" class="subtle" role="status">Nenhuma consulta realizada.</p>
                   <div id="monSupportList" style="overflow:auto;max-height:480px"></div>
                 </section>
+                <details id="monReviewWorkspace" style="margin-top:12px;border-top:1px solid #dce5f0;padding-top:10px">
+                  <summary style="cursor:pointer;font-weight:700">Conferir atendimento e avaliar com IA</summary>
+                  <p class="subtle">Movidesk: chat · Zenvia: voz. O áudio é enviado ao Gemini somente com autorização (limite de 3 MB). Revise o resultado antes de registrar.</p>
                 <strong>Consultar ligações da Zenvia e interações de chats do Movidesk</strong>
                 <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-top:10px">
                   <label>Início <input id="monFrom" type="date"></label>
@@ -1042,9 +1044,12 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                 <button id="monExportReview" type="button" class="s" disabled>Baixar avaliação JSON</button>
                 <button id="monSave" type="button" class="p" disabled>Registrar monitoria</button>
               </div>
-              <p id="monStatus" role="status" class="subtle">Pronto para importar uma conversa. As notas são propostas, não decisões finais.</p>
+              <p id="monStatus" role="status" class="subtle">Selecione um atendimento e confira as evidências antes de avaliar.</p>
+                </details>
             </div>
             <div class="card" id="monResults" style="max-width:1100px;overflow:auto"></div>
+            <details id="monExtraTools" style="max-width:1100px;margin-top:12px">
+              <summary style="cursor:pointer;padding:12px 15px;border:1px solid #dce5f0;border-radius:9px;font-weight:700;background:#f8fbff">Histórico, alertas e relatórios (opcional)</summary>
             <div class="card" style="max-width:1100px">
               <h3>🚨 Alertas críticos para gestores</h3>
               <p id="monAlertCoverage" class="subtle">Alertas internos consultados enquanto a Central estiver aberta, com atualização a cada 15 segundos. Sem gestor vinculado ao setor, a ocorrência fica pendente para a Qualidade.</p>
@@ -1090,6 +1095,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
               <p id="monPackageSummary" role="status" class="subtle">Selecione um colaborador e período. Envio por e-mail permanece suspenso.</p>
               <iframe id="monPackagePreview" title="Prévia do e-mail corporativo da monitoria" sandbox="" style="width:100%;height:410px;border:1px solid #dce5f0;border-radius:8px;background:#fff"></iframe>
             </div>
+            </details>
           </section>
 
 
