@@ -33,7 +33,11 @@ export async function collectVoiceReport(from:string,to:string,serviceKey:string
    const previous=people.get(item.extension)||{extension:String(item.extension),name:String(item.name||'Nome não cadastrado'),total:0,answered:0,unanswered:0,talkSeconds:0,missingTalkSamples:0};
    for(const k of ['total','answered','unanswered'])previous[k]+=Number(item[k]||0);
    // Missing durations must accumulate even when this extension has a measured subtotal.
-   const missing=Number(item.missingTalkSamples);
+   // Older provider responses omit the missing-sample field. With a measured total,
+   // zero missing is safe only when the provider also reports complete coverage.
+   // With no talk total, conservatively treat answered calls as unmeasured.
+   const missing=item.missingTalkSamples==null?
+    (item.talkSeconds==null?Number(item.answered||0):0):Number(item.missingTalkSamples);
    if(!Number.isInteger(missing)||missing<0||missing>Number(item.answered||0))
     throw Error('Cobertura de duração do ramal inválida');
    previous.missingTalkSamples+=missing;
