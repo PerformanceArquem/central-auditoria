@@ -1,0 +1,25 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,copyFileSync,writeFileSync,readFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {execFileSync} from 'node:child_process';
+const parser=process.env.COMPARISON_PARSER_DIR;
+test('installer is idempotent and preserves authentication plus unrelated installed features',{skip:!parser},()=>{
+ const dir=mkdtempSync(join(tmpdir(),'arquem-comparison-test-'));
+ copyFileSync(new URL('../apps-script/central-auditoria-emails-completo.gs',import.meta.url),join(dir,'Installed.js'));
+ const unrelated='function installedVoiceFeature(){return {enabled:true};}\n';writeFileSync(join(dir,'Voice.js'),unrelated);
+ const source=readFileSync(join(dir,'Installed.js'),'utf8'),originalPost=source.slice(source.indexOf('function doPost('),source.indexOf('\nfunction resposta('));
+ const runner=fileURLToPath(new URL('../apps-script/install-report-comparisons.mjs',import.meta.url));
+ const helper=fileURLToPath(new URL('../apps-script/arquem-comparativos.gs',import.meta.url));
+ const manifest=join(dir,'manifest.json');
+ const run=()=>execFileSync(process.execPath,[runner,dir,helper,parser,manifest],{encoding:'utf8'});
+ const first=JSON.parse(run());assert.equal(first.dispatcherPreserved,true);assert.equal(first.sent,false);
+ const patched=readFileSync(join(dir,'Installed.js'),'utf8');
+ assert.ok(patched.includes(originalPost));assert.equal(readFileSync(join(dir,'Voice.js'),'utf8'),unrelated);
+ assert.equal((patched.match(/arquemComparativosPdf_\(body,p\)/g)||[]).length,1);
+ assert.equal((patched.match(/arquemComparativosXlsx_\(ss,p\)/g)||[]).length,1);
+ assert.ok(patched.includes("comparisonVersion:'sector-comparisons-v1'"));
+ run();assert.equal(readFileSync(join(dir,'Installed.js'),'utf8'),patched);
+});

@@ -1,0 +1,60 @@
+name: Instalar comparativos preservando o gerador existente
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/install-report-comparisons.yml']
+permissions:
+  contents: read
+concurrency:
+  group: arquem-appsscript-production
+  cancel-in-progress: false
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verificar extensão e testes sem envio
+        run: |
+          node --check < apps-script/arquem-comparativos.gs
+          node --test tests/report-comparisons-appsscript.test.mjs tests/email-report-catalog.test.mjs
+      - name: Instalar ferramentas fixas
+        run: npm install --prefix "$RUNNER_TEMP/comparison-tools" --no-save @google/clasp@3.4.1 acorn@8.15.0
+      - name: Preparar credencial temporária
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          test -n "$CLASPRC_JSON"
+          umask 077
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+      - name: Aplicar extensão mantendo autenticação e funções instaladas
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/comparison-script"
+          cd "$RUNNER_TEMP/comparison-script"
+          printf '%s' '{"scriptId":"1WUhIenOGO-B_jAkYgECmpBq-jMeeFrTghwElVyBdKLTTICWnFzgkWmm8"}' > .clasp.json
+          CLI="$RUNNER_TEMP/comparison-tools/node_modules/.bin/clasp"
+          "$CLI" pull
+          node "$GITHUB_WORKSPACE/apps-script/install-report-comparisons.mjs" "$PWD" "$GITHUB_WORKSPACE/apps-script/arquem-comparativos.gs" "$RUNNER_TEMP/comparison-tools" "$RUNNER_TEMP/comparison-manifest.json"
+          "$CLI" deployments > "$RUNNER_TEMP/comparison-deployments"
+          DEPLOYMENT='AKfycbxneXcD3j5v3_UL7AnlweC6wo7pTfXzYxSMsDwHkvz9JtCpRbmRa3C9HC22JSjZ0Mus'
+          grep -Fq "$DEPLOYMENT" "$RUNNER_TEMP/comparison-deployments"
+          "$CLI" push --force
+          "$CLI" pull
+          node - "$RUNNER_TEMP/comparison-manifest.json" <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),m=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          for(const f of [...m.unchanged,...m.written]){const actual=crypto.createHash('sha256').update(fs.readFileSync(f.name)).digest('hex');if(actual!==f.sha256)throw Error('Fonte instalada divergente: '+f.name);}
+          NODE
+          "$CLI" deploy --deploymentId "$DEPLOYMENT" --description 'Comparativos mensais semanais e entradas por setor; sem envio'
+          echo 'Comparativos publicados na implantação existente. Autenticação preservada. Nenhum e-mail disparado pelo instalador.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Descartar credencial temporária
+        if: always()
+        run: rm -f "$HOME/.clasprc.json"

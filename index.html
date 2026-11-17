@@ -1484,6 +1484,15 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
     </div>
     <p class="subtle" style="margin-top:10px">Entradas e saídas da Produção: liberação exclusiva para o cadastro da Keila e dependente das validações do relatório. Cobranças recorrentes não são habilitadas neste módulo.</p>
   </div>
+  <section id="emailCatalogPanel" style="margin:18px 0;padding:16px;border:1px solid #d6e1f0;border-radius:12px">
+  <style id="emailCatalogStyles">#emailCatalogPanel table{table-layout:fixed;min-width:950px;width:100%}#emailCatalogPanel th,#emailCatalogPanel td{white-space:normal;overflow-wrap:anywhere;padding:8px 6px}#emailCatalogPanel th:nth-child(n+3):nth-child(-n+6){white-space:nowrap;font-size:11px}#emailCatalogPanel th:first-child{width:200px}#emailCatalogPanel th:nth-child(2){width:230px}#emailCatalogPanel th:nth-child(n+3):nth-child(-n+6){width:55px}#emailCatalogPanel th:nth-child(7){width:180px}#emailCatalogPanel th:last-child{width:120px}#emailCatalogPanel input[type=checkbox]{width:18px;height:18px;accent-color:#2457d6}#emailCatalogPanel details{font-size:11px;line-height:1.6}#emailCatalogPanel td button{white-space:normal}</style>
+    <h3>Catálogo de relatórios e destinatários</h3>
+    <p class="subtle">Consulte setores, quem recebe e as frequências cadastradas. Salvar ajusta os próximos relatórios e não dispara e-mails nem repete os já enviados.</p>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><label for="emailCatalogSearch">Setor ou destinatário</label><input id="emailCatalogSearch" type="search" placeholder="Nome, setor ou e-mail"><label for="emailCatalogCadence">Frequência</label><select id="emailCatalogCadence"><option value="">Todas</option><option value="daily">Diário</option><option value="weekly">Semanal</option><option value="monthly">Mensal</option><option value="annual">Anual</option></select><button type="button" class="s" id="emailCatalogRefresh">Consultar catálogo e envios de hoje</button></div>
+    <p id="emailCatalogStatus" role="status" class="coverage-note">Clique em consultar para carregar as configurações atuais.</p>
+    <div class="tw" style="max-height:520px;overflow:auto"><table><thead><tr><th>Relatório / destinatário</th><th>Setores e pessoas</th><th>Diário</th><th>Semanal</th><th>Mensal</th><th>Anual</th><th>Hoje · registros consultados</th><th>Configuração</th></tr></thead><tbody id="emailCatalogRows"><tr><td colspan="8">Catálogo ainda não consultado.</td></tr></tbody></table></div>
+    <p class="subtle">O calendário corporativo, os horários e a conciliação continuam controlando os disparos. Triagem da Inteligência: dias úteis às 9h para Cassiano e Keila; rotina independente das frequências gerenciais. Monitoria permanece excluída.</p>
+  </section>
   <div id="emailAdminPanel" class="hide">
     <p id="emailAdminStatus" role="status" class="coverage-note">Aguardando abertura.</p>
     <form id="emailAdminForm"><input id="emailRecordId" type="hidden">
@@ -6214,5 +6223,6 @@ window.clientImpactInit=()=>{
 
 <script src="/production-flow.js"></script>
 <script src="/email-delivery-control.js"></script>
+<script src="/email-report-catalog.js"></script>
 </body>
 </html>

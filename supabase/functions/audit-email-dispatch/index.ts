@@ -1,4 +1,5 @@
 import {assertFailedRetry,RETRY_POLICY} from "./failed-delivery-policy.ts";
+import {buildComparisons,renderComparisons,comparisonWindow,COMPARISON_POLICY} from "./report-comparisons.ts";
 import {voiceReportEligible,collectVoiceReport,composeVoiceChat} from "./voice-chat-report.ts";
 import {forecastSection,FORECAST_POLICY} from "./forecast-variance.ts";
 import {renderHourCharts,renderCsatChart,canReceiveCsat,reportIdentity,reportSubject} from "./email-visuals.ts";
@@ -661,7 +662,7 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;expor
  (report.teamJourneyHtml?'':'<div style="font-size:15px;color:#18385e;font-weight:700;margin:24px 0 12px">'+
    esc(rec.collaborator_name?'Destaques dos apontamentos':'Resumo por colaborador')+'</div>'+
    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5edf7;border-radius:8px;overflow:hidden">'+lines+'</table>')+
- detailsHtml+alertsHtml+
+ detailsHtml+alertsHtml+'<!-- ARQUEM_REPORT_EXTRA_SECTIONS -->'+
  '<p style="font-size:11px;line-height:1.6;color:#64748b;margin:22px 0">Fonte: API Movidesk / Central de Auditoria. Registros importados; não substitui o ponto eletrônico e não comprova produtividade ou presença.</p>'+
  '</td></tr><tr><td style="background:#f4f7fb;border-top:1px solid #dce5f0;padding:20px 26px;color:#718096;font-size:11px">'+
  'ARQUEM SISTEMAS &nbsp;|&nbsp; Central de Auditoria &nbsp;|&nbsp; Mensagem automática, não responda</td></tr>'+
@@ -915,6 +916,7 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
    schema:'arquem-mail-v1',
    visualVersion:'arquem-visual-v1',
    forecastPolicy:FORECAST_POLICY,
+   recipientConfigUpdatedAt:String(rec.updated_at||''),
    recipientId:String(rec.id),reportKind:kind,
    title:(kind==='monthly'||kind==='annual'?'Balancete ':'Relatório ')+REPORT_LABEL[kind].toLowerCase()+' - '+safe(rec.name||rec.sector||'Gestão'),
    from,to,partial,historicalIncomplete,
@@ -954,17 +956,32 @@ async function voiceChatPreview(payload:R){
  return json({ok:true,sent:false,eligible:true,from,to,files,html:section.html,text:section.text,zenviaVoice:section.packet});
 }
 
+function appendReportSection(html:string|undefined,section:string):string{
+ const marker='<!-- ARQUEM_REPORT_EXTRA_SECTIONS -->';
+ if(html?.includes(marker))return html.replace(marker,section+marker);
+ return /<\/body>/i.test(html||'')?(html||'').replace(/<\/body>/i,section+'</body>'):(html||'')+section;
+}
 async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R, previewOnly=false) {
   await assertEmailDeliveryEnabled(db);
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
   if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
+  if(reportData){
+    const current=(await recipientList()).find(r=>String(r.id)===String(reportData!.recipientId||''));
+    if(!current)throw Error('Destinatário atual indisponível para os comparativos.');
+    const comparisonRecipient=reportData.productionFlow&&Array.isArray(current.production_flow_collaborators)&&current.production_flow_collaborators.length
+      ?{...current,collaborator_name:null,collaborator_names:current.production_flow_collaborators}:current;
+    const comparisons=await comparisonData(comparisonRecipient,String(reportData.from),String(reportData.to));
+    const section=renderComparisons(comparisons);text+=section.text;
+    html=appendReportSection(html,section.html);
+    reportData={...reportData,comparisons};
+  }
   if(reportData&&!reportData.productionFlow){
     const rec=(await recipientList()).find(r=>String(r.id)===String(reportData!.recipientId||''));
     if(rec){
       const channels=await voiceChatSection(rec,String(reportData.from),String(reportData.to));
       if(channels){
         text+=channels.text;
-        html=/<\/body>/i.test(html||'')?(html||'').replace(/<\/body>/i,channels.html+'</body>'):(html||'')+channels.html;
+        html=appendReportSection(html,channels.html);
         reportData={...reportData,zenviaVoice:channels.packet,voiceChatVersion:'real-voice-chat-v1'};
       }
     }
@@ -976,7 +993,7 @@ async function sendMail(email: string, subject: string, text: string, html?: str
     if(timing){
       const section=timingContent(timing);
       text+=section.text;
-      if(html)html=/<\/body>/i.test(html)?html.replace(/<\/body>/i,section.html+'</body>'):html+section.html;
+      if(html)html=appendReportSection(html,section.html);
       reportData={...reportData,timing};
     }
   }
@@ -1000,6 +1017,8 @@ async function sendMail(email: string, subject: string, text: string, html?: str
     });
     if(!cap.ok)throw new Error('Verificação de anexos indisponível (HTTP '+cap.status+')');
     const capabilities=await cap.json().catch(()=>null) as R|null;
+    if(cleanReportData?.comparisons&&capabilities?.comparisonVersion!==COMPARISON_POLICY)
+      throw new Error('Comparativos ainda não homologados no PDF e Excel; envio suspenso.');
     if(capabilities?.sucesso!==true || !Array.isArray(capabilities.formats) ||
        !capabilities.formats.includes('pdf') || !capabilities.formats.includes('xlsx') ||
        capabilities.paperTemplateConfigured!==true)
@@ -1556,7 +1575,7 @@ async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipien
    if(!inserted?.length){results.push({recipient:'Keila',kind:task.kind,skipped:'Reserva já existente'});continue;}
    try{
     await sendMail(String(rec.email),reportSubject(rec,task.kind,task.from,task.to,{sector:'Produção',detail:'Rastreabilidade · '+REPORT_LABEL[task.kind]}),
-      content.text,content.html,content.packet as R);
+      content.text,content.html,{...content.packet,recipientId:rec.id} as R);
     await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
      method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -1660,7 +1679,7 @@ async function prepareReports() {
       '&select=dispatch_key,reconciliation_success_at,expires_at,report_data&limit=1');
     if(t.r.report_sections==null && existing.length && Date.parse(String(existing[0].reconciliation_success_at))===Date.parse(String(coverage.lastSuccess)) &&
       Date.parse(String(existing[0].expires_at))>Date.now()+5*60000 &&
-      Array.isArray(existing[0].report_data?.forecastVariances)&&existing[0].report_data?.visualVersion==='arquem-visual-v1'&&existing[0].report_data?.forecastPolicy===FORECAST_POLICY){
+      Array.isArray(existing[0].report_data?.forecastVariances)&&existing[0].report_data?.visualVersion==='arquem-visual-v1'&&existing[0].report_data?.forecastPolicy===FORECAST_POLICY&&existing[0].report_data?.recipientConfigUpdatedAt===String(t.r.updated_at||'')){
       results.push({key,skipped:'Conteudo ja preparado'});continue;
     }
     if(results.filter(x=>x.status==='prepared').length>=2)break;
@@ -1705,7 +1724,7 @@ async function cachedReport(t:ScheduledReport) {
   const rows=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
     '&status=eq.ready&select=subject,body_text,body_html,report_data,reconciliation_success_at,expires_at&limit=1');
   if(!rows.length||Date.parse(String(rows[0].expires_at))<=Date.now()||
-    rows[0].report_data?.visualVersion!=='arquem-visual-v1' || rows[0].report_data?.forecastPolicy!==FORECAST_POLICY ||
+    rows[0].report_data?.visualVersion!=='arquem-visual-v1' || rows[0].report_data?.forecastPolicy!==FORECAST_POLICY || rows[0].report_data?.recipientConfigUpdatedAt!==String(t.r.updated_at||'') ||
     !Array.isArray(rows[0].report_data?.forecastVariances) ||
     !Number.isFinite(Number(rows[0].report_data?.metrics?.targetGapMinutes)) ||
     !Array.isArray(rows[0].report_data?.extraordinary))return null;
@@ -2296,6 +2315,30 @@ async function dispatchNoonPartial() {
  return json({ok:results.every(x=>x.status!=='failed'&&x.status!=='blocked'),kind:'noon_partial',day:today,window:'09:00-11:50',latest,results});
 }
 
+async function comparisonData(rec:R,from:string,to:string){
+ const window=comparisonWindow(to),start=from<window.previous?from:window.previous;
+ const [appts,tickets,hol,checkpoint]=await Promise.all([
+  source(start,to,100000),list('audit_direct_tickets','?select=ticket_id,owner_histories:payload->ownerHistories,sector:payload->>ownerTeam,owner:payload->owner&order=ticket_id.asc',100000),holidays(),state()
+ ]);
+ return buildComparisons(rec,appts,tickets,from,to,hol,checkpoint.completed===true&&!checkpoint.last_error);
+}
+async function comparisonPreview(payload:R){
+ const from=String(payload.from||''),to=String(payload.to||''),id=String(payload.recipientId||'');
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to||to>dateBR()||Date.parse(to)-Date.parse(from)>366*86400000)throw Error('Período inválido');
+ const rec=(await recipientList()).find(r=>r.id===id);if(!rec)throw Error('Destinatário ativo não encontrado');
+ const [comparisons,appts,hol,tickets,clients]=await Promise.all([comparisonData(rec,from,to),source(from,to,100000),holidays(),ticketSource(),clientSource()]);
+ const report=buildReport(rec,appts,from,to,'weekly',hol,false,clients),alerts=ticketAlerts(rec,tickets);
+ const section=renderComparisons(comparisons);
+ const html=appendReportSection(reportEmailHtml(rec,report,from,to,'weekly',false,false,alerts.html,report.detailsHtml,'',''),section.html);
+ const packet={...reportPacket(rec,report,alerts,from,to,'weekly',false,false,clients),comparisons};
+ let files=[];
+ if(payload.createFiles===true){
+  const response=await fetch(validUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({token:E('GMAIL_MAIL_SECRET'),action:'voice_chat_preview',reportData:packet}),signal:AbortSignal.timeout(120000)});
+  const result=await response.json();if(!response.ok||result.sucesso!==true)throw Error('Prévia dos anexos indisponível');files=result.files||[];
+ }
+ return json({ok:true,sent:false,recipient:String(rec.email),html:corporateCopy(html),comparisons,files,metrics:report.metrics});
+}
+
 async function failedReportAction(payload:R) {
  const key=String(payload.dispatchKey||'');
  if(!key||key.length>180)return json({ok:false,error:'Registro inválido'},400);
@@ -2346,12 +2389,12 @@ async function handleRequest(req: Request): Promise<Response> {
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if(action==='failed_report_review'||action==='failed_report_send'){
+    if(action==='failed_report_review'||action==='failed_report_send'||action==='comparison_preview'){
       // The existing server-only scheduler credential already authorizes official
       // deliveries. Keep browser access under the existing active-admin session.
       const scheduler=!!E('REPORT_CRON_SECRET')&&req.headers.get('x-report-secret')===E('REPORT_CRON_SECRET');
       if(!scheduler&&!await isAdmin(req))return json({ok:false,error:'Acesso reservado ao administrador autenticado'},403);
-      return await failedReportAction(payload);
+      return action==='comparison_preview'?await comparisonPreview(payload):await failedReportAction(payload);
     }
     if(action==='email_delivery_control'){
       if(!await isAdmin(req))return json({ok:false,error:'Acesso reservado ao administrador autenticado'},403);
