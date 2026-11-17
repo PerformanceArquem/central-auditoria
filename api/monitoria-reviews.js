@@ -64,7 +64,7 @@ async function list(req,res,auth){
  const collaborator=str(req.query.collaborator||'',160);
  const filter=collaborator?{collaborator_name:'eq.'+collaborator}:{};
  const rows=await db(auth,'audit_monitoria_reviews',{
-  select:'id,created_at,created_by,channel,source_id,sector,collaborator_name,reviewer_name,monitored_at,recording_kind,evidence_reference,ruleset_version,score_suggested,score_approved,critical_suspected,critical_confirmed,critical_findings,criteria,review_status,approved_at,reviewer_notes,audit_monitoria_alerts(status,created_at,manager_user_id,acknowledged_at,manager_feedback)',
+  select:'id,created_at,created_by,channel,source_id,sector,collaborator_name,reviewer_name,monitored_at,recording_kind,evidence_reference,evidence_scope,evidence_acknowledged,ruleset_version,score_suggested,score_approved,critical_suspected,critical_confirmed,critical_findings,criteria,review_status,approved_at,reviewer_notes,audit_monitoria_alerts(status,created_at,manager_user_id,acknowledged_at,manager_feedback)',
   monitored_at:'gte.'+from,
   and:'(monitored_at.lte.'+to+')',
   ...filter,
