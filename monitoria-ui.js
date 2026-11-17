@@ -377,23 +377,30 @@
  function render(analysis){
    const result=$('monResults');result.replaceChildren();
    const title=document.createElement('h3');
-   title.textContent='Nota sugerida: '+analysis.scoreSuggestion+'/100 · '+(analysis.criticalFlag?'Possível falha crítica · revisão obrigatória':analysis.incomplete?'Avaliação incompleta':'Revisão da Qualidade pendente');
+   title.textContent=(analysis.incomplete?'Nota provisória (não final): ':'Nota sugerida (revisão obrigatória): ')+analysis.scoreSuggestion+'/100 · '+(analysis.criticalFlag?'Possível falha crítica':analysis.incomplete?'Avaliação incompleta':'Qualidade deve validar');
    result.appendChild(title);
    const subtitle=document.createElement('p');
-   subtitle.textContent='Versão '+analysis.version+' · critérios verificáveis '+analysis.verifiedCriteria+'/'+analysis.totalCriteria+' · nenhuma penalidade definitiva automática';
+   const reviewed=(analysis.criteria||[]).length;
+   const missing=(analysis.criteria||[]).filter(x=>x.decision==='nao_verificavel');
+   subtitle.textContent='Todos os critérios analisados: '+reviewed+'/'+analysis.totalCriteria+' · com evidências: '+analysis.verifiedCriteria+' · pendentes de comprovação: '+missing.length+' · versão '+analysis.version+' · nota nunca é aprovação automática';
    result.appendChild(subtitle);
    const table=document.createElement('table');table.style.width='100%';table.style.borderCollapse='collapse';
    const head=document.createElement('tr');
-   for(const label of ['Código','Critério','Situação','Desconto','Evidência']){const th=document.createElement('th');th.textContent=label;th.style.textAlign='left';th.style.borderBottom='1px solid #cbd5e1';head.appendChild(th)}
+   for(const label of ['Código','Critério','Situação','Desconto','Evidência','Justificativa / conferência']){const th=document.createElement('th');th.textContent=label;th.style.textAlign='left';th.style.borderBottom='1px solid #cbd5e1';head.appendChild(th)}
    table.appendChild(head);
    for(const r of analysis.criteria){
     const tr=document.createElement('tr');
-    for(const value of [r.code,r.name,r.decision,String(r.deducted),r.evidence||'Não disponível']){
+    for(const value of [r.code,r.name,r.decision,String(r.deducted),r.evidence||'Não comprovada',r.reason||'Conferir evidência no atendimento completo e no ticket']){
       const td=document.createElement('td');td.textContent=value;td.style.padding='8px';td.style.borderBottom='1px solid #e2e8f0';tr.appendChild(td);
     }
     table.appendChild(tr);
    }
    result.appendChild(table);
+   if(missing.length){
+     const note=document.createElement('p');
+     note.textContent='⚠ Existem '+missing.length+' critérios ainda não verificáveis. A nota mostrada é apenas provisória e pode mudar após a Qualidade conferir conversa integral, ticket, tabulação e horários. Não aprove sem essa conferência.';
+     result.appendChild(note);
+   }
    for(const c of analysis.critical.filter(x=>x.suspected)){
     const alert=document.createElement('p');alert.textContent='⚠ '+c.code+' — '+c.name+': análise crítica exige validação humana. '+c.evidence;result.appendChild(alert);
    }
