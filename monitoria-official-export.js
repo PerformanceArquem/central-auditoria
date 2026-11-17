@@ -8,7 +8,129 @@
  const ROWS=[22,23,24,31,32,33,34,41,42,49,50,51,52];
  const safe=v=>typeof v==='string'&&/^[\s]*[=+@\-\t\r]/.test(v)?"'"+v:v;
  const num=v=>typeof v==='number'?v:'N/A';
- function makeExcel({analysis,channel,collaborator,reviewer,sourceId,monitoredAt,transcript}){
+
+ // Keep the original corporate visual hierarchy in the exported XLSX.
+ // SheetJS Community Edition does not retain custom cell formatting on write;
+ // patch the generated OOXML styles in memory with the JSZip already used by Central.
+ const visualStyles = () => {
+   const colors=['FF203B68','FF63738E','FFCC0000','FFFDE6E6','FF315A95','FF69A957','FFDCE6F5','FFFFEAC1','FFFFFFFF','FFF5F8FD','FFE9F5E8','FFFFF0F0'];
+   const fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>',
+     ...colors.map(color=>'<fill><patternFill patternType="solid"><fgColor rgb="'+color+'"/><bgColor indexed="64"/></patternFill></fill>')];
+   const font=(size,bold,color)=>'<font>'+(bold?'<b/>':'')+'<sz val="'+size+'"/><color rgb="'+color+'"/><name val="Arial"/></font>';
+   const fonts=[
+     font(10,false,'FF26364A'),font(15,true,'FFFFFFFF'),font(12,true,'FF565C67'),
+     font(12,true,'FFFFFFFF'),font(10,true,'FFFFFFFF'),font(10,true,'FF203B68'),
+     font(10,false,'FFB80000'),font(11,true,'FF203B68'),font(10,true,'FFB91C1C')
+   ];
+   const border='<border><left style="thin"><color rgb="FFD7DFE8"/></left><right style="thin"><color rgb="FFD7DFE8"/></right><top style="thin"><color rgb="FFD7DFE8"/></top><bottom style="thin"><color rgb="FFD7DFE8"/></bottom><diagonal/></border>';
+   // 0 plain; 1 navy title; 2 subtitle; 3 critical banner; 4 critical description;
+   // 5 headers; 6 green header; 7 blue header; 8 block title; 9 block subtitle;
+   // 10 body; 11 alternate; 12 chat; 13 telephone; 14 observations; 15 critical row;
+   // 16 summary; 17 label; 18 input; 19 red finding.
+   const xfs=[
+     [0,0,0,false],[1,2,0,false],[2,9,0,true],[3,4,0,false],[6,5,0,true],
+     [4,6,1,true],[4,7,1,true],[4,6,1,true],[3,2,0,false],[5,8,0,true],
+     [0,10,1,true],[0,11,1,true],[0,12,1,true],[0,8,1,true],[0,9,1,true],
+     [0,13,1,true],[1,2,0,false],[7,7,1,true],[0,8,1,true],[8,13,1,true]
+   ];
+   const xfXml=xfs.map(([fontId,fillId,borderId,wrap])=>
+     '<xf numFmtId="0" fontId="'+fontId+'" fillId="'+fillId+'" borderId="'+borderId+
+     '" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" '+
+     (wrap?'wrapText="1" ':'')+'horizontal="left"/></xf>').join('');
+   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+     '<fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts>'+
+     '<fills count="'+fills.length+'">'+fills.join('')+'</fills>'+
+     '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+border+'</borders>'+
+     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+     '<cellXfs count="'+xfs.length+'">'+xfXml+'</cellXfs>'+
+     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+ };
+ function colNumber(ref){
+   const match=/^[A-Z]+/.exec(ref);
+   if(!match)return 0;
+   return [...match[0]].reduce((n,ch)=>n*26+ch.charCodeAt(0)-64,0);
+ }
+ async function polishWorkbook(wb){
+   if(!window.JSZip)throw Error('Biblioteca de formatação Excel indisponível');
+   const zip=await JSZip.loadAsync(XLSX.write(wb,{bookType:'xlsx',type:'array',compression:true}));
+   zip.file('xl/styles.xml',visualStyles());
+   const ns='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+   for(const [index,contentMax] of [[1,12],[2,7],[3,2]]){
+     const path='xl/worksheets/sheet'+index+'.xml';
+     const xml=await zip.file(path)?.async('string');
+     if(!xml)throw Error('Aba '+index+' não encontrada na exportação');
+     const doc=new DOMParser().parseFromString(xml,'application/xml');
+     if(doc.getElementsByTagName('parsererror').length)throw Error('Não foi possível formatar a planilha');
+     const sheetData=doc.getElementsByTagNameNS(ns,'sheetData')[0];
+     for(const row of Array.from(sheetData.getElementsByTagNameNS(ns,'row'))){
+       const rowNo=Number(row.getAttribute('r')||0);
+       let styleFor=(col)=>{
+         if(index===1){
+           if(rowNo===1)return 1;
+           if(rowNo===2)return 2;
+           if(rowNo===9)return 3;
+           if(rowNo===10)return 4;
+           if([18,27,37,45].includes(rowNo))return 8;
+           if([19,28,38,46].includes(rowNo))return 9;
+           if([11,20,29,39,47].includes(rowNo))return col>=4&&col<=5?6:col>=6&&col<=7?7:5;
+           if(rowNo>=13&&rowNo<=16)return col===8?14:col>=4&&col<=5?12:col>=6&&col<=7?13:15;
+           if([25,35,43,53,55].includes(rowNo))return 16;
+           if([56,57,58].includes(rowNo))return col===1?17:18;
+           if(rowNo>=4&&rowNo<=7)return col===1?17:18;
+           if([22,23,24,31,32,33,34,41,42,49,50,51,52].includes(rowNo))
+             return col===8?14:col>=4&&col<=5?12:col>=6&&col<=7?13:rowNo%2?10:11;
+           return 0;
+         }
+         if(index===2){
+           if(rowNo===1)return 1;
+           if([5,21].includes(rowNo))return 5;
+           if(rowNo===20)return 3;
+           if(rowNo===2||rowNo===3)return col%2?17:18;
+           if(rowNo>=22&&rowNo<=25)return 15;
+           if(rowNo>=6&&rowNo<=18)return rowNo%2?11:10;
+           return 0;
+         }
+         if(rowNo===1)return 1;
+         if(rowNo===2)return 4;
+         if(rowNo===3)return 5;
+         return rowNo%2?11:10;
+       };
+       // Materialize blank cells too: color bars span the full table width in Excel.
+       const cells=new Map(Array.from(row.getElementsByTagNameNS(ns,'c')).map(c=>[colNumber(c.getAttribute('r')||''),c]));
+       for(let col=1;col<=contentMax;col++){
+         const style=styleFor(col);
+         if(!style)continue;
+         let c=cells.get(col);
+         if(!c){
+           c=doc.createElementNS(ns,'c');
+           const letters=XLSX.utils.encode_col(col-1);
+           c.setAttribute('r',letters+rowNo);
+           const next=Array.from(row.getElementsByTagNameNS(ns,'c')).find(node=>colNumber(node.getAttribute('r')||'')>col);
+           if(next)row.insertBefore(c,next);else row.appendChild(c);
+         }
+         c.setAttribute('s',String(style));
+       }
+       if(index===1){
+         const h=[1,9,18,27,37,45].includes(rowNo)?31:
+           [11,20,29,39,47].includes(rowNo)?27:
+           [13,14,15,16,22,23,24,31,32,33,34,41,42,49,50,51,52].includes(rowNo)?55:24;
+         row.setAttribute('ht',String(h));row.setAttribute('customHeight','1');
+       } else if(index===2 && rowNo>=6){row.setAttribute('ht',rowNo>=22?44:60);row.setAttribute('customHeight','1');}
+     }
+     zip.file(path,new XMLSerializer().serializeToString(doc));
+   }
+   return zip.generateAsync({type:'blob',compression:'DEFLATE'});
+ }
+ function downloadFormatted(blob,name){
+   const url=URL.createObjectURL(blob);
+   const anchor=document.createElement('a');
+   anchor.href=url;anchor.download=name;
+   document.body.append(anchor);anchor.click();anchor.remove();
+   setTimeout(()=>URL.revokeObjectURL(url),60000);
+ }
+
+ async function makeExcel({analysis,channel,collaborator,reviewer,sourceId,monitoredAt,transcript}){
   if(!window.XLSX)throw Error('Biblioteca Excel não carregada');
   if(!analysis||!Array.isArray(analysis.criteria))throw Error('Faça a avaliação com Gemini antes de exportar');
   const wb=XLSX.utils.book_new();
@@ -91,7 +213,8 @@
   ws3['!cols']=[{wch:10},{wch:116}];
   XLSX.utils.book_append_sheet(wb,ws3,'Atendimento');
   const filename='Monitoria_Arquem_Formulario_IA_'+String(sourceId||'avaliacao').replace(/[^\w-]+/g,'_').slice(0,50)+'.xlsx';
-  XLSX.writeFile(wb,filename,{compression:true});
+  const blob=await polishWorkbook(wb);
+  downloadFormatted(blob,filename);
   return filename;
  }
  window.monitoriaOfficialExcel=makeExcel;
