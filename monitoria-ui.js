@@ -24,7 +24,7 @@
    return body;
  }
  async function openProtectedRecording({id,kind}){
-   if(!/^\\d{1,14}$/.test(String(id))||!['outbound','inbound'].includes(kind))
+   if(!/^\d{1,14}$/.test(String(id))||!['outbound','inbound'].includes(kind))
       throw Error('Referência inválida de gravação');
    const media=await api({action:'audio',kind,id},{binary:true});
    if(localAudioUrl)URL.revokeObjectURL(localAudioUrl);
