@@ -2,7 +2,7 @@
 (()=>{
  const $=id=>document.getElementById(id);
  let localAudioUrl='',selectedAudio=null,lastAnalysis=null,channel='chat',lastSavedReview=null,reviewRequestId=null,reports=[],alerts=[],polling=false;
- let sourceEvidenceKind='manual';
+ let sourceEvidenceKind='manual', evidenceGeneration=0;
  const status=(msg)=>{if($('monStatus'))$('monStatus').textContent=msg};
  const safeName=n=>String(n||'arquivo').replace(/[^\w.-]+/g,'_').slice(0,80);
  function download(name,text,type){
@@ -40,6 +40,7 @@
    try{await openProtectedRecording(args)}catch(e){status('Gravação: '+String(e.message||e))}
  };
  function resetSelectedEvidence(){
+   evidenceGeneration++;
    if(localAudioUrl){URL.revokeObjectURL(localAudioUrl);localAudioUrl='';}
    selectedAudio=null;
    const player=$('monAudioPlayer');
@@ -62,6 +63,11 @@
    const person=supportPeople[index];
    if(!person){list.textContent='Selecione ou sorteie um colaborador.';return}
    select.value=String(index);
+   resetSelectedEvidence();
+   $('monCollaborator').value=person.name;
+   $('monSector').value='Suporte';
+   $('monChannel').value='chat';channel='chat';
+   $('monTicketId').value=person.chatCandidate?.ticketId||'';
    const card=document.createElement('div');
    card.style.cssText='padding:12px;border:1px solid #dce5f0;border-radius:10px;background:#f8fbff';
    const title=document.createElement('strong');title.textContent=person.name;
@@ -98,6 +104,18 @@
      await listCalls();
    }));
    card.append(title,slots);list.appendChild(card);
+   const current=evidenceGeneration;
+   if(candidate){
+     const flag=document.createElement('p');flag.style.cssText='margin:8px 0 0;font-size:12px;color:#52637c';
+     flag.textContent='Carregando interações disponíveis do chamado #'+candidate.ticketId+'…';
+     card.appendChild(flag);
+     loadChat(current).then(ready=>{
+       if(current!==evidenceGeneration)return;
+       flag.textContent=ready
+         ?'Chat consultado. Abra “Conferir atendimento e avaliar com IA” para revisar as evidências. Nota ainda não gerada.'
+         :'Chat não disponível para análise automática. Confira o aviso na área de atendimento.';
+     });
+   }else status('Sem chamado de chat candidato para '+person.name+'. Selecione outro colaborador ou localize um atendimento.');
  }
  async function findSupportCandidates(){
    const button=$('monFindSupport'),list=$('monSupportList'),summary=$('monSupportSummary');
@@ -168,7 +186,7 @@
    const acknowledge=$('monChatCoverageAck');
    if(acknowledge)acknowledge.checked=false;
  }
- async function loadChat(){
+ async function loadChat(expectedGeneration=evidenceGeneration){
    const ticketId=$('monTicketId').value.trim();
    status('Consultando interações do chamado no Movidesk…');
    try{
@@ -179,7 +197,9 @@
        method:'GET',headers:{Authorization:'Bearer '+session.access_token},credentials:'same-origin',cache:'no-store'
      });
      const data=await res.json().catch(()=>({}));
+     if(expectedGeneration!==evidenceGeneration||ticketId!==$('monTicketId').value.trim())return false;
      if(!res.ok||!data?.ok)throw Error(data.error||'Histórico indisponível');
+     if(!Array.isArray(data.messages)||!data.messages.length)throw Error('Este chamado não retornou interações textuais. Escolha outro candidato.');
      resetChatCoverage();
      sourceEvidenceKind='movidesk_ticket_actions_unverified';
      $('monChatEvidenceWarning').hidden=false;
@@ -195,7 +215,8 @@
      $('monSourceId').value=ticketId;
      lastAnalysis=null;$('monExportReview').disabled=true;
      status(data.messages.length+' interações do chamado #'+ticketId+' recuperadas do Movidesk. '+data.warning);
-   }catch(e){status('Consulta Movidesk: '+String(e.message||e));}
+     return true;
+   }catch(e){if(expectedGeneration===evidenceGeneration)status('Consulta Movidesk: '+String(e.message||e));return false;}
  }
  async function reviewsApi(params,body){
    const session=await window.tmAuth?.getSession?.();
