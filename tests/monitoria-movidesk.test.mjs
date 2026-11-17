@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import handler from '../api/monitoria-movidesk.js';
+import handler,{normalize} from '../api/monitoria-movidesk.js';
 const prevFetch=globalThis.fetch;
 const original=Object.fromEntries(['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','MOVIDESK_TOKEN'].map(k=>[k,process.env[k]]));
 test.afterEach(()=>{
@@ -56,4 +56,18 @@ test('rejeita números de chamado inválidos antes de consultar Movidesk',async(
  await handler(req('102205 OR true'),res);
  assert.equal(res.statusCode,400);
  assert.equal(calls.some(x=>x.hostname==='api.movidesk.com'),false);
+});
+
+test('cobertura do extrato não presume chat completo e identifica origens heterogêneas',()=>{
+ const data=normalize({id:1001,subject:'Registro',actions:[
+  {id:1,origin:2,type:2,createdDate:'2026-11-17',createdBy:{name:'Atendente'},description:'Conversa'},
+  {id:2,origin:26,type:1,createdDate:'2026-11-17',createdBy:{name:'Interno'},description:'Nota interna'},
+  {id:3,origin:0,type:2,isDeleted:true,description:'Excluída'}
+ ]});
+ assert.equal(data.coverage.chatFullHistoryVerified,false);
+ assert.equal(data.coverage.activeActions,2);
+ assert.equal(data.coverage.renderedInteractions,2);
+ assert.deepEqual(data.coverage.actionOrigins,['2','26']);
+ assert.equal(data.coverage.requiresHumanCheck,true);
+ assert.match(data.warning,/NÃO HOMOLOGADO COMO CHAT COMPLETO/);
 });
