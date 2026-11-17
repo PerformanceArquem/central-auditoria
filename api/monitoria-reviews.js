@@ -61,11 +61,14 @@ async function list(req,res,auth){
  if(kind!=='reviews')return fail(res,400,'Consulta inválida');
  if(!auth.admin)return fail(res,403,'Relatórios disponíveis apenas para a Qualidade autorizada');
  const {from,to}=boundedDates(req.query);
+ const collaborator=str(req.query.collaborator||'',160);
+ const filter=collaborator?{collaborator_name:'eq.'+collaborator}:{};
  const rows=await db(auth,'audit_monitoria_reviews',{
-  select:'id,created_at,created_by,channel,source_id,sector,collaborator_name,ruleset_version,score_suggested,score_approved,critical_suspected,critical_confirmed,critical_findings,criteria,review_status,approved_at,reviewer_notes,audit_monitoria_alerts(status,created_at,manager_user_id,acknowledged_at,manager_feedback)',
-  created_at:'gte.'+from+'T00:00:00Z',
-  and:'(created_at.lte.'+to+'T23:59:59Z)',
-  order:'created_at.desc',limit:'1000'
+  select:'id,created_at,created_by,channel,source_id,sector,collaborator_name,reviewer_name,monitored_at,recording_kind,evidence_reference,ruleset_version,score_suggested,score_approved,critical_suspected,critical_confirmed,critical_findings,criteria,review_status,approved_at,reviewer_notes,audit_monitoria_alerts(status,created_at,manager_user_id,acknowledged_at,manager_feedback)',
+  monitored_at:'gte.'+from,
+  and:'(monitored_at.lte.'+to+')',
+  ...filter,
+  order:'monitored_at.desc',limit:'1000'
  });
  return res.status(200).json({ok:true,reviews:rows,from,to,partial:rows.length>=1000});
 }
