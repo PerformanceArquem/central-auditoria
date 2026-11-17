@@ -88,15 +88,16 @@ Deno.test('missing actual talk duration does not silently lower voice TMA to zer
  assertEquals(result.metrics.answered,2);
  assertEquals(result.metrics.tmaSamples,1);
  assertEquals(result.metrics.tmaMissingSamples,1);
- assertEquals(result.metrics.tmaSeconds,null);
- assertEquals(result.metrics.talkSeconds,null);
+ assertEquals(result.metrics.tmaSeconds,120);
+ assertEquals(result.metrics.talkSeconds,120); // observed subtotal, not complete total
+ assertEquals((result.metrics as Record<string,unknown>).talkCoverageComplete,false);
  // Ramal com chamada sem tempo nao pode publicar soma parcial como definitiva.
  assertEquals(result.byExtension.length,0);
  const email=prepareVoiceEmail({verified:true,ratings:[],metrics:result.metrics,
   from:'2026-11-10',to:'2026-11-11'});
- assertEquals(email.kpis.tmaSeconds,null);
- assertEquals(email.kpis.talkSeconds,null);
- if(!email.html.includes('Indisponível'))throw Error('Missing TMA must be unavailable');
+ assertEquals(email.kpis.tmaSeconds,120);
+ assertEquals(email.kpis.talkSeconds,120);
+ if(!email.html.includes('parcial'))throw Error('Incomplete voice data must be clearly marked partial');
 });
 
 Deno.test('per-extension durations are unavailable with a missing answered talk sample',async()=>{
@@ -114,12 +115,12 @@ Deno.test('per-extension durations are unavailable with a missing answered talk 
  const extension431=result.byExtension.find(x=>x.extension==='431');
  assertEquals(extension430?.answered,2);
  assertEquals(extension430?.missingTalkSamples,1);
- assertEquals(extension430?.talkSeconds,null);
+ assertEquals(extension430?.talkSeconds,120);
  assertEquals(extension431?.talkSeconds,45);
  const email=prepareVoiceEmail({verified:true,ratings:[],metrics:result.metrics,from:'2026-11-10',to:'2026-11-11',byExtension:result.byExtension});
  const q=email.kpis.byExtension.find(x=>x.extension==='430');
- assertEquals(q?.talkSeconds,null);
- if(!email.html.includes('Indisponível'))throw Error('Incomplete ramal talk duration must not become 0');
+ assertEquals(q?.talkSeconds,120);
+ if(!email.html.includes('Subtotal observado'))throw Error('Incomplete ramal talk duration must be labeled partial');
 });
 
 Deno.test('support recorte is calculated only with explicitly approved extension IDs',async()=>{
