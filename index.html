@@ -942,7 +942,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
             <summary><span class="nav-folder-icon" aria-hidden="true">▤</span><span>Auditorias</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary>
             <div class="nav-folder-items">
               <button data-t="support-quality">🎧 &nbsp;Qualidade do Suporte</button>
-              <button data-t="monitoria">✦ &nbsp;Mini Central de Monitoria</button>
+              <button data-t="monitoria">✦ &nbsp;Mini Central de Monitoria <span id="monNavAlertCount" class="nav-count" hidden>0</span></button>
               <button data-t="zenvia-voice">☎ &nbsp;Métricas de Voz · Zenvia</button>
               <button data-t="production-audit">🏭 &nbsp;Auditoria da Produção</button>
               <button data-t="intelligence-triage">🕒 &nbsp;Triagem da Inteligência <span id="itNavCount" class="nav-count">0</span></button>
@@ -977,6 +977,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
         </nav>
         <main>
 
+          <div id="monGlobalCriticalBanner" hidden role="alert" onclick="showTab('monitoria')" style="grid-column:1/-1;cursor:pointer;padding:10px 22px;background:#fff0ed;color:#9a1d18;font-weight:700;border-bottom:2px solid #bd2823"></div>
           <section id="t-monitoria" class="hide" aria-labelledby="monTitle">
             <div class="mh"><div class="eyebrow">QUALIDADE · MONITORIA ASSISTIDA</div><h2 id="monTitle">Mini Central de Monitoria</h2>
               <p>Áudios e chats · avaliação sugerida pelo Gemini conforme Formulario_Monitoria_Atendimento.xlsx · revisão humana obrigatória.</p>
@@ -1008,18 +1009,46 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                 <audio id="monAudioPlayer" controls hidden style="width:min(100%,620px)"></audio>
                 <a id="monDownloadAudio" href="#" hidden>Baixar áudio selecionado</a>
               </div>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0">
+                <label>ID ligação/chamado <input id="monSourceId" maxlength="80" required placeholder="Número da ligação ou ticket"></label>
+                <label>Setor <input id="monSector" maxlength="100" value="Suporte" required></label>
+                <label>Colaborador <input id="monCollaborator" maxlength="160" required placeholder="Nome completo"></label>
+              </div>
               <label for="monTranscript"><strong>Transcrição da ligação ou histórico do chat</strong></label>
               <textarea id="monTranscript" rows="12" style="width:100%;min-height:190px;resize:vertical" placeholder="Cole o diálogo com falas, horários e identificação dos interlocutores. Dados de chamados podem exigir comprovação no Movidesk."></textarea>
               <p><label style="display:flex;gap:8px;align-items:flex-start"><input id="monConsent" type="checkbox"> <span>Autorizo o processamento externo do <strong>áudio (se solicitar a transcrição)</strong> ou do <strong>texto (se solicitar avaliação)</strong> pelo Gemini, com revisão humana obrigatória. Nenhum e-mail será enviado.</span></label></p>
+              <p><label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="monSaveConsent"><span>Autorizo registrar esta avaliação e <strong>gerar imediatamente uma ocorrência interna para o gestor</strong> caso a IA encontre possível falha crítica. Nenhum e-mail será enviado.</span></label></p>
               <div style="display:flex;gap:8px;flex-wrap:wrap">
                 <button id="monTranscribe" type="button" class="s">🎙 Transcrever áudio com Gemini</button>
                 <button id="monRun" type="button" class="p">✦ Avaliar com Gemini</button>
                 <button id="monExportChat" type="button" class="s">Baixar conversa TXT</button>
                 <button id="monExportReview" type="button" class="s" disabled>Baixar avaliação JSON</button>
+                <button id="monSave" type="button" class="p" disabled>Registrar monitoria</button>
               </div>
               <p id="monStatus" role="status" class="subtle">Pronto para importar uma conversa. As notas são propostas, não decisões finais.</p>
             </div>
             <div class="card" id="monResults" style="max-width:1100px;overflow:auto"></div>
+            <div class="card" style="max-width:1100px">
+              <h3>🚨 Alertas críticos para gestores</h3>
+              <p id="monAlertCoverage" class="subtle">Alertas internos consultados enquanto a Central estiver aberta, com atualização a cada 15 segundos. Sem gestor vinculado ao setor, a ocorrência fica pendente para a Qualidade.</p>
+              <button id="monRefreshAlerts" type="button" class="s">Atualizar alertas</button>
+              <div id="monAlertList" role="region" aria-label="Ocorrências críticas da monitoria"></div>
+            </div>
+            <div class="card" style="max-width:1100px">
+              <h3>📊 Relatórios e notas da Monitoria</h3>
+              <p class="subtle">Exportação Excel com notas propostas e aprovadas separadamente, descontos por critério e falhas críticas. Apenas avaliações registradas.</p>
+              <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+                <label>De <input id="monReportFrom" type="date"></label>
+                <label>Até <input id="monReportTo" type="date"></label>
+                <label>Notas a exportar
+                  <select id="monReportStatus"><option value="approved">Somente aprovadas pela Qualidade</option><option value="all">Todas, incluindo provisórias</option></select>
+                </label>
+                <button id="monReportReload" type="button" class="s">Consultar monitorias</button>
+                <button id="monExcel" type="button" class="p" disabled>Baixar Excel com notas (.xlsx)</button>
+              </div>
+              <p id="monReportSummary" class="subtle" role="status">Nenhuma consulta realizada.</p>
+              <div id="monReviewList"></div>
+            </div>
           </section>
 
 
@@ -3652,7 +3681,7 @@ function showTab(t){
   revealActiveNavigation(t);
   $('t-cfg').classList.toggle('hide',t!=='cfg');
   ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','zenvia-voice','intelligence-triage','client-impact','monitoria'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='zenvia-voice')window.zenviaVoiceInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='intelligence-triage')window.intelligenceTriageInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
+  if(t==='monitoria')window.monitoriaRefreshAlerts?.(); if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='zenvia-voice')window.zenviaVoiceInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='intelligence-triage')window.intelligenceTriageInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='email-admin'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='zenvia-voice'||t==='intelligence-triage'||t==='client-impact');
   if(raw.length&&!['load','cfg','diag','alerts','email-admin','report-preview','support-quality','production-audit','zenvia-voice','intelligence-triage','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
