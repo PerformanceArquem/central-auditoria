@@ -47,7 +47,8 @@ test('link de áudio aponta ao módulo com login e não inclui token',()=>{
 });
 test('pacotes não fazem envio automático nem usam GmailApp',()=>{
  assert.ok(!/GmailApp|MailApp\.send|sendEmail\s*\(/.test(source));
- assert.match(source,/Chat_/);
+ assert.match(source,/Extrato_/);
+ assert.match(source,/NÃO garantem o chat integral/);
  assert.match(source,/\.pdf/);
  assert.match(source,/Notas_Monitoria\.xlsx/);
 });
