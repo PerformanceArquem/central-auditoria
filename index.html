@@ -904,6 +904,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 @media print{main .card{box-shadow:none!important;border:1px solid #d1d5db!important;background:#fff!important}}
 </style>
 <script defer src="./monitoria-ui.js"></script>
+<script defer src="./monitoria-packages.js"></script>
 </head>
     <body class="tm-locked">
         <form id="tm-login" class="card" hidden>
@@ -1013,6 +1014,9 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                 <label>ID ligação/chamado <input id="monSourceId" maxlength="80" required placeholder="Número da ligação ou ticket"></label>
                 <label>Setor <input id="monSector" maxlength="100" value="Suporte" required></label>
                 <label>Colaborador <input id="monCollaborator" maxlength="160" required placeholder="Nome completo"></label>
+                <label>Responsável pela monitoria <input id="monReviewer" maxlength="160" required placeholder="Analista de Qualidade"></label>
+                <label>Data da monitoria <input id="monMonitoredAt" type="date" required></label>
+                <label>Origem da ligação <select id="monRecordingKind"><option value="">Não informado</option><option value="inbound">Recebida</option><option value="outbound">Efetuada</option></select></label>
               </div>
               <label for="monTranscript"><strong>Transcrição da ligação ou histórico do chat</strong></label>
               <textarea id="monTranscript" rows="12" style="width:100%;min-height:190px;resize:vertical" placeholder="Cole o diálogo com falas, horários e identificação dos interlocutores. Dados de chamados podem exigir comprovação no Movidesk."></textarea>
@@ -1059,6 +1063,19 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
               </div>
               <p id="monReportSummary" class="subtle" role="status">Nenhuma consulta realizada.</p>
               <div id="monReviewList"></div>
+            </div>
+            <div class="card" style="max-width:1100px">
+              <h3>✉ Pacotes de Monitoria — prévia corporativa</h3>
+              <p class="subtle">Pacotes por colaborador e período semanal, mensal ou anual. Notas aprovadas, Excel, PDF das interações de chat Movidesk quando disponíveis, e link privado para ouvir gravação após login. <strong>Nenhum e-mail será enviado nesta etapa.</strong></p>
+              <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+                <label>Colaborador <input id="monPackageCollaborator" maxlength="160" placeholder="Nome exato do colaborador"></label>
+                <label>Tipo <select id="monPackagePeriod"><option value="weekly">Semanal</option><option value="monthly">Mensal</option><option value="annual">Anual</option></select></label>
+                <label>Data de referência <input type="date" id="monPackageAnchor"></label>
+                <button id="monPackagePreviewButton" type="button" class="s">Gerar prévia de e-mail</button>
+                <button id="monPackageDownload" type="button" class="p" disabled>Baixar pacote (PDF + Excel)</button>
+              </div>
+              <p id="monPackageSummary" role="status" class="subtle">Selecione um colaborador e período. Envio por e-mail permanece suspenso.</p>
+              <iframe id="monPackagePreview" title="Prévia do e-mail corporativo da monitoria" sandbox="" style="width:100%;height:410px;border:1px solid #dce5f0;border-radius:8px;background:#fff"></iframe>
             </div>
           </section>
 
@@ -3692,7 +3709,16 @@ function showTab(t){
   revealActiveNavigation(t);
   $('t-cfg').classList.toggle('hide',t!=='cfg');
   ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','zenvia-voice','intelligence-triage','client-impact','monitoria'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='monitoria')window.monitoriaRefreshAlerts?.(); if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='zenvia-voice')window.zenviaVoiceInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='intelligence-triage')window.intelligenceTriageInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
+  if(t==='monitoria'){
+    window.monitoriaRefreshAlerts?.();
+    const params=new URL(location.href).searchParams;
+    const recording=params.get('monitoria_voice'),kind=params.get('kind');
+    if(/^\\d{1,14}$/.test(recording||'') && ['inbound','outbound'].includes(kind||'')){
+      window.monitoriaOpenRecording?.({id:recording,kind});
+      const url=new URL(location.href);url.searchParams.delete('monitoria_voice');url.searchParams.delete('kind');
+      history.replaceState(null,'',url.pathname+url.search+url.hash);
+    }
+  } if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='zenvia-voice')window.zenviaVoiceInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='intelligence-triage')window.intelligenceTriageInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='email-admin'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='zenvia-voice'||t==='intelligence-triage'||t==='client-impact');
   if(raw.length&&!['load','cfg','diag','alerts','email-admin','report-preview','support-quality','production-audit','zenvia-voice','intelligence-triage','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
 }
