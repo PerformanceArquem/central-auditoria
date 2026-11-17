@@ -1059,7 +1059,20 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
               <p id="monStatus" role="status" class="subtle">Selecione um atendimento e confira as evidências antes de avaliar.</p>
                 </details>
             </div>
-            <div class="card" id="monResults" style="max-width:1100px;overflow:auto"></div>
+            <section id="monComparison" aria-label="Comparação entre atendimento e monitoria da IA" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr));gap:14px;align-items:start;max-width:1500px;margin-top:14px">
+              <div class="card" style="min-width:0;position:relative">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                  <h3 style="margin:0">Atendimento original</h3>
+                  <button id="monEvidenceSync" type="button" class="s">Atualizar visualização</button>
+                </div>
+                <p id="monEvidenceSourceNotice" class="subtle" style="margin:8px 0">Transcrição do chat/voz fornecida para análise. Confira a integridade da fonte.</p>
+                <div id="monEvidenceViewer" role="region" aria-label="Transcrição e evidências do atendimento" tabindex="0" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:690px;min-height:220px;overflow:auto;font-size:13px;line-height:1.65;padding:12px;border:1px solid #dce5f0;border-radius:9px;background:#f8fbff">Carregue um atendimento para comparar com a IA.</div>
+                <p class="subtle" style="font-size:12px;margin-top:8px">Os trechos destacados são correspondências textuais, não confirmação automática de uma infração. O extrato Movidesk pode estar incompleto.</p>
+              </div>
+              <div id="monResults" class="card" style="min-width:0;max-height:790px;overflow:auto" aria-label="Análise de critérios da IA">
+                Selecione um canal e informe a conversa para iniciar.
+              </div>
+            </section>
             <details id="monExtraTools" style="max-width:1100px;margin-top:12px">
               <summary style="cursor:pointer;padding:12px 15px;border:1px solid #dce5f0;border-radius:9px;font-weight:700;background:#f8fbff">Histórico, alertas e relatórios (opcional)</summary>
             <div class="card" style="max-width:1100px">
