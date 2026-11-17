@@ -944,10 +944,11 @@ async function voiceChatSection(rec:R,from:string,to:string){
  // No authorized support roster => no individual rows (fail closed).
  const managed=await list('audit_email_recipients',
   '?select=name,sector,collaborator_names,active&sector=eq.Suporte&active=eq.true');
- const supportRoster=managed.filter(row=>Array.isArray(row.collaborator_names)&&
+ const supportRoster:string[]=managed.filter(row=>Array.isArray(row.collaborator_names)&&
    row.collaborator_names.length>=3&&
    /gestao do suporte|relatorio setorial de suporte/.test(norm(row.name)))
-   .flatMap(row=>row.collaborator_names);
+   .flatMap(row=>row.collaborator_names)
+   .filter((name:unknown):name is string=>typeof name==='string');
  return composeVoiceChat(voice,chat,supportRoster);
 }
 async function voiceChatPreview(payload:R){
