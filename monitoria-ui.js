@@ -39,6 +39,71 @@
  window.monitoriaOpenRecording=async(args)=>{
    try{await openProtectedRecording(args)}catch(e){status('Gravação: '+String(e.message||e))}
  };
+ async function findSupportCandidates(){
+   const button=$('monFindSupport'),list=$('monSupportList'),summary=$('monSupportSummary');
+   if(!button||!list||!summary)return;
+   button.disabled=true;summary.textContent='Consultando apontamentos já existentes do Suporte…';
+   try{
+     const session=await window.tmAuth?.getSession?.();
+     if(!session?.access_token)throw Error('Faça login como administrador autorizado.');
+     const res=await fetch('/api/ticket-manager?monitoria=candidates&days=30',{
+       method:'GET',headers:{Authorization:'Bearer '+session.access_token},
+       credentials:'same-origin',cache:'no-store'
+     });
+     const data=await res.json().catch(()=>({}));
+     if(!res.ok||!data.ok)throw Error(data.error||'Consulta indisponível');
+     list.replaceChildren();
+     const people=Array.isArray(data.people)?data.people:[];
+     summary.textContent=people.length+' colaboradores com apontamentos recentes; até '+people.length*2+
+       ' monitorias previstas (chat e voz). Nenhuma nota calculada. '+
+       (data.partial?'Consulta limitada a 1.000 apontamentos; resultado parcial.':'');
+     if(!people.length){list.textContent='Nenhum apontamento recente para o período.';return;}
+     const table=document.createElement('table');
+     table.style.cssText='width:100%;border-collapse:collapse;min-width:580px';
+     const head=document.createElement('thead'),header=document.createElement('tr');
+     for(const title of ['Colaborador','Monitoria chat','Monitoria voz']){
+       const th=document.createElement('th');th.scope='col';th.textContent=title;
+       th.style.cssText='text-align:left;padding:9px;border-bottom:1px solid #cbd5e1';header.appendChild(th);
+     }
+     head.appendChild(header);table.appendChild(head);
+     const body=document.createElement('tbody');
+     for(const person of people){
+       const tr=document.createElement('tr'),name=document.createElement('td'),chat=document.createElement('td'),voice=document.createElement('td');
+       name.textContent=person.name;chat.style.padding=voice.style.padding=name.style.padding='10px 8px';
+       for(const cell of [name,chat,voice])cell.style.borderBottom='1px solid #e2e8f0';
+       if(person.chatCandidate){
+         const label=document.createElement('div');
+         label.textContent='#'+person.chatCandidate.ticketId+' · '+person.chatCandidate.date+
+           ' · '+person.chatCandidate.interactions+' ações textuais; cobertura não confirmada';
+         label.style.fontSize='12px';chat.appendChild(label);
+         const buttonChat=document.createElement('button');
+         buttonChat.type='button';buttonChat.className='s';buttonChat.textContent='Conferir chat';
+         buttonChat.onclick=async()=>{
+           $('monTicketId').value=person.chatCandidate.ticketId;
+           $('monCollaborator').value=person.name;
+           $('monSector').value='Suporte';
+           $('monChannel').value='chat';channel='chat';
+           await loadChat();$('monTranscript').scrollIntoView({behavior:'smooth',block:'center'});
+         };
+         chat.appendChild(buttonChat);
+       }else chat.textContent='Sem chamado candidato';
+       const voiceLabel=document.createElement('div');voiceLabel.textContent='Gravação ainda não vinculada ao colaborador';
+       voiceLabel.style.fontSize='12px';voice.appendChild(voiceLabel);
+       const voiceButton=document.createElement('button');
+       voiceButton.type='button';voiceButton.className='s';voiceButton.textContent='Localizar voz';
+       voiceButton.onclick=()=>{
+         $('monCollaborator').value=person.name;$('monSector').value='Suporte';
+         $('monChannel').value='voice';channel='voice';
+         $('monSearchCalls').scrollIntoView({behavior:'smooth',block:'center'});
+         status('Selecione uma chamada da Zenvia e confirme o atendente antes de solicitar análise por IA.');
+       };
+       voice.appendChild(voiceButton);
+       tr.append(name,chat,voice);body.appendChild(tr);
+     }
+     table.appendChild(body);list.appendChild(table);
+   }catch(e){summary.textContent='Consulta de candidatos: '+String(e.message||e);}
+   finally{button.disabled=false;}
+ }
  async function listCalls(){
    const start=$('monFrom').value,end=$('monTo').value;
    status('Consultando chamadas na Zenvia…');
@@ -347,6 +412,7 @@
    window.monitoriaRefreshAlerts=refreshAlerts;
    setInterval(()=>{if(!document.hidden&&window.tmAuth)refreshAlerts()},15000);
    refreshAlerts();
+   $('monFindSupport')?.addEventListener('click',findSupportCandidates);
    $('monSearchCalls')?.addEventListener('click',listCalls);
    $('monLoadChat')?.addEventListener('click',loadChat);
    $('monTranscribe')?.addEventListener('click',transcribe);
