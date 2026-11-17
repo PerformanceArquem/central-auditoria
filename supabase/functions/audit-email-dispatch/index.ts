@@ -1,6 +1,6 @@
 import {assertFailedRetry,RETRY_POLICY} from "./failed-delivery-policy.ts";
 import {voiceReportEligible,collectVoiceReport,composeVoiceChat} from "./voice-chat-report.ts";
-import {forecastSection} from "./forecast-variance.ts";
+import {forecastSection,FORECAST_POLICY} from "./forecast-variance.ts";
 import {renderHourCharts,renderCsatChart,canReceiveCsat,reportIdentity,reportSubject} from "./email-visuals.ts";
 import {reportTiming,timingContent,TIMING_NOTICE} from "./late-adjustments.ts";
 import {reportSectionOn,reportSectionFlags} from "./report-sections.ts";
@@ -914,6 +914,7 @@ function reportPacket(rec:R,report:R,tickets:R,from:string,to:string,kind:Report
  return {
    schema:'arquem-mail-v1',
    visualVersion:'arquem-visual-v1',
+   forecastPolicy:FORECAST_POLICY,
    recipientId:String(rec.id),reportKind:kind,
    title:(kind==='monthly'||kind==='annual'?'Balancete ':'Relatório ')+REPORT_LABEL[kind].toLowerCase()+' - '+safe(rec.name||rec.sector||'Gestão'),
    from,to,partial,historicalIncomplete,
@@ -1659,7 +1660,7 @@ async function prepareReports() {
       '&select=dispatch_key,reconciliation_success_at,expires_at,report_data&limit=1');
     if(t.r.report_sections==null && existing.length && Date.parse(String(existing[0].reconciliation_success_at))===Date.parse(String(coverage.lastSuccess)) &&
       Date.parse(String(existing[0].expires_at))>Date.now()+5*60000 &&
-      Array.isArray(existing[0].report_data?.forecastVariances)&&existing[0].report_data?.visualVersion==='arquem-visual-v1'){
+      Array.isArray(existing[0].report_data?.forecastVariances)&&existing[0].report_data?.visualVersion==='arquem-visual-v1'&&existing[0].report_data?.forecastPolicy===FORECAST_POLICY){
       results.push({key,skipped:'Conteudo ja preparado'});continue;
     }
     if(results.filter(x=>x.status==='prepared').length>=2)break;
@@ -1704,7 +1705,7 @@ async function cachedReport(t:ScheduledReport) {
   const rows=await db('audit_email_prepared_reports?dispatch_key=eq.'+encodeURIComponent(key)+
     '&status=eq.ready&select=subject,body_text,body_html,report_data,reconciliation_success_at,expires_at&limit=1');
   if(!rows.length||Date.parse(String(rows[0].expires_at))<=Date.now()||
-    rows[0].report_data?.visualVersion!=='arquem-visual-v1' ||
+    rows[0].report_data?.visualVersion!=='arquem-visual-v1' || rows[0].report_data?.forecastPolicy!==FORECAST_POLICY ||
     !Array.isArray(rows[0].report_data?.forecastVariances) ||
     !Number.isFinite(Number(rows[0].report_data?.metrics?.targetGapMinutes)) ||
     !Array.isArray(rows[0].report_data?.extraordinary))return null;

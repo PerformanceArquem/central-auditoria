@@ -9,6 +9,7 @@ const recipient={id:'recipient',active:true,scope:'sector',daily_enabled:true};
 const failed={dispatch_key:'recipient:daily:2026-11-16:2026-11-16',recipient_id:'recipient',report_kind:'daily',period_from:'2026-11-16',period_to:'2026-11-16',status:'failed',sent_at:null,error_message:'Gerador ainda não homologado para observações de ajustes posteriores ao fechamento'};
 test('only verified pre-provider failures with current permission can retry',()=>{
  assert.doesNotThrow(()=>assertFailedRetry(failed,recipient,'2026-11-17'));
+ assert.doesNotThrow(()=>assertFailedRetry({...failed,error_message:'Métricas de voz indisponíveis (HTTP 502: Não foi possível consolidar os dados de voz); relatório completo não liberado'},recipient,'2026-11-17'));
  for(const row of [{...failed,status:'sent'},{...failed,status:'processing'},{...failed,sent_at:'date'},{...failed,error_message:'timeout'},{...failed,error_message:'Entrega de PDF/XLSX não confirmada'},{...failed,dispatch_key:'monitoria:individual'},{...failed,period_to:'2026-11-17'}])assert.throws(()=>assertFailedRetry(row,recipient,'2026-11-17'));
  for(const rec of [{...recipient,scope:'monitoria'},{...recipient,active:false},{...recipient,daily_enabled:false},{...recipient,allowed_report_types:[]},{...recipient,allowed_report_types:['production_flow']}])assert.throws(()=>assertFailedRetry(failed,rec,'2026-11-17'));
 });
