@@ -9,6 +9,64 @@
    const a=document.createElement('a');a.href=url;a.download=safeName(name);a.click();
    setTimeout(()=>URL.revokeObjectURL(url),60000);
  }
+ async function api(params,{binary=false}={}){
+   const session=await window.tmAuth?.getSession?.();
+   if(!session?.access_token)throw Error('Faça login como administrador autorizado.');
+   const url='/api/monitoria-zenvia?'+new URLSearchParams(params);
+   const res=await fetch(url,{headers:{Authorization:'Bearer '+session.access_token},
+      credentials:'same-origin',cache:'no-store'});
+   if(binary){
+     if(!res.ok){const d=await res.json().catch(()=>({}));throw Error(d.error||'Áudio indisponível');}
+     return await res.blob();
+   }
+   const body=await res.json().catch(()=>({}));
+   if(!res.ok||body.ok!==true)throw Error(body.error||'Consulta indisponível');
+   return body;
+ }
+ async function listCalls(){
+   const start=$('monFrom').value,end=$('monTo').value;
+   status('Consultando chamadas na Zenvia…');
+   try{
+     const data=await api({action:'calls',from:start,to:end,limit:40});
+     const list=$('monCalls');list.replaceChildren();
+     if(!data.calls.length){list.textContent='Nenhuma chamada localizada para este período.';return}
+     for(const call of data.calls){
+       const row=document.createElement('div');
+       row.style.cssText='border:1px solid #dae2ee;border-radius:8px;padding:10px;margin:6px 0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap';
+       const description=document.createElement('span');
+       description.textContent='#'+call.id+' · '+call.direction+' · '+call.started+' · '+call.status+' · '+call.durationSeconds+'s';
+       const button=document.createElement('button');button.type='button';button.className='s';
+       button.textContent='Ouvir / baixar';
+       if(call.kind==='inbound'){button.disabled=true;button.title='Rota de gravação receptiva em homologação';}
+       button.addEventListener('click',async()=>{
+         button.disabled=true;status('Baixando gravação autenticada da Zenvia…');
+         try{
+           const media=await api({action:'audio',kind:call.kind,id:call.id},{binary:true});
+           if(localAudioUrl)URL.revokeObjectURL(localAudioUrl);
+           localAudioUrl=URL.createObjectURL(media);
+           const player=$('monAudioPlayer');player.src=localAudioUrl;player.hidden=false;
+           const link=$('monDownloadAudio');link.href=localAudioUrl;link.download='ligacao-'+call.id+'.mp3';link.hidden=false;
+           $('monChannel').value='voice';channel='voice';
+           status('Gravação carregada. Para análise pelo Gemini, informe a transcrição textual.');
+         }catch(e){status('Falha ao carregar gravação: '+String(e.message||e));}
+         finally{button.disabled=false;}
+       });
+       row.append(description,button);list.appendChild(row);
+     }
+     status(data.calls.length+' chamadas consultadas. Nenhuma gravação foi enviada ao Gemini.');
+   }catch(e){status('Consulta de ligações: '+String(e.message||e));}
+ }
+ async function loadChat(){
+   const protocol=$('monProtocol').value.trim();
+   status('Consultando histórico de chat pelo protocolo…');
+   try{
+     const data=await api({action:'chat',protocol});
+     const lines=data.messages.map(m=>'['+(m.at||'sem horário')+'] '+(m.sender||'Participante')+': '+m.text);
+     $('monTranscript').value=lines.join('\n');
+     $('monChannel').value='chat';channel='chat';
+     status(data.messages.length+' mensagens carregadas da Zenvia. Revise o histórico antes de enviar ao Gemini.');
+   }catch(e){status('Consulta de chat: '+String(e.message||e));}
+ }
  function render(analysis){
    const result=$('monResults');result.replaceChildren();
    const title=document.createElement('h3');
@@ -71,6 +129,8 @@
      if(!/\.(txt|csv)$/i.test(file.name)||file.size>150000){status('Use TXT ou CSV de até 150 KB.');return}
      $('monTranscript').value=await file.text();status('Conversa importada para conferência.');
    });
+   $('monSearchCalls')?.addEventListener('click',listCalls);
+   $('monLoadChat')?.addEventListener('click',loadChat);
    $('monRun').addEventListener('click',analyse);
    $('monExportChat').addEventListener('click',()=>download('chat_monitoria.txt',$('monTranscript').value,'text/plain;charset=utf-8'));
    $('monExportReview').addEventListener('click',()=>{if(lastAnalysis)download('avaliacao_monitoria.json',JSON.stringify(lastAnalysis,null,2),'application/json')});
