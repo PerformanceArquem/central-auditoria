@@ -246,12 +246,33 @@ test('missing talk duration must never be reported as 0s TMA',async()=>{
   const r=await invoke();
   assert.equal(r.code,200);
   assert.equal(r.body.summary.answered,2);
-  assert.equal(r.body.summary.tmaSeconds,null);
-  assert.equal(r.body.summary.talkSeconds,null);
+  assert.equal(r.body.summary.tmaSeconds,55); // TMA of valid calls only
+  assert.equal(r.body.summary.talkSeconds,55); // observed subtotal, not full total
+  assert.equal(r.body.summary.talkCoverageComplete,false);
   assert.equal(r.body.summary.tmaMissingSamples,1);
   assert.equal(r.body.summary.tmaSamples,1);
  }finally{outbound[0].destino.duracao_falada_segundos=saved;}
 });
+test('formatted Zenvia HH:MM:SS talk duration recovers valid TMA without guessing',async()=>{
+ const saved=outbound[0].destino.duracao_falada_segundos;
+ const oldText=outbound[0].destino.duracao_falada;
+ delete outbound[0].destino.duracao_falada_segundos;
+ outbound[0].destino.duracao_falada='00:01:55';
+ try{
+  const r=await invoke();
+  assert.equal(r.code,200);
+  assert.equal(r.body.summary.tmaMissingSamples,0);
+  assert.equal(r.body.summary.tmaSamples,2);
+  assert.equal(r.body.summary.tmaSeconds,85);
+  assert.equal(r.body.summary.talkSeconds,170);
+  assert.equal(r.body.summary.talkCoverageComplete,true);
+ }finally{
+  outbound[0].destino.duracao_falada_segundos=saved;
+  if(oldText===undefined)delete outbound[0].destino.duracao_falada;
+  else outbound[0].destino.duracao_falada=oldText;
+ }
+});
+
 test('real zero-duration answered call remains a valid measured sample',async()=>{
  const saved=outbound[0].destino.duracao_falada_segundos;
  outbound[0].destino.duracao_falada_segundos=0;
@@ -385,7 +406,9 @@ test('support missing call duration must not fabricate TMA',async()=>{
  delete inbound[0].duracao_falada_segundos;
  try{
   const r=await invoke();
-  assert.equal(r.body.support.metrics.tmaSeconds,null);
+  assert.equal(r.body.support.metrics.tmaSeconds,115);
+  assert.equal(r.body.support.metrics.talkSeconds,115);
+  assert.equal(r.body.support.metrics.talkCoverageComplete,false);
   assert.equal(r.body.support.metrics.tmaMissingSamples,1);
  }finally{inbound[0].duracao_falada_segundos=old;delete scope.process.env.ZENVIA_SUPPORT_EXTENSION_IDS;}
 });

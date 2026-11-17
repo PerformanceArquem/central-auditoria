@@ -5646,7 +5646,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
  }
  function paintVoice(v,error){
    const m=v?.support?.configured?v.support.metrics:null;
-   el('sqVoiceKpis').innerHTML=m?[['Ligações do Suporte',m.total],['Atendidas',m.answered],['Não atendidas',m.unanswered],['TMA real',sec(m.tmaSeconds)],['TME da fila',sec(v.queue?.tmeSeconds)]].map(([label,value])=>'<div class="card"><div class="subtle">'+escape(label)+'</div><h3>'+escape(value??'—')+'</h3></div>').join(''):'';
+   el('sqVoiceKpis').innerHTML=m?[['Ligações do Suporte',m.total],['Atendidas',m.answered],['Não atendidas',m.unanswered],['TMA real'+(m.tmaMissingSamples?' · parcial ('+m.tmaSamples+'/'+m.answered+' chamadas)':''),sec(m.tmaSeconds)],['TME da fila',sec(v.queue?.tmeSeconds)]].map(([label,value])=>'<div class="card"><div class="subtle">'+escape(label)+'</div><h3>'+escape(value??'—')+'</h3></div>').join(''):'';
    el('sqVoiceStatus').textContent=error?'Voz indisponível: '+error:(m?'Dados reais da Zenvia no mesmo período selecionado. Contagem e TMA restritos aos ramais homologados do Suporte; TME referente à fila configurada.':'Ramais do Suporte ainda não homologados.');
  }
  const table=(id,rows)=>{el(id).querySelector('tbody').innerHTML=rows.join('')||'<tr><td colspan="8">Nenhum registro para o período.</td></tr>'};
@@ -6095,11 +6095,11 @@ window.clientImpactInit=()=>{
    const rows=[
     ['Recebidas · conta Zenvia',x.inbound],['Efetuadas · conta Zenvia',x.outbound],['Total de ligações · conta Zenvia',x.total],
     ['Atendidas',x.answered],['Não atendidas',x.unanswered],['Em andamento',x.inProgress],['Não classificadas',x.unclassified],
-    ['TMA real',fmtSeconds(x.tmaSeconds)],['Tempo total falado',fmtSeconds(x.talkSeconds)],
+    ['TMA real'+(x.tmaMissingSamples?' · parcial ('+x.tmaSamples+'/'+x.answered+' chamadas)':''),fmtSeconds(x.tmaSeconds)],['Tempo falado '+(x.talkCoverageComplete?'total':'identificado · parcial'),fmtSeconds(x.tmaSamples>0?x.talkSeconds:null)],
     ['TME da fila',fmtSeconds(x.tmeSeconds)],
     ['Suporte · ligações por ramais homologados',supportK?.total??'Não homologado'],
     ['Suporte · atendidas',supportK?.answered??'Não homologado'],
-    ['Suporte · TMA',supportK?fmtSeconds(supportK.tmaSeconds):'Não homologado']
+    ['Suporte · TMA'+(supportK?.tmaMissingSamples?' · parcial ('+supportK.tmaSamples+'/'+supportK.answered+' chamadas)':''),supportK?fmtSeconds(supportK.tmaSeconds):'Não homologado']
    ];
    for(const [label,value] of rows){const box=document.createElement('div');box.className='card';
     const text=document.createElement('div');text.className='subtle';text.textContent=label;
@@ -6108,7 +6108,7 @@ window.clientImpactInit=()=>{
    renderRows('zvDays',d.byDay||[],['date','total','answered','unanswered','inProgress','unclassified']);
    renderRows('zvExtensions',d.byExtension||[],['name','total','answered','unanswered','inProgress','unclassified']);
    const queue=d.queue||{};
-   el('zvStatus').textContent='Fonte: API Zenvia Voice · '+start+' a '+end+' · '+(x.total||0)+' chamadas na conta. '+(support.configured?'Recorte do Suporte: ramais homologados.':'Recorte do Suporte pendente: configurar ramais homologados no servidor. ')+(queue.configured?'Fila configurada: '+(queue.calls??0)+' chamadas; '+(queue.waitSampleCount??0)+' amostras válidas de espera.':'TME pendente: configure o ID da fila de Suporte no servidor.');
+   el('zvStatus').textContent=(x.tmaMissingSamples?'⚠ '+x.tmaMissingSamples+' ligação(ões) atendida(s) sem duração falada: TMA e tempo identificado são PARCIAIS. ':'')+'Fonte: API Zenvia Voice · '+start+' a '+end+' · '+(x.total||0)+' chamadas na conta. '+(support.configured?'Recorte do Suporte: ramais homologados.':'Recorte do Suporte pendente: configurar ramais homologados no servidor. ')+(queue.configured?'Fila configurada: '+(queue.calls??0)+' chamadas; '+(queue.waitSampleCount??0)+' amostras válidas de espera.':'TME pendente: configure o ID da fila de Suporte no servidor.');
   }catch(e){reset();el('zvStatus').textContent='Métricas indisponíveis: '+e.message;}
   finally{loading=false;button.disabled=false;}
  }
