@@ -1,5 +1,6 @@
 import {CRITICAL,RULESET_VERSION,rulesFor} from './rules.ts';
 import {evaluate,type Channel,type Observation} from './scoring.ts';
+import {validateAudioPayload,transcriptionRequest,extractTranscription} from './transcription.ts';
 const env=(k:string)=>Deno.env.get(k)?.trim()||'';
 const origins=new Set(['https://central-auditoria-iota.vercel.app','https://centralauditoria.ddns.net','https://www.centralauditoria.ddns.net']);
 const response=(v:unknown,status=200)=>new Response(JSON.stringify(v),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
@@ -32,6 +33,26 @@ async function handle(req:Request){
  if(req.method!=='POST')return response({error:'Use POST'},405);
  if(!(await admin(req)))return response({error:'Acesso restrito à Qualidade autorizada (administrador)'},403);
  const input=await req.json().catch(()=>null);
+ if(input?.action==='transcribe'){
+  const checked=validateAudioPayload(input);
+  if(!checked.ok)return response({ok:false,error:checked.error},400);
+  const apiKey=env('GEMINI_API_KEY');
+  if(!apiKey)return response({ok:false,error:'Gemini não configurado no servidor'},503);
+  try{
+   const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
+    body:JSON.stringify(transcriptionRequest(checked.mimeType,checked.base64)),
+    signal:AbortSignal.timeout(60000)
+   });
+   if(!r.ok)return response({ok:false,error:'Serviço de transcrição indisponível'},503);
+   const text=extractTranscription(await r.json());
+   if(!text)return response({ok:false,error:'Não foi possível obter uma transcrição; revise o áudio'},422);
+   return response({ok:true,sent:false,temporary:true,requiresHumanReview:true,transcript:text});
+  }catch{
+   return response({ok:false,error:'Falha ao transcrever áudio; nenhum arquivo foi armazenado'},502);
+  }
+ }
  const channel=input?.channel as Channel,transcript=String(input?.transcript||'');
  if(!['chat','voice'].includes(channel))return response({error:'Canal inválido'},400);
  if(input?.consent!==true)return response({error:'É necessária autorização explícita para processar a conversa pelo Gemini'},400);
