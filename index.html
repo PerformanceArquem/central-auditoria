@@ -4866,7 +4866,8 @@ try{const sv=JSON.parse(localStorage.getItem('md_rules')||'{}');RF.forEach(i=>{i
 $('autoMin').value=localStorage.getItem('md_auto')??'5';
 localStorage.removeItem('md_iakey'); localStorage.removeItem('md_iamode');
 lastToday=$('endDate').value;
-showTab('cfg');
+const monitoriaRecording=new URL(location.href).searchParams.get('monitoria_voice');
+showTab(/^\\d{1,14}$/.test(monitoriaRecording||'')?'monitoria':'cfg');
 $('alarmMinDays').value=localStorage.getItem('md_alarm_days')||'7';
 showLiveEvents();
 Object.entries(MODS).forEach(([k,[t,d]])=>{
