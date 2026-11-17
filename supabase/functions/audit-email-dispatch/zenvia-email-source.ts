@@ -116,20 +116,21 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
    }
   }
  }
- // Sem duracao falada para TODAS as chamadas atendidas, não publicar TMA parcial.
- metrics.tmaSeconds=metrics.answered&&metrics.tmaMissingSamples===0?
-   Math.round((metrics.talkSeconds??0)/metrics.answered):null;
- if(metrics.tmaMissingSamples)metrics.talkSeconds=null;
+ // TMA de amostra = média somente das chamadas atendidas com duração comprovada.
+ // O tempo falado, quando a cobertura for incompleta, é um subtotal observado.
+ metrics.tmaSeconds=metrics.tmaSamples>0?
+   Math.round((metrics.talkSeconds??0)/metrics.tmaSamples):null;
+ (metrics as R).talkCoverageComplete=metrics.answered>0&&metrics.tmaMissingSamples===0;
  metrics.queueCalls=queueConfigured?qCount:null;
  metrics.queueMissingWait=queueConfigured?qMissing:null;
  metrics.tmeSeconds=queueConfigured&&qCount&&!qMissing?Math.round(qSum/qCount):null;
- supportMetrics.tmaSeconds=supportMetrics.answered>0&&!supportMetrics.tmaMissingSamples?
-   Math.round((supportMetrics.talkSeconds??0)/supportMetrics.answered):null;
- if(supportMetrics.tmaMissingSamples)supportMetrics.talkSeconds=null;
+ supportMetrics.tmaSeconds=supportMetrics.tmaSamples>0?
+   Math.round((supportMetrics.talkSeconds??0)/supportMetrics.tmaSamples):null;
+ (supportMetrics as R).talkCoverageComplete=supportMetrics.answered>0&&supportMetrics.tmaMissingSamples===0;
  return {support:{configured:!!supportSet,scope:supportSet?'Ramais de Suporte homologados':'Não homologado',
     metrics:supportSet?supportMetrics:null},metrics,byDay:[...day.values()].sort((a,b)=>a.date.localeCompare(b.date)),
   byHour:[...hour].map(([hour,count])=>({hour,count})).sort((a,b)=>b.count-a.count),
-  byExtension:[...extension.values()].map(x=>({...x,talkSeconds:x.missingTalkSamples?null:x.talkSeconds} as R))
+  byExtension:[...extension.values()].map(x=>({...x,talkCoverageComplete:x.answered>0&&!x.missingTalkSamples} as R))
     .sort((a,b)=>Number((b as R).total)-Number((a as R).total)).slice(0,30),
   coverageVerified:true,source:'Zenvia Voice',queueConfigured};
 }
