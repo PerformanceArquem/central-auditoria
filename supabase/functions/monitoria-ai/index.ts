@@ -19,6 +19,26 @@ function cors(req:Request,res:Response){
  h.set('Access-Control-Allow-Methods','POST,OPTIONS');h.set('Vary','Origin');
  return new Response(res.body,{status:res.status,headers:h});
 }
+async function googleFailure(result:Response,context:'evaluation'|'transcription'){
+ let statusText='';
+ let reason='';
+ try{
+  const payload=await result.json();
+  statusText=typeof payload?.error?.status==='string'?payload.error.status.slice(0,70):'';
+  const details=Array.isArray(payload?.error?.details)?payload.error.details:[];
+  reason=details.map((item:Record<string,unknown>)=>String(item?.reason||'')).find(Boolean)?.slice(0,70)||'';
+ }catch{/* Do not include provider messages, secrets or chat content in diagnostics. */}
+ const status=result.status;
+ let message='Falha temporária de comunicação com a API Gemini.';
+ if(status===400)message='O Gemini recusou os parâmetros da avaliação (HTTP 400). Verifique compatibilidade do modelo e do formato da resposta.';
+ if(status===401||status===403)message='O Google recusou a credencial ou a permissão da API Gemini (HTTP '+status+'). Verifique se o Secret contém uma chave API válida do Google AI Studio.';
+ if(status===404)message='Modelo Gemini não encontrado ou indisponível para esta chave (HTTP 404).';
+ if(status===429)message='Cota gratuita do Gemini atingida ou limite de solicitações excedido (HTTP 429). Tente novamente quando a cota estiver disponível.';
+ if(status>=500)message='O serviço Gemini está temporariamente indisponível (HTTP '+status+').';
+ const code='GEMINI_PROVIDER_'+status;
+ console.error('monitoria-ai provider rejection',JSON.stringify({context,providerStatus:status,statusText,reason}));
+ return response({ok:false,error:message,code,providerStatus:status,providerErrorStatus:statusText||undefined,providerReason:reason||undefined},503);
+}
 async function admin(req:Request){
  const jwt=/^Bearer\s+(.+)$/i.exec(req.headers.get('authorization')||'')?.[1];
  const base=env('SUPABASE_URL').replace(/\/$/,'');
@@ -56,7 +76,7 @@ async function handle(req:Request){
     body:JSON.stringify(transcriptionRequest(checked.mimeType,checked.base64)),
     signal:AbortSignal.timeout(60000)
    });
-   if(!r.ok)return response({ok:false,error:'Serviço de transcrição indisponível'},503);
+   if(!r.ok)return await googleFailure(r,'transcription');
    const text=extractTranscription(await r.json());
    if(!text)return response({ok:false,error:'Não foi possível obter uma transcrição; revise o áudio'},422);
    return response({ok:true,sent:false,temporary:true,requiresHumanReview:true,transcript:text});
@@ -98,7 +118,7 @@ async function handle(req:Request){
     generationConfig:{temperature:0.1,maxOutputTokens:4500,responseMimeType:'application/json',responseSchema:schema}
    }),signal:AbortSignal.timeout(45000)
   });
-  if(!result.ok)return response({error:'A API Gemini recusou ou não concluiu a avaliação',providerStatus:result.status,code:'GEMINI_UPSTREAM_ERROR'},503);
+  if(!result.ok)return await googleFailure(result,'evaluation');
   const body=await result.json();
   raw=JSON.parse(body.candidates?.[0]?.content?.parts?.map((x:{text?:string})=>x.text||'').join('')||'null');
  }catch{return response({error:'Falha ao processar resposta estruturada da IA'},502);}
