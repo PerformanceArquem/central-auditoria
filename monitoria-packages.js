@@ -39,7 +39,7 @@
    const line=approved.map(r=>{
     const href=audioLink(r);
     const ref=r.channel==='chat'?
-      '<span>PDF do chat no pacote anexo; cobertura das ações deve ser validada</span>':
+      '<span>Extrato das interações do Movidesk: confira se o PDF está no pacote e se o diálogo está completo</span>':
       href?'<a href="'+escapeHtml(href)+'" style="color:#1d4ed8">Abrir gravação (login obrigatório)</a>':'<span>Gravação não homologada</span>';
     return '<tr><td>'+escapeHtml(fmt(r.monitored_at))+'</td><td>'+escapeHtml(r.channel==='chat'?'Chat Movidesk':'Ligação Zenvia')+'</td><td>#'+escapeHtml(r.source_id)+'</td><td>'+escapeHtml(r.reviewer_name)+'</td><td style="font-weight:700">'+Number(r.score_approved).toFixed(2)+'</td><td>'+(r.critical_confirmed?'Crítica confirmada':'—')+'</td><td>'+ref+'</td></tr>';
    }).join('');
@@ -62,11 +62,11 @@
    const ctor=window.jspdf?.jsPDF;if(!ctor)throw Error('Biblioteca de PDF indisponível');
    const pdf=new ctor({format:'a4',unit:'mm'});let y=21;
    pdf.setFillColor(20,33,61);pdf.rect(0,0,210,20,'F');pdf.setTextColor(255,255,255);pdf.setFontSize(13);
-   pdf.text('ARQUEM | HISTORICO DE CHAT',13,12);pdf.setTextColor(25,38,59);pdf.setFontSize(10);
+   pdf.text('ARQUEM | EXTRATO DAS INTERACOES MOVIDESK',13,12);pdf.setTextColor(25,38,59);pdf.setFontSize(10);
    const header=['Chamado Movidesk: #'+review.source_id,'Colaborador: '+review.collaborator_name,
      'Monitor responsável: '+review.reviewer_name,'Data da monitoria: '+review.monitored_at,
      'Nota aprovada: '+review.score_approved+'/100',
-     'ATENCAO: ações de ticket podem não representar o chat completo.'];
+     'ATENCAO: extrato das acoes do chamado; nao certifica chat completo.'];
    for(const row of header){pdf.text(pdf.splitTextToSize(row,183),12,y);y+=7}
    y+=3;pdf.setFontSize(9);
    for(const m of messages){
@@ -107,16 +107,16 @@
     try{
      const result=await fetchJson('/api/monitoria-movidesk?'+new URLSearchParams({ticketId:r.source_id}));
      if(result.partial||!result.messages?.length){missing.push(r.source_id);continue}
-     zip.file('Chats/Chat_'+safe(r.source_id)+'_'+safe(r.id)+'.pdf',chatPDF(r,result.messages));
+     zip.file('Interacoes_Movidesk/Extrato_'+safe(r.source_id)+'_'+safe(r.id)+'.pdf',chatPDF(r,result.messages));
     }catch{missing.push(r.source_id);}
    }
-   if(missing.length)zip.file('PENDENCIAS_CHAT.txt','Os seguintes chats NÃO foram anexados devido a histórico insuficiente ou falha de consulta:\n'+missing.join('\n'));
-   zip.file('LEIA_ANTES_DE_ENVIAR.txt','PACOTE GERADO SEM ENVIO DE EMAIL.\nOs links para gravações exigem login e permissões da Central de Auditoria.\nApenas notas aprovadas foram incluídas.\nOs PDFs refletem as ações retornadas pelo Movidesk e não garantem o chat integral.\nNão envie este pacote a destinatários sem autorização de acesso.\n');
+   if(missing.length)zip.file('PENDENCIAS_CHAT.txt','Os seguintes extratos Movidesk NÃO foram anexados devido a histórico insuficiente ou falha de consulta:\n'+missing.join('\n'));
+   zip.file('LEIA_ANTES_DE_ENVIAR.txt','PACOTE GERADO SEM ENVIO DE EMAIL.\nOs links para gravações exigem login e permissões da Central de Auditoria.\nApenas notas aprovadas foram incluídas.\nOs PDFs são EXTRATOS de interações retornadas pelo Movidesk; NÃO garantem o chat integral.\nNão envie este pacote a destinatários sem autorização de acesso.\n');
    const blob=await zip.generateAsync({type:'blob'});
    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;
    a.download='Pacote_Monitoria_'+safe(previewRows[0].collaborator_name)+'_'+previewPeriod.from+'_a_'+previewPeriod.to+'.zip';
    a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
-   $('monPackageSummary').textContent='Pacote preparado, sem e-mail enviado. PDFs pendentes: '+missing.length+'. Valide o conteúdo antes de usar o serviço de e-mail corporativo.';
+   $('monPackageSummary').textContent='Pacote preparado, sem e-mail enviado. Extratos Movidesk pendentes: '+missing.length+'. NÃO considerar o chat completo apenas com base no extrato.';
  }
  function bind(){
   if(!$('monPackagePeriod'))return;
