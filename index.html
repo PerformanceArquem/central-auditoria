@@ -4709,7 +4709,7 @@ async function cloudBootstrap(){
     cloudMessage(`Supabase conectado · ${remote.length} chamado(s) recuperado(s)${cache?.tickets?.length?` · ${cache.tickets.length} do cache local conferidos`:''}.`,'okc');
     // Nao reenviar tickets restaurados do cache durante a abertura.
     // Apenas uma sincronizacao bem-sucedida da API Movidesk autoriza gravar novas versoes.
-    await cloudSaveState();
+    try{await cloudSaveState()}catch(e){cloudMessage('Supabase conectado · chamados recuperados. Não foi possível salvar as configurações: '+e.message,'err')}
     return true;
   }catch(e){cloudReady=false;cloudHydrating=false;cloudMessage('Não foi possível conectar ao Supabase: '+e.message,'err');return false}
 }

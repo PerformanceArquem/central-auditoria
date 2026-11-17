@@ -45,3 +45,31 @@ test('oversized payload fails locally before reaching Supabase',async()=>{
  await handler(req({tickets:[{id:100,description:'x'.repeat(260000)}]}),res);
  assert.equal(res.statusCode,413);assert.equal(called,false);
 });
+
+test('existing intelligence history survives a shared-settings save above the ticket limit',async()=>{
+ const state={md_ia:'á'.repeat(140000),md_domain:'https://arquem.movidesk.com',md_token:'private',md_secret:'private'};
+ let saved;
+ globalThis.fetch=async(url,opts)=>{
+  if(String(url).includes('/auth/v1/user'))return {ok:true,json:async()=>({id:'test',email:'quality@example.com'})};
+  assert.match(String(url),/\/rest\/v1\/tm_state\?/);
+  saved=JSON.parse(opts.body)[0];
+  return {ok:true,status:201,text:async()=>'',headers:new Headers()};
+ };
+ const res=result();await handler({...req({state}),query:{action:'saveState'}},res);
+ assert.equal(res.statusCode,200);
+ assert.equal(saved.state.md_ia,state.md_ia);
+ assert.equal(saved.state.md_domain,state.md_domain);
+ assert.equal(saved.state.md_token,undefined);
+ assert.equal(saved.state.md_secret,undefined);
+});
+
+test('shared-settings limit remains bounded and rejects before writing',async()=>{
+ let called=false;
+ globalThis.fetch=async(url)=>{
+  if(String(url).includes('/auth/v1/user'))return {ok:true,json:async()=>({id:'test',email:'quality@example.com'})};
+  called=true;throw Error('Should not write');
+ };
+ const res=result();await handler({...req({state:{md_ia:'á'.repeat(500000)}}),query:{action:'saveState'}},res);
+ assert.equal(res.statusCode,413);assert.equal(called,false);
+ assert.match(res.body.error,/Configurações compartilhadas/);
+});
