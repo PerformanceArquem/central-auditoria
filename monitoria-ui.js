@@ -1,7 +1,7 @@
 /* Mini Central de Monitoria — fluxo assistido, sem envio automático ou persistência de mídia. */
 (()=>{
  const $=id=>document.getElementById(id);
- let localAudioUrl='',lastAnalysis=null,channel='chat';
+ let localAudioUrl='',selectedAudio=null,lastAnalysis=null,channel='chat';
  const status=(msg)=>{if($('monStatus'))$('monStatus').textContent=msg};
  const safeName=n=>String(n||'arquivo').replace(/[^\w.-]+/g,'_').slice(0,80);
  function download(name,text,type){
@@ -43,6 +43,7 @@
          try{
            const media=await api({action:'audio',kind:call.kind,id:call.id},{binary:true});
            if(localAudioUrl)URL.revokeObjectURL(localAudioUrl);
+           selectedAudio=media;
            localAudioUrl=URL.createObjectURL(media);
            const player=$('monAudioPlayer');player.src=localAudioUrl;player.hidden=false;
            const link=$('monDownloadAudio');link.href=localAudioUrl;link.download='ligacao-'+call.id+'.mp3';link.hidden=false;
@@ -92,6 +93,37 @@
    }
    $('monExportReview').disabled=false;
  }
+ async function transcribe(){
+   if(!$('monConsent')?.checked){status('Autorize o processamento do áudio pelo Gemini antes de transcrever.');return}
+   if(!selectedAudio){status('Selecione uma gravação para transcrever.');return}
+   if(selectedAudio.size>3*1024*1024){status('Transcrição direta limitada a 3 MB. Divida ou compacte o áudio antes de enviar.');return}
+   const mimeType=selectedAudio.type||'audio/mpeg';
+   if(!['audio/mpeg','audio/mp3','audio/wav','audio/x-wav','audio/ogg','audio/webm','audio/mp4','audio/m4a'].includes(mimeType)){
+     status('Formato não suportado para transcrição. Converta para MP3, WAV, OGG, M4A ou WebM.');return
+   }
+   const button=$('monTranscribe');button.disabled=true;
+   status('Transcrevendo áudio com Gemini. Revise o texto antes de avaliar.');
+   try{
+     const client=window.tmEmailAdminClient;
+     const session=await window.tmAuth?.getSession?.();
+     if(!client?.functions||!session?.access_token)throw Error('Faça login como administrador autorizado.');
+     const audioBase64=await new Promise((resolve,reject)=>{
+       const r=new FileReader();
+       r.onload=()=>resolve(String(r.result||'').split(',')[1]||'');
+       r.onerror=()=>reject(Error('Não foi possível ler o áudio'));
+       r.readAsDataURL(selectedAudio);
+     });
+     const {data,error}=await client.functions.invoke('monitoria-ai',{
+       body:{action:'transcribe',consent:true,mimeType,audioBase64}
+     });
+     if(error||!data?.ok)throw Error(data?.error||error?.message||'Transcrição indisponível');
+     $('monTranscript').value=data.transcript||'';
+     $('monChannel').value='voice';channel='voice';
+     lastAnalysis=null;$('monExportReview').disabled=true;
+     status('Transcrição sugerida. Confira palavras, falantes e horários antes de solicitar a avaliação.');
+   }catch(e){status('Transcrição: '+String(e.message||e));}
+   finally{button.disabled=false;}
+ }
  async function analyse(){
    if(!($('monConsent')?.checked)){status('Autorize explicitamente o processamento da conversa pelo Gemini.');return}
    const transcript=$('monTranscript').value.trim();
@@ -120,6 +152,7 @@
       const f=e.target.files?.[0];const player=$('monAudioPlayer');
       if(!f){player.removeAttribute('src');return}
       if(!f.type.startsWith('audio/')||f.size>100*1024*1024){status('Selecione um áudio de até 100 MB.');e.target.value='';return}
+      selectedAudio=f;
       localAudioUrl=URL.createObjectURL(f);player.src=localAudioUrl;player.hidden=false;
       const link=$('monDownloadAudio');link.href=localAudioUrl;link.download=safeName(f.name);link.hidden=false;
       status('Áudio disponível para ouvir e baixar neste navegador. Nenhum arquivo foi enviado ao servidor.');
@@ -133,6 +166,7 @@
    $('monFrom').value=today;$('monTo').value=today;
    $('monSearchCalls')?.addEventListener('click',listCalls);
    $('monLoadChat')?.addEventListener('click',loadChat);
+   $('monTranscribe')?.addEventListener('click',transcribe);
    $('monRun').addEventListener('click',analyse);
    $('monExportChat').addEventListener('click',()=>download('chat_monitoria.txt',$('monTranscript').value,'text/plain;charset=utf-8'));
    $('monExportReview').addEventListener('click',()=>{if(lastAnalysis)download('avaliacao_monitoria.json',JSON.stringify(lastAnalysis,null,2),'application/json')});
