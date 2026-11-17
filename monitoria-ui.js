@@ -188,6 +188,9 @@
  }
  async function loadChat(expectedGeneration=evidenceGeneration){
    const ticketId=$('monTicketId').value.trim();
+   const button=$('monLoadChat'),near=$('monChatLoadStatus');
+   if(button){button.disabled=true;button.textContent='Carregando…'}
+   if(near){near.textContent='Consultando o Movidesk e, se necessário, o extrato já sincronizado…';near.style.color='#52637c'}
    status('Consultando interações do chamado no Movidesk…');
    try{
      if(!/^\d{1,12}$/.test(ticketId))throw Error('Informe o número do chamado Movidesk.');
@@ -214,9 +217,11 @@
      $('monChannel').value='chat';channel='chat';
      $('monSourceId').value=ticketId;
      lastAnalysis=null;$('monExportReview').disabled=true;
+     if(near){near.textContent=data.messages.length+' interações carregadas do '+(data.syncedFallback?'banco sincronizado':'Movidesk')+'. Confira a cobertura antes de avaliar.';near.style.color='#17603a'}
      status(data.messages.length+' interações do chamado #'+ticketId+' recuperadas do Movidesk. '+data.warning);
      return true;
-   }catch(e){if(expectedGeneration===evidenceGeneration)status('Consulta Movidesk: '+String(e.message||e));return false;}
+   }catch(e){if(expectedGeneration===evidenceGeneration){const message=String(e.message||e);status('Consulta Movidesk: '+message);if(near){near.textContent='Falha ao abrir conversa: '+message;near.style.color='#a9231c'}}return false;}
+   finally{if(button){button.disabled=false;button.textContent='Abrir conversa'}}
  }
  async function reviewsApi(params,body){
    const session=await window.tmAuth?.getSession?.();
