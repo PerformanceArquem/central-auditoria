@@ -595,10 +595,10 @@
    $('monReloadRoutes').addEventListener('click',loadRoutes);
    $('monExportChat').addEventListener('click',()=>download('chat_monitoria.txt',$('monTranscript').value,'text/plain;charset=utf-8'));
    $('monExportReview').addEventListener('click',()=>{if(lastAnalysis)download('avaliacao_monitoria.json',JSON.stringify(lastAnalysis,null,2),'application/json')});
-   $('monExportOfficialExcel')?.addEventListener('click',()=>{
+   $('monExportOfficialExcel')?.addEventListener('click',async()=>{
      try{
        if(!lastAnalysis)throw Error('Primeiro avalie com Gemini');
-       const filename=window.monitoriaOfficialExcel?.({
+       const filename=await window.monitoriaOfficialExcel?.({
          analysis:lastAnalysis,
          channel,
          collaborator:$('monCollaborator').value.trim(),
