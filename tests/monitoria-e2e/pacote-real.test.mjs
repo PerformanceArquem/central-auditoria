@@ -54,10 +54,10 @@ const sandbox={
  window:{XLSX,JSZip,jspdf:{jsPDF},tmAuth:{getSession:async()=>({access_token:'synthetic-test-jwt'})}},
  fetch:async (url,options)=>{
   fetches.push({url:String(url),options});
-  if(String(url).includes('/api/monitoria-reviews')){
+  if(String(url).includes('/api/ticket-manager?monitoria=reviews')){
     return {ok:true,json:async()=>({ok:true,reviews:[approved,voice,provisional],partial:false})};
   }
-  if(String(url).includes('/api/monitoria-movidesk')){
+  if(String(url).includes('/api/ticket-manager?monitoria=movidesk')){
     return {ok:true,json:async()=>({ok:true,messages:[
       {at:'2026-11-17T09:10:00',sender:'Atendente',text:'Bom dia, como posso ajudar?'},
       {at:'2026-11-17T09:12:00',sender:'Cliente',text:'Preciso de atendimento.'}
@@ -113,7 +113,7 @@ test('gera ZIP verdadeiro com Excel, PDF final e extrato com informação de cob
  assert.equal(manifest.chatFullHistoryValidated,false);
  assert.equal(manifest.emailsSent,false);
  assert.equal(manifest.chatExtractsIncluded[0].fullChatVerified,false);
- assert.equal(fetches.filter(x=>x.url.includes('/api/monitoria-movidesk')).length,1);
+ assert.equal(fetches.filter(x=>x.url.includes('/api/ticket-manager?monitoria=movidesk')).length,1);
  for(const request of fetches){
    assert.equal(request.options.headers.Authorization,'Bearer synthetic-test-jwt');
  }
