@@ -1033,6 +1033,17 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
               <p id="monAlertCoverage" class="subtle">Alertas internos consultados enquanto a Central estiver aberta, com atualização a cada 15 segundos. Sem gestor vinculado ao setor, a ocorrência fica pendente para a Qualidade.</p>
               <button id="monRefreshAlerts" type="button" class="s">Atualizar alertas</button>
               <div id="monAlertList" role="region" aria-label="Ocorrências críticas da monitoria"></div>
+              <details style="margin-top:12px">
+                <summary style="cursor:pointer;font-weight:600">Configurar gestor por setor (administrador)</summary>
+                <p class="subtle">O alerta fica pendente de encaminhamento até ser associado a um usuário ativo da Central. Não são enviados e-mails.</p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+                  <label>Setor <input id="monRouteSector" maxlength="100" placeholder="Suporte"></label>
+                  <label>ID do usuário gestor (UUID) <input id="monRouteUser" maxlength="36" placeholder="Usuário autenticado da Central" style="min-width:290px"></label>
+                  <button id="monSaveRoute" type="button" class="s">Vincular gestor</button>
+                  <button id="monReloadRoutes" type="button" class="s">Consultar vínculos</button>
+                </div>
+                <div id="monRouteList" class="subtle"></div>
+              </details>
             </div>
             <div class="card" style="max-width:1100px">
               <h3>📊 Relatórios e notas da Monitoria</h3>
