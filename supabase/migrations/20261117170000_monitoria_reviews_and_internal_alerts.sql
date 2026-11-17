@@ -21,6 +21,8 @@ create table if not exists public.audit_monitoria_reviews (
  recording_kind text check (recording_kind in ('inbound','outbound')),
  evidence_reference text,
  check (evidence_reference is null or length(evidence_reference)<=120),
+ evidence_scope text not null default 'manual' check (evidence_scope in ('manual','movidesk_ticket_actions_unverified','voice_transcript')),
+ evidence_acknowledged boolean not null default false,
  ruleset_version text not null check (length(ruleset_version) between 1 and 80),
  score_suggested numeric(5,2) not null check (score_suggested between 0 and 100),
  score_approved numeric(5,2) check (score_approved between 0 and 100),
