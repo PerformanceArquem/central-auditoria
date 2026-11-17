@@ -39,3 +39,18 @@ Deno.test("falha crítica sem evidência não zera a nota",()=>{
  const result=evaluate('chat',[],[{id:'Z1',decision:'nao_conforme',evidence:'trecho inexistente'}],'Bom dia. Como posso ajudar?');
  if(result.scoreSuggestion!==100||result.criticalFlag)throw Error("Zeramento sem evidência");
 });
+
+Deno.test("decisão parcial sem peso definido não bloqueia a persistência da monitoria",()=>{
+ const transcript='Atendente: Bom dia. Posso ajudar?';
+ const result=evaluate('chat',[
+  {id:'R01',decision:'parcial',evidence:'Bom dia'},
+  {id:'R03',decision:'parcial',evidence:'Bom dia'}
+ ],[],transcript);
+ const r01=result.criteria.find(x=>x.id==='R01');
+ const r03=result.criteria.find(x=>x.id==='R03');
+ if(r01?.decision!=='nao_verificavel'||r01?.deducted!==0||r01?.needsReview!==true)
+  throw Error('Parcial sem peso deve ser não verificável e requerer revisão');
+ if(r03?.decision!=='parcial'||r03?.deducted!==2.5)
+  throw Error('Parcial válido deve manter desconto da planilha');
+ if(result.scoreSuggestion!==97.5)throw Error('Nota divergente: '+result.scoreSuggestion);
+});
