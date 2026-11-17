@@ -1,10 +1,14 @@
 type Row=Record<string,unknown>;
 export const RETRY_POLICY='failed-reports-20261117-v1';
-// Only this verified pre-provider failure is safe to retry. Network errors,
+// Only these verified pre-provider failures are safe to retry. Network errors,
 // refused messages and missing attachment acknowledgements require reconciliation.
 export function assertFailedRetry(row:Row,rec:Row,today:string){
  if(row.status!=='failed'||row.sent_at)throw Error('Este registro não é uma falha sem envio confirmado.');
- if(row.error_message!=='Gerador ainda não homologado para observações de ajustes posteriores ao fechamento')
+ const preProviderFailures=[
+  'Gerador ainda não homologado para observações de ajustes posteriores ao fechamento',
+  'Métricas de voz indisponíveis (HTTP 502: Não foi possível consolidar os dados de voz); relatório completo não liberado'
+ ];
+ if(!preProviderFailures.includes(String(row.error_message)))
   throw Error('Confirme a situação no serviço de e-mail antes de reenviar esta falha.');
  if(rec.active!==true||!['sector','management'].includes(String(rec.scope)))
   throw Error('Destinatário inativo ou escopo não permitido. Monitoria permanece bloqueada.');
