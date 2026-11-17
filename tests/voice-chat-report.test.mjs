@@ -21,9 +21,9 @@ test('long report periods use bounded authenticated read-only windows and weight
 });
 test('unavailable provider data blocks an official combined report instead of inventing zero',async()=>{await assert.rejects(()=>collectVoiceReport('2026-11-13','2026-11-13','key',async()=>({ok:false})));});
 test('combined report packet and HTML contain voice and chat metrics and escaped person names',()=>{
- const voice={total:3,inbound:2,outbound:1,answered:2,unanswered:1,tmaSeconds:90,tmeSeconds:null,byExtension:[{extension:'123',name:'<Bruno>',total:3,answered:2}]};
- const result=composeVoiceChat(voice,{metrics:{tickets:4},measuredChat:{tmaSeconds:30,tmeSeconds:5},quality:[{channel:'voz',total:2,csatPositive:1},{channel:'chat',total:3,csatPositive:2}]});
- assert.equal(result.packet.chatMetrics.tickets,4);assert.equal(result.packet.quality.chat.positive,2);assert.ok(result.html.includes('&lt;Bruno&gt;'));assert.ok(!result.html.includes('<Bruno>'));assert.ok(result.text.includes('Indisponível'));assert.ok(result.text.includes('30s'));
+ const voice={total:3,inbound:2,outbound:1,answered:2,unanswered:1,tmaSeconds:90,tmeSeconds:null,byExtension:[{extension:'123',name:'Bruno <Oliveira>',total:3,answered:2}]};
+ const result=composeVoiceChat(voice,{metrics:{tickets:4},measuredChat:{tmaSeconds:30,tmeSeconds:5},quality:[{channel:'voz',total:2,csatPositive:1},{channel:'chat',total:3,csatPositive:2}]},['Bruno O.']);
+ assert.equal(result.packet.chatMetrics.tickets,4);assert.equal(result.packet.quality.chat.positive,2);assert.ok(result.html.includes('Bruno &lt;Oliveira&gt;'));assert.ok(!result.html.includes('<Oliveira>'));assert.ok(result.text.includes('Indisponível'));assert.ok(result.text.includes('30s'));
 });
 
 
@@ -54,4 +54,34 @@ test('report TMA preserves measured calls across windows and labels missing cove
  const report=composeVoiceChat(result,{metrics:{tickets:3},measuredChat:{},quality:[]});
  assert.ok(report.html.includes('parcial: 2/3 chamadas'));
  assert.ok(report.text.includes('subtotal'));
+});
+
+test('voice distribution shows only authorized Support staff, excluding Kassio and other departments',()=>{
+ const people=[
+  {extension:'1',name:'Rhyan Massayoshi',total:19,answered:15},
+  {extension:'2',name:'Bruno Oliveira',total:16,answered:13},
+  {extension:'3',name:'Vitor Nascimento',total:10,answered:7},
+  {extension:'4',name:'Guilherme Henrique',total:8,answered:3},
+  {extension:'5',name:'Cleverson Teixeira',total:5,answered:5},
+  {extension:'6',name:'Kassio Rodrigues',total:4,answered:3},
+  {extension:'7',name:'Alan Reis',total:9,answered:6},
+  {extension:'8',name:'Davi Vinicius',total:6,answered:6},
+  {extension:'9',name:'Guilherme Bonato',total:3,answered:3},
+  {extension:'10',name:'Laís Lot',total:3,answered:0}
+ ];
+ const roster=['Bruno O.','Cesar A.','Cleverson T.','Guilherme H.','Rhyan M.','Venicio D.','Vitor N.','Kassio Nascimento'];
+ const voice={total:83,inbound:83,outbound:0,answered:61,unanswered:22,tmaSeconds:120,tmeSeconds:null,byExtension:people};
+ const result=composeVoiceChat(voice,{metrics:{tickets:1},measuredChat:{},quality:[]},roster);
+ assert.deepEqual(result.packet.byExtension.map(x=>x.name),['Rhyan Massayoshi','Bruno Oliveira','Vitor Nascimento','Guilherme Henrique','Cleverson Teixeira']);
+ for(const other of ['Kassio Rodrigues','Alan Reis','Davi Vinicius','Guilherme Bonato','Laís Lot'])
+  assert.ok(!result.html.includes(other),other+' incorrectly included');
+ assert.ok(result.html.includes('Bruno Oliveira'));
+ assert.equal(result.packet.total,83); // account totals remain unchanged
+ assert.equal(result.packet.personScope,'Somente colaboradores do Suporte, excluindo Kassio');
+});
+test('voice distribution fails closed when approved Support roster is missing',()=>{
+ const voice={total:2,inbound:2,outbound:0,answered:2,unanswered:0,tmaSeconds:60,byExtension:[{extension:'1',name:'Kassio Rodrigues',total:2,answered:2}]};
+ const result=composeVoiceChat(voice,{metrics:{},measuredChat:{},quality:[]});
+ assert.deepEqual(result.packet.byExtension,[]);
+ assert.ok(!result.html.includes('Kassio Rodrigues'));
 });

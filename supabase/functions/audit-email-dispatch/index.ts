@@ -939,7 +939,17 @@ async function voiceChatSection(rec:R,from:string,to:string){
   supportQualityMetrics({from,to})
  ]);
  const chat=await chatResponse.json();if(chat.ok!==true)throw Error('Métricas do chat indisponíveis');
- return composeVoiceChat(voice,chat);
+ // Use ONLY the approved Suporte management team roster, even when the
+ // recipient (e.g. the Director) can see multiple company sectors.
+ // No authorized support roster => no individual rows (fail closed).
+ const managed=await list('audit_email_recipients',
+  '?select=name,sector,collaborator_names,active&sector=eq.Suporte&active=eq.true');
+ const supportRoster:string[]=managed.filter(row=>Array.isArray(row.collaborator_names)&&
+   row.collaborator_names.length>=3&&
+   /gestao do suporte|relatorio setorial de suporte/.test(norm(row.name)))
+   .flatMap(row=>row.collaborator_names)
+   .filter((name:unknown):name is string=>typeof name==='string');
+ return composeVoiceChat(voice,chat,supportRoster);
 }
 async function voiceChatPreview(payload:R){
  const rec=(await recipientList()).find(r=>String(r.id)===String(payload.recipientId||''));
