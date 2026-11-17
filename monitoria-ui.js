@@ -399,6 +399,22 @@
    }
    $('monExportReview').disabled=false;
  }
+ async function geminiFailure(error,data){
+   let message=typeof data?.error==='string'?data.error:'';
+   let httpStatus=error?.context?.status||null;
+   if(error?.context&&typeof error.context.json==='function'){
+     try{
+       const details=await error.context.clone().json();
+       if(typeof details?.error==='string')message=details.error;
+       httpStatus=httpStatus||details?.status||null;
+     }catch{/* Retain non-sensitive fallback message. */}
+   }
+   if(message)return message+(httpStatus?' (HTTP '+httpStatus+')':'');
+   if(httpStatus===503)return 'A função de IA está indisponível (HTTP 503). Verifique se GEMINI_API_KEY está configurada nos segredos do Supabase e se a API Gemini está acessível.';
+   if(httpStatus===401||httpStatus===403)return 'Sessão ou autorização da Qualidade inválida. Entre novamente na Central.';
+   return String(error?.message||'Não foi possível comunicar com a IA')+
+     '. Confirme a configuração e disponibilidade da função monitoria-ai no Supabase.';
+ }
  async function transcribe(){
    if(!$('monConsent')?.checked){status('Autorize o processamento do áudio pelo Gemini antes de transcrever.');return}
    if(!selectedAudio){status('Selecione uma gravação para transcrever.');return}
@@ -422,7 +438,7 @@
      const {data,error}=await client.functions.invoke('monitoria-ai',{
        body:{action:'transcribe',consent:true,mimeType,audioBase64}
      });
-     if(error||!data?.ok)throw Error(data?.error||error?.message||'Transcrição indisponível');
+     if(error||!data?.ok)throw Error(error?await geminiFailure(error,data):data?.error||'Transcrição indisponível');
      $('monTranscript').value=data.transcript||'';
      $('monChannel').value='voice';channel='voice';
      lastAnalysis=null;$('monExportReview').disabled=true;
@@ -456,7 +472,7 @@
      const session=await window.tmAuth?.getSession?.();
      if(!client?.functions||!session?.access_token)throw Error('Faça login com um usuário administrador autorizado.');
      const {data,error}=await client.functions.invoke('monitoria-ai',{body:{channel,transcript,consent:true}});
-     if(error)throw Error(data?.error||error.message||'Erro ao consultar o Gemini');
+     if(error)throw Error(await geminiFailure(error,data));
      if(!data?.ok||!data.analysis)throw Error(data?.error||'Análise não disponibilizada');
      lastAnalysis=data.analysis;lastSavedReview=null;reviewRequestId=null;render(lastAnalysis);
      $('monSave').disabled=false;
