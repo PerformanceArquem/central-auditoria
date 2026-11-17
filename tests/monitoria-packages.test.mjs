@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const source=readFileSync(new URL('../monitoria-packages.js',import.meta.url),'utf8');
-const code=source.replace(' let previewRows=[],previewPeriod=null;',' globalThis.__testPeriods={periods,emailHtml,audioLink};\n let previewRows=[],previewPeriod=null;');
+const code=source.replace(' let previewRows=[],previewPeriod=null;',' globalThis.__testPeriods={periods,emailHtml,audioLink,finalReportPDF};\n let previewRows=[],previewPeriod=null;');
 const sandbox={
  location:{origin:'https://central-auditoria-iota.vercel.app'},
  document:{readyState:'loading',addEventListener(){}},
@@ -51,4 +51,36 @@ test('pacotes não fazem envio automático nem usam GmailApp',()=>{
  assert.match(source,/NÃO garantem o chat integral/);
  assert.match(source,/\.pdf/);
  assert.match(source,/Notas_Monitoria\.xlsx/);
+});
+
+test('PDF final inclui monitor responsável, nota aprovada e link privado sem token',()=>{
+ const operations=[];
+ class MockPdf{
+  setFillColor(...a){operations.push(['fill',...a])}
+  rect(){}setTextColor(){}setFontSize(){}setFont(){}setDrawColor(){}line(){}
+  text(t){operations.push(['text',t])}
+  textWithLink(label,x,y,options){operations.push(['link',label,options.url])}
+  splitTextToSize(text){return [String(text)]}
+  addPage(){operations.push(['newPage'])}
+  setProperties(){}output(){return Uint8Array.from([37,80,68,70]).buffer}
+ }
+ sandbox.window.jspdf={jsPDF:MockPdf};
+ const rows=[{
+  review_status:'approved',score_approved:94,score_suggested:96,channel:'voice',
+  monitored_at:'2026-11-17',source_id:'12345',recording_kind:'outbound',
+  reviewer_name:'Analista Qualidade',collaborator_name:'Pessoa Exemplo',sector:'Suporte',
+  critical_findings:[],critical_confirmed:false,reviewer_notes:'Revisada'
+ }];
+ const result=finalReportPDF(rows,periods('monthly','2026-11-17'));
+ assert.ok(result instanceof ArrayBuffer);
+ assert.ok(operations.some(o=>o[0]==='text'&&String(o[1]).includes('Analista Qualidade')));
+ assert.ok(operations.some(o=>o[0]==='text'&&String(o[1]).includes('94')));
+ assert.ok(operations.some(o=>o[0]==='link'&&o[2].includes('monitoria_voice=12345')));
+ assert.ok(operations.every(o=>JSON.stringify(o).indexOf('Access-Token')<0));
+});
+test('pacote sempre possui relatório final em PDF e manifesto de integridade',()=>{
+ assert.match(source,/Relatorio_Final_Monitoria\.pdf/);
+ assert.match(source,/MANIFESTO_MONITORIA\.json/);
+ assert.match(source,/chatFullHistoryValidated:false/);
+ assert.match(source,/emailsSent:false/);
 });
