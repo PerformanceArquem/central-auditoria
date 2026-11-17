@@ -1,7 +1,7 @@
 /* Mini Central de Monitoria — fluxo assistido, sem envio automático ou persistência de mídia. */
 (()=>{
  const $=id=>document.getElementById(id);
- let localAudioUrl='',selectedAudio=null,lastAnalysis=null,channel='chat';
+ let localAudioUrl='',selectedAudio=null,lastAnalysis=null,channel='chat',lastSavedReview=null,reviewRequestId=null,reports=[],alerts=[],polling=false;
  const status=(msg)=>{if($('monStatus'))$('monStatus').textContent=msg};
  const safeName=n=>String(n||'arquivo').replace(/[^\w.-]+/g,'_').slice(0,80);
  function download(name,text,type){
@@ -76,6 +76,128 @@
      status(data.messages.length+' interações do chamado #'+ticketId+' recuperadas do Movidesk. '+data.warning);
    }catch(e){status('Consulta Movidesk: '+String(e.message||e));}
  }
+ async function reviewsApi(params,body){
+   const session=await window.tmAuth?.getSession?.();
+   if(!session?.access_token)throw Error('Entre na Central para consultar monitorias');
+   const url='/api/monitoria-reviews'+(params?'?'+new URLSearchParams(params):'');
+   const r=await fetch(url,{
+    method:body?'POST':'GET',headers:{Authorization:'Bearer '+session.access_token,...(body?{'Content-Type':'application/json'}:{})},
+    body:body?JSON.stringify(body):undefined,cache:'no-store',credentials:'same-origin'
+   });
+   const data=await r.json().catch(()=>({}));
+   if(!r.ok||!data.ok)throw Error(data.error||'Serviço de monitoria indisponível');
+   return data;
+ }
+ function metadata(){
+   const sourceId=$('monSourceId').value.trim();
+   const sector=$('monSector').value.trim();
+   const collaborator=$('monCollaborator').value.trim();
+   if(!/^[A-Za-z0-9_-]{1,80}$/.test(sourceId)||!sector||!collaborator)
+    throw Error('Preencha o ID da ligação/chamado, o setor e o colaborador antes da análise');
+   return {sourceId,sector,collaborator};
+ }
+ async function saveReview(){
+   if(!lastAnalysis)throw Error('Avalie o atendimento primeiro');
+   const values=metadata();
+   if(!$('monSaveConsent').checked)throw Error('Autorize o registro da monitoria e de possíveis alertas internos');
+   reviewRequestId=reviewRequestId||crypto.randomUUID();
+   const result=await reviewsApi(null,{
+      action:'submit',requestId:reviewRequestId,consent:true,channel,...values,analysis:lastAnalysis
+   });
+   lastSavedReview=result.review?.id;
+   $('monSave').disabled=true;
+   status(lastAnalysis.criticalFlag?
+    'Ocorrência crítica registrada na fila interna. O gestor vinculado ao setor será alertado; se não houver vínculo, ficará para encaminhamento pela Qualidade.':
+    'Monitoria provisória registrada. Aguarda validação da Qualidade.');
+   await refreshAlerts();
+   return result;
+ }
+ async function refreshAlerts(){
+   if(polling)return;
+   polling=true;
+   try{
+    const data=await reviewsApi({kind:'alerts'});
+    alerts=data.alerts||[];
+    const pending=alerts.filter(a=>a.status==='unread'||a.status==='routing_pending');
+    const badge=$('monNavAlertCount');
+    if(badge){badge.textContent=String(pending.length);badge.hidden=!pending.length;}
+    const banner=$('monGlobalCriticalBanner');
+    if(banner){
+      banner.hidden=!pending.length;
+      banner.textContent=pending.length?'⚠ '+pending.length+' ocorrência(s) crítica(s) aguardando ciência/encaminhamento · Abrir Mini Central de Monitoria':'';
+    }
+    const list=$('monAlertList');if(!list)return;
+    list.replaceChildren();
+    for(const a of alerts.slice(0,50)){
+      const div=document.createElement('div');div.style.cssText='border-bottom:1px solid #ddd;padding:10px 0';
+      const review=a.audit_monitoria_reviews||{};
+      const txt=document.createElement('span');
+      txt.textContent=(a.status==='routing_pending'?'⚠ GESTOR NÃO VINCULADO':a.status==='unread'?'🚨 NÃO LIDO':'✓ '+a.status.toUpperCase())
+       +' · '+a.sector+' · '+(review.collaborator_name||'Colaborador')+' · '+(review.channel||'')+' #'+(review.source_id||'');
+      div.appendChild(txt);
+      if(a.status==='unread'){
+       const button=document.createElement('button');button.className='s';button.type='button';button.style.marginLeft='10px';button.textContent='Registrar ciência';
+       button.onclick=async()=>{try{await reviewsApi(null,{action:'ack',alertId:a.id});await refreshAlerts()}catch(e){status(e.message)}};
+       div.appendChild(button);
+      }
+      list.appendChild(div);
+    }
+   }catch(e){
+    const el=$('monAlertCoverage');if(el)el.textContent='Alertas indisponíveis: '+String(e.message||e);
+   }finally{polling=false;}
+ }
+ async function refreshReports(){
+   const from=$('monReportFrom').value,to=$('monReportTo').value;
+   status('Consultando monitorias registradas…');
+   try{
+    const data=await reviewsApi({kind:'reviews',from,to});
+    reports=data.reviews||[];
+    $('monReportSummary').textContent=reports.length+' monitorias no período'+(data.partial?' · cobertura limitada a 1.000 registros; reduza o período':'');
+    $('monExcel').disabled=!reports.length||data.partial;
+    const table=$('monReviewList');table.replaceChildren();
+    for(const a of reports.slice(0,60)){
+     const line=document.createElement('div');line.style.cssText='padding:8px;border-bottom:1px solid #ddd;display:flex;gap:10px;flex-wrap:wrap;align-items:center';
+     const label=document.createElement('span');
+     label.textContent=(a.collaborator_name||'Colaborador')+' · '+a.channel+' · '+a.source_id+' · nota '+(a.score_approved??a.score_suggested)+' · '+a.review_status;
+     line.appendChild(label);
+     if(a.review_status==='provisional'){
+      const b=document.createElement('button');b.type='button';b.className='s';b.textContent='Validar monitoria';
+      b.onclick=async()=>{
+       const confirms=a.critical_suspected?window.confirm('A Qualidade confirma a falha crítica? Se confirmar, a nota aprovada será zero.') : false;
+       const raw=confirms?'0':window.prompt('Nota final aprovada (0 a 100):',String(a.score_suggested));
+       if(raw===null)return;
+       const score=Number(raw);if(!Number.isFinite(score)||score<0||score>100){status('Nota inválida');return}
+       const notes=window.prompt('Observação da Qualidade:', '')||'';
+       try{await reviewsApi(null,{action:'approve',reviewId:a.id,confirmCritical:confirms,score,notes});await refreshReports();await refreshAlerts()}
+       catch(e){status('Aprovação: '+String(e.message||e))}
+      };line.appendChild(b);
+     }
+     table.appendChild(line);
+    }
+    status('Relatórios atualizados. Notas provisórias e aprovadas permanecem identificadas.');
+   }catch(e){status('Relatórios: '+String(e.message||e));}
+ }
+ function exportExcel(){
+   if(!window.XLSX){status('Biblioteca Excel indisponível');return}
+   const selected=$('monReportStatus').value==='approved'?reports.filter(r=>r.review_status==='approved'):reports;
+   if(!selected.length){status('Nenhuma monitoria correspondente ao filtro');return}
+   const wb=XLSX.utils.book_new();
+   const add=(name,rows)=>{const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=rows[0].map((_,i)=>({wch:i===0?22:Math.min(55,Math.max(16,String(rows[0][i]||'').length+4))}));XLSX.utils.book_append_sheet(wb,ws,name)};
+   const approved=selected.filter(r=>r.review_status==='approved');
+   const average=approved.length?Math.round(approved.reduce((sum,r)=>sum+Number(r.score_approved||0),0)/approved.length*100)/100:null;
+   add('Resumo',[['Indicador','Valor'],['Monitorias exportadas',selected.length],['Aprovadas',approved.length],['Provisórias',selected.length-approved.length],['Média notas aprovadas',average??'Sem avaliações aprovadas'],['Falhas críticas suspeitas',selected.filter(r=>r.critical_suspected).length],['Falhas críticas confirmadas',selected.filter(r=>r.critical_confirmed).length]]);
+   add('Notas por Atendimento',[['Data','Colaborador','Setor','Canal','ID atendimento','Nota IA','Nota aprovada','Status','Crítica suspeita','Crítica confirmada','Versão normas','Observação Qualidade'],
+    ...selected.map(r=>[r.created_at,r.collaborator_name,r.sector,r.channel,r.source_id,r.score_suggested,r.score_approved??'',r.review_status,r.critical_suspected?'Sim':'Não',r.critical_confirmed===true?'Sim':r.critical_confirmed===false?'Não':'Pendente',r.ruleset_version,r.reviewer_notes||''])]);
+   add('Critérios',[['Data','ID atendimento','Colaborador','Canal','Código','Decisão','Desconto','Evidência','Justificativa'],
+    ...selected.flatMap(r=>(r.criteria||[]).map(c=>[r.created_at,r.source_id,r.collaborator_name,r.channel,c.id,c.decision,c.deducted,c.evidence,c.reason]))]);
+   add('Não Conformidades',[['Data','Colaborador','Setor','Canal','ID atendimento','Código crítico','Evidência','Situação'],
+    ...selected.flatMap(r=>(r.critical_findings||[]).filter(c=>c.suspected).map(c=>[r.created_at,r.collaborator_name,r.sector,r.channel,r.source_id,c.code,c.evidence,r.critical_confirmed===true?'Confirmada':r.critical_confirmed===false?'Descartada':'Aguardando Qualidade']))]);
+   add('Colaboradores',[['Colaborador','Monitorias aprovadas','Média aprovada'],
+    ...Object.entries(Object.groupBy(approved,r=>r.collaborator_name||'Não identificado')).map(([person,rows])=>[person,rows.length,Math.round(rows.reduce((n,r)=>n+Number(r.score_approved||0),0)/rows.length*100)/100])]);
+   const filename='Monitoria_Arquem_'+$('monReportFrom').value+'_a_'+$('monReportTo').value+'.xlsx';
+   XLSX.writeFile(wb,filename,{compression:true});
+   status('Excel gerado com notas aprovadas e/ou provisórias identificadas, critérios e falhas críticas.');
+ }
  function render(analysis){
    const result=$('monResults');result.replaceChildren();
    const title=document.createElement('h3');
@@ -134,6 +256,7 @@
  }
  async function analyse(){
    if(!($('monConsent')?.checked)){status('Autorize explicitamente o processamento da conversa pelo Gemini.');return}
+   try{metadata()}catch(e){status(e.message);return}
    const transcript=$('monTranscript').value.trim();
    if(transcript.length<60){status('Informe uma transcrição completa ou importe o chat.');return}
    const button=$('monRun');button.disabled=true;status('Conferindo sessão e solicitando avaliação ao Gemini…');
@@ -144,8 +267,12 @@
      const {data,error}=await client.functions.invoke('monitoria-ai',{body:{channel,transcript,consent:true}});
      if(error)throw Error(data?.error||error.message||'Erro ao consultar o Gemini');
      if(!data?.ok||!data.analysis)throw Error(data?.error||'Análise não disponibilizada');
-     lastAnalysis=data.analysis;render(lastAnalysis);
-     status('Avaliação sugerida pronta para conferência manual. Não foi gravada nem enviada.');
+     lastAnalysis=data.analysis;lastSavedReview=null;reviewRequestId=null;render(lastAnalysis);
+     $('monSave').disabled=false;
+     if(lastAnalysis.criticalFlag){
+       try{await saveReview()}
+       catch(e){status('URGENTE: possível falha crítica identificada, mas o alerta NÃO foi registrado: '+String(e.message||e));}
+     }else status('Avaliação sugerida pronta. Registre-a para entrar nos relatórios e revisão da Qualidade.');
    }catch(e){status('Falha na análise: '+String(e.message||e));}
    finally{button.disabled=false}
  }
@@ -172,10 +299,18 @@
    });
    const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
    $('monFrom').value=today;$('monTo').value=today;
+   $('monReportTo').value=today;$('monReportFrom').value=today.slice(0,7)+'-01';
+   window.monitoriaRefreshAlerts=refreshAlerts;
+   setInterval(()=>{if(!document.hidden&&window.tmAuth)refreshAlerts()},15000);
+   refreshAlerts();
    $('monSearchCalls')?.addEventListener('click',listCalls);
    $('monLoadChat')?.addEventListener('click',loadChat);
    $('monTranscribe')?.addEventListener('click',transcribe);
    $('monRun').addEventListener('click',analyse);
+   $('monSave').addEventListener('click',async()=>{try{await saveReview()}catch(e){status('Registro: '+String(e.message||e))}});
+   $('monReportReload').addEventListener('click',refreshReports);
+   $('monExcel').addEventListener('click',exportExcel);
+   $('monRefreshAlerts').addEventListener('click',refreshAlerts);
    $('monExportChat').addEventListener('click',()=>download('chat_monitoria.txt',$('monTranscript').value,'text/plain;charset=utf-8'));
    $('monExportReview').addEventListener('click',()=>{if(lastAnalysis)download('avaliacao_monitoria.json',JSON.stringify(lastAnalysis,null,2),'application/json')});
    $('monResults').textContent='Selecione um canal e informe a conversa para iniciar.';
