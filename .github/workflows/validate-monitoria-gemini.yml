@@ -5,6 +5,8 @@ on:
     paths:
       - 'supabase/functions/monitoria-ai/**'
       - 'monitoria-ui.js'
+      - 'api/monitoria-zenvia.js'
+      - 'tests/monitoria-zenvia.test.mjs'
       - 'index.html'
       - '.github/workflows/validate-monitoria-gemini.yml'
   push:
@@ -12,6 +14,8 @@ on:
     paths:
       - 'supabase/functions/monitoria-ai/**'
       - 'monitoria-ui.js'
+      - 'api/monitoria-zenvia.js'
+      - 'tests/monitoria-zenvia.test.mjs'
       - 'index.html'
       - '.github/workflows/validate-monitoria-gemini.yml'
 
@@ -30,5 +34,7 @@ jobs:
         run: deno test supabase/functions/monitoria-ai/scoring.test.ts
       - name: Check Edge Function types
         run: deno check supabase/functions/monitoria-ai/index.ts
-      - name: Verify browser script syntax
-        run: node --check monitoria-ui.js
+      - name: Verify browser and Zenvia backend syntax
+        run: node --check monitoria-ui.js && node --check api/monitoria-zenvia.js
+      - name: Verify Zenvia access control and recording proxy without external requests
+        run: node --test tests/monitoria-zenvia.test.mjs
