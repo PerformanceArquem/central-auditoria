@@ -30,7 +30,7 @@ function actor(v){
  if(typeof v==='string')return v.slice(0,100);
  return String(v?.businessName||v?.name||'Não identificado').slice(0,100);
 }
-function normalize(ticket){
+export function normalize(ticket){
  const actions=Array.isArray(ticket?.actions)?ticket.actions:[];
  const messages=actions.filter(a=>a&&!a.isDeleted&&
    (typeof a.description==='string'||typeof a.htmlDescription==='string'))
@@ -42,10 +42,21 @@ function normalize(ticket){
    actionType:a.type==null?null:String(a.type).slice(0,20),
    origin:a.origin==null?null:String(a.origin).slice(0,20)
   })).filter(a=>a.text);
+ const active=actions.filter(a=>a&&!a.isDeleted);
+ const origins=[...new Set(active.map(a=>a.origin==null?'não informado':String(a.origin)))].slice(0,30);
+ const types=[...new Set(active.map(a=>a.type==null?'não informado':String(a.type)))].slice(0,30);
+ const discarded=active.length-messages.length;
+ const partial=actions.length>1500||messages.length>=1500;
+ const coverage={
+  source:'movidesk_ticket_actions',chatFullHistoryVerified:false,
+  exportedActions:actions.length,activeActions:active.length,renderedInteractions:messages.length,
+  nonTextOrExcludedActions:Math.max(0,discarded),actionOrigins:origins,actionTypes:types,
+  partial,requiresHumanCheck:true,
+  reason:'Ações de chamado são registros de diferentes origens/tipos, não necessariamente mensagens de chat. Não foi confirmado início, fim ou integridade da conversa.'
+ };
  return {ticketId:String(ticket.id||''),subject:String(ticket.subject||'').slice(0,240),
-  messages,partial:actions.length>1500||messages.length>=1500,
-  source:'movidesk_ticket_actions',
-  warning:'Exibição das interações registradas no chamado. O histórico completo do canal Chat pode exigir outro recurso da API Movidesk. Confirme os eventos antes de avaliar.'};
+  messages,partial,coverage,source:'movidesk_ticket_actions',
+  warning:'EXTRATO NÃO HOMOLOGADO COMO CHAT COMPLETO: valide início, fim e participantes da conversa antes de pontuar. Ações de chamado podem incluir notas e registros internos.'};
 }
 export default async function handler(req,res){
  res.setHeader('Cache-Control','private, no-store');
