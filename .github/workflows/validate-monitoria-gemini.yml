@@ -5,6 +5,7 @@ on:
     paths:
       - 'supabase/functions/monitoria-ai/**'
       - 'monitoria-ui.js'
+      - 'monitoria-packages.js'
       - 'api/monitoria-zenvia.js'
       - 'api/monitoria-movidesk.js'
       - 'api/monitoria-reviews.js'
@@ -19,6 +20,7 @@ on:
     paths:
       - 'supabase/functions/monitoria-ai/**'
       - 'monitoria-ui.js'
+      - 'monitoria-packages.js'
       - 'api/monitoria-zenvia.js'
       - 'api/monitoria-movidesk.js'
       - 'api/monitoria-reviews.js'
@@ -45,6 +47,6 @@ jobs:
       - name: Check Edge Function types
         run: deno check supabase/functions/monitoria-ai/index.ts
       - name: Verify browser and Zenvia backend syntax
-        run: node --check monitoria-ui.js && node --check api/monitoria-zenvia.js && node --check api/monitoria-movidesk.js && node --check api/monitoria-reviews.js && node --check lib/monitoria-review-validation.js
+        run: node --check monitoria-ui.js && node --check monitoria-packages.js && node --check api/monitoria-zenvia.js && node --check api/monitoria-movidesk.js && node --check api/monitoria-reviews.js && node --check lib/monitoria-review-validation.js
       - name: Verify Zenvia access control and recording proxy without external requests
         run: node --test tests/monitoria-zenvia.test.mjs tests/monitoria-movidesk.test.mjs tests/monitoria-reviews.test.mjs
