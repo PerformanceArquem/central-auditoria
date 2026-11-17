@@ -1,3 +1,4 @@
+import {assertFailedRetry,RETRY_POLICY} from "./failed-delivery-policy.ts";
 import {voiceReportEligible,collectVoiceReport,composeVoiceChat} from "./voice-chat-report.ts";
 import {forecastSection} from "./forecast-variance.ts";
 import {renderHourCharts,renderCsatChart,canReceiveCsat,reportIdentity,reportSubject} from "./email-visuals.ts";
@@ -952,7 +953,7 @@ async function voiceChatPreview(payload:R){
  return json({ok:true,sent:false,eligible:true,from,to,files,html:section.html,text:section.text,zenviaVoice:section.packet});
 }
 
-async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R) {
+async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R, previewOnly=false) {
   await assertEmailDeliveryEnabled(db);
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
   if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
@@ -1014,6 +1015,7 @@ async function sendMail(email: string, subject: string, text: string, html?: str
       throw new Error('Envio bloqueado: Apps Script instalado não confirma suporte às seções personalizadas. Atualize e homologue os anexos.');
   }
   await assertEmailDeliveryEnabled(db);
+  if(previewOnly)return {subject:cleanSubject,html:cleanHtml,text:cleanText};
   const res = await fetch(endpoint, {
     method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ token: E('GMAIL_MAIL_SECRET'), email, assunto: cleanSubject,
@@ -2293,12 +2295,63 @@ async function dispatchNoonPartial() {
  return json({ok:results.every(x=>x.status!=='failed'&&x.status!=='blocked'),kind:'noon_partial',day:today,window:'09:00-11:50',latest,results});
 }
 
+async function failedReportAction(payload:R) {
+ const key=String(payload.dispatchKey||'');
+ if(!key||key.length>180)return json({ok:false,error:'Registro inválido'},400);
+ const path='audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key);
+ const rows=await db(path+'&select=*&limit=1');
+ if(rows.length!==1)return json({ok:false,error:'Registro não encontrado'},404);
+ const row=rows[0],rec=(await recipientList()).find(r=>r.id===row.recipient_id);
+ if(!rec)throw Error('Destinatário inativo ou vínculo inválido');
+ assertFailedRetry(row,rec,dateBR());
+ const from=String(row.period_from),to=String(row.period_to),kind=row.report_kind as ReportKind;
+ if(!(await recentCoverage(from,to)).ready)throw Error('Aguardando conciliação do período; reenvio bloqueado.');
+ const [hol,appts,tickets,clients]=await Promise.all([holidays(),source(from,to),ticketSource(),clientSource()]);
+ const report=buildReport(rec,appts,from,to,kind,hol,false,clients);
+ if(!report.metrics.appointments)throw Error('Sem apontamentos confirmados; reenvio bloqueado.');
+ const alerts=ticketAlerts(rec,tickets),quality=await supportRatingCache()(rec,from,to);
+ const overview=await directionOverviewCache()(rec,from,to,alerts.activeTickets,kind);
+ const forecast=await optionalForecast(rec);
+ const subject=reportSubject(rec,kind,from,to,{detail:REPORT_LABEL[kind]});
+ const textBody=report.text+overview.text+quality.text+'\n\n'+alerts.text+forecast.text;
+ const html=reportEmailHtml(rec,report,from,to,kind,false,false,alerts.html,report.detailsHtml+quality.html,overview.html,forecast.html);
+ const packet=reportPacket(rec,report,alerts,from,to,kind,false,false,clients,forecast.rows,quality);
+ const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify({policy:RETRY_POLICY,row,rec,subject,textBody,html,packet})));
+ const reviewToken=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+ if(payload.action==='failed_report_review'){
+  const preview=await sendMail(String(rec.email),subject,textBody,html,packet,true);
+  return json({ok:true,reviewToken,policy:RETRY_POLICY,recipient:String(rec.email),subject:preview!.subject,html:preview!.html,from,to,
+  notice:'Relatório recalculado com permissões atuais. PDF, Excel e ajustes após o fechamento conferidos com o gerador. Monitoria excluída.'});
+ }
+ if(payload.confirmSend!==true||payload.reviewToken!==reviewToken)return json({ok:false,error:'Revise novamente: o conteúdo ou cadastro mudou.'},409);
+ await assertEmailDeliveryEnabled(db);
+ if(E('REPORT_EMAIL_SEND_ENABLED')!=='true')throw Error('Envios desativados no servidor.');
+ const claimed=await db(path+'&status=eq.failed&sent_at=is.null&error_message=eq.'+encodeURIComponent(String(row.error_message)),{
+  method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({status:'processing',last_attempt_at:new Date().toISOString(),attempt_count:Number(row.attempt_count||1)+1,error_message:'Reenvio administrativo em andamento; conferir provedor antes de repetir.'})});
+ if(claimed.length!==1)return json({ok:false,error:'Registro já reservado por outra execução.'},409);
+ try{await sendMail(String(rec.email),subject,textBody,html,packet);}
+ catch(ex){
+  await db(path+'&status=eq.processing',{method:'PATCH',body:JSON.stringify({status:'failed',error_message:err(ex).slice(0,300)})}).catch(()=>{});
+  throw ex;
+ }
+ // A failed success-write must leave processing, never a retryable accepted message.
+ await db(path+'&status=eq.processing',{method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script',error_message:null})});
+ return json({ok:true,status:'sent',recipient:String(rec.email),policy:RETRY_POLICY});
+}
+
 async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'Apenas POST' }, 405);
   let payload: R = {};
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
+    if(action==='failed_report_review'||action==='failed_report_send'){
+      // The existing server-only scheduler credential already authorizes official
+      // deliveries. Keep browser access under the existing active-admin session.
+      const scheduler=!!E('REPORT_CRON_SECRET')&&req.headers.get('x-report-secret')===E('REPORT_CRON_SECRET');
+      if(!scheduler&&!await isAdmin(req))return json({ok:false,error:'Acesso reservado ao administrador autenticado'},403);
+      return await failedReportAction(payload);
+    }
     if(action==='email_delivery_control'){
       if(!await isAdmin(req))return json({ok:false,error:'Acesso reservado ao administrador autenticado'},403);
       try{return json(await emailDeliveryAdmin(payload,req,db,E,validUrl()));}
@@ -2337,11 +2390,11 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return withCors(req, new Response(null, { status: 204 }));
   const auditPayload=await req.clone().json().catch(()=>({}));
   const response=await handleRequest(req);
-  if(['dispatch','prepare','attachment_probe','timing_probe'].includes(String(auditPayload.action))){
+  if(['dispatch','prepare','attachment_probe','timing_probe','failed_report_review','failed_report_send'].includes(String(auditPayload.action))){
     const summary=await response.clone().json().catch(()=>({error:'Resposta inválida'}));
     await db('audit_email_run_logs',{method:'POST',body:JSON.stringify({
       action:String(auditPayload.action),batch_group:auditPayload.batchGroup||null,
-      http_status:response.status,ok:summary.ok===true,summary
+      http_status:response.status,ok:summary.ok===true,summary:String(auditPayload.action)==='failed_report_review'?{ok:summary.ok,policy:summary.policy,error:summary.error,reviewOnly:true}:summary
     })}).catch(ex=>console.error('Falha ao gravar log de execução:',safe(err(ex))));
   }
   return withCors(req,response);

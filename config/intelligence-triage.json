@@ -6,9 +6,13 @@
   "criteriaApprovedAt": "2026-11-13",
   "criteria": "T1–T4 abertos; equipe Inteligência; serviço Triagem; início da permanência contínua atual na equipe",
   "recipients": [
-    {"name": "Cassiano", "email": "zanona@arquem.com.br"},
-    {"name": "Keila", "email": "inteligencia.gerencia@arquem.com.br"},
-    {"name": "Cristiano / Direção", "email": "canestraro@arquem.com.br"}
+    {
+      "name": "Cassiano",
+      "email": "zanona@arquem.com.br"
+    },
+    {
+      "name": "Keila",
+      "email": "inteligencia.gerencia@arquem.com.br"
+    }
   ]
 }
-
