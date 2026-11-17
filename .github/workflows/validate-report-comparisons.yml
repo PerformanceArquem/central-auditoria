@@ -1,0 +1,32 @@
+name: Validar comparativos e catálogo sem disparos
+on:
+  pull_request:
+    paths: ['supabase/functions/audit-email-dispatch/**','email-report-catalog.js','index.html','apps-script/arquem-comparativos.gs','apps-script/install-report-comparisons.mjs','tests/report-comparisons*','tests/email-report-catalog.test.mjs','.github/workflows/*report-comparisons.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: npm install --prefix "$RUNNER_TEMP/comparison-parser" --no-save acorn@8.15.0
+      - name: Tipos, contagens, datas de trabalho e escopos
+        run: |
+          deno check supabase/functions/audit-email-dispatch/index.ts
+          deno test tests/report-comparisons.test.ts tests/forecast-email.test.ts tests/corporate-email-policy.test.ts
+      - name: Interface, anexos e instalação sem e-mail
+        env:
+          COMPARISON_PARSER_DIR: ${{ runner.temp }}/comparison-parser
+        run: |
+          node --check email-report-catalog.js
+          node --check < apps-script/arquem-comparativos.gs
+          node --test tests/email-report-catalog.test.mjs tests/report-comparisons-appsscript.test.mjs tests/report-comparisons-installer.test.mjs tests/failed-delivery-retry.test.mjs tests/email-admin-ui.test.mjs tests/email-delivery-control.test.mjs
