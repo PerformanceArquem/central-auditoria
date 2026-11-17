@@ -1,0 +1,40 @@
+name: Validate Monitoria Critical Alerts DB (isolated)
+on:
+  push:
+    branches: ['feature/mini-central-monitoria-gemini-20261117']
+    paths:
+      - 'supabase/migrations/20261117170000_monitoria_reviews_and_internal_alerts.sql'
+      - 'tests/monitoria-manager-alerts.sql'
+      - '.github/workflows/validate-monitoria-db.yml'
+  pull_request:
+    paths:
+      - 'supabase/migrations/20261117170000_monitoria_reviews_and_internal_alerts.sql'
+      - 'tests/monitoria-manager-alerts.sql'
+      - '.github/workflows/validate-monitoria-db.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: temporary-test-only
+          POSTGRES_DB: monitoria_isolated
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manager routing and alert trigger without Supabase production
+        env:
+          PGPASSWORD: temporary-test-only
+        run: |
+          psql --host localhost --port 5432 --username postgres --dbname monitoria_isolated \
+            --set ON_ERROR_STOP=on --file tests/monitoria-manager-alerts.sql
