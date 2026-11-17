@@ -34,13 +34,13 @@ function deps(rows=sample){
   duration:(m:number)=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')+':00',
   emailEsc:(v:unknown)=>String(v||'').replace(/[&<>"]/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x]||x))};
 }
-Deno.test('management includes qualifying closed tickets across sectors, excludes open and minor gaps',async()=>{
+Deno.test('production management includes only production closed tickets',async()=>{
  const {requested,...d}=deps();
- const result=await forecastSection({scope:'management',sectors:[]},d);
- assert(result.rows.length===3,'expected three qualifying cases');
+ const result=await forecastSection({scope:'management',sectors:['Produção','Produção - CPO']},d);
+ assert(result.rows.length===1&&result.rows[0].id==='100893','expected only production');
  assert(!result.rows.some(x=>x.id==='90000'||x.id==='97286'),'open/minor gap must be excluded');
- assert(result.html.includes('https://arquem.movidesk.com/Ticket/Edit/94646'),'ticket link missing');
- assert(result.text.includes('Confiança: alta'),'confidence missing');
+ assert(result.html.includes('https://arquem.movidesk.com/Ticket/Edit/100893'),'ticket link missing');
+ assert(result.text.includes('Confiança: baixa'),'confidence missing');
  assert(result.html.includes('não limitada ao período'),'current snapshot caveat missing');
  assert(!result.html.includes('GEMINI_API_KEY'),'secrets must never appear');
  assert(requested.length===2,'expected snapshot and owners only');
@@ -53,20 +53,36 @@ Deno.test('sector recipient sees only matching sector, including accents',async(
 });
 Deno.test('individual report only includes tickets owned by the selected collaborator',async()=>{
  const {requested,...d}=deps();
- const result=await forecastSection({scope:'sector',sector:'Qualidade',collaborator_name:'Alan Reis'},d);
- assert(result.rows.length===2,'expected two tickets for selected collaborator');
- assert(result.rows.every(x=>x.owner==='Alan Reis'),'owner scoping failed');
+ const result=await forecastSection({scope:'sector',sector:'Produção - CPO',collaborator_name:'Guilherme Bonato'},d);
+ assert(result.rows.length===1,'expected production ticket for selected collaborator');
+ assert(result.rows.every(x=>x.owner==='Guilherme Bonato'),'owner scoping failed');
+ const other=await forecastSection({scope:'sector',sector:'Produção - CPO',collaborator_name:'Outra pessoa'},d);
+ assert(other.rows.length===0,'another owner leaked');
 });
 Deno.test('stale snapshots are hidden, without disguising old data as current',async()=>{
  const old=sample.map(x=>({...x,updated_at:'2020-01-01T00:00:00Z'}));
  const {requested,...d}=deps(old);
- const result=await forecastSection({scope:'management'},d);
+ const result=await forecastSection({scope:'management',sectors:['Produção - CPO']},d);
  assert(result.rows.length===0&&!result.text&&!result.html,'stale snapshot incorrectly displayed');
 });
 Deno.test('escape untrusted client names in corporate HTML',async()=>{
  const unsafe=sample.map((x,i)=>i===0?{...x,client_name:'<img src=x onerror=alert(1)>'}:x);
  const {requested,...d}=deps(unsafe);
- const result=await forecastSection({scope:'management'},d);
+ const result=await forecastSection({scope:'management',sectors:['Produção - CPO']},d);
  assert(!result.html.includes('<img'),'unsafe HTML was not escaped');
  assert(result.html.includes('&lt;img'),'escaped text missing');
+});
+Deno.test('non-production, mixed and company reports contain no forecasts and make no queries',async()=>{
+ for(const rec of [
+  {scope:'sector',sector:'Qualidade',collaborator_name:'Alan Reis'},
+  {scope:'sector',sector:'Suporte'}, {scope:'sector',sector:'Treinamento'},
+  {scope:'management'}, {scope:'management',sectors:[]},
+  {scope:'management',sectors:['Produção','Qualidade']},
+  {scope:'management',sectors:['Suporte','Inteligência']},
+  {scope:'monitoria',sector:'Produção'}
+ ]){
+  const {requested,...d}=deps();const result=await forecastSection(rec,d);
+  assert(result.rows.length===0&&!result.html&&!result.text,'forecast leaked outside production');
+  assert(requested.length===0,'unnecessary out-of-scope query');
+ }
 });

@@ -1,5 +1,12 @@
 // Snapshot de previsões encerradas para relatório executivo, sem IA externa.
 type R = Record<string,any>;
+export const FORECAST_POLICY='production-only-v1';
+export function forecastReportEligible(rec:R):boolean {
+ const normalize=(v:unknown)=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+ const sectors=(Array.isArray(rec.sectors)&&rec.sectors.length?rec.sectors:[rec.sector]).map(normalize).filter(Boolean);
+ return ['sector','management'].includes(String(rec.scope||'sector'))&&sectors.length>0&&
+  sectors.every((sector:string)=>['producao','producao - cpo'].includes(sector));
+}
 type ForecastAlert = {
   id:string;subject:string;client:string;sector:string;owner:string;status:string;
   estimatedHours:number;actualMinutes:number;gapHours:number;variancePercent:number;
@@ -11,6 +18,7 @@ export async function forecastSection(
 ):Promise<{text:string;html:string;rows:ForecastAlert[]}>{
  const {db,norm,duration,emailEsc:esc}=deps;
  const empty={text:'',html:'',rows:[] as ForecastAlert[]};
+ if(!forecastReportEligible(rec))return empty;
  const results=await db('audit_forecast_variance_snapshots?select=ticket_id,subject,client_name,sector,status,estimated_hours,actual_minutes,variance_percent,evidence,confidence,updated_at&order=variance_percent.desc&limit=150') as R[];
  if(!Array.isArray(results)||!results.length)return empty;
  const stamp=Date.parse(String(results[0].updated_at||''));
@@ -20,6 +28,7 @@ export async function forecastSection(
  const qualified=results.filter(x=>{
   const expected=Number(x.estimated_hours),minutes=Number(x.actual_minutes),gap=Number(x.variance_percent);
   if(!(expected>=8&&minutes>0&&gap>=60&&minutes<expected*60))return false;
+  if(!['producao','producao - cpo'].includes(norm(x.sector)))return false;
   if(!/^(fechad|conclu|resolvid|encerrad|finalizad)/.test(norm(x.status)))return false;
   if(linked.length&&!linked.includes(norm(x.sector)))return false;
   if(scope!=='management'&&!linked.length)return false;
