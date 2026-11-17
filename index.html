@@ -3713,7 +3713,7 @@ function showTab(t){
     window.monitoriaRefreshAlerts?.();
     const params=new URL(location.href).searchParams;
     const recording=params.get('monitoria_voice'),kind=params.get('kind');
-    if(/^\\d{1,14}$/.test(recording||'') && ['inbound','outbound'].includes(kind||'')){
+    if(/^\d{1,14}$/.test(recording||'') && ['inbound','outbound'].includes(kind||'')){
       window.monitoriaOpenRecording?.({id:recording,kind});
       const url=new URL(location.href);url.searchParams.delete('monitoria_voice');url.searchParams.delete('kind');
       history.replaceState(null,'',url.pathname+url.search+url.hash);
@@ -4867,7 +4867,7 @@ $('autoMin').value=localStorage.getItem('md_auto')??'5';
 localStorage.removeItem('md_iakey'); localStorage.removeItem('md_iamode');
 lastToday=$('endDate').value;
 const monitoriaRecording=new URL(location.href).searchParams.get('monitoria_voice');
-showTab(/^\\d{1,14}$/.test(monitoriaRecording||'')?'monitoria':'cfg');
+showTab(/^\d{1,14}$/.test(monitoriaRecording||'')?'monitoria':'cfg');
 $('alarmMinDays').value=localStorage.getItem('md_alarm_days')||'7';
 showLiveEvents();
 Object.entries(MODS).forEach(([k,[t,d]])=>{
