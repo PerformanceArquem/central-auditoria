@@ -984,7 +984,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
             <div class="card" style="border-left:4px solid #2457d6;max-width:1100px">
               <p class="subtle">As gravações podem ser ouvidas e baixadas sem usar IA. A transcrição automática é opcional, exige autorização explícita e envia o áudio ao Gemini de forma temporária (até 3 MB). Revise a transcrição antes de gerar uma nota.</p>
               <div style="border:1px solid #dce5f0;border-radius:10px;padding:14px;margin:12px 0;background:#f8fbff">
-                <strong>Consultar atendimentos diretamente na Zenvia</strong>
+                <strong>Consultar ligações da Zenvia e interações de chats do Movidesk</strong>
                 <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-top:10px">
                   <label>Início <input id="monFrom" type="date"></label>
                   <label>Fim <input id="monTo" type="date"></label>
@@ -992,10 +992,10 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                 </div>
                 <div id="monCalls" role="region" aria-label="Ligações consultadas" style="margin:10px 0;max-height:280px;overflow:auto"></div>
                 <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
-                  <label>Protocolo do chat <input id="monProtocol" type="text" maxlength="90" placeholder="Protocolo Zenvia"></label>
+                  <label>Número do chamado Movidesk <input id="monTicketId" type="text" inputmode="numeric" maxlength="12" placeholder="Ex.: 102205"></label>
                   <button id="monLoadChat" type="button" class="s">Abrir conversa</button>
                 </div>
-                <p class="subtle">Consultas exigem acesso administrativo. Gravações de chamadas efetuadas podem ser recuperadas quando disponíveis; chamadas recebidas e chat dependem de homologação e credenciais da conta.</p>
+                <p class="subtle">Consultas exigem acesso administrativo. Ligações e gravações usam a Zenvia Voice; as interações de texto são obtidas exclusivamente dos chamados Movidesk. As ações de um chamado podem não conter todo o histórico do chat; confira a cobertura antes de monitorar.</p>
               </div>
               <div class="row" style="display:flex;gap:14px;align-items:end;flex-wrap:wrap">
                 <label>Canal
