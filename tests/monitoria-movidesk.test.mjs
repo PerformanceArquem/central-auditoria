@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import handler,{normalize} from '../api/monitoria-movidesk.js';
+import handler,{normalize} from '../lib/monitoria-movidesk-handler.js';
 const prevFetch=globalThis.fetch;
 const original=Object.fromEntries(['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','MOVIDESK_TOKEN'].map(k=>[k,process.env[k]]));
 test.afterEach(()=>{
