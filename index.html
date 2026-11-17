@@ -1019,10 +1019,6 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                 <div id="monChatEvidenceWarning" hidden style="margin-top:10px;padding:12px;border:1px solid #de9a56;background:#fff8ec;color:#754b10;border-radius:8px" role="status">
                   <strong>Fonte Movidesk: extrato não validado como chat completo.</strong>
                   <p id="monChatEvidenceDetails" style="margin:6px 0"></p>
-                  <label style="display:flex;gap:8px;align-items:start">
-                    <input id="monChatCoverageAck" type="checkbox">
-                    <span>Conferi as interações e reconheço que não há confirmação de todo o diálogo. Só avaliarei os critérios que possuam evidências suficientes.</span>
-                  </label>
                 </div>
               </div>
               <div class="row" style="display:flex;gap:14px;align-items:end;flex-wrap:wrap">
@@ -1044,6 +1040,13 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
               </div>
               <label for="monTranscript"><strong>Transcrição da ligação ou histórico do chat</strong></label>
               <textarea id="monTranscript" rows="12" style="width:100%;min-height:190px;resize:vertical" placeholder="Cole o diálogo com falas, horários e identificação dos interlocutores. Dados de chamados podem exigir comprovação no Movidesk."></textarea>
+              <div id="monChatCoverageConfirm" hidden style="margin:12px 0;padding:12px;border:1px solid #de9a56;border-radius:8px;background:#fff8ec;color:#754b10">
+                <label style="display:flex;gap:9px;align-items:flex-start;font-weight:600">
+                  <input id="monChatCoverageAck" type="checkbox" style="margin-top:3px">
+                  <span>Conferi o extrato do Movidesk e confirmo que vou avaliar somente critérios com evidência suficiente. O extrato pode não conter a conversa inteira.</span>
+                </label>
+                <small style="display:block;margin-top:6px">Confirmação obrigatória para gerar a nota sugerida pela IA.</small>
+              </div>
               <p><label style="display:flex;gap:8px;align-items:flex-start"><input id="monConsent" type="checkbox"> <span>Autorizo o processamento externo do <strong>áudio (se solicitar a transcrição)</strong> ou do <strong>texto (se solicitar avaliação)</strong> pelo Gemini, com revisão humana obrigatória. Nenhum e-mail será enviado.</span></label></p>
               <p><label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="monSaveConsent"><span>Autorizo registrar esta avaliação e <strong>gerar imediatamente uma ocorrência interna para o gestor</strong> caso a IA encontre possível falha crítica. Nenhum e-mail será enviado.</span></label></p>
               <div style="display:flex;gap:8px;flex-wrap:wrap">
