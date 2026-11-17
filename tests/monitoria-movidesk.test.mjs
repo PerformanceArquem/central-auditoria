@@ -71,3 +71,37 @@ test('cobertura do extrato não presume chat completo e identifica origens heter
  assert.equal(data.coverage.requiresHumanCheck,true);
  assert.match(data.warning,/NÃO HOMOLOGADO COMO CHAT COMPLETO/);
 });
+
+test('usa extrato já sincronizado quando Movidesk falha, sem alegar chat completo',async()=>{
+ prepare();
+ const seen=[];
+ globalThis.fetch=async input=>{
+  const u=new URL(input);seen.push(u);
+  if(u.pathname==='/auth/v1/user')return json({id:'user-1'});
+  if(u.pathname==='/rest/v1/audit_users')return json([{role:'admin',is_active:true}]);
+  if(u.hostname==='api.movidesk.com')return new Response('{}',{status:503});
+  if(u.pathname==='/rest/v1/audit_direct_tickets')return json([{
+   ticket_id:'102205',payload:{id:102205,subject:'Atendimento sincronizado',
+    actions:[{id:1,createdDate:'2026-11-17',createdBy:{name:'Atendente'},description:'Olá'},
+     {id:2,createdDate:'2026-11-17',createdBy:{name:'Cliente'},description:'Ajuda'}]}
+  }]);
+  throw Error('unexpected '+u.pathname);
+ };
+ const res=response();await handler(req('102205'),res);
+ assert.equal(res.statusCode,200);assert.equal(res.body.syncedFallback,true);
+ assert.equal(res.body.messages.length,2);
+ assert.equal(res.body.coverage.chatFullHistoryVerified,false);
+ assert.match(res.body.warning,/EXTRATO SINCRONIZADO/);
+ assert.equal(seen.filter(u=>u.pathname==='/rest/v1/audit_direct_tickets').length,1);
+});
+test('não consulta extrato sincronizado quando autenticação falha',async()=>{
+ prepare();const seen=[];
+ globalThis.fetch=async input=>{
+  const u=new URL(input);seen.push(u);
+  if(u.pathname==='/auth/v1/user')throw Error('auth offline');
+  throw Error('unexpected call');
+ };
+ const res=response();await handler(req('102205'),res);
+ assert.equal(res.statusCode,503);
+ assert.equal(seen.filter(u=>u.pathname==='/rest/v1/audit_direct_tickets').length,0);
+});
