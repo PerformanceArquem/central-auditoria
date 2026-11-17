@@ -988,9 +988,17 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                 <section id="monSupportCandidates" aria-label="Duas monitorias por colaborador do Suporte" style="border:1px solid #d9e4f2;border-radius:10px;padding:14px;margin:0 0 14px;background:white">
                   <h3 style="margin:0 0 6px">Selecionar colaborador</h3>
                   <p class="subtle" style="margin:0 0 10px">Abra um atendimento de chat ou localize a ligação. A nota depende da conferência das evidências.</p>
-                  <button id="monFindSupport" type="button" class="p">Consultar Suporte</button>
+                  <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+                    <button id="monFindSupport" type="button" class="s">Atualizar colaboradores</button>
+                    <label style="flex:1;min-width:180px">Colaborador
+                      <select id="monSupportSelect" aria-label="Selecionar colaborador do Suporte" disabled style="width:100%">
+                        <option value="">Consulte o Suporte primeiro</option>
+                      </select>
+                    </label>
+                    <button id="monSupportDraw" type="button" class="p" disabled>Sortear colaborador</button>
+                  </div>
                   <p id="monSupportSummary" class="subtle" role="status">Nenhuma consulta realizada.</p>
-                  <div id="monSupportList" style="overflow:auto;max-height:480px"></div>
+                  <div id="monSupportList" style="margin-top:8px"></div>
                 </section>
                 <details id="monReviewWorkspace" style="margin-top:12px;border-top:1px solid #dce5f0;padding-top:10px">
                   <summary style="cursor:pointer;font-weight:700">Conferir atendimento e avaliar com IA</summary>
