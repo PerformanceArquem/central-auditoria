@@ -53,6 +53,11 @@ async function list(req,res,auth){
   });
   return res.status(200).json({ok:true,alerts:result,mode:'polling',intervalSeconds:15});
  }
+ if(kind==='routes'){
+  if(!auth.admin)return fail(res,403,'Configuração reservada a administradores');
+  const routes=await db(auth,'audit_monitoria_manager_routes',{select:'sector,manager_user_id,active,configured_at',order:'sector.asc',limit:'100'});
+  return res.status(200).json({ok:true,routes});
+ }
  if(kind!=='reviews')return fail(res,400,'Consulta inválida');
  if(!auth.admin)return fail(res,403,'Relatórios disponíveis apenas para a Qualidade autorizada');
  const {from,to}=boundedDates(req.query);
@@ -70,7 +75,7 @@ async function submit(req,res,auth,body){
  let review;
  try{review=prepareReview(body,auth.userId)}catch(e){return fail(res,400,e.message)}
  // Insert triggers a critical alert in the SAME database transaction.
- const rows=await db(auth,'audit_monitoria_reviews',{},
+ const rows=await db(auth,'audit_monitoria_reviews',{on_conflict:'client_request_id'},
   'POST',review,{Prefer:'return=representation,resolution=ignore-duplicates'});
  const item=rows[0];
  if(!item){
