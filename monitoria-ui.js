@@ -58,15 +58,23 @@
    }catch(e){status('Consulta de ligações: '+String(e.message||e));}
  }
  async function loadChat(){
-   const protocol=$('monProtocol').value.trim();
-   status('Consultando histórico de chat pelo protocolo…');
+   const ticketId=$('monTicketId').value.trim();
+   status('Consultando interações do chamado no Movidesk…');
    try{
-     const data=await api({action:'chat',protocol});
+     if(!/^\d{1,12}$/.test(ticketId))throw Error('Informe o número do chamado Movidesk.');
+     const session=await window.tmAuth?.getSession?.();
+     if(!session?.access_token)throw Error('Faça login como administrador autorizado.');
+     const res=await fetch('/api/monitoria-movidesk?'+new URLSearchParams({ticketId}),{
+       method:'GET',headers:{Authorization:'Bearer '+session.access_token},credentials:'same-origin',cache:'no-store'
+     });
+     const data=await res.json().catch(()=>({}));
+     if(!res.ok||!data?.ok)throw Error(data.error||'Histórico indisponível');
      const lines=data.messages.map(m=>'['+(m.at||'sem horário')+'] '+(m.sender||'Participante')+': '+m.text);
      $('monTranscript').value=lines.join('\n');
      $('monChannel').value='chat';channel='chat';
-     status(data.messages.length+' mensagens carregadas da Zenvia. Revise o histórico antes de enviar ao Gemini.');
-   }catch(e){status('Consulta de chat: '+String(e.message||e));}
+     lastAnalysis=null;$('monExportReview').disabled=true;
+     status(data.messages.length+' interações do chamado #'+ticketId+' recuperadas do Movidesk. '+data.warning);
+   }catch(e){status('Consulta Movidesk: '+String(e.message||e));}
  }
  function render(analysis){
    const result=$('monResults');result.replaceChildren();
