@@ -25,3 +25,33 @@ test('combined report packet and HTML contain voice and chat metrics and escaped
  const result=composeVoiceChat(voice,{metrics:{tickets:4},measuredChat:{tmaSeconds:30,tmeSeconds:5},quality:[{channel:'voz',total:2,csatPositive:1},{channel:'chat',total:3,csatPositive:2}]});
  assert.equal(result.packet.chatMetrics.tickets,4);assert.equal(result.packet.quality.chat.positive,2);assert.ok(result.html.includes('&lt;Bruno&gt;'));assert.ok(!result.html.includes('<Bruno>'));assert.ok(result.text.includes('Indisponível'));assert.ok(result.text.includes('30s'));
 });
+
+
+test('report TMA preserves measured calls across windows and labels missing coverage',async()=>{
+ let index=0;
+ const http=async(input,options)=>{
+  const url=new URL(input);index++;
+  assert.equal(options.method,'GET');
+  const first=index===1;
+  const summary=first
+   ?{total:3,inbound:2,outbound:1,answered:2,unanswered:1,inProgress:0,unclassified:0,talkSeconds:120,tmaSamples:1,tmaMissingSamples:1}
+   :{total:2,inbound:1,outbound:1,answered:1,unanswered:1,inProgress:0,unclassified:0,talkSeconds:60,tmaSamples:1,tmaMissingSamples:0};
+  return {ok:true,json:async()=>({ok:true,from:url.searchParams.get('start'),to:url.searchParams.get('end'),summary,
+   support:{metrics:summary},queue:{configured:false},byDay:[],byExtension:[{extension:'123',name:'Agente',total:summary.total,answered:summary.answered,unanswered:summary.unanswered,talkSeconds:summary.talkSeconds,missingTalkSamples:summary.tmaMissingSamples}]})};
+ };
+ const result=await collectVoiceReport('2026-10-01','2026-11-16','synthetic-service',http);
+ assert.equal(index,2);
+ assert.equal(result.answered,3);
+ assert.equal(result.tmaSamples,2);
+ assert.equal(result.tmaMissingSamples,1);
+ assert.equal(result.tmaSeconds,90); // 180s / 2 measured calls, not /3 answered
+ assert.equal(result.talkSeconds,180); // observed subtotal
+ assert.equal(result.talkCoverageComplete,false);
+ assert.equal(result.supportMetrics.tmaSeconds,90);
+ assert.equal(result.byExtension[0].missingTalkSamples,1);
+ assert.equal(result.byExtension[0].talkSeconds,180);
+ assert.equal(result.byExtension[0].talkCoverageComplete,false);
+ const report=composeVoiceChat(result,{metrics:{tickets:3},measuredChat:{},quality:[]});
+ assert.ok(report.html.includes('parcial: 2/3 chamadas'));
+ assert.ok(report.text.includes('subtotal'));
+});
