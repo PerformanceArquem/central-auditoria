@@ -79,3 +79,50 @@ test('Zenvia voice endpoint refuses chat actions',async()=>{
  assert.equal(res.statusCode,400);
  assert.equal(seen.some(x=>x.url.hostname==='zchat.zenvia.io'),false);
 });
+
+test('gestor não pode listar chamadas mesmo quando possui acesso à Central',async()=>{
+ const seen=setup(undefined,'user');const res=response();
+ await handler(req('calls',{from:'2026-11-16',to:'2026-11-16'}),res);
+ assert.equal(res.statusCode,403);
+ assert.equal(seen.some(x=>x.url.hostname==='voice-api.zenvia.com'),false);
+});
+test('gestor pode ouvir somente ligação de monitoria aprovada em setor vinculado',async()=>{
+ const seen=setup((u)=>{
+  if(u.pathname==='/rest/v1/audit_monitoria_reviews'){
+   assert.equal(u.searchParams.get('review_status'),'eq.approved');
+   assert.equal(u.searchParams.get('source_id'),'eq.123');
+   return json([{id:'review-1',source_id:'123',sector:'Suporte',recording_kind:'outbound'}]);
+  }
+  if(u.pathname==='/rest/v1/audit_monitoria_manager_routes')
+   return json([{sector:'Suporte',manager_user_id:'user-1',active:true}]);
+  if(u.pathname==='/chamada/123/gravacao')
+   return new Response(Uint8Array.from([73,68,51]),{status:200,headers:{'content-type':'audio/mpeg'}});
+  throw Error('Unexpected upstream '+u.pathname);
+ },'user');
+ const res=response();
+ await handler(req('audio',{id:'123',kind:'outbound'}),res);
+ assert.equal(res.statusCode,200);
+ assert.ok(Buffer.isBuffer(res.body));
+ assert.equal(seen.filter(x=>x.url.hostname==='voice-api.zenvia.com').length,1);
+});
+test('gestor de outro setor nunca recupera o áudio protegido',async()=>{
+ const seen=setup((u)=>{
+  if(u.pathname==='/rest/v1/audit_monitoria_reviews')
+   return json([{id:'review-1',source_id:'123',sector:'Produção',recording_kind:'outbound'}]);
+  if(u.pathname==='/rest/v1/audit_monitoria_manager_routes')
+   return json([{sector:'Suporte',manager_user_id:'user-1',active:true}]);
+  throw Error('Should not request recording: '+u.pathname);
+ },'user');
+ const res=response();await handler(req('audio',{id:'123',kind:'outbound'}),res);
+ assert.equal(res.statusCode,403);
+ assert.equal(seen.some(x=>x.url.hostname==='voice-api.zenvia.com'),false);
+});
+test('gestor não pode acessar ligação sem monitoria aprovada',async()=>{
+ const seen=setup((u)=>{
+  if(u.pathname==='/rest/v1/audit_monitoria_reviews')return json([]);
+  throw Error('Unexpected extra query '+u.pathname);
+ },'user');
+ const res=response();await handler(req('audio',{id:'123',kind:'outbound'}),res);
+ assert.equal(res.statusCode,403);
+ assert.equal(seen.some(x=>x.url.hostname==='voice-api.zenvia.com'),false);
+});
