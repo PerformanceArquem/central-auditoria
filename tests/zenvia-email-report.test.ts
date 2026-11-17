@@ -100,6 +100,20 @@ Deno.test('missing actual talk duration does not silently lower voice TMA to zer
  if(!email.html.includes('parcial'))throw Error('Incomplete voice data must be clearly marked partial');
 });
 
+Deno.test('formatted HH:MM:SS talk duration from Zenvia is valid without seconds field',async()=>{
+ const outbound=[{id:10,data_criacao:'2026-11-10T09:00:00-03:00',destino:{status:'atendida',duracao_falada:'00:02:00'}},
+ {id:11,data_criacao:'2026-11-10T10:00:00-03:00',destino:{status:'atendida',duracao_falada_segundos:60}}];
+ const fetchMock=async(input:string|URL|Request):Promise<Response>=>{
+  const rows=new URL(String(input)).pathname==='/chamada/relatorio'?outbound:[];
+  return new Response(JSON.stringify({sucesso:true,dados:{relatorio:rows,total:rows.length}}),{status:200});
+ };
+ const result=await readZenviaEmailMetrics('2026-11-10','2026-11-11','fixture-token','',fetchMock);
+ assertEquals(result.metrics.tmaSeconds,90);
+ assertEquals(result.metrics.talkSeconds,180);
+ assertEquals(result.metrics.tmaSamples,2);
+ assertEquals(result.metrics.tmaMissingSamples,0);
+});
+
 Deno.test('per-extension durations are unavailable with a missing answered talk sample',async()=>{
  const outbound=[
   {id:10,data_criacao:'2026-11-10T09:00:00-03:00',ramal_id_origem:430,destino:{status:'atendida',duracao_falada_segundos:120}},
