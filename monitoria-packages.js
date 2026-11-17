@@ -51,8 +51,8 @@
    const book=XLSX.utils.book_new();
    const add=(name,data)=>XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(data),name);
    const approved=rows.filter(r=>r.review_status==='approved');
-   add('Notas',[['Data','Colaborador','Setor','Canal','Chamado ou ligação','Monitor responsável','Nota IA','Nota aprovada','Crítica confirmada','Parecer'],
-      ...approved.map(r=>[r.monitored_at,r.collaborator_name,r.sector,r.channel,r.source_id,r.reviewer_name,r.score_suggested,r.score_approved,r.critical_confirmed?'Sim':'Não',r.reviewer_notes||''])]);
+   add('Notas',[['Data','Colaborador','Setor','Canal','Chamado ou ligação','Monitor responsável','Nota IA','Nota aprovada','Crítica confirmada','Parecer','Fonte da evidência','Cobertura reconhecida'],
+      ...approved.map(r=>[r.monitored_at,r.collaborator_name,r.sector,r.channel,r.source_id,r.reviewer_name,r.score_suggested,r.score_approved,r.critical_confirmed?'Sim':'Não',r.reviewer_notes||'',r.evidence_scope||'Não informado',r.evidence_acknowledged?'Sim':'Não'])]);
    add('Critérios',[['Data','ID atendimento','Colaborador','Monitor responsável','Código','Decisão','Desconto','Evidência'],
       ...approved.flatMap(r=>(r.criteria||[]).map(c=>[r.monitored_at,r.source_id,r.collaborator_name,r.reviewer_name,c.id,c.decision,c.deducted,c.evidence]))]);
    add('Não Conformidades',[['Data','Colaborador','ID atendimento','Monitor responsável','Código','Evidência','Confirmada','Gestor notificado','Data ciência'],
@@ -94,6 +94,7 @@
      pdf.setDrawColor(190,202,222);pdf.line(12,y,198,y);y+=7;
      block('Data: '+r.monitored_at+' | Canal: '+(r.channel==='voice'?'Ligacao':'Chat')+' | Atendimento: '+r.source_id,'bold');
      block('Monitor responsavel: '+r.reviewer_name+' | Setor: '+r.sector);
+     block('Evidencia: '+(r.evidence_scope||'nao informada')+' | Ciencia da cobertura: '+(r.evidence_acknowledged?'sim':'nao'));
      block('Nota sugerida: '+r.score_suggested+' / 100 | Nota aprovada: '+r.score_approved+' / 100'+(r.critical_confirmed?' | CRITICO CONFIRMADO':''));
      if(r.reviewer_notes)block('Parecer da Qualidade: '+r.reviewer_notes);
      if(r.channel==='voice'){
@@ -172,6 +173,7 @@
      approvedReviews:previewRows.length,pdfReportIncluded:true,excelIncluded:true,
      chatExtractsIncluded:included,chatExtractsMissing:missing,
      chatFullHistoryValidated:false,
+     evidenceScopes:previewRows.map(r=>({reviewId:r.id,scope:r.evidence_scope||'não informado',acknowledged:r.evidence_acknowledged===true})),
      emailsSent:false,recordingsEmbedded:false,
      recordingLinksRequireExistingCentralLogin:true
    };
