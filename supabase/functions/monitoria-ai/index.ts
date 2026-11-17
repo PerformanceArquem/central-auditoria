@@ -2,6 +2,7 @@ import {CRITICAL,RULESET_VERSION,rulesFor} from './rules.ts';
 import {evaluate,type Channel,type Observation} from './scoring.ts';
 import {validateAudioPayload,transcriptionRequest,extractTranscription} from './transcription.ts';
 const env=(k:string)=>Deno.env.get(k)?.trim()||'';
+const geminiKey=()=>env('GEMINI_API_KEY')||env('GOOGLE_GEMINI_API_KEY')||env('GOOGLE_AI_API_KEY')||env('GOOGLE_API_KEY');
 const origins=new Set(['https://central-auditoria-iota.vercel.app','https://centralauditoria.ddns.net','https://www.centralauditoria.ddns.net']);
 function allowedOrigin(value:string){
  if(origins.has(value))return true;
@@ -40,11 +41,14 @@ async function handle(req:Request){
  if(req.method!=='POST')return response({error:'Use POST'},405);
  if(!(await admin(req)))return response({error:'Acesso restrito à Qualidade autorizada (administrador)'},403);
  const input=await req.json().catch(()=>null);
+ if(input?.action==='diagnostic'){
+  return response({ok:true,configured:!!geminiKey(),service:'monitoria-ai',authentication:'verified',noEmail:true});
+ }
  if(input?.action==='transcribe'){
   const checked=validateAudioPayload(input);
   if(!checked.ok)return response({ok:false,error:checked.error},400);
-  const apiKey=env('GEMINI_API_KEY');
-  if(!apiKey)return response({ok:false,error:'Gemini não configurado no servidor'},503);
+  const apiKey=geminiKey();
+  if(!apiKey)return response({ok:false,error:'A função de monitoria não encontrou a credencial Gemini entre as variáveis disponíveis neste projeto Supabase',code:'GEMINI_CREDENTIAL_NOT_VISIBLE'},503);
   try{
    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',{
     method:'POST',
@@ -64,8 +68,8 @@ async function handle(req:Request){
  if(!['chat','voice'].includes(channel))return response({error:'Canal inválido'},400);
  if(input?.consent!==true)return response({error:'É necessária autorização explícita para processar a conversa pelo Gemini'},400);
  if(transcript.length<60||transcript.length>45000)return response({error:'Transcrição precisa ter de 60 a 45.000 caracteres'},400);
- const apiKey=env('GEMINI_API_KEY');
- if(!apiKey)return response({error:'Gemini não configurado no servidor'},503);
+ const apiKey=geminiKey();
+ if(!apiKey)return response({error:'A função de monitoria não encontrou a credencial Gemini entre as variáveis disponíveis neste projeto Supabase',code:'GEMINI_CREDENTIAL_NOT_VISIBLE'},503);
  const rubric=rulesFor(channel).map(r=>({id:r.id,code:r.code,name:r.name,description:r.description,points:r[channel]}));
  const schema={type:'OBJECT',properties:{
   criteria:{type:'ARRAY',items:{type:'OBJECT',properties:{
@@ -94,7 +98,7 @@ async function handle(req:Request){
     generationConfig:{temperature:0.1,maxOutputTokens:4500,responseMimeType:'application/json',responseSchema:schema}
    }),signal:AbortSignal.timeout(45000)
   });
-  if(!result.ok)return response({error:'Gemini indisponível para avaliação',status:result.status},503);
+  if(!result.ok)return response({error:'A API Gemini recusou ou não concluiu a avaliação',providerStatus:result.status,code:'GEMINI_UPSTREAM_ERROR'},503);
   const body=await result.json();
   raw=JSON.parse(body.candidates?.[0]?.content?.parts?.map((x:{text?:string})=>x.text||'').join('')||'null');
  }catch{return response({error:'Falha ao processar resposta estruturada da IA'},502);}
