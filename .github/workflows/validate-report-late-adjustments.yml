@@ -5,6 +5,8 @@ on:
     paths:
       - 'supabase/functions/audit-email-dispatch/late-adjustments.ts'
       - 'supabase/functions/audit-email-dispatch/late-adjustments.test.ts'
+      - 'supabase/functions/audit-email-dispatch/production-flow-keila.ts'
+      - 'supabase/functions/audit-email-dispatch/production-flow-keila.test.ts'
       - '.github/workflows/validate-report-late-adjustments.yml'
   push:
     branches:
@@ -12,6 +14,8 @@ on:
     paths:
       - 'supabase/functions/audit-email-dispatch/late-adjustments.ts'
       - 'supabase/functions/audit-email-dispatch/late-adjustments.test.ts'
+      - 'supabase/functions/audit-email-dispatch/production-flow-keila.ts'
+      - 'supabase/functions/audit-email-dispatch/production-flow-keila.test.ts'
       - '.github/workflows/validate-report-late-adjustments.yml'
 
 permissions:
@@ -26,4 +30,4 @@ jobs:
         with:
           deno-version: v2.x
       - name: Test report calculations without network, mail or credentials
-        run: deno test supabase/functions/audit-email-dispatch/late-adjustments.test.ts
+        run: deno test supabase/functions/audit-email-dispatch/late-adjustments.test.ts supabase/functions/audit-email-dispatch/production-flow-keila.test.ts
