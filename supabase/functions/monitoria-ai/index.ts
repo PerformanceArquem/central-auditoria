@@ -3,11 +3,18 @@ import {evaluate,type Channel,type Observation} from './scoring.ts';
 import {validateAudioPayload,transcriptionRequest,extractTranscription} from './transcription.ts';
 const env=(k:string)=>Deno.env.get(k)?.trim()||'';
 const origins=new Set(['https://central-auditoria-iota.vercel.app','https://centralauditoria.ddns.net','https://www.centralauditoria.ddns.net']);
+function allowedOrigin(value:string){
+ if(origins.has(value))return true;
+ try{
+  const u=new URL(value);
+  return u.protocol==='https:' && /^central-auditoria-[a-z0-9-]+-arquem\.vercel\.app$/.test(u.hostname) && u.pathname==='/' && !u.username && !u.password && !u.search && !u.hash;
+ }catch{return false}
+}
 const response=(v:unknown,status=200)=>new Response(JSON.stringify(v),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 function cors(req:Request,res:Response){
  const h=new Headers(res.headers),origin=req.headers.get('origin')||'';
- if(origins.has(origin))h.set('Access-Control-Allow-Origin',origin);
- h.set('Access-Control-Allow-Headers','authorization,apikey,content-type,x-client-info');
+ if(allowedOrigin(origin))h.set('Access-Control-Allow-Origin',origin);
+ h.set('Access-Control-Allow-Headers','authorization,apikey,content-type,x-client-info,x-retry-count,traceparent,tracestate,baggage');
  h.set('Access-Control-Allow-Methods','POST,OPTIONS');h.set('Vary','Origin');
  return new Response(res.body,{status:res.status,headers:h});
 }
