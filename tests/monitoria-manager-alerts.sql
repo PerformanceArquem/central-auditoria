@@ -16,14 +16,14 @@ insert into public.audit_users values
 insert into public.audit_monitoria_manager_routes(sector,manager_user_id)
 values('Suporte','123e4567-e89b-42d3-a456-426614174002');
 insert into public.audit_monitoria_reviews(
- client_request_id,created_by,channel,source_id,sector,collaborator_name,ruleset_version,
+ client_request_id,created_by,channel,source_id,sector,collaborator_name,reviewer_name,monitored_at,ruleset_version,
  score_suggested,critical_suspected,critical_findings)
 values
  ('123e4567-e89b-42d3-a456-426614174011','123e4567-e89b-42d3-a456-426614174000',
-  'chat','102205','Suporte','Colaborador Teste','monitoria-suporte-2026-11-17',0,true,
+  'chat','102205','Suporte','Colaborador Teste','Analista Teste','2026-11-17','monitoria-suporte-2026-11-17',0,true,
   '[{"code":"Z1","suspected":true,"evidence":"Trecho de teste"}]'::jsonb),
  ('123e4567-e89b-42d3-a456-426614174012','123e4567-e89b-42d3-a456-426614174000',
-  'voice','1883','Não Mapeado','Colaborador Teste','monitoria-suporte-2026-11-17',0,true,
+  'voice','1883','Não Mapeado','Colaborador Teste','Analista Teste','2026-11-17','monitoria-suporte-2026-11-17',0,true,
   '[{"code":"Z3","suspected":true,"evidence":"Trecho de teste"}]'::jsonb),
  ('123e4567-e89b-42d3-a456-426614174013','123e4567-e89b-42d3-a456-426614174000',
   'chat','102206','Suporte','Colaborador Teste','monitoria-suporte-2026-11-17',100,false,'[]');
