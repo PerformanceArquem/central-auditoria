@@ -30,8 +30,9 @@
    return data;
  }
  const audioLink=r=>
-   r.channel==='voice'&&['inbound','outbound'].includes(r.recording_kind)&&/^\d{1,14}$/.test(String(r.source_id))?
-     host+'/?monitoria_voice='+encodeURIComponent(r.source_id)+'&kind='+r.recording_kind:null;
+   r.channel==='voice'&&['inbound','outbound'].includes(r.recording_kind)&&/^\d{1,14}$/.test(String(r.source_id))&&
+   /^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(String(r.id||''))?
+     host+'/?monitoria_voice='+encodeURIComponent(r.source_id)+'&kind='+r.recording_kind+'&review='+encodeURIComponent(r.id):null;
  function emailHtml(rows,period){
    const approved=rows.filter(x=>x.review_status==='approved'&&typeof x.score_approved==='number');
    const average=approved.length?(approved.reduce((n,r)=>n+Number(r.score_approved),0)/approved.length).toFixed(2):'—';
