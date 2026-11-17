@@ -120,7 +120,7 @@
  }
  function bind(){
   if(!$('monPackagePeriod'))return;
-  const today=new Date().toISOString().slice(0,10);$('monPackageAnchor').value=today;
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());$('monPackageAnchor').value=today;
   $('monPackagePreviewButton').onclick=async()=>{try{await load()}catch(e){$('monPackageSummary').textContent=e.message}};
   $('monPackageDownload').onclick=async()=>{try{await downloadPackage()}catch(e){$('monPackageSummary').textContent=e.message}};
   $('monPackagePeriod').onchange=()=>{$('monPackageDownload').disabled=true;previewRows=[]};
