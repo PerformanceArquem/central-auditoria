@@ -26,7 +26,7 @@ values
   'voice','1883','Não Mapeado','Colaborador Teste','Analista Teste','2026-11-17','monitoria-suporte-2026-11-17',0,true,
   '[{"code":"Z3","suspected":true,"evidence":"Trecho de teste"}]'::jsonb),
  ('123e4567-e89b-42d3-a456-426614174013','123e4567-e89b-42d3-a456-426614174000',
-  'chat','102206','Suporte','Colaborador Teste','monitoria-suporte-2026-11-17',100,false,'[]');
+  'chat','102206','Suporte','Colaborador Teste','Analista Teste','2026-11-17','monitoria-suporte-2026-11-17',100,false,'[]');
 do $$
 declare route_alert record;unassigned_alert record;count_alert integer;
 begin
