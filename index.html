@@ -998,6 +998,14 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                   <button id="monLoadChat" type="button" class="s">Abrir conversa</button>
                 </div>
                 <p class="subtle">Consultas exigem acesso administrativo. Ligações e gravações usam a Zenvia Voice; as interações de texto são obtidas exclusivamente dos chamados Movidesk. As ações de um chamado podem não conter todo o histórico do chat; confira a cobertura antes de monitorar.</p>
+                <div id="monChatEvidenceWarning" hidden style="margin-top:10px;padding:12px;border:1px solid #de9a56;background:#fff8ec;color:#754b10;border-radius:8px" role="status">
+                  <strong>Fonte Movidesk: extrato não validado como chat completo.</strong>
+                  <p id="monChatEvidenceDetails" style="margin:6px 0"></p>
+                  <label style="display:flex;gap:8px;align-items:start">
+                    <input id="monChatCoverageAck" type="checkbox">
+                    <span>Conferi as interações e reconheço que não há confirmação de todo o diálogo. Só avaliarei os critérios que possuam evidências suficientes.</span>
+                  </label>
+                </div>
               </div>
               <div class="row" style="display:flex;gap:14px;align-items:end;flex-wrap:wrap">
                 <label>Canal
