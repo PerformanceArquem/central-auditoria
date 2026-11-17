@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import handler from '../api/monitoria-zenvia.js';
 
 const savedFetch=globalThis.fetch;
-const vars=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','ZENVIA_VOICE_ACCESS_TOKEN','ZENVIA_CHAT_API_TOKEN'];
+const vars=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','ZENVIA_VOICE_ACCESS_TOKEN'];
 const previous=Object.fromEntries(vars.map(k=>[k,process.env[k]]));
 function response(){return {
  statusCode:200,headers:{},body:null,
@@ -21,7 +21,6 @@ function setup(provider=()=>json({sucesso:true,dados:{relatorio:[],total:0}}),ro
  process.env.SUPABASE_URL='https://test.supabase.co';
  process.env.SUPABASE_SERVICE_ROLE_KEY='test-service-not-real';
  process.env.ZENVIA_VOICE_ACCESS_TOKEN='fake-voice';
- process.env.ZENVIA_CHAT_API_TOKEN='fake-chat';
  const seen=[];
  globalThis.fetch=async (url,options={})=>{
   const u=new URL(url);seen.push({url:u,headers:options.headers||{}});
@@ -73,13 +72,10 @@ test('authorized outbound audio is proxied with no secrets in result',async()=>{
  assert.equal(res.statusCode,200);assert.equal(res.headers['Content-Type'],'audio/mpeg');
  assert.ok(Buffer.isBuffer(res.body));assert.equal(res.body.length,4);
 });
-test('chat lookup uses backend token only, exposing bounded normalized messages',async()=>{
- const seen=setup(()=>json({messages:[{sender:{name:'Agente'},text:'Bom dia',privateKey:'never expose',createdAt:'2026-11-16T11:10:00Z'}]}));
+test('Zenvia voice endpoint refuses chat actions',async()=>{
+ const seen=setup();
  const res=response();
  await handler(req('chat',{protocol:'ABC_123'}),res);
- assert.equal(res.statusCode,200);assert.equal(res.body.messages[0].text,'Bom dia');
- assert.equal(JSON.stringify(res.body).includes('never expose'),false);
- assert.equal(JSON.stringify(res.body).includes('fake-chat'),false);
- const url=seen.find(x=>x.url.hostname==='zchat.zenvia.io')?.url;
- assert.equal(url?.searchParams.get('token'),'fake-chat');
+ assert.equal(res.statusCode,400);
+ assert.equal(seen.some(x=>x.url.hostname==='zchat.zenvia.io'),false);
 });
