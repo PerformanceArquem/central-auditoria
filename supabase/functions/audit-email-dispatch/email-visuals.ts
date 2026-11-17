@@ -14,7 +14,7 @@ export function reportIdentity(rec:R){
  if(individual)return {title:String(rec.collaborator_name||people[0]),hierarchy:[] as string[],kind:'Relatório individual'};
  if(sectors.length===1){
   const sector=sectors[0],key=sector.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-  return {title:'Equipe · '+sector,hierarchy:key==='suporte'?['Supervisão · Cássio','Coordenação · Carla']:key==='financeiro'?['Coordenação · Carla']:[],kind:'Relatório de equipe'};
+  return {title:'Equipe · '+sector,hierarchy:key==='suporte'?['Supervisão · Kassio','Coordenação · Carla']:key==='financeiro'?['Coordenação · Carla']:[],kind:'Relatório de equipe'};
  }
  return {title:String(rec.name||'Visão gerencial'),hierarchy:[] as string[],kind:'Relatório de gestão'};
 }
