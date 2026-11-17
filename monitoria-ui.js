@@ -23,6 +23,21 @@
    if(!res.ok||body.ok!==true)throw Error(body.error||'Consulta indisponível');
    return body;
  }
+ async function openProtectedRecording({id,kind}){
+   if(!/^\\d{1,14}$/.test(String(id))||!['outbound','inbound'].includes(kind))
+      throw Error('Referência inválida de gravação');
+   const media=await api({action:'audio',kind,id},{binary:true});
+   if(localAudioUrl)URL.revokeObjectURL(localAudioUrl);
+   selectedAudio=media;localAudioUrl=URL.createObjectURL(media);
+   const player=$('monAudioPlayer');player.src=localAudioUrl;player.hidden=false;
+   const link=$('monDownloadAudio');link.href=localAudioUrl;link.download='ligacao-'+id+'.mp3';link.hidden=false;
+   $('monChannel').value='voice';channel='voice';
+   $('monSourceId').value=id;$('monRecordingKind').value=kind;
+   status('Gravação carregada com acesso autenticado. Clique em reproduzir para ouvir. Transcrição com Gemini opcional.');
+ }
+ window.monitoriaOpenRecording=async(args)=>{
+   try{await openProtectedRecording(args)}catch(e){status('Gravação: '+String(e.message||e))}
+ };
  async function listCalls(){
    const start=$('monFrom').value,end=$('monTo').value;
    status('Consultando chamadas na Zenvia…');
@@ -41,14 +56,7 @@
        button.addEventListener('click',async()=>{
          button.disabled=true;status('Baixando gravação autenticada da Zenvia…');
          try{
-           const media=await api({action:'audio',kind:call.kind,id:call.id},{binary:true});
-           if(localAudioUrl)URL.revokeObjectURL(localAudioUrl);
-           selectedAudio=media;
-           localAudioUrl=URL.createObjectURL(media);
-           const player=$('monAudioPlayer');player.src=localAudioUrl;player.hidden=false;
-           const link=$('monDownloadAudio');link.href=localAudioUrl;link.download='ligacao-'+call.id+'.mp3';link.hidden=false;
-           $('monChannel').value='voice';channel='voice';
-           status('Gravação carregada. Para análise pelo Gemini, informe a transcrição textual.');
+           await openProtectedRecording({id:call.id,kind:call.kind});
          }catch(e){status('Falha ao carregar gravação: '+String(e.message||e));}
          finally{button.disabled=false;}
        });
@@ -72,6 +80,7 @@
      const lines=data.messages.map(m=>'['+(m.at||'sem horário')+'] '+(m.sender||'Participante')+': '+m.text);
      $('monTranscript').value=lines.join('\n');
      $('monChannel').value='chat';channel='chat';
+     $('monSourceId').value=ticketId;
      lastAnalysis=null;$('monExportReview').disabled=true;
      status(data.messages.length+' interações do chamado #'+ticketId+' recuperadas do Movidesk. '+data.warning);
    }catch(e){status('Consulta Movidesk: '+String(e.message||e));}
@@ -92,9 +101,13 @@
    const sourceId=$('monSourceId').value.trim();
    const sector=$('monSector').value.trim();
    const collaborator=$('monCollaborator').value.trim();
+   const reviewer=$('monReviewer').value.trim();
+   const monitoredAt=$('monMonitoredAt').value;
+   const recordingKind=channel==='voice'?$('monRecordingKind').value:'';
+   if(!reviewer||!monitoredAt)throw Error('Informe quem monitorou e a data da monitoria');
    if(!/^[A-Za-z0-9_-]{1,80}$/.test(sourceId)||!sector||!collaborator)
     throw Error('Preencha o ID da ligação/chamado, o setor e o colaborador antes da análise');
-   return {sourceId,sector,collaborator};
+   return {sourceId,sector,collaborator,reviewer,monitoredAt,recordingKind};
  }
  async function saveReview(){
    if(!lastAnalysis)throw Error('Avalie o atendimento primeiro');
@@ -206,12 +219,12 @@
    const approved=selected.filter(r=>r.review_status==='approved');
    const average=approved.length?Math.round(approved.reduce((sum,r)=>sum+Number(r.score_approved||0),0)/approved.length*100)/100:null;
    add('Resumo',[['Indicador','Valor'],['Monitorias exportadas',selected.length],['Aprovadas',approved.length],['Provisórias',selected.length-approved.length],['Média notas aprovadas',average??'Sem avaliações aprovadas'],['Falhas críticas suspeitas',selected.filter(r=>r.critical_suspected).length],['Falhas críticas confirmadas',selected.filter(r=>r.critical_confirmed).length]]);
-   add('Notas por Atendimento',[['Data','Colaborador','Setor','Canal','ID atendimento','Nota IA','Nota aprovada','Status','Crítica suspeita','Crítica confirmada','Versão normas','Observação Qualidade','Alerta interno','Gestor vinculado','Hora alerta','Ciência do gestor','Feedback gestor'],
-    ...selected.map(r=>[r.created_at,r.collaborator_name,r.sector,r.channel,r.source_id,r.score_suggested,r.score_approved??'',r.review_status,r.critical_suspected?'Sim':'Não',r.critical_confirmed===true?'Sim':r.critical_confirmed===false?'Não':'Pendente',r.ruleset_version,r.reviewer_notes||'',r.audit_monitoria_alerts?.status||'',r.audit_monitoria_alerts?.manager_user_id||'',r.audit_monitoria_alerts?.created_at||'',r.audit_monitoria_alerts?.acknowledged_at||'',r.audit_monitoria_alerts?.manager_feedback||''])]);
-   add('Critérios',[['Data','ID atendimento','Colaborador','Canal','Código','Decisão','Desconto','Evidência','Justificativa'],
-    ...selected.flatMap(r=>(r.criteria||[]).map(c=>[r.created_at,r.source_id,r.collaborator_name,r.channel,c.id,c.decision,c.deducted,c.evidence,c.reason]))]);
+   add('Notas por Atendimento',[['Data da monitoria','Colaborador','Setor','Canal','ID atendimento','Monitor responsável','Tipo gravação','Nota IA','Nota aprovada','Status','Crítica suspeita','Crítica confirmada','Versão normas','Observação Qualidade','Alerta interno','Gestor vinculado','Hora alerta','Ciência do gestor','Feedback gestor'],
+    ...selected.map(r=>[r.monitored_at,r.collaborator_name,r.sector,r.channel,r.source_id,r.reviewer_name,r.recording_kind||'',r.score_suggested,r.score_approved??'',r.review_status,r.critical_suspected?'Sim':'Não',r.critical_confirmed===true?'Sim':r.critical_confirmed===false?'Não':'Pendente',r.ruleset_version,r.reviewer_notes||'',r.audit_monitoria_alerts?.status||'',r.audit_monitoria_alerts?.manager_user_id||'',r.audit_monitoria_alerts?.created_at||'',r.audit_monitoria_alerts?.acknowledged_at||'',r.audit_monitoria_alerts?.manager_feedback||''])]);
+   add('Critérios',[['Data da monitoria','ID atendimento','Colaborador','Monitor responsável','Canal','Código','Decisão','Desconto','Evidência','Justificativa'],
+    ...selected.flatMap(r=>(r.criteria||[]).map(c=>[r.monitored_at,r.source_id,r.collaborator_name,r.reviewer_name,r.channel,c.id,c.decision,c.deducted,c.evidence,c.reason]))]);
    add('Não Conformidades',[['Data','Colaborador','Setor','Canal','ID atendimento','Código crítico','Evidência','Situação','Alerta','Gestor','Hora alerta','Hora ciência'],
-    ...selected.flatMap(r=>(r.critical_findings||[]).filter(c=>c.suspected).map(c=>[r.created_at,r.collaborator_name,r.sector,r.channel,r.source_id,c.code,c.evidence,r.critical_confirmed===true?'Confirmada':r.critical_confirmed===false?'Descartada':'Aguardando Qualidade',r.audit_monitoria_alerts?.status||'',r.audit_monitoria_alerts?.manager_user_id||'',r.audit_monitoria_alerts?.created_at||'',r.audit_monitoria_alerts?.acknowledged_at||'']))]);
+    ...selected.flatMap(r=>(r.critical_findings||[]).filter(c=>c.suspected).map(c=>[r.monitored_at,r.collaborator_name,r.sector,r.channel,r.source_id,c.code,c.evidence,r.critical_confirmed===true?'Confirmada':r.critical_confirmed===false?'Descartada':'Aguardando Qualidade',r.audit_monitoria_alerts?.status||'',r.audit_monitoria_alerts?.manager_user_id||'',r.audit_monitoria_alerts?.created_at||'',r.audit_monitoria_alerts?.acknowledged_at||'']))]);
    const byPerson=new Map();for(const r of approved){const key=r.collaborator_name||'Não identificado';const value=byPerson.get(key)||[];value.push(r);byPerson.set(key,value)}
    add('Colaboradores',[['Colaborador','Monitorias aprovadas','Média aprovada'],
     ...[...byPerson.entries()].map(([person,rows])=>[person,rows.length,Math.round(rows.reduce((n,r)=>n+Number(r.score_approved||0),0)/rows.length*100)/100])]);
@@ -321,6 +334,7 @@
    });
    const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
    $('monFrom').value=today;$('monTo').value=today;
+   $('monMonitoredAt').value=today;
    $('monReportTo').value=today;$('monReportFrom').value=today.slice(0,7)+'-01';
    window.monitoriaRefreshAlerts=refreshAlerts;
    setInterval(()=>{if(!document.hidden&&window.tmAuth)refreshAlerts()},15000);
