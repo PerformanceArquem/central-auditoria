@@ -9,6 +9,7 @@ create table if not exists public.audit_monitoria_manager_routes (
 );
 create table if not exists public.audit_monitoria_reviews (
  id uuid primary key default gen_random_uuid(),
+ client_request_id uuid not null unique,
  created_at timestamptz not null default now(),
  created_by uuid not null references auth.users(id),
  channel text not null check (channel in ('chat','voice')),
