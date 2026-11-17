@@ -51,7 +51,7 @@
    $('monRecordingKind').value='';
    lastAnalysis=null;lastSavedReview=null;reviewRequestId=null;
    $('monSave').disabled=true;
-   $('monExportReview').disabled=true;
+   $('monExportReview').disabled=true;if($('monExportOfficialExcel'))$('monExportOfficialExcel').disabled=true;
    resetChatCoverage();
    const results=$('monResults');if(results)results.replaceChildren();
  }
@@ -218,7 +218,7 @@
      $('monTranscript').value=lines.join('\n');
      $('monChannel').value='chat';channel='chat';
      $('monSourceId').value=ticketId;
-     lastAnalysis=null;$('monExportReview').disabled=true;
+     lastAnalysis=null;$('monExportReview').disabled=true;if($('monExportOfficialExcel'))$('monExportOfficialExcel').disabled=true;
      if(near){near.textContent=data.messages.length+' interações carregadas do '+(data.syncedFallback?'banco sincronizado':'Movidesk')+'. Confira a cobertura antes de avaliar.';near.style.color='#17603a'}
      status(data.messages.length+' interações do chamado #'+ticketId+' recuperadas do Movidesk. '+data.warning);
      return true;
@@ -469,6 +469,7 @@
      result.append(reminder);
    }
    $('monExportReview').disabled=false;
+   if($('monExportOfficialExcel'))$('monExportOfficialExcel').disabled=false;
  }
  async function geminiFailure(error,data){
    let message=typeof data?.error==='string'?data.error:'';
@@ -512,7 +513,7 @@
      if(error||!data?.ok)throw Error(error?await geminiFailure(error,data):data?.error||'Transcrição indisponível');
      $('monTranscript').value=data.transcript||'';
      $('monChannel').value='voice';channel='voice';
-     lastAnalysis=null;$('monExportReview').disabled=true;
+     lastAnalysis=null;$('monExportReview').disabled=true;if($('monExportOfficialExcel'))$('monExportOfficialExcel').disabled=true;
      status('Transcrição sugerida. Confira palavras, falantes e horários antes de solicitar a avaliação.');
    }catch(e){status('Transcrição: '+String(e.message||e));}
    finally{button.disabled=false;}
@@ -594,6 +595,22 @@
    $('monReloadRoutes').addEventListener('click',loadRoutes);
    $('monExportChat').addEventListener('click',()=>download('chat_monitoria.txt',$('monTranscript').value,'text/plain;charset=utf-8'));
    $('monExportReview').addEventListener('click',()=>{if(lastAnalysis)download('avaliacao_monitoria.json',JSON.stringify(lastAnalysis,null,2),'application/json')});
+   $('monExportOfficialExcel')?.addEventListener('click',()=>{
+     try{
+       if(!lastAnalysis)throw Error('Primeiro avalie com Gemini');
+       const filename=window.monitoriaOfficialExcel?.({
+         analysis:lastAnalysis,
+         channel,
+         collaborator:$('monCollaborator').value.trim(),
+         reviewer:$('monReviewer').value.trim(),
+         sourceId:$('monSourceId').value.trim(),
+         monitoredAt:$('monMonitoredAt').value,
+         transcript:$('monTranscript').value
+       });
+       if(!filename)throw Error('Exportador do modelo oficial não carregado');
+       status('Planilha '+filename+' gerada com nota provisória, descontos, fatores críticos e atendimento para revisão da Qualidade.');
+     }catch(e){status('Exportação do formulário: '+String(e.message||e))}
+   });
    $('monResults').textContent='Selecione um canal e informe a conversa para iniciar.';
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);
