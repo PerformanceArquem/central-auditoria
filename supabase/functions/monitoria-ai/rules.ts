@@ -1,5 +1,11 @@
 // Fonte: Formulario_Monitoria_Atendimento.xlsx, aba Monitoria, linhas 9-53.
 // Não alterar pesos sem uma nova versão aprovada da planilha. Códigos duplicados recebem IDs estáveis.
+export type Channel='chat'|'voice';
+export type MonitorRule={
+ id:string;code:string;block:number;name:string;description:string;
+ chat:{points:number|null;partial:number|null};
+ voice:{points:number|null;partial:number|null};
+};
 export const RULESET_VERSION = "monitoria-suporte-2026-11-17";
 export const BLOCK_WEIGHTS = Object.freeze({1:15,2:40,3:15,4:30});
 export const CRITICAL = Object.freeze([
@@ -24,7 +30,7 @@ export const CRITICAL = Object.freeze([
     "description": "Negligenciou uma escalação ou não abriu o chamado necessário, travando a operação do cliente."
   }
 ]);
-export const RULES = Object.freeze([
+export const RULES: ReadonlyArray<MonitorRule> = Object.freeze([
   {
     "id": "R01",
     "code": "1.1",
@@ -221,7 +227,7 @@ export const RULES = Object.freeze([
     }
   }
 ]);
-export function rulesFor(channel) {
+export function rulesFor(channel:Channel) {
  if(!['chat','voice'].includes(channel))throw new Error('Canal inválido');
  return RULES.filter(r=>typeof r[channel].points==='number');
 }
