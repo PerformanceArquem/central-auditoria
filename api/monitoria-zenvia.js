@@ -32,22 +32,26 @@ async function authorize(req){
  // Never grant bulk call searches or access to arbitrary call identifiers.
  if(req.query.action!=='audio')return {error:'Listagem de chamadas restrita à Qualidade',status:403};
  const callId=String(req.query.id||''),kind=String(req.query.kind||'');
- if(!idOK(callId)||!['outbound','inbound'].includes(kind))
-  return {error:'Identificação de gravação inválida',status:400};
+ const reviewId=String(req.query.reviewId||'');
+ if(!idOK(callId)||!['outbound','inbound'].includes(kind)||
+  !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reviewId))
+  return {error:'Identificação da monitoria ou gravação inválida',status:400};
  // Route must match the user's verified account and the review's sector.
  // Query only approved records of the requested call, then check manager routing.
  const reviews=new URL(base+'/rest/v1/audit_monitoria_reviews');
  reviews.searchParams.set('select','id,sector,source_id,recording_kind');
+ reviews.searchParams.set('id','eq.'+reviewId);
  reviews.searchParams.set('source_id','eq.'+callId);
  reviews.searchParams.set('recording_kind','eq.'+kind);
  reviews.searchParams.set('channel','eq.voice');
  reviews.searchParams.set('review_status','eq.approved');
- reviews.searchParams.set('limit','50');
+ reviews.searchParams.set('limit','1');
  const matches=await fetch(reviews,{headers:h,signal:AbortSignal.timeout(12000)});
  if(!matches.ok)return {error:'Não foi possível conferir o acesso à gravação',status:503};
  const allowedReviews=await matches.json();
- if(!Array.isArray(allowedReviews)||allowedReviews.length===0)
-  return {error:'Gravação sem monitoria aprovada vinculada',status:403};
+ if(!Array.isArray(allowedReviews)||allowedReviews.length!==1||
+   String(allowedReviews[0].id)!==reviewId||String(allowedReviews[0].source_id)!==callId)
+  return {error:'Gravação sem esta monitoria aprovada vinculada',status:403};
  const routes=new URL(base+'/rest/v1/audit_monitoria_manager_routes');
  routes.searchParams.set('select','sector,manager_user_id,active');
  routes.searchParams.set('manager_user_id','eq.'+user.id);
