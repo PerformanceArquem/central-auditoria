@@ -986,6 +986,13 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
             <div class="card" style="border-left:4px solid #2457d6;max-width:1100px">
               <p class="subtle">As gravações podem ser ouvidas e baixadas sem usar IA. A transcrição automática é opcional, exige autorização explícita e envia o áudio ao Gemini de forma temporária (até 3 MB). Revise a transcrição antes de gerar uma nota.</p>
               <div style="border:1px solid #dce5f0;border-radius:10px;padding:14px;margin:12px 0;background:#f8fbff">
+                <section id="monSupportCandidates" aria-label="Duas monitorias por colaborador do Suporte" style="border:1px solid #d9e4f2;border-radius:10px;padding:14px;margin:0 0 14px;background:white">
+                  <h4 style="margin:0 0 6px">Monitorias por colaborador do Suporte</h4>
+                  <p class="subtle" style="margin:0 0 10px">Uma avaliação de chat e uma de voz por colaborador. Candidatos são selecionados do banco existente; notas só são sugeridas após conferir autoria, diálogo ou gravação e autorizar a IA. Nenhum e-mail será enviado.</p>
+                  <button id="monFindSupport" type="button" class="s">Encontrar atendimentos do Suporte</button>
+                  <p id="monSupportSummary" class="subtle" role="status">Nenhuma consulta realizada.</p>
+                  <div id="monSupportList" style="overflow:auto;max-height:480px"></div>
+                </section>
                 <strong>Consultar ligações da Zenvia e interações de chats do Movidesk</strong>
                 <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-top:10px">
                   <label>Início <input id="monFrom" type="date"></label>
