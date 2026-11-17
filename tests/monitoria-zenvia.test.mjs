@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import handler from '../api/monitoria-zenvia.js';
+import handler from '../lib/monitoria-zenvia-handler.js';
 
 const savedFetch=globalThis.fetch;
 const vars=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','ZENVIA_VOICE_ACCESS_TOKEN'];
