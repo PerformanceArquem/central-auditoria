@@ -183,6 +183,7 @@
    sourceEvidenceKind='manual';
    const area=$('monChatEvidenceWarning');
    if(area)area.hidden=true;
+   const confirmation=$('monChatCoverageConfirm');if(confirmation)confirmation.hidden=true;
    const acknowledge=$('monChatCoverageAck');
    if(acknowledge)acknowledge.checked=false;
  }
@@ -206,6 +207,7 @@
      resetChatCoverage();
      sourceEvidenceKind='movidesk_ticket_actions_unverified';
      $('monChatEvidenceWarning').hidden=false;
+     $('monChatCoverageConfirm').hidden=false;
      const coverage=data.coverage||{};
      $('monChatEvidenceDetails').textContent=
        (coverage.activeActions??'?')+' ações ativas; '+(coverage.renderedInteractions??data.messages.length)+
@@ -440,7 +442,10 @@
    }
    try{metadata()}catch(e){status(e.message);return}
    if(sourceEvidenceKind==='movidesk_ticket_actions_unverified'&&!$('monChatCoverageAck').checked){
-     status('Confirme a verificação manual do extrato Movidesk antes de solicitar a nota.');
+     const box=$('monChatCoverageConfirm');
+     if(box){box.hidden=false;box.scrollIntoView({behavior:'smooth',block:'center'});}
+     $('monChatCoverageAck').focus();
+     status('Marque a confirmação de conferência do extrato, logo acima da autorização do Gemini.');
      return;
    }
    const transcript=$('monTranscript').value.trim();
