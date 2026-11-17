@@ -32,9 +32,16 @@ export async function collectVoiceReport(from:string,to:string,serviceKey:string
    if(!/^\d{1,12}$/.test(String(item.extension)))throw Error('Pessoa de voz inválida');
    const previous=people.get(item.extension)||{extension:String(item.extension),name:String(item.name||'Nome não cadastrado'),total:0,answered:0,unanswered:0,talkSeconds:0,missingTalkSamples:0};
    for(const k of ['total','answered','unanswered'])previous[k]+=Number(item[k]||0);
-   if(item.talkSeconds==null){
-    previous.missingTalkSamples+=Math.max(0,Number(item.missingTalkSamples||0));
-   }else previous.talkSeconds+=Number(item.talkSeconds);
+   // Missing durations must accumulate even when this extension has a measured subtotal.
+   const missing=Number(item.missingTalkSamples);
+   if(!Number.isInteger(missing)||missing<0||missing>Number(item.answered||0))
+    throw Error('Cobertura de duração do ramal inválida');
+   previous.missingTalkSamples+=missing;
+   if(item.talkSeconds!=null){
+    const measured=Number(item.talkSeconds);
+    if(!Number.isFinite(measured)||measured<0)throw Error('Tempo de ramal inválido');
+    previous.talkSeconds+=measured;
+   }
    people.set(item.extension,previous);
   }
  }
