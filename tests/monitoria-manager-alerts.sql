@@ -3,6 +3,8 @@ begin;
 create schema if not exists auth;
 create table auth.users(id uuid primary key);
 create role service_role;
+create role anon;
+create role authenticated;
 create table public.audit_users(user_id uuid primary key,role text,is_active boolean);
 insert into auth.users(id) values
  ('123e4567-e89b-42d3-a456-426614174000'),
