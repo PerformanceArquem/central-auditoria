@@ -127,3 +127,19 @@ test('gestor não pode acessar ligação sem monitoria aprovada',async()=>{
  assert.equal(res.statusCode,403);
  assert.equal(seen.some(x=>x.url.hostname==='voice-api.zenvia.com'),false);
 });
+
+test('gestor não pode trocar a referência da monitoria mantendo número da ligação',async()=>{
+ const actual='123e4567-e89b-42d3-a456-426614174001';
+ const other='123e4567-e89b-42d3-a456-426614174003';
+ const seen=setup(u=>{
+  if(u.pathname==='/rest/v1/audit_monitoria_reviews'){
+   assert.equal(u.searchParams.get('id'),'eq.'+other);
+   return json([{id:actual,source_id:'123',sector:'Suporte',recording_kind:'outbound'}]);
+  }
+  throw Error('No audio or manager lookup should occur for mismatched review UUID');
+ },'user');
+ const res=response();
+ await handler(req('audio',{id:'123',kind:'outbound',reviewId:other}),res);
+ assert.equal(res.statusCode,403);
+ assert.equal(seen.some(x=>x.url.hostname==='voice-api.zenvia.com'),false);
+});
