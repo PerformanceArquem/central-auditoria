@@ -3712,10 +3712,10 @@ function showTab(t){
   if(t==='monitoria'){
     window.monitoriaRefreshAlerts?.();
     const params=new URL(location.href).searchParams;
-    const recording=params.get('monitoria_voice'),kind=params.get('kind');
+    const recording=params.get('monitoria_voice'),kind=params.get('kind'),reviewId=params.get('review');
     if(/^\d{1,14}$/.test(recording||'') && ['inbound','outbound'].includes(kind||'')){
-      window.monitoriaOpenRecording?.({id:recording,kind});
-      const url=new URL(location.href);url.searchParams.delete('monitoria_voice');url.searchParams.delete('kind');
+      window.monitoriaOpenRecording?.({id:recording,kind,reviewId});
+      const url=new URL(location.href);url.searchParams.delete('monitoria_voice');url.searchParams.delete('kind');url.searchParams.delete('review');
       history.replaceState(null,'',url.pathname+url.search+url.hash);
     }
   } if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='zenvia-voice')window.zenviaVoiceInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='intelligence-triage')window.intelligenceTriageInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
