@@ -1,5 +1,8 @@
 
 const MAX_BODY_TICKETS = 5;
+const MAX_TICKET_BYTES = 250000;
+// Shared settings include the existing intelligence history, not ticket batches.
+const MAX_STATE_BYTES = 1000000;
 const stateId = 'shared';
 
 const urlBase = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
@@ -35,7 +38,7 @@ async function authenticate(req) {
   return user && user.id ? user : null;
 }
 
-async function db(path, { method = 'GET', body, prefer } = {}) {
+async function db(path, { method = 'GET', body, prefer, maxBytes = MAX_TICKET_BYTES } = {}) {
   const headers = {
     apikey: adminKey,
     Authorization: `Bearer ${adminKey}`,
@@ -53,8 +56,11 @@ async function db(path, { method = 'GET', body, prefer } = {}) {
     throw Object.assign(new Error('JSON de sincronização não serializável'), { status: 400 });
   }
   const bodyBytes = serialized === undefined ? 0 : Buffer.byteLength(serialized, 'utf8');
-  if (bodyBytes > 250000) {
-    throw Object.assign(new Error('Lote de sincronização excede o limite do servidor; tente lotes menores'), { status: 413 });
+  if (bodyBytes > maxBytes) {
+    const message = path.startsWith('tm_state?')
+      ? 'Configurações compartilhadas excedem 1 MB; dados locais preservados'
+      : 'Lote de sincronização excede o limite do servidor; tente lotes menores';
+    throw Object.assign(new Error(message), { status: 413 });
   }
   const r = await fetch(`${urlBase}/rest/v1/${path}`, {
     method,
@@ -285,6 +291,7 @@ export default async function handler(req, res) {
 
       await db('tm_state?on_conflict=id', {
         method: 'POST',
+        maxBytes: MAX_STATE_BYTES,
         body: [{
           id: stateId,
           state: safe,
