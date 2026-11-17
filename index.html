@@ -1465,11 +1465,18 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
             <div id="t-email-admin" class="hide">
                 <div class="mh"><div><div class="eyebrow">RELATÓRIOS · ADMINISTRAÇÃO</div><h2>Central de e-mails e destinatários</h2><p>Gerencie relatórios automáticos, testes individuais e histórico de envio sem misturar com as configurações técnicas.</p></div></div>
                 <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
-  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="b" id="emailReportReleaseOpen">Liberar relatórios</button><button type="button" class="s" id="emailAdminOpen">Gerenciar destinatários</button></div></div>
+  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="b" id="emailMatrixOpen">Permissões por colaborador</button><button type="button" class="b" id="emailReportReleaseOpen">Liberar relatórios</button><button type="button" class="s" id="emailAdminOpen">Gerenciar destinatários</button></div></div>
   <section class="email-delivery-control" aria-labelledby="emailDeliveryTitle">
     <div><h3 id="emailDeliveryTitle">Envio de e-mails</h3><div id="emailDeliveryStatus" role="status" aria-live="polite">Consultando situação dos e-mails…</div><p id="emailDeliveryHint" class="subtle">Chave geral para relatórios, Triagem e envios manuais.</p></div>
     <div class="email-delivery-actions"><label class="email-delivery-switch"><input id="emailDeliveryToggle" type="checkbox" role="switch" aria-label="Envio de e-mails" aria-describedby="emailDeliveryHint" aria-checked="false" disabled><span>Ligar / desligar</span></label><button type="button" class="s" id="emailDeliveryRefresh" aria-label="Atualizar situação dos e-mails">↻ Atualizar</button></div>
   </section>
+<section id="emailMatrixPanel" class="hide" style="margin:14px 0;padding:16px;border:1px solid #d6e1f0;border-radius:12px">
+<div class="row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+<div><h3>Matriz de acesso aos relatórios</h3><p class="subtle">Defina os relatórios de cada destinatário e marque Diário, Semanal, Mensal e Anual. Salvar não dispara e-mail.</p></div>
+<div class="row"><input id="emailMatrixSearch" type="search" aria-label="Buscar colaborador" placeholder="Buscar colaborador ou e-mail"><button type="button" class="s" id="emailMatrixNew">+ Novo colaborador</button><button type="button" class="s" id="emailMatrixRefresh">↻ Atualizar</button></div></div>
+<p id="emailMatrixStatus" role="status" class="coverage-note">Abra o módulo para consultar a configuração.</p>
+<div class="tw" style="max-height:560px;overflow:auto"><table style="min-width:1100px;width:100%"><thead><tr><th>Destinatário / Colaborador</th><th>Setor</th><th>Tipos autorizados</th><th>Diário</th><th>Semanal</th><th>Mensal</th><th>Anual</th><th>Ativo</th><th>Ações</th></tr></thead><tbody id="emailMatrixRows"><tr><td colspan="9">Carregando...</td></tr></tbody></table></div>
+<p class="subtle">Fluxo da Produção é exclusivo do cadastro autorizado da Keila; cobranças automáticas e Monitoria não são habilitadas aqui. Períodos continuam sujeitos ao calendário corporativo.</p></section>
   <div id="emailReportReleasePanel" class="hide" style="margin-top:16px;border:1px solid #d6e1f0;border-radius:12px;padding:16px">
     <div class="row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div><h3 style="margin:0">Liberação de relatórios para envio</h3><p class="subtle" style="margin:4px 0">Autorize ou suspenda categorias por destinatário, sem alterar e-mails, setores ou frequências. Nenhuma mensagem é disparada ao salvar.</p></div>
@@ -5320,6 +5327,75 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       try{await loadMovideskDirectory(true)}catch(err){console.warn('Diretório do Movidesk indisponível:',err)}
     }catch(e){say('Não foi possível carregar: '+e.message)}finally{loading=false}
   }
+  
+  const matrixStatus=t=>{$('emailMatrixStatus').textContent=t};
+  const matrixNorm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  function matrixRender(){
+    const term=matrixNorm($('emailMatrixSearch').value);
+    const matches=records.filter(r=>[r.name,r.email,r.collaborator_name,(r.collaborator_names||[]).join(' ')].some(t=>matrixNorm(t).includes(term)));
+    $('emailMatrixRows').innerHTML=matches.map(r=>{
+      const id=esc(r.id),old=r.allowed_report_types==null;
+      const allow=code=>old?code==='general':(r.allowed_report_types||[]).includes(code);
+      const keila=String(r.id)==='a5329710-dd63-4bfd-bbd3-dc23e0efc8f0'&&String(r.email).toLowerCase()==='inteligencia.gerencia@arquem.com.br';
+      const cb=(key,checked)=>'<label><input type="checkbox" data-matrix="'+key+'" '+(checked?'checked':'')+' aria-label="'+key+' de '+esc(r.name)+'"></label>';
+      return '<tr data-matrix-id="'+id+'"><td><b>'+esc(r.name)+'</b><small style="display:block">'+esc(r.email)+'</small></td><td>'+esc(r.sector||r.scope||'—')+'</td>'+
+       '<td>'+cb('general',allow('general'))+' Gerenciais / setoriais'+(keila?'<div>'+cb('production_flow',old||allow('production_flow'))+' Fluxo da Produção</div>':'')+'</td>'+
+       '<td>'+cb('daily_enabled',r.daily_enabled)+'</td><td>'+cb('weekly_enabled',r.weekly_enabled)+'</td><td>'+cb('monthly_enabled',r.monthly_enabled)+'</td><td>'+cb('annual_enabled',r.annual_enabled)+'</td><td>'+cb('active',r.active)+'</td>'+
+       '<td><button type="button" class="s" data-matrix-save="'+id+'">Salvar</button> <button type="button" class="s" data-matrix-edit="'+id+'">Detalhes</button></td></tr>';
+    }).join('')||'<tr><td colspan="9">Nenhum cadastro encontrado.</td></tr>';
+    matrixStatus(matches.length+' cadastro(s) exibido(s). As alterações são individuais.');
+  }
+  $('emailMatrixOpen').addEventListener('click',async()=>{
+    const p=$('emailMatrixPanel'),open=p.classList.contains('hide');
+    p.classList.toggle('hide',!open);
+    $('emailMatrixOpen').textContent=open?'Fechar permissões':'Permissões por colaborador';
+    if(open){await reload();matrixRender();p.scrollIntoView({behavior:'smooth',block:'start'});}
+  });
+  $('emailMatrixSearch').addEventListener('input',matrixRender);
+  $('emailMatrixRefresh').addEventListener('click',async()=>{await reload();matrixRender()});
+  $('emailMatrixNew').addEventListener('click',async()=>{
+    await verify();
+    $('emailAdminPanel').classList.remove('hide');
+    $('emailNew').click();
+    $('emailAdminPanel').scrollIntoView({behavior:'smooth',block:'start'});
+  });
+  $('emailMatrixRows').addEventListener('click',async e=>{
+    const edit=e.target.closest('[data-matrix-edit]');
+    if(edit){
+      $('emailAdminPanel').classList.remove('hide');
+      $('emailRecipients').querySelector('[data-email-edit="'+edit.dataset.matrixEdit+'"]')?.click();
+      return;
+    }
+    const button=e.target.closest('[data-matrix-save]');
+    if(!button)return;
+    const id=button.dataset.matrixSave,row=button.closest('[data-matrix-id]');
+    const existing=records.find(r=>String(r.id)===id);
+    if(!existing)return matrixStatus('Registro não encontrado. Atualize a lista.');
+    button.disabled=true;
+    try{
+      await verify();
+      const checked=k=>!!row.querySelector('[data-matrix="'+k+'"]:checked');
+      if(!['daily_enabled','weekly_enabled','monthly_enabled','annual_enabled'].some(checked))
+        throw Error('Marque pelo menos uma frequência.');
+      if((checked('monthly_enabled')||checked('annual_enabled'))&&
+        !(existing.sector||(Array.isArray(existing.sectors)&&existing.sectors.length)))
+        throw Error('Defina os setores do fechamento no botão Detalhes.');
+      const original=Array.isArray(existing.allowed_report_types)?existing.allowed_report_types:['ticket_followup'];
+      const types=original.filter(v=>v!=='general'&&v!=='production_flow');
+      if(checked('general'))types.push('general');
+      const keila=String(existing.id)==='a5329710-dd63-4bfd-bbd3-dc23e0efc8f0'&&String(existing.email).toLowerCase()==='inteligencia.gerencia@arquem.com.br';
+      if(keila&&checked('production_flow'))types.push('production_flow');
+      const changes={allowed_report_types:[...new Set(types)],daily_enabled:checked('daily_enabled'),
+        weekly_enabled:checked('weekly_enabled'),monthly_enabled:checked('monthly_enabled'),
+        annual_enabled:checked('annual_enabled'),active:checked('active'),updated_at:new Date().toISOString()};
+      const {data,error}=await client.from('audit_email_recipients').update(changes).eq('id',id).eq('updated_at',existing.updated_at).select('id');
+      if(error)throw error;
+      if(!data?.length)throw Error('Outro administrador alterou o cadastro. Atualize para evitar conflito.');
+      matrixStatus('Permissões de '+existing.name+' salvas. Nenhum e-mail enviado.');
+      await reload();matrixRender();
+    }catch(error){matrixStatus('Falha ao salvar: '+(error.message||error));}
+    finally{button.disabled=false;}
+  });
   // Módulo de liberação: altera somente allowed_report_types após validação de administrador.
   const releaseSay=message=>{$('emailReleaseStatus').textContent=message};
   const flowRecipientId='a5329710-dd63-4bfd-bbd3-dc23e0efc8f0';
