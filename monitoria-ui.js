@@ -23,10 +23,10 @@
    if(!res.ok||body.ok!==true)throw Error(body.error||'Consulta indisponível');
    return body;
  }
- async function openProtectedRecording({id,kind}){
+ async function openProtectedRecording({id,kind,reviewId}){
    if(!/^\d{1,14}$/.test(String(id))||!['outbound','inbound'].includes(kind))
       throw Error('Referência inválida de gravação');
-   const media=await api({action:'audio',kind,id},{binary:true});
+   const media=await api({action:'audio',kind,id,...(reviewId?{reviewId}:{})},{binary:true});
    if(localAudioUrl)URL.revokeObjectURL(localAudioUrl);
    selectedAudio=media;localAudioUrl=URL.createObjectURL(media);
    const player=$('monAudioPlayer');player.src=localAudioUrl;player.hidden=false;
