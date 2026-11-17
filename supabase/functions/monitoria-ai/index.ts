@@ -161,7 +161,14 @@ async function handle(req:Request){
   'Use SUP-003 para fundamentar os critérios existentes R04, R05 e R11. Não crie critérios ou descontos adicionais.',
   'O roteiro de saudação e encerramento é uma referência de intenção e cordialidade; não exija frases literais.',
   'A pesquisa prévia de chamados, consulta ao Kanban e registro correto dependem de evidências externas ao diálogo. Não deduza não conformidades por ausência no extrato.',
-  'Em voz, confira apresentação e identificação; em chat, considere mensagem automática quando comprovada. Não presuma que WhatsApp e chat Movidesk são o mesmo canal.'
+  'Em voz, confira apresentação e identificação; em chat, considere mensagem automática quando comprovada. Não presuma que WhatsApp e chat Movidesk são o mesmo canal.',
+  'Critério R01: o SLA de 1 minuto começa na RESPOSTA DO CLIENTE ao chatbot, não na transferência ou mensagem automática. Confirme ambas as marcas temporais.',
+  'Critério R02: solicitar CNPJ somente QUANDO NECESSÁRIO; não penalize a ausência de pergunta se ele já estiver validado no histórico.',
+  'Critério R07: só conclua violação de tempo após identificar início da espera e mensagens intermediárias em um histórico INTEGRAL; lacuna no extrato não prova silêncio.',
+  'Critério R08: abrir uma escalação correta, mesmo que o problema não esteja resolvido imediatamente, NÃO é infração por si só. Penalize apenas uma falha concreta de encaminhamento, omissão ou compromisso não cumprido, com evidência.',
+  'Critério R11: um anexo enviado pelo cliente não demonstra isoladamente que o agente reuniu evidências suficientes para a documentação e escalação.',
+  'Critério R12: não diga que a ação pública está correta se o registro da ação pública não foi fornecido.',
+  'Caso classifique nao_verificavel, NÃO afirme como fato que houve violação ou conformidade; formule o motivo como hipótese e necessidade de verificação.'
  ].join('\n');
  let raw;
  try{
