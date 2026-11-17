@@ -61,6 +61,22 @@ async function availableFlashModels(apiKey:string){
  modelCache={at:Date.now(),models};
  return models;
 }
+// One bounded retry for transient Google overload; never retry invalid keys, quotas, or model errors.
+async function generateWithOverloadRetry(model:string,apiKey:string,body:unknown,timeoutMs:number){
+ const endpoint='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';
+ const serialized=JSON.stringify(body);
+ for(let attempt=0;attempt<2;attempt++){
+  const result=await fetch(endpoint,{
+   method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
+   body:serialized,signal:AbortSignal.timeout(timeoutMs)
+  });
+  if(result.status!==503||attempt===1)return result;
+  console.warn('monitoria-ai Gemini 503 transient overload; retrying once',{model,attempt:attempt+1});
+  await result.body?.cancel().catch(()=>{});
+  await new Promise(resolve=>setTimeout(resolve,1000+Math.floor(Math.random()*450)));
+ }
+ throw Error('Retry exit unexpected');
+}
 async function admin(req:Request){
  const jwt=/^Bearer\s+(.+)$/i.exec(req.headers.get('authorization')||'')?.[1];
  const base=env('SUPABASE_URL').replace(/\/$/,'');
@@ -95,12 +111,8 @@ async function handle(req:Request){
    const available=await availableFlashModels(apiKey);
    if(!Array.isArray(available))return available.error;
    if(!available.length)return response({ok:false,error:'Nenhum modelo Flash compatível com a cota gratuita foi disponibilizado pelo Google para esta chave.',code:'NO_FREE_FLASH_MODEL'},503);
-   const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+available[0]+':generateContent',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
-    body:JSON.stringify(transcriptionRequest(checked.mimeType,checked.base64)),
-    signal:AbortSignal.timeout(60000)
-   });
+   const r=await generateWithOverloadRetry(available[0],apiKey,
+    transcriptionRequest(checked.mimeType,checked.base64),60000);
    if(!r.ok)return await googleFailure(r,'transcription');
    const text=extractTranscription(await r.json());
    if(!text)return response({ok:false,error:'Não foi possível obter uma transcrição; revise o áudio'},422);
@@ -139,14 +151,11 @@ async function handle(req:Request){
   if(!Array.isArray(available))return available.error;
   if(!available.length)return response({ok:false,error:'Nenhum modelo Flash compatível com a cota gratuita foi disponibilizado pelo Google para esta chave.',code:'NO_FREE_FLASH_MODEL'},503);
   const model=available[0];
-  const result=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent',{
-   method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
-   body:JSON.stringify({
+  const result=await generateWithOverloadRetry(model,apiKey,{
     systemInstruction:{parts:[{text:system}]},
     contents:[{role:'user',parts:[{text:JSON.stringify({source:'Formulario_Monitoria_Atendimento.xlsx',version:RULESET_VERSION,channel,rubric,critical:CRITICAL,transcript})}]}],
     generationConfig:{temperature:0.1,maxOutputTokens:4500,responseMimeType:'application/json',responseSchema:schema}
-   }),signal:AbortSignal.timeout(45000)
-  });
+   },45000);
   if(!result.ok)return await googleFailure(result,'evaluation');
   const body=await result.json();
   raw=JSON.parse(body.candidates?.[0]?.content?.parts?.map((x:{text?:string})=>x.text||'').join('')||'null');
