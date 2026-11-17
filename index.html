@@ -903,6 +903,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 @media(prefers-reduced-motion:reduce){main .card,main .row.noprint button,main .card button{transition:none}}
 @media print{main .card{box-shadow:none!important;border:1px solid #d1d5db!important;background:#fff!important}}
 </style>
+<script defer src="./monitoria-ui.js"></script>
 </head>
     <body class="tm-locked">
         <form id="tm-login" class="card" hidden>
@@ -941,6 +942,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
             <summary><span class="nav-folder-icon" aria-hidden="true">▤</span><span>Auditorias</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary>
             <div class="nav-folder-items">
               <button data-t="support-quality">🎧 &nbsp;Qualidade do Suporte</button>
+              <button data-t="monitoria">✦ &nbsp;Mini Central de Monitoria</button>
               <button data-t="zenvia-voice">☎ &nbsp;Métricas de Voz · Zenvia</button>
               <button data-t="production-audit">🏭 &nbsp;Auditoria da Produção</button>
               <button data-t="intelligence-triage">🕒 &nbsp;Triagem da Inteligência <span id="itNavCount" class="nav-count">0</span></button>
@@ -974,6 +976,37 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
           </details>
         </nav>
         <main>
+
+          <section id="t-monitoria" class="hide" aria-labelledby="monTitle">
+            <div class="mh"><div class="eyebrow">QUALIDADE · MONITORIA ASSISTIDA</div><h2 id="monTitle">Mini Central de Monitoria</h2>
+              <p>Áudios e chats · avaliação sugerida pelo Gemini conforme Formulario_Monitoria_Atendimento.xlsx · revisão humana obrigatória.</p>
+            </div>
+            <div class="card" style="border-left:4px solid #2457d6;max-width:1100px">
+              <p class="subtle">Nesta etapa, os arquivos são selecionados localmente. O áudio pode ser ouvido e baixado, mas <strong>não é enviado à IA</strong>. Para avaliar ligações, forneça a transcrição. A integração automática com a biblioteca de gravações da Zenvia depende da confirmação de acesso à mídia.</p>
+              <div class="row" style="display:flex;gap:14px;align-items:end;flex-wrap:wrap">
+                <label>Canal
+                  <select id="monChannel"><option value="chat">Chat</option><option value="voice">Telefonia</option></select>
+                </label>
+                <label>Carregar chat (TXT/CSV)<input id="monChatFile" type="file" accept=".txt,.csv,text/plain,text/csv"></label>
+                <label>Carregar áudio (local)<input id="monAudioFile" type="file" accept="audio/*"></label>
+              </div>
+              <div style="margin:12px 0">
+                <audio id="monAudioPlayer" controls hidden style="width:min(100%,620px)"></audio>
+                <a id="monDownloadAudio" href="#" hidden>Baixar áudio selecionado</a>
+              </div>
+              <label for="monTranscript"><strong>Transcrição da ligação ou histórico do chat</strong></label>
+              <textarea id="monTranscript" rows="12" style="width:100%;min-height:190px;resize:vertical" placeholder="Cole o diálogo com falas, horários e identificação dos interlocutores. Dados de chamados podem exigir comprovação no Movidesk."></textarea>
+              <p><label style="display:flex;gap:8px;align-items:flex-start"><input id="monConsent" type="checkbox"> <span>Autorizo que o texto informado seja processado pelo Gemini para gerar uma <strong>sugestão</strong> de avaliação; nenhum envio de e-mail será realizado.</span></label></p>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button id="monRun" type="button" class="p">✦ Avaliar com Gemini</button>
+                <button id="monExportChat" type="button" class="s">Baixar conversa TXT</button>
+                <button id="monExportReview" type="button" class="s" disabled>Baixar avaliação JSON</button>
+              </div>
+              <p id="monStatus" role="status" class="subtle">Pronto para importar uma conversa. As notas são propostas, não decisões finais.</p>
+            </div>
+            <div class="card" id="monResults" style="max-width:1100px;overflow:auto"></div>
+          </section>
+
 
             <div id="t-report-preview" class="hide">
               <div class="mh"><div><div class="eyebrow">RELATÓRIOS · SOMENTE LEITURA</div><h2>Pré-visualização dos colaboradores</h2><p>Resumo diário e semanal dos apontamentos sincronizados pelo Movidesk.</p></div></div>
@@ -3603,7 +3636,7 @@ function showTab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   revealActiveNavigation(t);
   $('t-cfg').classList.toggle('hide',t!=='cfg');
-  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','zenvia-voice','intelligence-triage','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','zenvia-voice','intelligence-triage','client-impact','monitoria'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
   if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='zenvia-voice')window.zenviaVoiceInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='intelligence-triage')window.intelligenceTriageInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='email-admin'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='zenvia-voice'||t==='intelligence-triage'||t==='client-impact');
   if(raw.length&&!['load','cfg','diag','alerts','email-admin','report-preview','support-quality','production-audit','zenvia-voice','intelligence-triage','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
