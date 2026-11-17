@@ -38,12 +38,13 @@ test('prévia corporativa omite avaliações provisórias e escapa HTML',()=>{
  assert.match(html,/prévia sem envio automático/i);
 });
 test('link de áudio aponta ao módulo com login e não inclui token',()=>{
- const link=audioLink({channel:'voice',recording_kind:'outbound',source_id:'1234567'});
+ const link=audioLink({channel:'voice',recording_kind:'outbound',source_id:'1234567',id:'123e4567-e89b-42d3-a456-426614174001'});
  const u=new URL(link);assert.equal(u.pathname,'/');
  assert.equal(u.searchParams.get('monitoria_voice'),'1234567');
  assert.equal(u.searchParams.get('kind'),'outbound');
+ assert.equal(u.searchParams.get('review'),'123e4567-e89b-42d3-a456-426614174001');
  assert.equal(u.searchParams.has('token'),false);
- assert.equal(audioLink({channel:'voice',recording_kind:'outbound',source_id:'1%2Fother'}),null);
+ assert.equal(audioLink({channel:'voice',recording_kind:'outbound',source_id:'1%2Fother',id:'123e4567-e89b-42d3-a456-426614174001'}),null);
 });
 test('pacotes não fazem envio automático nem usam GmailApp',()=>{
  assert.ok(!/GmailApp|MailApp\.send|sendEmail\s*\(/.test(source));
@@ -67,7 +68,7 @@ test('PDF final inclui monitor responsável, nota aprovada e link privado sem to
  sandbox.window.jspdf={jsPDF:MockPdf};
  const rows=[{
   review_status:'approved',score_approved:94,score_suggested:96,channel:'voice',
-  monitored_at:'2026-11-17',source_id:'12345',recording_kind:'outbound',
+  monitored_at:'2026-11-17',source_id:'12345',recording_kind:'outbound',id:'123e4567-e89b-42d3-a456-426614174001',
   reviewer_name:'Analista Qualidade',collaborator_name:'Pessoa Exemplo',sector:'Suporte',
   critical_findings:[],critical_confirmed:false,reviewer_notes:'Revisada'
  }];
