@@ -30,7 +30,8 @@ async function googleFailure(result:Response,context:'evaluation'|'transcription
  }catch{/* Do not include provider messages, secrets or chat content in diagnostics. */}
  const status=result.status;
  let message='Falha temporária de comunicação com a API Gemini.';
- if(status===400)message='O Gemini recusou os parâmetros da avaliação (HTTP 400). Verifique compatibilidade do modelo e do formato da resposta.';
+ if(reason==='API_KEY_INVALID')message='O Google rejeitou a chave configurada (API_KEY_INVALID). Cadastre uma chave API válida do Gemini no Secret GEMINI_API_KEY deste projeto Supabase.';
+ else if(status===400)message='O Gemini recusou os parâmetros da avaliação (HTTP 400). Verifique compatibilidade do modelo e do formato da resposta.';
  if(status===401||status===403)message='O Google recusou a credencial ou a permissão da API Gemini (HTTP '+status+'). Verifique se o Secret contém uma chave API válida do Google AI Studio.';
  if(status===404)message='Modelo Gemini não encontrado ou indisponível para esta chave (HTTP 404).';
  if(status===429)message='Cota gratuita do Gemini atingida ou limite de solicitações excedido (HTTP 429). Tente novamente quando a cota estiver disponível.';
