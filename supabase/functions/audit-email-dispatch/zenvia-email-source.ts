@@ -8,6 +8,7 @@ const answered=new Set(['atendida','atendido','answered','completada']);
 const missed=new Set(['sem resposta','nao atendida','nao atendido','nao_atendida','ocupado','ocupada','congestionado','falha','cancelada','cancelado','nao existe','failed','busy','no answer']);
 const positive=(n:unknown)=>{const x=Number(n);return Number.isFinite(x)&&x>0?Math.round(x):0};
 const measuredSeconds=(n:unknown)=>{if(n==null||n==='')return null;const x=Number(n);return Number.isFinite(x)&&x>=0?Math.round(x):null};
+const talkSeconds=(leg:Record<string,unknown>)=>{const seconds=measuredSeconds(leg?.duracao_falada_segundos);if(seconds!==null)return seconds;const text=leg?.duracao_falada;if(typeof text!=='string'||!/^\d{1,3}:[0-5]\d:[0-5]\d$/.test(text))return null;const [h,m,s]=text.split(':').map(Number);return h*3600+m*60+s;};
 type R=Record<string,any>;
 const addDate=(date:string,n:number)=>new Date(Date.parse(date+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);
 export async function readZenviaEmailMetrics(from:string,to:string,token:string,queueId='',http:typeof fetch=fetch,supportExtensionIds=''){
@@ -70,7 +71,7 @@ export async function readZenviaEmailMetrics(from:string,to:string,token:string,
     const active=row.ativa===true||row.ativa===1||row.ativo===true||row.ativo===1||norm(row.status_geral)==='curso';
     const status=active?'inProgress':answered.has(state)?'answered':missed.has(state)?'unanswered':'unclassified';
     metrics.total++;metrics[direction]++;metrics[status]++;
-    const talk=measuredSeconds(leg.duracao_falada_segundos);
+    const talk=talkSeconds(leg);
     if(status==='answered'){
       if(talk==null)metrics.tmaMissingSamples++;
       else {metrics.tmaSamples++;metrics.talkSeconds=(metrics.talkSeconds??0)+talk;}
