@@ -1102,6 +1102,44 @@ async function adminAction(payload: R) {
         status:'Falha na verificação do Apps Script: '+safe(err(ex))});
     }
   }
+  if (action === 'recovery_audit') {
+    // Admin only: read-only review of failed official dispatches.
+    // Never returns recipient emails, provider credentials or the prepared report body.
+    const start=String(payload.periodEnd||'');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(start) ||
+       Number.isNaN(Date.parse(start+'T12:00:00Z')) ||
+       new Date(start+'T12:00:00Z').toISOString().slice(0,10)!==start)
+      return json({ok:false,error:'Data final inválida'},400);
+    const [rows,recipients] = await Promise.all([
+      db('audit_email_sector_dispatches?period_to=eq.'+encodeURIComponent(start)+
+        '&status=eq.failed&report_kind=in.(daily,weekly)&dispatch_key=not.like.preliminary:*&select=dispatch_key,recipient_id,report_kind,period_from,period_to,status,provider_id,sent_at,attempt_count,error_message,reviewed_at&order=report_kind.asc,period_from.asc&limit=101'),
+      db('audit_email_recipients?select=id,name&limit=200')
+    ]);
+    const names=new Map<string,string>((recipients as R[]).map(x=>[String(x.id),safe(x.name)]));
+    const truncated=(rows as R[]).length>100;
+    const records=(rows as R[]).slice(0,100).map(x=>({
+      dispatchKey:String(x.dispatch_key),
+      recipientId:String(x.recipient_id),
+      recipient:names.get(String(x.recipient_id))||'Destinatário não identificado',
+      kind:String(x.report_kind),from:String(x.period_from),to:String(x.period_to),
+      status:String(x.status),attempts:Number(x.attempt_count)||0,
+      providerMarked:!!x.provider_id,deliveryMarked:!!x.sent_at,
+      reviewRecorded:!!x.reviewed_at,
+      // Do not echo arbitrary provider error bodies into the dashboard.
+      failureCategory:String(x.error_message||'').includes('Gerador ainda não homologado')?
+        'attachments_not_approved':'provider_or_delivery_failure',
+      failureSummary:String(x.error_message||'').includes('Gerador ainda não homologado')?
+        'Anexos ainda não homologados':'Verificar logs restritos e o provedor',
+      recoveryClass:x.provider_id||x.sent_at?'possible_delivery_needs_verification':
+        'unconfirmed_failure_needs_verification',
+      requiresProviderReconciliation:true,
+      automaticRetryAllowed:false
+    }));
+    return json({ok:true,sent:false,readOnly:true,periodEnd:start,
+      records,total:records.length,truncated,complete:!truncated,
+      manualVerificationRequired:true,
+      note:'Conferir Gmail remetente, homologação de PDF/XLSX e aprovação do Apps Script antes de qualquer reenvio.'});
+  }
   if (action === 'dispatch_health') {
     // Monitor administrativo de leitura: nenhuma reserva de envio ou disparo.
     const [history, incremental, recentSync, logs, recipients] = await Promise.all([
@@ -1860,11 +1898,22 @@ async function dispatch(payload:R = {}) {
       }
     } catch (ex) { results.push({ recipientId: id, kind: t.kind, status: 'failed', error: err(ex) }); }
   }
-  return json({ok:![...results,...keilaFlow].some(x=>x.status==='failed'),
-    date:today,batchSize:MAX_DISPATCH_BATCH,handled,
+  // handled counts attempted reservations, NOT successful mail deliveries.
+  // Preserve the legacy fields and expose disjoint, audit-friendly outcomes.
+  const dispatchResults=[...keilaFlow,...results];
+  const deliverySummary={
+    attempts:handled,
+    providerAccepted:dispatchResults.filter(x=>x.status==='sent').length,
+    failed:dispatchResults.filter(x=>x.status==='failed').length,
+    skipped:dispatchResults.filter(x=>x.status==='skipped'||('skipped' in x && x.skipped!=null)).length,
+    preliminaryAccepted:dispatchResults.filter(x=>x.status==='sent_preliminary').length,
+    inboxDeliveryVerified:false
+  };
+  return json({ok:!dispatchResults.some(x=>x.status==='failed'),
+    date:today,batchSize:MAX_DISPATCH_BATCH,handled,deliverySummary,
     pendingMayRemain:handled===MAX_DISPATCH_BATCH||results.some(x=>String(x.skipped||'').includes('Aguardando')),
     waitingForReconciliation:results.filter(x=>String(x.skipped||'').includes('Aguardando')).length,
-    results:[...keilaFlow,...results]});
+    results:dispatchResults});
 }
 // Prévia executiva semanal: apenas leitura, sem Gmail, sem fila de envio e sem cache de disparos.
 // Escopo e formatação baseados nos cadastros e no mesmo relatório corporativo da Direção.
@@ -2401,7 +2450,7 @@ async function handleRequest(req: Request): Promise<Response> {
       try{return json(await emailDeliveryAdmin(payload,req,db,E,validUrl()));}
       catch(ex){return json({ok:false,error:err(ex)},409);}
     }
-    if (action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
+    if (action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'recovery_audit' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
       return action === 'voice_chat_preview' ? await voiceChatPreview(payload)
         : action === 'ticket_charge_capabilities' ? json({ok:true,aiAvailable:E('GEMINI_AI_DRAFT_ENABLED')==='true'&&!!E('GEMINI_API_KEY'),guidanceAvailable:true})

@@ -1,0 +1,19 @@
+name: Validate post-close adjustments attachments
+on:
+  pull_request:
+    paths:
+      - 'apps-script/**'
+      - 'tests/apps-script-post-close.test.mjs'
+      - '.github/workflows/validate-post-close-adjustments.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate PDF/XLSX post-close contract without sending email
+        run: node --test tests/apps-script-post-close.test.mjs

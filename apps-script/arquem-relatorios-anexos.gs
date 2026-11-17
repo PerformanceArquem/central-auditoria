@@ -104,20 +104,35 @@ function arquemCapacidadesAnexos_() {
   const checkedId=props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED_TEMPLATE_ID');
   const checkedAt=Date.parse(props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED_AT')||'');
   let ready=false;
-  if(id && checkedId===id && Number.isFinite(checkedAt)){
+  let templateUpdatedAt=NaN;
+  // Never advertise readiness when the final doPost would reject attachments.
+  if(props.getProperty('ARQUEM_ATTACHMENTS_VALIDATED')==='true' &&
+     id && checkedId===id && Number.isFinite(checkedAt)){
     try{
       const file=DriveApp.getFileById(id);
+      templateUpdatedAt=file.getLastUpdated().getTime();
       ready=file.getMimeType()===MimeType.GOOGLE_DOCS &&
-        checkedAt>=file.getLastUpdated().getTime();
+        Number.isFinite(templateUpdatedAt) && checkedAt>=templateUpdatedAt;
     }catch(_){ready=false;}
   }
+  const postCheckedAt=Date.parse(props.getProperty('ARQUEM_POST_CLOSE_VALIDATED_AT')||'');
+  const postVisualAt=Date.parse(props.getProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT')||'');
+  const postCloseReady=ready &&
+    props.getProperty('ARQUEM_POST_CLOSE_VALIDATED_VERSION')==='post-close-v1' &&
+    props.getProperty('ARQUEM_POST_CLOSE_VALIDATED_TEMPLATE_ID')===id &&
+    Number.isFinite(postCheckedAt) &&
+    postCheckedAt>=templateUpdatedAt &&
+    props.getProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_VERSION')==='post-close-v1' &&
+    props.getProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID')===id &&
+    Number.isFinite(postVisualAt) && postVisualAt>=postCheckedAt;
   return {sucesso:true,attachmentsVersion:'arquem-3-keila-quality',formats:['pdf','xlsx'],
     paperTemplateConfigured:ready,
+    postCloseAdjustmentsSupported:postCloseReady,
     keilaQualityReady:ready &&
       props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_VERSION')==='arquem-3-keila-quality' &&
       props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_TEMPLATE_ID')===id &&
       Number.isFinite(Date.parse(props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_AT')||'')) &&
-      Date.parse(props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_AT')||'')>=DriveApp.getFileById(id).getLastUpdated().getTime()};
+      Date.parse(props.getProperty('ARQUEM_KEILA_QUALITY_VALIDATED_AT')||'')>=templateUpdatedAt};
 }
 
 /**
@@ -225,6 +240,137 @@ function arquemSanearPacote_(value) {
   }
   return value;
 }
+
+/**
+ * Ajustes reconhecidos depois do fechamento: mantenha data de trabalho e
+ * data de observação distintas. Nunca some o delta novamente ao dia atual.
+ */
+function arquemAjustesValidos_(packet) {
+  if (!packet || !packet.timing) return null;
+  const t=packet.timing;
+  if (!t || typeof t!=='object' || !Array.isArray(t.adjustments) ||
+      t.adjustments.length>100) throw new Error('Ajustes posteriores inválidos');
+  const total=t.adjustmentCount==null?t.adjustments.length:Number(t.adjustmentCount);
+  if (!Number.isSafeInteger(total) || total<0 || total<t.adjustments.length)
+    throw new Error('Contagem de ajustes inválida');
+  const formatDate=s=>String(s||'').slice(0,10);
+  const items=t.adjustments.map(x=>{
+    if (!x || typeof x!=='object' ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(String(x.date||'')) ||
+        !Number.isFinite(Number(x.previousMinutes)) ||
+        !Number.isFinite(Number(x.currentMinutes)) ||
+        Number(x.previousMinutes)<0 || Number(x.currentMinutes)<0 ||
+        !Number.isFinite(Number(x.deltaMinutes)) ||
+        Math.abs(Number(x.currentMinutes)-Number(x.previousMinutes)-Number(x.deltaMinutes))>0.01 ||
+        !Number.isFinite(Date.parse(String(x.observedAt||''))))
+      throw new Error('Registro de ajuste posterior inválido');
+    return {
+      ticketId:/^\d+$/.test(String(x.ticketId||''))?String(x.ticketId):'',
+      date:formatDate(x.date),
+      person:String(x.person||'').slice(0,120),
+      previous:Number(x.previousMinutes),
+      current:Number(x.currentMinutes),
+      delta:Number(x.deltaMinutes),
+      observedAt:String(x.observedAt),
+      inCurrentPeriod:x.inCurrentPeriod===true
+    };
+  });
+  return {notice:String(t.notice||'').slice(0,1200),status:String(t.status||'').slice(0,70),total,items};
+}
+function arquemAssinarAjustes_(packet) {
+  const adjustments=arquemAjustesValidos_(packet);
+  if (!adjustments) return null;
+  const notice='Horas atribuídas à data original do trabalho. Ajustes identificados após o fechamento não são somados novamente ao dia da atualização.';
+  return {...adjustments, notice:adjustments.notice?String(adjustments.notice)+' '+notice:notice};
+}
+/**
+ * Pacote inteiramente sintético. Não contém apontamentos de clientes reais.
+ * Usado em validação técnica e em artefatos de conferência visual.
+ */
+function arquemAmostraAjustes_() {
+  return {
+    schema:'arquem-mail-v1',title:'Homologação de ajustes após fechamento',
+    from:'2026-11-09',to:'2026-11-15',metrics:{minutes:480,appointments:1,tickets:1},
+    collaborators:[],daily:[],tickets:[],customers:[],activities:[],
+    timing:{status:'tracked',notice:'Aviso de conciliação após fechamento',
+      adjustmentCount:2,adjustments:[{
+        ticketId:'100769',date:'2026-11-10',person:'Pessoa demonstrativa A',
+        previousMinutes:60,currentMinutes:90,deltaMinutes:30,
+        observedAt:'2026-11-16T10:00:00Z',inCurrentPeriod:true
+      },{
+        ticketId:'100770',date:'2026-11-11',person:'Pessoa demonstrativa B',
+        previousMinutes:90,currentMinutes:60,deltaMinutes:-30,
+        observedAt:'2026-11-16T11:00:00Z',inCurrentPeriod:true
+      }]}
+  };
+}
+/**
+ * Gera PDF e XLSX revisáveis em uma pasta privada, sem envio de e-mail.
+ * Configure ARQUEM_HOMOLOGACAO_FOLDER_ID com o ID de uma pasta restrita.
+ * Não chama GmailApp, MailApp nem o doPost do aplicativo.
+ */
+function arquemPrepararRevisaoVisualAjustesSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  const folderId=String(props.getProperty('ARQUEM_HOMOLOGACAO_FOLDER_ID')||'').trim();
+  if (!folderId)throw new Error('Defina a pasta privada ARQUEM_HOMOLOGACAO_FOLDER_ID');
+  const folder=DriveApp.getFolderById(folderId);
+  // Nunca gravar anexos em uma pasta com acesso público ou por link.
+  // getSharingAccess verifica o compartilhamento direto da pasta; o
+  // responsável também deve revisar permissões herdadas no Google Drive.
+  if(folder.getSharingAccess()!==DriveApp.Access.PRIVATE)
+    throw new Error('A pasta de homologação não pode permitir acesso público ou por link');
+  // O teste técnico revoga a aprovação visual anterior somente após a
+  // pasta de destino passar na checagem de privacidade.
+  const tech=arquemHomologarAjustesSemEnvio();
+  if(!tech.technicalValidation || tech.postCloseAdjustmentsSupported!==false)
+    throw new Error('Teste técnico não passou ou não respeitou o bloqueio de envio');
+  const blobs=arquemCreateReportAttachments_(arquemAmostraAjustes_());
+  if(blobs.length!==2 ||
+     !blobs.some(b=>b.getContentType()==='application/pdf') ||
+     !blobs.some(b=>/\.xlsx$/i.test(b.getName())))
+    throw new Error('A revisão visual exige exatamente um PDF e um Excel');
+  const saved=[];
+  try {
+    for(const blob of blobs)saved.push(folder.createFile(blob));
+    return {ok:true,sent:false,visualApprovalRequired:true,
+      files:saved.map(f=>({name:f.getName(),url:f.getUrl(),id:f.getId()}))};
+  } catch(e) {
+    // Se a segunda gravação falhar, descartar a primeira imediatamente.
+    saved.forEach(f=>{try{f.setTrashed(true);}catch(_){}});
+    throw e;
+  }
+}
+
+function arquemHomologarAjustesSemEnvio() {
+  const props=PropertiesService.getScriptProperties();
+  // Fail closed immediately: even a failed new validation invalidates old visual approval.
+  props.deleteProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_AT');
+  props.deleteProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_VERSION');
+  props.deleteProperty('ARQUEM_POST_CLOSE_VISUAL_APPROVED_TEMPLATE_ID');
+  const id=String(props.getProperty('ARQUEM_PAPEL_TIMBRADO_DOC_ID')||'').trim();
+  if (!id) throw new Error('Papel timbrado obrigatório para homologar ajustes');
+  // Revalida os anexos regulares e o modelo antes de homologar a extensão.
+  const basic=arquemValidarPublicacaoSemEnvio();
+  if (basic.ok!==true || basic.sent!==false || basic.files.length!==2)
+    throw new Error('Anexos corporativos não homologados');
+  const packet=arquemAmostraAjustes_();
+  const files=arquemCreateReportAttachments_(packet);
+  const pdf=files.find(f=>f.getContentType()==='application/pdf');
+  const xlsx=files.find(f=>f.getName().endsWith('.xlsx'));
+  if (!pdf || !xlsx || pdf.getBytes().length<2000 || xlsx.getBytes().length<1500)
+    throw new Error('PDF/XLSX inválidos na homologação de ajustes');
+  // A geração técnica não autoriza anúncios de capacidade antes da revisão
+  // humana dos dois anexos reais. Uma homologação nova invalida a anterior.
+  props.setProperties({
+    ARQUEM_POST_CLOSE_VALIDATED_VERSION:'post-close-v1',
+    ARQUEM_POST_CLOSE_VALIDATED_AT:new Date().toISOString(),
+    ARQUEM_POST_CLOSE_VALIDATED_TEMPLATE_ID:id
+  },false);
+  return {ok:true,sent:false,technicalValidation:true,visualApprovalRequired:true,
+    postCloseAdjustmentsSupported:false,
+    files:files.map(f=>({name:f.getName(),bytes:f.getBytes().length}))};
+}
+
 function arquemCreateReportAttachments_(packet) {
   if (!packet || packet.schema !== 'arquem-mail-v1') throw new Error('Pacote de relatório inválido');
   packet=arquemSanearPacote_(packet);
@@ -364,6 +510,30 @@ function arquemPdf_(p, keep) {
     arquemEstilizarTabelaPdf_(body.appendTable(rows));
     if(p.daily.length>90)body.appendParagraph('Exibindo os primeiros 90 de '+p.daily.length+' registros diários agrupados.');
   }
+
+  if (p.timing) {
+    const timing=arquemAssinarAjustes_(p);
+    arquemAddHeading_(body,'Ajustes identificados após o fechamento');
+    body.appendParagraph(timing.notice);
+    if(timing.status==='unavailable')
+      body.appendParagraph('Detalhamento indisponível nesta atualização; consultar a conciliação antes de concluir a análise.');
+    body.appendParagraph('Ajustes identificados: '+timing.total+
+      (timing.total>timing.items.length?' | Exibidos: '+timing.items.length:''));
+    if(timing.items.length){
+      const rows=[['Chamado','Data do trabalho','Colaborador','Antes','Depois','Diferença','Identificado em']];
+      timing.items.forEach(x=>rows.push([
+        x.ticketId?'#'+x.ticketId:'—',x.date,x.person,
+        arquemH_(x.previous),arquemH_(x.current),
+        (x.delta<0?'-':'+')+arquemH_(Math.abs(x.delta)),x.observedAt
+      ]));
+      const table=body.appendTable(rows);
+      arquemEstilizarTabelaPdf_(table);
+      timing.items.forEach((x,i)=>{
+        if(x.ticketId)table.getCell(i+1,0).editAsText()
+          .setLinkUrl('https://arquem.movidesk.com/Ticket/Edit/'+x.ticketId);
+      });
+    }
+  }
   if ((p.customers||[]).length){
     arquemAddHeading_(body,'Empresas que mais consomem tempo');
     arquemEstilizarTabelaPdf_(body.appendTable([['Empresa','Horas','Chamados']].concat(
@@ -415,7 +585,7 @@ function arquemXlsx_(p, keep) {
      ['Chamados trabalhados',Number(p.metrics&&p.metrics.tickets)||0],
      ['Conciliação',p.partial?'Dados parciais':'Dados disponíveis'],
      ['Histórico',p.historicalIncomplete?'Comparativo anual PRELIMINAR':'Verificar cobertura']]));
-  if(!p.productionFlow)first.getRange('B4').setNumberFormat('[h]:mm:ss');
+  if(!p.productionFlow)first.getRange('B5').setNumberFormat('[h]:mm:ss');
   if(p.productionQuality){
     const qs=p.productionQuality;
     const quality=arquemCreateSheet_(ss,'Qualidade',
@@ -439,6 +609,37 @@ function arquemXlsx_(p, keep) {
     (p.daily||[]).map(x=>[x.date,x.person,x.sector,arquemExcelHora_(x.minutes),
       arquemExcelHora_(x.referenceMinutes),arquemExcelHora_(x.minimumMinutes),x.status]));
   arquemFormatarHoras_(daySheet,[4,5,6],(p.daily||[]).length);
+
+  if(p.timing){
+    const timing=arquemAssinarAjustes_(p);
+    const sheet=arquemCreateSheet_(ss,'Ajustes pós-fechamento',
+      ['Chamado','Data do trabalho','Colaborador','Antes','Depois','Diferença','Diferença (min)','Identificado em','No período'],
+      timing.items.map(x=>[
+        x.ticketId?'#'+x.ticketId:'—',x.date,x.person,
+        x.previous/1440,x.current/1440,
+        (x.delta<0?'-':'+')+arquemH_(Math.abs(x.delta)),x.delta,x.observedAt,
+        x.inCurrentPeriod?'Sim':'Não'
+      ]));
+    const row=timing.items.length;
+    if(row){
+      sheet.getRange(2,4,row,2).setNumberFormat('[h]:mm:ss');
+      // A duração assinada fica em minutos numéricos para permitir SUM/AVG no Excel.
+      // O texto HH:MM:SS adjacente mantém a leitura de horas negativas sem ####.
+      sheet.getRange(2,7,row,1).setNumberFormat('+0 "min";-0 "min";0 "min"');
+      const linked=timing.items.map(x=>{
+        const txt=x.ticketId?'#'+x.ticketId:'—';
+        const b=SpreadsheetApp.newRichTextValue().setText(txt);
+        if(x.ticketId)b.setLinkUrl('https://arquem.movidesk.com/Ticket/Edit/'+x.ticketId);
+        return [b.build()];
+      });
+      sheet.getRange(2,1,row,1).setRichTextValues(linked);
+    }
+    first.getRange(10,1,3,2).setValues([
+      ['Ajustes pós-fechamento',timing.total],
+      ['Situação da conciliação',timing.status],
+      ['Critério','Diferenças permanecem na data original do trabalho']
+    ]);
+  }
   const ticketSheet=arquemCreateSheet_(ss,'Chamados',
     ['Chamado','Cliente','Responsável','Status','Idade (dias)','Link Movidesk'],
     (p.tickets||[]).map(x=>['#'+String(x.id||''),x.client,x.owner,x.status,x.ageDays,x.url]));
