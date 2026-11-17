@@ -10,7 +10,7 @@ const sandbox={
  window:{},URL,Date,Number,String,Math,Array,Map,Set,encodeURIComponent,
 };
 vm.runInNewContext(code,sandbox,{timeout:3000});
-const {periods,emailHtml,audioLink}=sandbox.__testPeriods;
+const {periods,emailHtml,audioLink,finalReportPDF}=sandbox.__testPeriods;
 test('semanal é segunda a domingo, incluindo virada do ano',()=>{
  const x=periods('weekly','2026-01-01');
  assert.equal(x.from,'2025-12-29');assert.equal(x.to,'2026-01-04');
