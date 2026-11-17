@@ -2,7 +2,7 @@ import {CRITICAL,RULESET_VERSION,rulesFor} from './rules.ts';
 import {evaluate,type Channel,type Observation} from './scoring.ts';
 import {validateAudioPayload,transcriptionRequest,extractTranscription} from './transcription.ts';
 const env=(k:string)=>Deno.env.get(k)?.trim()||'';
-const geminiKey=()=>env('GEMINI_API_KEY')||env('GOOGLE_GEMINI_API_KEY')||env('GOOGLE_AI_API_KEY')||env('GOOGLE_API_KEY');
+const geminiKey=()=>env('GEMINI_API_KEY')||env('GOOGLE_GEMINI_API_KEY')||env('GOOGLE_AI_API_KEY')||env('GOOGLE_API_KEY')||env('monitoria-ai');
 const origins=new Set(['https://central-auditoria-iota.vercel.app','https://centralauditoria.ddns.net','https://www.centralauditoria.ddns.net']);
 function allowedOrigin(value:string){
  if(origins.has(value))return true;
