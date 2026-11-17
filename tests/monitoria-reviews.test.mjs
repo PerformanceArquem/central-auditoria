@@ -9,7 +9,7 @@ const mock=(channel='chat',critical=false)=>{
  }).filter(Boolean);
  const alerts=critical?[{code:'Z1',suspected:true,evidence:'Trecho de atendimento observado'}]:[];
  return {action:'submit',requestId:id,consent:true,channel,sourceId:'102205',sector:'Suporte',
-  collaborator:'Colaborador de Teste',analysis:{
+  collaborator:'Colaborador de Teste',reviewer:'Analista Qualidade',monitoredAt:'2026-11-17',analysis:{
   version:'monitoria-suporte-2026-11-17',channel,scoreSuggestion:critical?0:100,
   criteria,critical:alerts
  }};
