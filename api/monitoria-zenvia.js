@@ -1,8 +1,7 @@
-// Consulta protegida de ligações, áudio TotalVoice e histórico Zenvia Chat.
+// Consulta protegida de ligações e áudio TotalVoice. Chats são atendidos exclusivamente pelo Movidesk.
 // Não responde tokens, números de telefone, URLs de mídia ou mensagens para usuários não autorizados.
 // Somente GET, sem envio de mensagens, sem alterar gravações ou configurações da Zenvia.
 const VOICE='https://voice-api.zenvia.com';
-const CHAT='https://zchat.zenvia.io';
 const MAX_AUDIO=16*1024*1024;
 const send=(res,status,data)=>res.status(status).json(data);
 const validDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s+'T12:00:00Z'))&&new Date(s+'T12:00:00Z').toISOString().slice(0,10)===s;
@@ -116,33 +115,6 @@ async function audio(req,res){
  res.setHeader('X-Content-Type-Options','nosniff');
  return res.status(200).send(Buffer.concat(chunks.map(x=>Buffer.from(x)),size));
 }
-function normalizeMessages(data){
- // Permitir apenas esquemas documentados/conhecidos, sem replicar objetos completos com PII.
- const rows=Array.isArray(data)?data:Array.isArray(data?.messages)?data.messages:
-  Array.isArray(data?.data?.messages)?data.data.messages:
-  Array.isArray(data?.data)?data.data:null;
- if(!rows)return null;
- return rows.slice(0,2000).map((m,i)=>({
-  index:i,
-  at:String(m?.createdAt||m?.created_at||m?.date||m?.timestamp||'').slice(0,45),
-  sender:String(m?.sender?.name||m?.agent?.name||m?.senderName||m?.author||m?.from||'').slice(0,100),
-  text:String(m?.text||m?.message||m?.body||m?.content?.text||'').slice(0,8000)
- }));
-}
-async function chat(req,res){
- const token=process.env.ZENVIA_CHAT_API_TOKEN;
- if(!token)return send(res,503,{ok:false,error:'Token de leitura do histórico Zenvia Chat ainda não configurado'});
- const protocol=String(req.query.protocol||'').trim();
- if(!/^[A-Za-z0-9_-]{1,90}$/.test(protocol))return send(res,400,{ok:false,error:'Protocolo de chat inválido'});
- const url=new URL(CHAT+'/api/ms/external/history/'+encodeURIComponent(protocol)+'/messages');
- url.searchParams.set('token',token);
- const r=await fetch(url,{method:'GET',headers:{Accept:'application/json'},redirect:'error',signal:AbortSignal.timeout(25000)});
- if(!r.ok)return send(res,r.status===404?404:502,{ok:false,error:'Histórico indisponível ou acesso Zenvia não autorizado'});
- const payload=await r.json().catch(()=>null);
- const messages=normalizeMessages(payload);
- if(!messages)return send(res,502,{ok:false,error:'Formato do histórico Zenvia não reconhecido; homologar contrato da conta'});
- return send(res,200,{ok:true,protocol,messages,partial:messages.length===2000});
-}
 export default async function handler(req,res){
  res.setHeader('Cache-Control','private, no-store');
  if(req.method!=='GET')return send(res,405,{ok:false,error:'Método não permitido'});
@@ -152,7 +124,6 @@ export default async function handler(req,res){
   const action=String(req.query.action||'');
   if(action==='calls')return await calls(req,res);
   if(action==='audio')return await audio(req,res);
-  if(action==='chat')return await chat(req,res);
   return send(res,400,{ok:false,error:'Consulta desconhecida'});
  }catch{return send(res,502,{ok:false,error:'Não foi possível consultar a Zenvia'});}
 }
