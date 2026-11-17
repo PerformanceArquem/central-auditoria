@@ -272,24 +272,45 @@ function supportRatingCache() {
       rows ? 'Sem avaliações no período' : 'Avaliações indisponíveis no momento';
     const superadores = metric?.superadores.percent != null ?
       metric.superadores.percent.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%' : 'Indisponível';
-    const visible = eligible ? selected.slice(0,100) : [];
-    const ratings = visible.map(row=>({date:row.service_date,ticketId:row.ticket_id,
+    // CSAT stays independent per channel. A missing voice rating is NOT a score of zero.
+    const voiceRows=selected.filter(row=>row.channel==='voz');
+    const chatRows=selected.filter(row=>row.channel==='chat');
+    const voiceSummary=ratingSummary(voiceRows);
+    const chatSummary=ratingSummary(chatRows);
+    const headline=(label:string,value:ReturnType<typeof ratingSummary>)=>
+      label+': '+(value.csatPercent==null?'Sem avaliações no período':
+        value.csatPercent.toLocaleString('pt-BR',{maximumFractionDigits:2})+
+        '% ('+value.excelente+' de '+value.total+' notas ≥ 8)');
+    const voiceHeadline=rows?headline('CSAT Voz',voiceSummary):'CSAT Voz: avaliações indisponíveis';
+    const chatHeadline=rows?headline('CSAT Chat',chatSummary):'CSAT Chat: avaliações indisponíveis';
+    const visible=eligible?[...voiceRows.slice(0,100),...chatRows.slice(0,100)]:[];
+    const ratings=visible.map(row=>({date:row.service_date,ticketId:row.ticket_id,
       collaborator:row.collaborator_name,channel:row.channel,score:row.score,source:row.source}));
-    const table = eligible && ratings.length ?
-      '<h3>Notas CSAT por atendimento (até 100 registros)</h3>'+
-      '<table width="100%" cellpadding="6" cellspacing="0" style="font-size:12px;border-collapse:collapse"><tr style="background:#edf3fb"><th>Data</th><th>Chamado</th><th>Colaborador</th><th>Canal</th><th>Nota</th></tr>'+
-      ratings.map(row=>'<tr><td>'+emailEsc(displayDate(String(row.date)))+'</td><td>'+
-        (/^\\d+$/.test(String(row.ticketId))?'<a href="https://arquem.movidesk.com/Ticket/Edit/'+row.ticketId+'">#'+row.ticketId+'</a>':'—')+
-        '</td><td>'+emailEsc(row.collaborator)+'</td><td>'+emailEsc(row.channel)+'</td><td><b>'+row.score+'</b></td></tr>').join('')+
-      '</table>' : '';
-    const detail = eligible && rows ?
-      '\nNotas CSAT (até 100):\n'+ratings.map(row=>
-        row.date+' | #'+row.ticketId+' | '+row.collaborator+' | '+row.channel+' | nota '+row.score).join('\n') : '';
-    const text = 'CSAT do Suporte (notas 8–10 positivas): '+result+'. Superadores: '+superadores+'.'+
+    const tableRows=(channel:'voz'|'chat',items:typeof ratings)=>{
+      const channelRatings=items.filter(row=>row.channel===channel);
+      if(!channelRatings.length)return '<p style="margin:8px 0">Sem avaliações de '+(channel==='voz'?'voz':'chat')+' no período. Não equivale a nota zero.</p>';
+      return '<table width="100%" cellpadding="6" cellspacing="0" style="font-size:12px;border-collapse:collapse"><tr style="background:#edf3fb"><th>Data</th><th>Chamado</th><th>Colaborador</th><th>Canal</th><th>Nota</th></tr>'+
+        channelRatings.map(row=>'<tr><td>'+emailEsc(displayDate(String(row.date)))+'</td><td>'+
+          (/^\d+$/.test(String(row.ticketId))?'<a href="https://arquem.movidesk.com/Ticket/Edit/'+row.ticketId+'">#'+row.ticketId+'</a>':'—')+
+          '</td><td>'+emailEsc(row.collaborator)+'</td><td>'+emailEsc(row.channel)+'</td><td><b>'+row.score+'</b></td></tr>').join('')+
+        '</table>';
+    };
+    const table=eligible&&rows?
+      '<h3>Notas CSAT por atendimento — Voz (até 100 registros)</h3>'+tableRows('voz',ratings)+
+      '<h3>Notas CSAT por atendimento — Chat (até 100 registros)</h3>'+tableRows('chat',ratings):'';
+    const detail=eligible&&rows?
+      '\nNotas CSAT de Voz (até 100):\n'+(voiceRows.length?ratings.filter(row=>row.channel==='voz').map(row=>
+       row.date+' | #'+row.ticketId+' | '+row.collaborator+' | voz | nota '+row.score).join('\n'):'Sem avaliações de voz no período.')+
+      '\nNotas CSAT de Chat (até 100):\n'+(chatRows.length?ratings.filter(row=>row.channel==='chat').map(row=>
+       row.date+' | #'+row.ticketId+' | '+row.collaborator+' | chat | nota '+row.score).join('\n'):'Sem avaliações de chat no período.'):'';
+    const text='CSAT do Suporte (notas 8–10 positivas): '+result+'. Superadores: '+superadores+'. '+
+      voiceHeadline+'. '+chatHeadline+'.'+
       (eligible?' Notas 1–7: abaixo do padrão. Sem avaliação não equivale a nota zero.':'');
     return {text:'\n\n'+text+detail,
       html:renderCsatChart(metric,rec)+'<p><strong>'+emailEsc(text)+'</strong></p>'+table,
-      metric,ratings:eligible?ratings:[],csatFullCount:selected.length};
+      metric,ratings:eligible?ratings:[],csatFullCount:selected.length,
+      csatByChannel:{voz:voiceSummary,chat:chatSummary}};
+
   };
 }
 // Resiliência: falhas do módulo de previsões não bloqueiam relatórios oficiais.
