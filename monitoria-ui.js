@@ -2,6 +2,7 @@
 (()=>{
  const $=id=>document.getElementById(id);
  let localAudioUrl='',selectedAudio=null,lastAnalysis=null,channel='chat',lastSavedReview=null,reviewRequestId=null,reports=[],alerts=[],polling=false;
+ let sourceEvidenceKind='manual';
  const status=(msg)=>{if($('monStatus'))$('monStatus').textContent=msg};
  const safeName=n=>String(n||'arquivo').replace(/[^\w.-]+/g,'_').slice(0,80);
  function download(name,text,type){
@@ -65,6 +66,13 @@
      status(data.calls.length+' chamadas consultadas. Nenhuma gravação foi enviada ao Gemini.');
    }catch(e){status('Consulta de ligações: '+String(e.message||e));}
  }
+ function resetChatCoverage(){
+   sourceEvidenceKind='manual';
+   const area=$('monChatEvidenceWarning');
+   if(area)area.hidden=true;
+   const acknowledge=$('monChatCoverageAck');
+   if(acknowledge)acknowledge.checked=false;
+ }
  async function loadChat(){
    const ticketId=$('monTicketId').value.trim();
    status('Consultando interações do chamado no Movidesk…');
@@ -77,6 +85,15 @@
      });
      const data=await res.json().catch(()=>({}));
      if(!res.ok||!data?.ok)throw Error(data.error||'Histórico indisponível');
+     resetChatCoverage();
+     sourceEvidenceKind='movidesk_ticket_actions_unverified';
+     $('monChatEvidenceWarning').hidden=false;
+     const coverage=data.coverage||{};
+     $('monChatEvidenceDetails').textContent=
+       (coverage.activeActions??'?')+' ações ativas; '+(coverage.renderedInteractions??data.messages.length)+
+       ' interações extraídas; origens: '+(coverage.actionOrigins||[]).join(', ')+
+       '; tipos: '+(coverage.actionTypes||[]).join(', ')+
+       '. Início, fim e integridade do chat NÃO foram confirmados.';
      const lines=data.messages.map(m=>'['+(m.at||'sem horário')+'] '+(m.sender||'Participante')+': '+m.text);
      $('monTranscript').value=lines.join('\n');
      $('monChannel').value='chat';channel='chat';
@@ -115,7 +132,9 @@
    if(!$('monSaveConsent').checked)throw Error('Autorize o registro da monitoria e de possíveis alertas internos');
    reviewRequestId=reviewRequestId||crypto.randomUUID();
    const result=await reviewsApi(null,{
-      action:'submit',requestId:reviewRequestId,consent:true,channel,...values,analysis:lastAnalysis
+      action:'submit',requestId:reviewRequestId,consent:true,channel,...values,analysis:lastAnalysis,
+      evidenceScope:channel==='chat'?sourceEvidenceKind:'voice_transcript',
+      evidenceAcknowledged:sourceEvidenceKind==='movidesk_ticket_actions_unverified'?$('monChatCoverageAck').checked:true
    });
    lastSavedReview=result.review?.id;
    $('monSave').disabled=true;
@@ -292,6 +311,10 @@
    if(!($('monConsent')?.checked)){status('Autorize explicitamente o processamento da conversa pelo Gemini.');return}
    if(!($('monSaveConsent')?.checked)){status('Para garantir o alerta imediato ao gestor em caso crítico, autorize o registro da monitoria antes da análise.');return}
    try{metadata()}catch(e){status(e.message);return}
+   if(sourceEvidenceKind==='movidesk_ticket_actions_unverified'&&!$('monChatCoverageAck').checked){
+     status('Confirme a verificação manual do extrato Movidesk antes de solicitar a nota.');
+     return;
+   }
    const transcript=$('monTranscript').value.trim();
    if(transcript.length<60){status('Informe uma transcrição completa ou importe o chat.');return}
    const button=$('monRun');button.disabled=true;status('Conferindo sessão e solicitando avaliação ao Gemini…');
@@ -330,7 +353,7 @@
    $('monChatFile').addEventListener('change',async e=>{
      const file=e.target.files?.[0];if(!file)return;
      if(!/\.(txt|csv)$/i.test(file.name)||file.size>150000){status('Use TXT ou CSV de até 150 KB.');return}
-     $('monTranscript').value=await file.text();status('Conversa importada para conferência.');
+     resetChatCoverage();$('monTranscript').value=await file.text();status('Conversa importada para conferência.');
    });
    const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
    $('monFrom').value=today;$('monTo').value=today;
