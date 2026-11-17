@@ -62,7 +62,7 @@ async function list(req,res,auth){
  if(!auth.admin)return fail(res,403,'Relatórios disponíveis apenas para a Qualidade autorizada');
  const {from,to}=boundedDates(req.query);
  const rows=await db(auth,'audit_monitoria_reviews',{
-  select:'id,created_at,created_by,channel,source_id,sector,collaborator_name,ruleset_version,score_suggested,score_approved,critical_suspected,critical_confirmed,critical_findings,criteria,review_status,approved_at,reviewer_notes',
+  select:'id,created_at,created_by,channel,source_id,sector,collaborator_name,ruleset_version,score_suggested,score_approved,critical_suspected,critical_confirmed,critical_findings,criteria,review_status,approved_at,reviewer_notes,audit_monitoria_alerts(status,created_at,manager_user_id,acknowledged_at,manager_feedback)',
   created_at:'gte.'+from+'T00:00:00Z',
   and:'(created_at.lte.'+to+'T23:59:59Z)',
   order:'created_at.desc',limit:'1000'
