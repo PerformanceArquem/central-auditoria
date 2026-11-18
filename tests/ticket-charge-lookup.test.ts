@@ -58,3 +58,16 @@ Deno.test('não mistura payload de outra referência solicitada',async()=>{
  });
  assert(result.records.length===1 && result.records[0].ticket_id==='97513','chamado estranho retornado');
 });
+
+Deno.test('last real appointment is taken only from actual recorded minutes',async()=>{
+ const rows=[{ticket_id:'97513',appointment_date:'2026-11-17',duration_minutes:45,collaborator_name:'Equipe A',activity:'Análise'},
+  {ticket_id:'97513',appointment_date:'2026-11-12',duration_minutes:30,collaborator_name:'Equipe B',activity:'Apoio'}];
+ const result=await chargeTicketLookup(['97513','96484'],async p=>{
+  if(p.startsWith('audit_direct_tickets'))return [record('97513'),record('96484')];
+  if(p.startsWith('audit_direct_appointments'))return rows;
+  return [];
+ });
+ const latest=result.records[0].last_real_appointment as Record<string,unknown>;
+ assert(latest.date==='2026-11-17'&&latest.minutes===45,'último apontamento real incorreto');
+ assert(result.records[1].last_real_appointment===null,'apontamento inventado');
+});
