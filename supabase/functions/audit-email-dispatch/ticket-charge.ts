@@ -83,8 +83,8 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
    '<td style="'+cell+'white-space:nowrap">'+
     '<a href="'+t.url+'" target="_blank" rel="noopener noreferrer" style="font-weight:700;text-decoration:none;color:#1559a4">#'+esc(t.id)+'</a>'+
     '<div style="font-size:10px;color:#65778f;margin-top:5px">Item '+String(i+1).padStart(2,'0')+'</div></td>'+
-   '<td style="'+cell+'max-width:190px"><strong style="color:#173454">'+esc(t.client)+'</strong>'+
-    '<div style="font-size:11px;color:#65778f;margin-top:5px">'+esc(t.sector)+'</div></td>'+
+   '<td style="'+cell+'max-width:190px"><strong style="color:#173454">'+esc(t.client)+'</strong></td>'+ 
+   '<td style="'+cell+'min-width:105px">'+esc(t.sector)+'</td>'+ 
    '<td style="'+cell+'min-width:170px">'+esc(t.subject)+'</td>'+
    '<td style="'+cell+'min-width:125px">'+esc(t.owner)+
     '<div style="font-size:11px;color:#65778f;margin-top:5px">Situação: '+esc(t.status)+'</div>'+
@@ -111,7 +111,7 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  '</div>'+
  '<div style="padding:0 18px 22px;overflow-x:auto">'+
  '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;min-width:620px">'+
- '<thead style="background:#eaf2fa"><tr>'+header('Chamado')+header('Cliente / setor')+header('Assunto')+header('Responsável / status')+'</tr></thead>'+
+ '<thead style="background:#eaf2fa"><tr>'+header('Chamado')+header('Cliente')+header('Setor')+header('Assunto')+header('Responsável / status')+'</tr></thead>'+
  '<tbody>'+table+'</tbody></table></div>'+
  guidanceHtml+
  '<div style="padding:18px 28px;background:#f6f9fc;border-top:1px solid #e2eaf3">'+
