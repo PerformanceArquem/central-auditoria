@@ -2310,9 +2310,16 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
    missingIds:found.missingIds,availableIds:found.records.map(x=>String(x.ticket_id)),sources:found.sources},409);
  const includeGuidance=payload.includeGuidance===true;
  const draft=composeTicketCharge(found.records,recipient,message,{includeGuidance});
- if(action==='ticket_charge_preview')
-  return json({ok:true,preview:true,recipient,cc,registerInternalNote,timeLog,ccSupported:!cc.length||await ccProviderSupported(),subject:corporateCopy(draft.subject),text:corporateCopy(draft.text),
+ if(action==='ticket_charge_preview'){
+  // Diagnóstico somente de leitura: informar a causa sem expor segredo nem URL do provedor.
+  // O gate de envio permanece no backend, independentemente desta prévia.
+  const ccDiagnostic=cc.length?await ccProviderDiagnostic():null;
+  return json({ok:true,preview:true,recipient,cc,registerInternalNote,timeLog,
+    ccSupported:!cc.length||ccDiagnostic?.supported===true,
+    ccDiagnostic:ccDiagnostic?{reason:ccDiagnostic.reason,checkedAt:ccDiagnostic.checkedAt}:null,
+    subject:corporateCopy(draft.subject),text:corporateCopy(draft.text),
     html:corporateCopy(draft.html),ticketCount:draft.tickets.length,ids,guidance:draft.guidance});
+ }
  if(action!=='ticket_charge_send')return json({ok:false,error:'Ação não autorizada.'},400);
  await verifyTicketChargeRepeat(ids,recipient);
  const sender=await ticketChargeAdminUser(req);
