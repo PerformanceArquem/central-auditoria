@@ -23,7 +23,8 @@ const appointments = t => {
    out.push({ticket_id:String(t.id),collaborator_name:person(collaborator)||person(t.owner)||'Não informado',
     appointment_date:safeDate(date||a.createdDate).slice(0,10),duration_minutes:minutes,activity:label(activity)||'Geral',sector:label(sector)||team});
   };
-  if(aps.length)for(const p of aps)append(p.workTime??p.accountedTime,p.createdBy||p.agent||a.createdBy,p.date,p.activity,p.createdByTeam);
+  // A métrica Horas Apontadas usa workTime; accountedTime representa tempo contabilizado.
+  if(aps.length)for(const p of aps)append(p.workTime,p.createdBy||p.agent||a.createdBy,p.date,p.activity,p.createdByTeam);
   else append(a.timeWorked,a.createdBy,a.createdDate,a.activity,null);
  }
  return out;

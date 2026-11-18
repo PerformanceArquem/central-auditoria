@@ -67,7 +67,7 @@ async function report(input:any,base:string,key:string){
  const working=(d:string)=>{const w=new Date(d+'T12:00:00Z').getUTCDay();return w!==0&&w!==6&&!holidaySet.has(d)};
  const outside=rows.filter(x=>!working(x.appointment_date));
  const sum=(a:any[])=>a.reduce((n,x)=>n+x.duration_minutes,0);
- const summary={periodFrom:from,periodTo:to,filters,records:rows.length,tickets:new Set(rows.map(x=>x.ticket_id)).size,totalHours:Number((sum(rows)/60).toFixed(2)),hoursOutsideBusinessDays:Number((sum(outside)/60).toFixed(2)),entriesOutsideBusinessDays:outside.length,holidayDates:[...holidaySet].sort(),source:'audit_direct_appointments + audit_direct_tickets',coverage:appointments.length,generatedAt:new Date().toISOString()};
+ const summary={metric:'Horas Apontadas (workTime do Movidesk)',periodFrom:from,periodTo:to,filters,records:rows.length,tickets:new Set(rows.map(x=>x.ticket_id)).size,totalHours:Number((sum(rows)/60).toFixed(2)),hoursOutsideBusinessDays:Number((sum(outside)/60).toFixed(2)),entriesOutsideBusinessDays:outside.length,holidayDates:[...holidaySet].sort(),source:'audit_direct_appointments + audit_direct_tickets',coverage:appointments.length,generatedAt:new Date().toISOString()};
  const bySector=rank(rows,'sector'),byCollaborator=rank(rows,'collaborator_name'),byClient=rank(rows,'client'),byActivity=rank(rows,'activity');
  return {summary,bySector,byCollaborator,byClient,byActivity};
 }

@@ -51,7 +51,8 @@ function appointments(ticket:Record<string,unknown>){
     activity:name(activity)||"Geral",appointment_date:day,duration_minutes:d,
     source_synced_at:new Date().toISOString()});
   }
-  if(entries.length)entries.forEach((p,pi)=>add(p.workTime??p.accountedTime,
+  // Horas Apontadas no Movidesk = workTime; accountedTime é tempo contabilizado e não substitui o apontamento.
+  if(entries.length)entries.forEach((p,pi)=>add(p.workTime,
    p.createdBy??p.agent??action.createdBy,p.date,p.activity,p.createdByTeam,
    String(action.id??ai)+":"+String(p.id??pi)));
   else add(action.timeWorked,action.createdBy,action.createdDate,action.activity,
