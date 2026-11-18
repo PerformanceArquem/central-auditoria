@@ -67,7 +67,7 @@ test('promotion rejects version files unless their exact approved SHA-256 matche
   for(const file of files)writeFileSync(join(tmp,file),file==='appsscript.json'?'{"timeZone":"America/Sao_Paulo"}':'function marker(){}');
   const h=createHash('sha256');
   for(const file of files.slice().sort()){
-   h.update(file);h.update('\\0');h.update(readFileSync(join(tmp,file)));h.update('\\0');
+   h.update(file);h.update('\0');h.update(readFileSync(join(tmp,file)));h.update('\0');
   }
   const approved=h.digest('hex');
   assert.equal(run('sha256',tmp,approved).status,0);
