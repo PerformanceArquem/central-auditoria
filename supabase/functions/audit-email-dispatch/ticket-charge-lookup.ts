@@ -1,8 +1,10 @@
+import {isProjectChargeSubject,projectChargeMetrics} from './project-charge-metrics.ts';
 // Busca consistente com as diferentes bases utilizadas no ranking e na importação.
 type TicketRecord=Record<string,unknown>;
 type LookupDB=(path:string)=>Promise<unknown>;
 export type ChargeLookup={records:TicketRecord[],missingIds:string[],sources:Record<string,string>};
-export async function chargeTicketLookup(ids:string[],db:LookupDB):Promise<ChargeLookup>{
+export type ChargeProjectOptions={dailyGoalHours?:number;periodFrom?:string;periodTo?:string};
+export async function chargeTicketLookup(ids:string[],db:LookupDB,opts:ChargeProjectOptions={}):Promise<ChargeLookup>{
  if(!Array.isArray(ids)||!ids.length||ids.length>20||
   ids.some(x=>!/^\d{1,12}$/.test(x))||new Set(ids).size!==ids.length)
   throw Error('Selecione de 1 a 20 chamados distintos.');
@@ -51,6 +53,46 @@ export async function chargeTicketLookup(ids:string[],db:LookupDB):Promise<Charg
  }
  for(const [id,row] of found){
    found.set(id,{...row,last_real_appointment:latest.get(id)||null});
+ }
+ // Apenas chamados P ** recebem o cálculo de Projetos e Prazos.
+ // O total usa apontamentos reais de todo o histórico, enquanto a média e
+ // a classificação diária usam o período selecionado no painel.
+ const projectIds=ids.filter(id=>{
+   const t=found.get(id),p=(t?.payload||{}) as Record<string,unknown>;
+   return t&&isProjectChargeSubject(p.subject);
+ });
+ if(projectIds.length){
+   const grouped=new Map<string,Record<string,unknown>[]>();
+   for(const id of projectIds)grouped.set(id,[]);
+   const pageSize=1000,maxPages=50;
+   let finished=false;
+   for(let page=0;page<maxPages;page++){
+     const query='audit_direct_appointments?select=ticket_id,appointment_date,duration_minutes'+
+       '&ticket_id=in.('+projectIds.join(',')+')&order=appointment_date.desc&limit='+pageSize+'&offset='+(page*pageSize);
+     const batch=await db(query);
+     if(!Array.isArray(batch))throw Error('Consulta de apontamentos do projeto indisponível.');
+     for(const item of batch){
+       if(!item||typeof item!=='object')continue;
+       const record=item as Record<string,unknown>,id=String(record.ticket_id||'');
+       if(grouped.has(id))grouped.get(id)!.push(record);
+     }
+     if(batch.length<pageSize){finished=true;break}
+   }
+   if(!finished)throw Error('Histórico de apontamentos excedeu o limite seguro; não é possível calcular as métricas do projeto.');
+   const snapshots=await db('audit_forecast_variance_snapshots?select=ticket_id,estimated_hours,evidence_origin,confidence,updated_at'+
+      '&ticket_id=in.('+projectIds.join(',')+')&limit=100') as Record<string,unknown>[];
+   if(!Array.isArray(snapshots))throw Error('Previsões de projetos indisponíveis.');
+   const forecasts=new Map(snapshots.map(r=>[String(r.ticket_id),r]));
+   for(const id of projectIds){
+     const source=found.get(id)!, forecast=forecasts.get(id);
+     const forecastNum=forecast?.estimated_hours===null||forecast?.estimated_hours===undefined?
+       null:Number(forecast.estimated_hours);
+     const metrics=projectChargeMetrics(grouped.get(id)||[],opts.dailyGoalHours||4,
+       opts.periodFrom,opts.periodTo,forecastNum);
+     found.set(id,{...source,project_metrics:{...metrics,
+       forecastOrigin:forecast?String(forecast.evidence_origin||'Base de previsão'):null,
+       forecastUpdatedAt:forecast?String(forecast.updated_at||''):null}});
+   }
  }
  return {records:ids.filter(id=>found.has(id)).map(id=>found.get(id)!),missingIds:missing,sources};
 }
