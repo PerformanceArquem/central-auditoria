@@ -2,6 +2,7 @@
 // /exec deployment. Never prints deployment IDs, tokens, scripts or addresses.
 import {readFileSync,appendFileSync,readdirSync} from 'node:fs';
 import {join} from 'node:path';
+import {createHash} from 'node:crypto';
 const [mode,...args]=process.argv.slice(2);
 const pattern=/^\s*[-*]?\s*(\S+)\s+@(\d+)\b/gm;
 function deploymentVersion(file,id){
@@ -21,6 +22,22 @@ if(mode==='deployment'){
  const result=deploymentVersion(listing,targetId);
  if(result.version!==Number(version))throw Error('Versão da implantação divergiu do valor aprovado');
  console.log('APPSSCRIPT_CC_DEPLOYMENT_MATCH version='+result.version+' deploymentCount='+result.deployments);
+}else if(mode==='sha256'){
+ const [folder,expectedSha]=args;
+ if(!folder||!expectedSha||!(/^[a-f0-9]{64}$/.test(expectedSha)))throw Error('Assinatura SHA-256 aprovada obrigatória');
+ const files=readdirSync(folder,{withFileTypes:true})
+  .filter(entry=>entry.isFile()&&(entry.name==='appsscript.json'||/\.(js|gs|html)$/.test(entry.name)))
+  .map(entry=>entry.name).sort();
+ if(!files.includes('appsscript.json')||files.length<7)
+  throw Error('Inventário de versão candidata incompleto');
+ const hash=createHash('sha256');
+ for(const file of files){
+  hash.update(file);hash.update('\0');
+  hash.update(readFileSync(join(folder,file)));hash.update('\0');
+ }
+ const actual=hash.digest('hex');
+ if(actual!==expectedSha)throw Error('SHA-256 da versão candidata divergiu da versão aprovada');
+ console.log('APPSSCRIPT_CC_VERSION_SHA256_MATCH files='+files.length);
 }else if(mode==='candidate'){
  const [folder,summaryPath,version]=args;
  if(!folder||!summaryPath||!Number.isSafeInteger(Number(version))||Number(version)<1)
