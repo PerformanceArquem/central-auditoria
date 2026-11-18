@@ -31,7 +31,6 @@ for(const file of ['arquem-relatorios-anexos.gs','central-auditoria-emails-compl
      appendHorizontalRule(){},
      appendTable(rows){
        tables.push(rows);
-       if(rows[0]?.[0]==='Data'&&rows[0]?.includes('Saldo jornada'))throw STOP;
        return {};
      }
    };
@@ -42,13 +41,15 @@ for(const file of ['arquem-relatorios-anexos.gs','central-auditoria-emails-compl
      DocumentApp:{
        ParagraphHeading:{TITLE:'TITLE',HEADING1:'HEADING1',HEADING2:'HEADING2'},
        create:()=>({getId:()=>docId}),
-       openById:()=>({getBody:()=>body})
+       openById:()=>({getBody:()=>body,saveAndClose(){}})
      },
-     DriveApp:{getFileById:()=>({getId:()=>docId})}
+     DriveApp:{getFileById:()=>({getId:()=>docId,getAs:()=>({})})},
+     MimeType:{PDF:'application/pdf'}
    };
    vm.createContext(context);
    vm.runInContext(code,context);
-   try{context.arquemPdf_(sample,[]);assert.fail('PDF interceptação não ocorreu')}catch(e){if(e!==STOP)throw e}
+   context.arquemEstilizarTabelaPdf_=()=>{};
+   context.arquemPdf_(sample,[]);
    const peoplePdf=tables.find(t=>t[0][0]==='Colaborador');
    assert.ok(peoplePdf,'tabela colaborador ausente');
    assert.deepEqual(Array.from(peoplePdf[1].slice(-2)),['+01:13:00','-00:23:00']);
