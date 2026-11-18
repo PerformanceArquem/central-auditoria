@@ -14,7 +14,7 @@ test('Validation starts from an explicit button with server-generated date',()=>
 });
 test('Send is blocked unless selection and validator match',()=>{
  assert.match(edge,/validation\.validated_by!==sender/);
- assert.match(edge,/JSON\.stringify\(\(validation\.ticket_ids\|\|\[\]\)\.map\(String\)\)/);
+ assert.match(edge,/Array\.isArray\(validation\.ticket_ids\)\?validation\.ticket_ids\.map\(String\)/);
  assert.match(edge,/Clique em Validado após a prévia atual/);
  assert.match(html,/!alarmEmailValidated/);
 });
