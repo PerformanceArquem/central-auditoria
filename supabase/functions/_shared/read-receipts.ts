@@ -5,7 +5,7 @@ export type ReceiptContext = {
   recipientName?: unknown;
   from?: unknown;
   to?: unknown;
-  source?: 'sector' | 'triage' | 'ticket_charge';
+  source?: 'sector' | 'triage' | 'ticket_charge' | 'test';
 };
 type Db = (path: string, init?: RequestInit) => Promise<any>;
 const bytesHex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
