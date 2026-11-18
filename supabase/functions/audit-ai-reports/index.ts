@@ -86,7 +86,7 @@ async function answerWithGemini(data:any,prompt:string,consent:boolean){
   const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':secret},body:JSON.stringify(body),signal:AbortSignal.timeout(18000)});
   if(!r.ok)throw new Error('Gemini HTTP '+r.status);
   const out=await r.json();
-  const answer=clean((out.candidates?.[0]?.content?.parts||[]).map((p:any)=>p.text||'').join('\n'),7000);
+  const answer=String((out.candidates?.[0]?.content?.parts||[]).map((p:any)=>p.text||'').join('\n')).replace(/[\x00\x7f]/g,'').trim().slice(0,7000);
   if(!answer)throw new Error('Gemini vazio');
   return {answer,aiUsed:true};
  }catch{return {answer:basicAnswer(data,prompt),aiUsed:false,reason:'Gemini não respondeu; o sistema apresentou o relatório calculado sem IA externa.'}}
