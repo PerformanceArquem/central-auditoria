@@ -342,6 +342,10 @@ function arquemH_(minutes) {
 }
 // Excel: número em frações de dia, não texto. Permite SOMA e mantém
 // horas acumuladas acima de 24h com o formato [h]:mm:ss.
+function arquemSaldo_(minutes) {
+  const n=Math.round(Number(minutes)||0);
+  return (n>=0?'+':'-')+String(Math.floor(Math.abs(n)/60)).padStart(2,'0')+':'+String(Math.abs(n)%60).padStart(2,'0')+':00';
+}
 function arquemExcelHora_(minutes) {
   return Math.max(0,Math.round(Number(minutes)||0))/1440;
 }
@@ -419,10 +423,12 @@ function arquemPdf_(p, keep) {
     arquemEstilizarTabelaPdf_(body.appendTable(lines));
   } else if ((p.collaborators||[]).length) {
     arquemAddHeading_(body,'Colaboradores · horas e jornada');
-    const lines=[['Colaborador','Setor','Horas','Meta mínima','Jornada','Falta mínimo','Falta jornada']];
+    const lines=[['Colaborador','Setor','Horas','Meta mínima','Jornada','Falta mínimo','Falta jornada','Saldo mínimo','Saldo jornada']];
     p.collaborators.slice(0,70).forEach(x=>lines.push([
       String(x.name||''),String(x.sector||''),arquemH_(x.minutes),arquemH_(x.minimumMinutes),
-      arquemH_(x.targetMinutes),arquemH_(x.minimumGap),arquemH_(x.targetGap)]));
+      arquemH_(x.targetMinutes),arquemH_(x.minimumGap),arquemH_(x.targetGap),
+      arquemSaldo_(x.minimumBalance!==undefined?x.minimumBalance:Number(x.minutes||0)-Number(x.minimumMinutes||0)),
+      arquemSaldo_(x.targetBalance!==undefined?x.targetBalance:Number(x.minutes||0)-Number(x.targetMinutes||0))]));
     arquemEstilizarTabelaPdf_(body.appendTable(lines));
   }
   if ((p.daily||[]).length) {
@@ -501,9 +507,11 @@ function arquemXlsx_(p, keep) {
     }
   }
   const people=arquemCreateSheet_(ss,'Colaboradores',
-    ['Colaborador','Setor','Horas','Mínimo','Jornada','Falta mínimo','Falta jornada','Origem'],
+    ['Colaborador','Setor','Horas','Mínimo','Jornada','Falta mínimo','Falta jornada','Saldo mínimo','Saldo jornada','Origem'],
     (p.productionQuality?[]:(p.collaborators||[])).map(x=>[x.name,x.sector,arquemExcelHora_(x.minutes),arquemExcelHora_(x.minimumMinutes),
-     arquemExcelHora_(x.targetMinutes),arquemExcelHora_(x.minimumGap),arquemExcelHora_(x.targetGap),x.ruleSource||'Padrão']));
+     arquemExcelHora_(x.targetMinutes),arquemExcelHora_(x.minimumGap),arquemExcelHora_(x.targetGap),
+     arquemSaldo_(x.minimumBalance!==undefined?x.minimumBalance:Number(x.minutes||0)-Number(x.minimumMinutes||0)),
+     arquemSaldo_(x.targetBalance!==undefined?x.targetBalance:Number(x.minutes||0)-Number(x.targetMinutes||0)),x.ruleSource||'Padrão']));
   arquemFormatarHoras_(people,[3,4,5,6,7],p.productionQuality?0:(p.collaborators||[]).length);
   const daySheet=arquemCreateSheet_(ss,'Dia a dia',
     ['Data','Colaborador','Setor','Horas','Jornada','Mínimo','Situação'],
