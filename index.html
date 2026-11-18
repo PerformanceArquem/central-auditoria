@@ -3820,7 +3820,7 @@ function renderAlerts(){
   if(window.Chart&&$('chIdleSector')){
     const chartGroups=groups.slice(0,15);
     const chartSignature=JSON.stringify([limit,chartGroups.map(g=>[g.team,g.worst.idle])]);
-    if(chartSignature!==alarmSectorChartSignature){
+    if(chartSignature!==alarmSectorChartSignature||!CH.chIdleSector){
       alarmSectorChartSignature=chartSignature;
       mkc('chIdleSector',{type:'bar',data:{labels:chartGroups.map(g=>g.team),
       datasets:[{label:'Maior nº de dias sem atualização',data:chartGroups.map(g=>g.worst.idle),
