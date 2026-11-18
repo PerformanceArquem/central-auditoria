@@ -71,6 +71,7 @@ test('inventory review remains read-only and release allowlist unchanged',()=>{
  assert.match(runner,/ci-clasp-inventory-triage\.mjs/);
  assert.doesNotMatch(runner,/clasp push|create-deployment|create-version/);
  const recon=readFileSync(new URL('../apps-script/ci-clasp-reconcile-dry-run.mjs',import.meta.url),'utf8');
- assert.match(recon,/approvedInventories = new Set\(\['6:39', '8:48'\]\)/);
- assert.doesNotMatch(recon,/'9:49'/);
+ assert.match(recon,/approvedInventories = new Set\(\['6:39', '8:48', '9:49'\]\)/);
+ assert.match(recon,/'9:49'/);
+ assert.match(recon,/homologacao-pr103-isolada[.]js/);
 });

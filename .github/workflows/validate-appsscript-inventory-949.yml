@@ -1,0 +1,22 @@
+name: Validate audited Apps Script inventory 9-49
+on:
+  pull_request:
+    paths:
+      - 'apps-script/ci-clasp-reconcile-dry-run.mjs'
+      - 'apps-script/ci-clasp-safe-overlays.mjs'
+      - 'apps-script/ci-clasp-dopost-voice-guard-dryrun.mjs'
+      - 'tests/appsscript-audited-inventory-949.test.mjs'
+      - 'tests/appsscript-cc-version-audit.test.mjs'
+      - '.github/workflows/validate-appsscript-inventory-949.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/appsscript-audited-inventory-949.test.mjs tests/appsscript-cc-version-audit.test.mjs

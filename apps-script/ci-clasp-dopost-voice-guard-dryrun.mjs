@@ -16,7 +16,7 @@ const funcs=(src,file)=>{
  return names;
 };
 const files=readdirSync(inputDir).filter(f=>f.endsWith('.js')).sort();
-if(![6,8].includes(files.length)||!files.includes('Código.js'))throw Error('Unexpected input files: '+files.length);
+if(![6,8,9].includes(files.length)||!files.includes('Código.js'))throw Error('Unexpected input files: '+files.length);
 const original=new Map(files.map(f=>[f,readFileSync(join(inputDir,f),'utf8')]));
 const source=original.get('Código.js');
 const listed=funcs(source,'Código.js');
@@ -70,8 +70,10 @@ for(const [file,src] of all)for(const [name,n] of funcs(src,file)){
 }
 // Only audited source/function inventories are accepted. All duplicate, doPost,
 // attachment and manifest checks above remain mandatory.
-if(!new Set(['6:39','8:48']).has(files.length+':'+inventory.size))
+if(!new Set(['6:39','8:48','9:49']).has(files.length+':'+inventory.size))
  throw Error('Unexpected global inventory: files='+files.length+' functions='+inventory.size);
+if(files.length===9&&!files.includes('homologacao-pr103-isolada.js'))
+ throw Error('PR103 file missing from 9:49 voice guard inventory');
 mkdirSync(outputDir,{recursive:true});
 for(const [file,src] of all)writeFileSync(join(outputDir,file),src,{mode:0o600});
 const manifest=readFileSync(join(inputDir,'appsscript.json'));
