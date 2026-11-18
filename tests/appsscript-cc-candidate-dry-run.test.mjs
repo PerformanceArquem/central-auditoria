@@ -37,6 +37,9 @@ test('read-only candidate changes only doPost; preserves file list and manifest'
   const r=spawnSync(process.execPath,[script,input,out,summary,modules],{encoding:'utf8'});
   assert.equal(r.status,0,r.stderr);
   assert.match(r.stdout,/STAGING_OK/);
+  assert.match(r.stdout,/APPSSCRIPT_CC_FINGERPRINT remote=[a-f0-9]{64} candidate=[a-f0-9]{64}/);
+  assert.match(readFileSync(summary,'utf8'),/expected_remote_sha256/);
+  assert.match(readFileSync(summary,'utf8'),/approved_source_sha256/);
   assert.match(r.stdout,/CC_CANDIDATE_SHAPE capabilityIfs=2 exactCapabilityIfs=1 mailCalls=1 mailArguments=1 firstMailArgumentType=ObjectExpression capabilityBeforeMail=true/);
   assert.doesNotMatch(r.stdout,/MAIL_SECRET|arquem\.com\.br|function doPost/);
   assert.equal(readFileSync(join(out,'appsscript.json'),'utf8'),readFileSync(join(input,'appsscript.json'),'utf8'));
@@ -66,4 +69,20 @@ test('staging code does not send or publish',()=>{
  const src=readFileSync(script,'utf8');
  assert.doesNotMatch(src,/clasp push|execSync\(|fetch\(|create-deployment/);
  assert.match(src,/names\.size!==49/);
+});
+
+test('numbered CC candidate release requires exact approved commit and hashes, never promotes /exec',()=>{
+ const run=workflow.split('  publish-cc-candidate:')[1]?.split('  publish:')[0];
+ assert.ok(run,'controlled CC candidate publish job missing');
+ assert.match(workflow,/publish_cc_candidate/);
+ assert.match(run,/environment: apps-script-production/);
+ assert.match(run,/APPROVED_COMMIT.*GITHUB_SHA/);
+ assert.match(run,/EXPECTED_REMOTE/);
+ assert.match(run,/APPROVED_SOURCE/);
+ assert.match(run,/ci-clasp-cc-candidate-dry-run\.mjs/);
+ assert.match(run,/ci-clasp-guard\.mjs" verify/);
+ assert.match(run,/ci-clasp-guard\.mjs" compare/);
+ assert.match(run,/ci-clasp-cc-promotion-guard\.mjs" sha256/);
+ assert.match(run,/clasp create-version/);
+ assert.doesNotMatch(run,/clasp update-deployment|MailApp\.sendEmail/);
 });
