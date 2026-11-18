@@ -85,3 +85,38 @@ test('voice distribution fails closed when approved Support roster is missing',(
  assert.deepEqual(result.packet.byExtension,[]);
  assert.ok(!result.html.includes('Kassio Rodrigues'));
 });
+
+test('TME weighted by measured queue waits, with partial coverage in official report',async()=>{
+ let idx=0;
+ const http=async(input)=>{
+  idx++;
+  const queue=idx===1?{configured:true,calls:4,waitSampleCount:3,waitTotalSeconds:90,tmeSeconds:30,missingWaitSamples:1}:
+    {configured:true,calls:2,waitSampleCount:2,waitTotalSeconds:120,tmeSeconds:60,missingWaitSamples:0};
+  const summary={total:4,inbound:4,outbound:0,answered:3,unanswered:1,talkSeconds:180,tmaSamples:3,tmaMissingSamples:0};
+  const u=new URL(input);
+  return {ok:true,json:async()=>({ok:true,from:u.searchParams.get('start'),to:u.searchParams.get('end'),summary,queue,
+   support:{metrics:summary},byDay:[],byExtension:[]})};
+ };
+ const result=await collectVoiceReport('2026-10-01','2026-11-16','synthetic-service',http);
+ assert.equal(idx,2);
+ assert.equal(result.tmeSeconds,42); // (90+120)/(3+2), never /6
+ assert.equal(result.queueWaitSamples,5);
+ assert.equal(result.queueCalls,6);
+ assert.equal(result.queueWaitMissingSamples,1);
+ assert.equal(result.queueWaitCoverageComplete,false);
+ const output=composeVoiceChat(result,{metrics:{tickets:1},measuredChat:{},quality:[]});
+ assert.ok(output.html.includes('parcial: 5/6 chamadas'));
+ assert.ok(output.text.includes('TME da fila é PARCIAL'));
+});
+test('no queue wait measurements stays unavailable and never becomes zero',async()=>{
+ const http=async(input)=>{
+  const u=new URL(input);
+  return {ok:true,json:async()=>({ok:true,from:u.searchParams.get('start'),to:u.searchParams.get('end'),
+   summary:{total:2,inbound:2,outbound:0,answered:1,unanswered:1},support:{metrics:{total:2,answered:1}},
+   queue:{configured:true,calls:2,waitSampleCount:0,waitTotalSeconds:0,tmeSeconds:null,missingWaitSamples:2},
+   byDay:[],byExtension:[]})};
+ };
+ const result=await collectVoiceReport('2026-11-17','2026-11-17','synthetic-service',http);
+ assert.equal(result.tmeSeconds,null);
+ assert.equal(result.queueWaitSamples,0);
+});
