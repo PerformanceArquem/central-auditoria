@@ -1,6 +1,7 @@
 // Read-only deployment candidate: never writes to Apps Script and never exports source.
 import {readFileSync,writeFileSync,mkdirSync,readdirSync} from 'node:fs';
 import {join} from 'node:path';
+import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 const [remoteDir,outputDir,summary,modulesDir]=process.argv.slice(2);
 if(!remoteDir||!outputDir||!summary||!modulesDir)throw Error('Usage: reconcile-dry-run remote out summary modules');
@@ -39,6 +40,9 @@ for(const [file,source] of sources)for(const fn of functions(source)){
  members.push({file,start:fn.start,end:fn.end,body:source.slice(fn.start,fn.end)});
  declarations.set(fn.name,members);
 }
+// Content hashes provide reviewable, non-source fingerprints without exporting
+// proprietary Apps Script code from the runner or writing it to GitHub.
+const fingerprint=body=>createHash('sha256').update(body).digest('hex').slice(0,16);
 const exactDuplicates=[],conflicting=[];
 const removeByFile=new Map();
 for(const [name,members] of declarations){
@@ -47,10 +51,10 @@ for(const [name,members] of declarations){
  // of the actual remote implementation, not just a signature comparison.
  const identical=members.every(m=>m.body===members[0].body);
  if(!identical){
-  conflicting.push({name,owners:members.map(m=>m.file)});
+  conflicting.push({name,owners:members.map(m=>m.file+' ('+fingerprint(m.body)+')')});
   continue;
  }
- exactDuplicates.push({name,owners:members.map(m=>m.file)});
+ exactDuplicates.push({name,owners:members.map(m=>m.file+' ('+fingerprint(m.body)+')')});
  // Remove byte-identical duplicates only from the TEMPORARY candidate;
  // prefer the canonical source when present and retain one declaration.
  const keeper=members.find(m=>m.file===zenvia)||members[0];
