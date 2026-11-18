@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'apps-script/ci-clasp-cc-live-audit.mjs'
+      - 'apps-script/ci-clasp-inventory-triage.mjs'
       - 'tests/appsscript-cc-version-audit.test.mjs'
       - '.github/workflows/appsscript-clasp-controlled.yml'
       - '.github/workflows/validate-appsscript-cc-audit.yml'
