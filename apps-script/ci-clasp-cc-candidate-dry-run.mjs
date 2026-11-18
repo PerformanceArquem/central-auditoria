@@ -28,17 +28,27 @@ walk(post,n=>{
  if(n.type==='CallExpression'&&n.callee?.type==='MemberExpression'&&
  n.callee.object?.name==='MailApp'&&n.callee.property?.name==='sendEmail')mails.push(n);
 });
-// Structural diagnostics contain only counts and AST types, not remote code.
-const shape={capabilityIfs:actions.length,mailCalls:mails.length,
+// Select an exact action guard rather than counting unrelated appearances of
+// the word "capabilities" in other conditions or nested branches.
+const isActionMember=n=>n?.type==='MemberExpression'&&!n.computed&&
+ n.object?.type==='Identifier'&&['dados','data'].includes(n.object.name)&&
+ n.property?.name==='action';
+const isCapabilityLiteral=n=>n?.type==='Literal'&&n.value==='capabilities';
+const isCapabilityTest=n=>n?.type==='BinaryExpression'&&['===','=='].includes(n.operator)&&
+ ((isActionMember(n.left)&&isCapabilityLiteral(n.right))||
+  (isActionMember(n.right)&&isCapabilityLiteral(n.left)));
+const selected=actions.filter(n=>isCapabilityTest(n.test)&&
+ mails.length===1&&n.end<mails[0].start);
+const shape={capabilityIfs:actions.length,exactCapabilityIfs:selected.length,mailCalls:mails.length,
  mailArguments:mails.length===1?mails[0].arguments.length:-1,
  firstMailArgumentType:mails.length===1?(mails[0].arguments[0]?.type||'none'):'unknown',
- capabilityBeforeMail:actions.length===1&&mails.length===1?actions[0].end<mails[0].start:false};
+ capabilityBeforeMail:selected.length===1&&mails.length===1?selected[0].end<mails[0].start:false};
 console.log('CC_CANDIDATE_SHAPE '+Object.entries(shape).map(([k,v])=>k+'='+v).join(' '));
-if(actions.length!==1||mails.length!==1||mails[0].arguments.length!==1||
- mails[0].arguments[0].type!=='ObjectExpression'||actions[0].end>=mails[0].start)
+if(selected.length!==1||mails.length!==1||mails[0].arguments.length!==1||
+ mails[0].arguments[0].type!=='ObjectExpression')
  throw Error('Formato de envio ou capabilities não revisado');
-const caps=[];
-walk(actions[0].consequent,n=>{
+const capabilityGuard=selected[0],caps=[];
+walk(capabilityGuard.consequent,n=>{
  if(n.type==='CallExpression'&&n.callee?.name==='arquemCapacidadesAnexos_')caps.push(n);
 });
 if(caps.length!==1)throw Error('Resposta capabilities não reconhecida');
@@ -53,7 +63,7 @@ const ccCode=[
 ].join('\n');
 const edits=[
  {at:caps[0].start,end:caps[0].end,text:'Object.assign({},'+src.slice(caps[0].start,caps[0].end)+',{ccSupported:true})'},
- {at:actions[0].end,end:actions[0].end,text:'\n'+ccCode+'\n'},
+ {at:capabilityGuard.end,end:capabilityGuard.end,text:'\n'+ccCode+'\n'},
  {at:arg.end-1,end:arg.end-1,text:", ...(cc.length?{cc:cc.join(', ')}:{})"}
 ];
 let modified=src;
