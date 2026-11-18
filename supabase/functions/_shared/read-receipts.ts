@@ -23,17 +23,7 @@ export function openSignalContent(token: string) {
   const url = 'https://dvaaicqajlppuigeyejr.supabase.co/functions/v1/audit-open-signal?t='+encodeURIComponent(token);
   // Transparent one-pixel GIF. No IP, user agent or precise location is intentionally stored.
   return '<img src="'+url+'" width="1" height="1" alt="" aria-hidden="true" style="width:1px;height:1px;opacity:0" />'+
-    '<p style="font-size:11px;color:#52657a">Aviso de transparência: este e-mail pode registrar o carregamento de uma imagem como abertura detectada. Isso não comprova leitura. A confirmação de leitura é voluntária.</p>';
-}
-const esc = (x: unknown) => String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-export function receiptContent(url: string) {
-  return {
-    text:'\n\nCONFIRMAÇÃO DE LEITURA\nApós ler o relatório, confirme sua leitura: '+url+'\nA confirmação só é registrada após clicar em “Confirmar minha leitura” na página.\n',
-    html:'<div data-arquem-read-receipt style="margin:24px 0;padding:18px;background:#f2f6fc;border-left:4px solid #173b65">'+
-      '<p style="margin:0 0 12px;color:#173b65;font-weight:bold">Confirmação de leitura</p>'+
-      '<a href="'+esc(url)+'" style="display:inline-block;background:#173b65;color:#fff;text-decoration:none;padding:12px 18px;border-radius:6px">Confirmar leitura do relatório</a>'+
-      '<p style="margin:12px 0 0;font-size:12px;color:#52657a">A confirmação só é registrada após clicar em “Confirmar minha leitura” na página.</p></div>'
-  };
+    '<p style="font-size:11px;color:#52657a">Aviso de transparência: este e-mail pode registrar o carregamento de uma imagem como abertura detectada. Isso não comprova leitura.</p>';
 }
 export function appendReceiptHtml(html: string, section: string) {
   // Use the same insertion point as report sections; retain the corporate footer.
@@ -53,13 +43,15 @@ export async function prepareReadReceipt(db: Db, secret: string, ctx: ReceiptCon
       recipient_email:email,subject,period_from:ctx.from||null,period_to:ctx.to||null,
       expires_at:new Date(now.getTime()+90*86400000).toISOString()})
   });
-  // Retries keep the same link, expiry and first confirmation. Never reset an acknowledgement.
+  // Preserve tracking tokens, expiry and any confirmation recorded for an earlier send.
   const row = rows?.[0] || (await db('audit_email_read_receipts?dispatch_key=eq.'+encodeURIComponent(ctx.dispatchKey)+'&select=token_hash,open_token_hash,recipient_email,expires_at&limit=1'))?.[0];
   if (!row || row.token_hash!==tokenHash || row.open_token_hash!==openTokenHash || row.recipient_email!==email || Date.parse(row.expires_at)<=now.getTime())
     throw new Error('Não foi possível preparar a confirmação de leitura deste envio.');
-  const url = 'https://central-auditoria-iota.vercel.app/confirmar-leitura.html#token='+token;
-  const ack = receiptContent(url);
-  return {dispatchKey:ctx.dispatchKey,...ack,text:ack.text+'\nAviso: imagens deste e-mail podem gerar registro automático de abertura detectada, sem comprovar leitura.\n',html:ack.html+openSignalContent(openToken)};
+  return {
+    dispatchKey:ctx.dispatchKey,
+    text:'\n\nAviso: imagens deste e-mail podem gerar registro automático de abertura detectada, sem comprovar leitura.\n',
+    html:openSignalContent(openToken)
+  };
 }
 export async function markReceiptDelivered(db: Db, dispatchKey: string) {
   await db('audit_email_read_receipts?dispatch_key=eq.'+encodeURIComponent(dispatchKey)+'&delivered_at=is.null', {
