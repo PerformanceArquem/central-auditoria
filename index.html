@@ -1987,7 +1987,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                             <table><thead><tr><th>Chamado</th><th>Destinatário</th><th>Cobranças</th><th>Último envio</th><th>Próxima revisão</th><th>Situação atual</th><th>Prévia</th></tr></thead><tbody id="alarmReviewRows"></tbody></table>
                           </div>
                           <div id="alarmEmailHistorySummary" class="subtle"></div>
-                          <div class="tw"><table><thead><tr><th>Data e hora (Brasília)</th><th>Destinatário</th><th>Situação</th><th>Chamados incluídos</th><th>Quantidade</th><th>Reiteração</th><th>Protocolo</th></tr></thead><tbody id="alarmEmailHistoryRows"><tr><td colspan="7">Carregando...</td></tr></tbody></table></div>
+                          <div class="tw"><table><thead><tr><th>Data e hora (Brasília)</th><th>Destinatário</th><th>Em cópia (CC)</th><th>Situação</th><th>Chamados incluídos</th><th>Quantidade</th><th>Reiteração</th><th>Protocolo</th></tr></thead><tbody id="alarmEmailHistoryRows"><tr><td colspan="8">Carregando...</td></tr></tbody></table></div>
                         </div>
                     </div>
                 </div>
@@ -3302,10 +3302,10 @@ function alarmEmailHistoryRender(){
   const links=ids.map(id=>'<a target="_blank" rel="noopener noreferrer" href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(String(id))+'">#'+esc(id)+'</a>').join(' · ');
   const sentDate=r.sent_at||r.created_at;
   const state=r.status==='sent'?'ok':r.status==='uncertain'?'alert-warn':'alert-warn';
-  return '<tr><td>'+esc(alarmEmailTime(sentDate))+'</td><td>'+esc(r.recipient)+'</td>'+
+  return '<tr><td>'+esc(alarmEmailTime(sentDate))+'</td><td>'+esc(r.recipient)+'</td><td>'+esc((r.cc_recipients||[]).join(', ')||'—')+'</td>'+
     '<td><span class="pill '+state+'">'+esc(alarmEmailHistoryStatus(r.status))+'</span></td>'+
     '<td>'+links+'</td><td>'+ids.length+'</td><td>'+esc(ids.map(id=>'#'+id+': '+alarmReminderStatusForTicket(id).label).join(' · '))+'</td><td title="'+esc(r.id||'')+'">'+esc(String(r.request_id||r.id||'').slice(0,8))+'</td></tr>';
- }).join('')||'<tr><td colspan="7">Nenhum registro corresponde ao filtro.</td></tr>';
+ }).join('')||'<tr><td colspan="8">Nenhum registro corresponde ao filtro.</td></tr>';
 }
 function alarmEmailHistoryExport(){
  const filter=$('alarmEmailHistoryFilter')?.value||'all';
@@ -3318,8 +3318,8 @@ function alarmEmailHistoryExport(){
   if(/^[\s]*[=+\-@]/.test(v))v="'"+v;
   return '"'+v.replace(/"/g,'""')+'"';
  };
- const cols=[['Data Brasília','Destinatário','Situação','Chamados','Quantidade','Assunto','Protocolo','Registrado em UTC']];
- const lines=rows.map(r=>[alarmEmailTime(r.sent_at||r.created_at),r.recipient,alarmEmailHistoryStatus(r.status),
+ const cols=[['Data Brasília','Destinatário','Cópias (CC)','Situação','Chamados','Quantidade','Assunto','Protocolo','Registrado em UTC']];
+ const lines=rows.map(r=>[alarmEmailTime(r.sent_at||r.created_at),r.recipient,(r.cc_recipients||[]).join(' | '),alarmEmailHistoryStatus(r.status),
   (r.ticket_ids||[]).map(id=>'#'+id).join(' | '),(r.ticket_ids||[]).length,r.subject,r.request_id||'',r.created_at]);
  const csv='\uFEFF'+cols.concat(lines).map(row=>row.map(csvCell).join(';')).join('\r\n');
  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
