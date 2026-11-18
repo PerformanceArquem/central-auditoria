@@ -17,7 +17,7 @@ export async function processChargeInternalNote(db:Db,token:string){
  const marker='CENTRAL-AUDITORIA-COBRANCA:'+requestId+':'+ticketId;
  const url=new URL('https://api.movidesk.com/public/v1/tickets');
  url.searchParams.set('token',token);url.searchParams.set('id',ticketId);
- url.searchParams.set('$select','id,actions');url.searchParams.set('$expand','actions');
+ url.searchParams.set('$select','id');url.searchParams.set('$expand','actions');
  let patchAttempted=false;
  try{
   const res=await fetch(url,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)});
