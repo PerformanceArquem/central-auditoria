@@ -1,0 +1,22 @@
+name: Validate pointed-hours source
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/movidesk-incremental-sync/index.ts'
+      - 'api/audit-report-source.js'
+      - 'supabase/functions/audit-ai-reports/index.ts'
+      - 'tests/pointed-hours-source.test.mjs'
+      - '.github/workflows/validate-pointed-hours.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check api/audit-report-source.js
+      - run: node --test tests/pointed-hours-source.test.mjs
