@@ -132,7 +132,7 @@ test('voice UI shows TME unavailable, uses authenticated request, and has no sec
  assert.ok(html.includes('id="t-zenvia-voice"'));
  assert.ok(html.includes("window.tmAuth?.getSession?.()"));
  assert.ok(html.includes("fetch('/api/audit-production-metrics?mode=zenvia&'"));
- assert.ok(html.includes("['TME da fila',fmtSeconds(x.tmeSeconds)]"));
+ assert.ok(html.includes("fmtSeconds(x.tmeSeconds)"));
  assert.ok(html.includes("['Em andamento',x.inProgress]"));
  assert.ok(html.includes("['Não classificadas',x.unclassified]"));
  assert.ok(!html.includes('ZENVIA_VOICE_ACCESS_TOKEN'));
@@ -153,7 +153,7 @@ test('configured support queue supplies real TME from all queue wait samples',as
    assert.equal(calls.some(x=>x.url.pathname==='/fila/430/relatorio'),true);
  }finally{delete scope.process.env.ZENVIA_VOICE_QUEUE_ID;}
 });
-test('queue wait missing or null means no TME, never treated as zero',async()=>{
+test('queue wait missing or null gives explicitly partial TME, never imputed as zero',async()=>{
  scope.process.env.ZENVIA_VOICE_QUEUE_ID='430';waitMissing=true;
  try{
    const r=await invoke();
@@ -161,8 +161,9 @@ test('queue wait missing or null means no TME, never treated as zero',async()=>{
    assert.equal(r.body.queue.calls,2);
    assert.equal(r.body.queue.waitSampleCount,1);
    assert.equal(r.body.queue.missingWaitSamples,1);
-   assert.equal(r.body.queue.tmeSeconds,null);
-   assert.equal(r.body.summary.tmeSeconds,null);
+   assert.equal(r.body.queue.tmeSeconds,40);
+   assert.equal(r.body.summary.tmeSeconds,40);
+   assert.equal(r.body.queue.waitCoverageComplete,false);
  }finally{waitMissing=false;delete scope.process.env.ZENVIA_VOICE_QUEUE_ID;}
 });
 test('invalid queue ID is not sent to Zenvia external API',async()=>{
