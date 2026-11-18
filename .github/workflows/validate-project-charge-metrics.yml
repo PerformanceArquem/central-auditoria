@@ -1,0 +1,23 @@
+name: Validate project metrics in charge emails
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/audit-email-dispatch/project-charge-metrics.ts'
+      - 'supabase/functions/audit-email-dispatch/ticket-charge.ts'
+      - 'supabase/functions/audit-email-dispatch/ticket-charge-lookup.ts'
+      - 'supabase/functions/audit-email-dispatch/index.ts'
+      - 'index.html'
+      - 'tests/project-charge-metrics.test.ts'
+      - '.github/workflows/validate-project-charge-metrics.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  metrics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno test tests/project-charge-metrics.test.ts tests/ticket-charge-lookup.test.ts tests/ticket-charge.test.ts
