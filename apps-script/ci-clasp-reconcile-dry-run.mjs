@@ -31,9 +31,13 @@ const newNames=[...afterNames].filter(name=>!beforeNames.has(name));
 if(lostNames.length||newNames.length)throw Error('Contrato de funções alterado: removidas='+lostNames.length+' adicionadas='+newNames.length);
 const critical=['doPost','arquemCreateReportAttachments_','arquemCapacidadesAnexos_','arquemHomologarKeilaSemEnvio','arquemValidarPublicacaoSemEnvio'];
 // A zero-duplicate result alone is NOT proof of correctness.
-// Remote inventory verified in protected audit run 43906645766: six JS files,
-// 39 unique global functions. Keep exact inventory, critical names and duplicate checks.
-if(original.length!==6 || afterNames.size!==39)
+// Reviewed audit inventories: run 43906645766 (6 JS files, 39 unique globals)
+// and run 43925902801 (8 JS files, 48 unique globals).
+// Accept only these exact pairs; preserve critical-name and duplicate checks.
+// Any other inventory must be investigated before changing this allowlist.
+const approvedInventories = new Set(['6:39', '8:48']);
+const inventoryKey = original.length+':'+afterNames.size;
+if(!approvedInventories.has(inventoryKey))
  throw Error('Unexpected inventory: files='+original.length+' functions='+afterNames.size);
 const missingCritical=critical.filter(name=>!afterNames.has(name));
 if(missingCritical.length)throw Error('Funções críticas não encontradas: '+missingCritical.join(', '));
