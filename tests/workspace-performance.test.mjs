@@ -5,7 +5,7 @@ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const slice=(start,end)=>{const a=html.indexOf(start),b=html.indexOf(end,a);assert.ok(a>=0&&b>a);return html.slice(a,b)};
 const renderSource=slice('function render(){','function renderEntries(');
 const names=['renderEntries','renderDiag','renderLiveDaily','generateManagerReport','renderProj','renderBudget','renderForecastAudit','renderBot','renderOcc','renderMgmt','renderVip','renderCharts','renderComparisons','renderPivot','renderAlerts','enhanceTables'];
-for(const [tab,expected] of Object.entries({mgmt:['renderMgmt'],charts:['renderCharts','renderComparisons'],entries:['renderEntries'],proj:['renderProj','renderBudget','renderForecastAudit','renderBot'],live:['renderLiveDaily','generateManagerReport'],'email-admin':[]})){
+for(const [tab,expected] of Object.entries({mgmt:['renderMgmt'],charts:['renderCharts','renderComparisons'],entries:['renderEntries'],proj:['renderProj','renderBudget','renderForecastAudit'],cfg:['renderBot'],live:['renderLiveDaily','generateManagerReport'],'email-admin':[]})){
   test('opening '+tab+' does not render closed modules and retains global counts',()=>{
     const calls=[],nodes={};
     const render=new Function('ACT','rows','R','mk','$','H','window',...names,renderSource+'return render;')(

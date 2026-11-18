@@ -2978,7 +2978,8 @@ function render(){
   if(ACT==='entries')renderEntries(kd);
   if(ACT==='diag')renderDiag();
   if(ACT==='live'){renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();}
-  if(ACT==='proj'){renderProj(c);renderBudget(c);renderForecastAudit();renderBot(c);}
+  if(ACT==='proj'){renderProj(c);renderBudget(c);renderForecastAudit();}
+  if(ACT==='cfg')renderBot(c);
   if(ACT==='occ')renderOcc(c);
   if(ACT==='mgmt')renderMgmt(c);
   if(ACT==='vip')renderVip(c);
