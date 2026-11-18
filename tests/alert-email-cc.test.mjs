@@ -37,3 +37,19 @@ test('read-only inspection of TypeScript dispatcher preserves syntax',()=>{
  const cleaned=stripTypeScriptTypes(api);
  assert.doesNotThrow(()=>new Function(cleaned.replace(/\bimport\s+[^;]+;/g,'')));
 });
+
+test('sector manager button uses active registered manager metadata without guessing addresses',()=>{
+ assert.match(html,/id="alarmEmailManagerCc"/);
+ assert.match(html,/function alarmSuggestManagerCc\(/);
+ assert.match(html,/select\('name,email,scope,sector,sectors,active'\)/);
+ assert.match(html,/managementByEmail/);
+ assert.match(html,/managementByEmail\.set\(email,known\)/);
+ assert.match(html,/filter\(x=>x\.email!==alarmRecipientEmail\(\)\)/);
+ assert.match(html,/\$('alarmEmailCcDetails'\)\.open=true/);
+ assert.match(html,/Melhorar cobrança com IA/);
+});
+test('standard subject explicitly says verification of tickets without movement or treatment',()=>{
+ assert.match(mail,/Verificação de chamado sem movimentação\/tratamento/);
+ assert.match(mail,/Verificação de chamados sem movimentação\/tratamento/);
+ assert.match(mail,/responsável/i);
+});
