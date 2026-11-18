@@ -1950,7 +1950,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
  <small id="alarmEmailWorkHint" class="subtle">Não é gerado apontamento de tempo apenas por enviar um e-mail.</small>
 </details>
 <button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
-                            <button type="button" class="s" id="alarmEmailValidate" onclick="alarmEmailValidate()" disabled>✓ Validado — registrar início</button>
+                            <button type="button" class="s" id="alarmEmailValidate" onclick="alarmEmailValidate()" disabled>Validar e registrar início</button>
                             <span id="alarmEmailValidatedAt" class="subtle" aria-live="polite">Validação pendente</span>
                             <button type="button" class="b" id="alarmEmailSend" onclick="alarmEmailSend()" disabled title="Disponível somente depois de visualizar e conferir a prévia">Confirmar e enviar</button><style>#alarmEmailSend:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}</style>
                           </div>
@@ -3522,7 +3522,7 @@ function alarmUpdateSelectedCount(){
 }
 function alarmEmailInvalidate(){
  alarmEmailApproved='';alarmEmailRequestId='';alarmEmailValidated=false;alarmEmailMissingIds=[];
- if($('alarmEmailValidate')){$('alarmEmailValidate').disabled=true;$('alarmEmailValidate').textContent='✓ Validado — registrar início'}
+ if($('alarmEmailValidate')){$('alarmEmailValidate').disabled=true;$('alarmEmailValidate').textContent='Validar e registrar início'}
  if($('alarmEmailValidatedAt'))$('alarmEmailValidatedAt').textContent='Validação pendente';
  $('alarmEmailRemoveMissing')?.classList.add('hide');
  const button=$('alarmEmailSend');if(button)button.disabled=true;
@@ -3739,7 +3739,7 @@ async function alarmEmailPreview(){
   $('alarmEmailPreviewRecipients').textContent='Para: '+data.recipient+(data.cc?.length?' · CC: '+data.cc.join(', '):'')+
     (data.registerInternalNote?' · Ação interna no Movidesk após aceite do e-mail':' · Sem ação interna no Movidesk')+
     (data.timeLog?' · Horas reais: '+data.timeLog.date+' '+data.timeLog.start+'–'+data.timeLog.end:'');
-  if(data.cc?.length&&data.ccSupported!==true)throw Error('O serviço de e-mail ainda não confirmou suporte a cópias (CC). Nenhum envio será liberado antes dessa validação.');
+  const ccBlocked=!!data.cc?.length&&data.ccSupported!==true;
   $('alarmEmailPreviewText').textContent=data.text||'';
   $('alarmEmailPreviewFrame').srcdoc=data.html;
   const diagnosis=$('alarmEmailDiagnosisList'),diagBox=$('alarmEmailManagerDiagnosis');
@@ -3760,14 +3760,16 @@ async function alarmEmailPreview(){
   }
 
   $('alarmEmailPreviewArea').classList.remove('hide');
-  alarmEmailApproved=alarmSelectionSignature();
-  alarmEmailRequestId=crypto.randomUUID();
+  alarmEmailApproved=ccBlocked?'':alarmSelectionSignature();
+  alarmEmailRequestId=ccBlocked?'':crypto.randomUUID();
   alarmEmailValidated=false;
-  $('alarmEmailValidate').disabled=false;
-  $('alarmEmailValidate').textContent='✓ Validado — registrar início';
-  $('alarmEmailValidatedAt').textContent='Validação pendente';
+  $('alarmEmailValidate').disabled=ccBlocked;
+  $('alarmEmailValidate').textContent='Validar e registrar início';
+  $('alarmEmailValidatedAt').textContent=ccBlocked?'Bloqueado: suporte a CC não confirmado':'Validação pendente';
   button.disabled=true;
-  $('alarmEmailStatus').textContent='Prévia pronta. Confira destinatário, chamados, texto e orientações antes de confirmar o envio.';
+  $('alarmEmailStatus').textContent=ccBlocked
+    ?'Prévia disponível para conferência, mas o envio com CC está bloqueado: o serviço Gmail não confirmou suporte a cópias. Verifique suporte a CC ou desmarque as cópias e gere outra prévia.'
+    :'Prévia pronta. Confira destinatário, chamados, texto e orientações antes de confirmar o envio.';
  }catch(e){
   alarmEmailApproved='';
   alarmEmailMissingIds=Array.isArray(e.missingIds)?e.missingIds:[];
