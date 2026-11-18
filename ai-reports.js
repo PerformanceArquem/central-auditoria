@@ -1,7 +1,7 @@
 (()=>{'use strict';
  const $=id=>document.getElementById(id);
  const fmt=n=>Number(n||0).toLocaleString('pt-BR',{maximumFractionDigits:2});
- let last=null,processing=false;
+ let last=null,lastNarrative='',processing=false;
  const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  const addDays=(s,n)=>{const d=new Date(s+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)};
  function post(role,message){
@@ -38,6 +38,20 @@
   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a');a.href=url;a.download='relatorio-personalizado-'+last.summary.periodFrom+'_'+last.summary.periodTo+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
  }
+ const htmlEsc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ function printReport(){
+  if(!last)return;
+  const w=window.open('','_blank');
+  if(!w){$('aiReportStatus').textContent='Permita pop-ups para imprimir o relatório.';return}
+  const sections=cols.map(([title,key])=>{
+   const rows=(last[key]||[]).map(x=>'<tr><td>'+htmlEsc(x.name)+'</td><td>'+htmlEsc(fmt(x.hours))+'</td><td>'+htmlEsc(x.entries)+'</td><td>'+htmlEsc(x.tickets)+'</td></tr>').join('');
+   return '<h2>'+htmlEsc(title)+'</h2><table><thead><tr><th>Nome</th><th>Horas</th><th>Apontamentos</th><th>Chamados</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  }).join('');
+  const s=last.summary;
+  w.document.open();
+  w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório personalizado · Central de Auditoria</title><style>body{font:14px/1.55 Arial,sans-serif;color:#20364f;margin:32px}h1{color:#173c64}h2{margin-top:25px;font-size:17px}table{border-collapse:collapse;width:100%;margin:10px 0 18px}th,td{border:1px solid #b8c8d8;padding:7px;text-align:left}pre{white-space:pre-wrap;font:inherit;background:#f1f5fa;padding:15px}small{color:#536276}@media print{body{margin:16mm}}</style></head><body><h1>Central de Auditoria · Relatório personalizado</h1><p><strong>Período:</strong> '+htmlEsc(s.periodFrom)+' a '+htmlEsc(s.periodTo)+'</p><p><strong>Indicadores:</strong> '+htmlEsc(fmt(s.totalHours))+' horas · '+htmlEsc(s.tickets)+' chamados · '+htmlEsc(s.records)+' apontamentos · '+htmlEsc(fmt(s.hoursOutsideBusinessDays))+' h fora de dias úteis</p><h2>Interpretação</h2><pre>'+htmlEsc(lastNarrative)+'</pre>'+sections+'<small>Fonte: apontamentos sincronizados do Supabase. Em feriados e finais de semana, o registro de horas não representa automaticamente jornada útil. Gerado em '+htmlEsc(s.generatedAt)+'.</small></body></html>');
+  w.document.close();w.focus();w.print();
+ }
  async function submit(e){
   e?.preventDefault();if(processing)return;
   const input=$('aiReportPrompt'),prompt=input.value.trim();
@@ -53,7 +67,7 @@
    const {data,error}=await client.functions.invoke('audit-ai-reports',{body:{prompt,from,to,sector:$('aiReportSector').value.trim(),collaborator:$('aiReportCollaborator').value.trim(),client:$('aiReportClient').value.trim(),externalAiConsent:$('aiReportConsent').checked}});
    if(error){let detail=error.message||'Falha na consulta';try{const body=await error.context?.json();if(body?.error)detail=body.error}catch{}throw Error(detail)}
    if(!data?.ok)throw Error(data?.error||'Não foi possível gerar o relatório');
-   last=data;renderStats(data);post('assistant',data.answer+(data.aiUsed?'\n\n✓ Análise Gemini com indicadores do sistema.':'\n\nℹ Resumo calculado sem IA externa. '+(data.reason||'')));
+   last=data;lastNarrative=data.answer;renderStats(data);post('assistant',data.answer+(data.aiUsed?'\n\n✓ Análise Gemini com indicadores do sistema.':'\n\nℹ Resumo calculado sem IA externa. '+(data.reason||'')));
    $('aiReportStatus').textContent='Relatório atualizado a partir dos dados sincronizados. '+(data.aiUsed?'Interpretação feita pelo Gemini.':'Interpretação automática externa não utilizada.');
   }catch(err){post('assistant','Não foi possível gerar este relatório: '+String(err?.message||err));$('aiReportStatus').textContent='Falha na consulta. Os relatórios anteriores foram preservados.'}
   finally{processing=false;$('aiReportSend').disabled=false}
@@ -63,7 +77,7 @@
   const end=today();$('aiReportTo').value=end;$('aiReportFrom').value=addDays(end,-6);
   $('aiReportForm').addEventListener('submit',submit);
   $('aiReportExport').addEventListener('click',exportCsv);
-  $('aiReportPrint').addEventListener('click',()=>window.print());
+  $('aiReportPrint').addEventListener('click',printReport);
   $('aiReportOpen').addEventListener('click',()=>{$('aiReportPanel').scrollIntoView({block:'start',behavior:'smooth'});$('aiReportPrompt').focus()});
   document.querySelectorAll('[data-ai-report-example]').forEach(b=>b.addEventListener('click',()=>{$('aiReportPrompt').value=b.dataset.aiReportExample||'';$('aiReportPrompt').focus()}));
   post('assistant','Olá! Peça um relatório, por exemplo: “Quais colaboradores apontaram mais horas no período?” ou “Compare horas por setor e destaque os apontamentos em feriados.” Escolha as datas e os filtros antes de enviar.');
