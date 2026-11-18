@@ -2283,6 +2283,9 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  if(message.length>8500)return json({ok:false,error:'O texto é muito longo.'},400);
  const requestId=String(payload.requestId||'');
  if(action==='ticket_charge_validate'){
+  // Never persist an approval for CC while the published provider cannot deliver it.
+  if(cc.length&&!await ccProviderSupported())
+   return json({ok:false,error:'O serviço de e-mail ainda não confirmou suporte a cópias (CC). Validação bloqueada sem enviar e-mail.'},409);
   if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestId))return json({ok:false,error:'Identificador de validação inválido.'},400);
   const user=await ticketChargeAdminUser(req);
   const existing=await db('audit_ticket_charge_validations?select=request_id&request_id=eq.'+encodeURIComponent(requestId)+'&limit=1') as R[];
