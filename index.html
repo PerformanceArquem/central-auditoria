@@ -1585,9 +1585,9 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
     </div>
     <div id="emailHistoryKpis" class="kpis" style="margin:12px 0"></div>
     <div class="tw" style="max-height:400px;overflow:auto"><table><thead><tr><th>Agendado/registrado</th><th>Destinatário</th><th>Relatório</th><th>Período</th><th>Situação</th><th>Enviado em</th><th>Detalhes</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
-    <h3 style="margin-top:22px">Confirmações de leitura</h3>
-    <p class="subtle">Confirmação explícita pelo link individual do relatório. Abrir o e-mail ou a página não confirma a leitura. Use Atualizar para consultar novos registros.</p>
-    <div class="tw" style="max-height:400px;overflow:auto"><table><thead><tr><th>Destinatário</th><th>Relatório</th><th>Período</th><th>Enviado em</th><th>Leitura</th><th>Confirmado em</th></tr></thead><tbody id="emailReadReceipts"><tr><td colspan="6">Abra o módulo para carregar.</td></tr></tbody></table></div>
+    <h3 style="margin-top:22px">Aberturas detectadas e confirmações de leitura</h3>
+    <p class="subtle">O carregamento de imagem pode registrar uma abertura detectada, mas não comprova leitura (proxies e scanners podem gerar registros). A confirmação de leitura exige clique voluntário. Use Atualizar para consultar novos registros.</p>
+    <div class="tw" style="max-height:400px;overflow:auto"><table><thead><tr><th>Destinatário</th><th>Relatório</th><th>Período</th><th>Enviado em</th><th>Abertura detectada</th><th>Leitura</th><th>Confirmado em</th></tr></thead><tbody id="emailReadReceipts"><tr><td colspan="7">Abra o módulo para carregar.</td></tr></tbody></table></div>
     <p class="subtle" style="margin-top:12px">O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
   </div>
 </div>
@@ -5365,14 +5365,14 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const pending=(!filter||filter==='pending')?withoutRecord.map(x=>'<tr><td>—</td><td>'+esc(x.name)+'</td><td>'+esc(x.scope==='management'?'Gestão':'Setorial')+'</td><td>—</td><td>Pendente de registro</td><td>—</td><td>Nenhum envio encontrado entre os 150 registros consultados; verificar agendamento e período.</td></tr>'):[];
       $('emailDispatches').innerHTML=existing.concat(pending).join('')||'<tr><td colspan="7">Nenhum registro corresponde ao filtro.</td></tr>';
       try{
-        const receipts=await client.from('audit_email_read_receipts').select('dispatch_key,recipient_name,recipient_email,subject,period_from,period_to,created_at,expires_at,delivered_at,confirmed_at').neq('source','test').order('created_at',{ascending:false}).limit(150);
+        const receipts=await client.from('audit_email_read_receipts').select('dispatch_key,recipient_name,recipient_email,subject,period_from,period_to,created_at,expires_at,delivered_at,first_opened_at,confirmed_at').neq('source','test').order('created_at',{ascending:false}).limit(150);
         if(receipts.error)throw receipts.error;
         $('emailReadReceipts').innerHTML=(receipts.data||[]).map(x=>{
-          const status=x.confirmed_at?'Leitura confirmada':!x.delivered_at?'Envio não confirmado':Date.parse(x.expires_at)<=Date.now()?'Link expirado':'Aguardando confirmação';
+          const status=x.confirmed_at?'Leitura confirmada':!x.delivered_at?'Envio não confirmado':Date.parse(x.expires_at)<=Date.now()?'Link expirado':x.first_opened_at?'Abertura detectada, leitura não confirmada':'Aguardando confirmação';
           const period=x.period_from&&x.period_to?displayPeriodDate(x.period_from)+' a '+displayPeriodDate(x.period_to):'Conforme relatório';
-          return '<tr><td>'+esc(x.recipient_name)+'<small style="display:block">'+esc(x.recipient_email)+'</small></td><td>'+esc(x.subject)+'</td><td>'+esc(period)+'</td><td>'+esc(time(x.delivered_at))+'</td><td>'+esc(status)+'</td><td>'+esc(time(x.confirmed_at))+'</td></tr>';
-        }).join('')||'<tr><td colspan="6">Nenhuma confirmação solicitada. O acompanhamento começa nos novos envios; relatórios antigos não serão reenviados.</td></tr>';
-      }catch(e){$('emailReadReceipts').innerHTML='<tr><td colspan="6">Não foi possível consultar as confirmações de leitura. Atualize novamente em instantes.</td></tr>';console.warn('Consulta de confirmações indisponível');}
+          return '<tr><td>'+esc(x.recipient_name)+'<small style="display:block">'+esc(x.recipient_email)+'</small></td><td>'+esc(x.subject)+'</td><td>'+esc(period)+'</td><td>'+esc(time(x.delivered_at))+'</td><td>'+esc(time(x.first_opened_at))+'</td><td>'+esc(status)+'</td><td>'+esc(time(x.confirmed_at))+'</td></tr>';
+        }).join('')||'<tr><td colspan="7">Nenhuma confirmação solicitada. O acompanhamento começa nos novos envios; relatórios antigos não serão reenviados.</td></tr>';
+      }catch(e){$('emailReadReceipts').innerHTML='<tr><td colspan="7">Não foi possível consultar as confirmações de leitura. Atualize novamente em instantes.</td></tr>';console.warn('Consulta de confirmações indisponível');}
       loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
       try{await loadMovideskDirectory(true)}catch(err){console.warn('Diretório do Movidesk indisponível:',err)}
     }catch(e){say('Não foi possível carregar: '+e.message)}finally{loading=false}

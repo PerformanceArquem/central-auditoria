@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {stripTypeScriptTypes} from 'node:module';
 const moduleUrl=code=>'data:text/javascript;base64,'+Buffer.from(code).toString('base64');
 const receiptsUrl=moduleUrl(stripTypeScriptTypes(readFileSync(new URL('../supabase/functions/_shared/read-receipts.ts',import.meta.url),'utf8')));
-const {receiptToken,hashReceiptToken,prepareReadReceipt,receiptContent}=await import(receiptsUrl);
+const {receiptToken,hashReceiptToken,prepareReadReceipt,receiptContent,openSignalToken,openSignalContent}=await import(receiptsUrl);
 const handler=stripTypeScriptTypes(readFileSync(new URL('../supabase/functions/audit-read-receipt/handler.ts',import.meta.url),'utf8')).replace("'../_shared/read-receipts.ts'",JSON.stringify(receiptsUrl));
 const {handleReadReceipt}=await import(moduleUrl(handler));
 const now=new Date('2026-11-18T15:00:00Z');
@@ -64,4 +64,28 @@ test('scheduled email batches cannot dispatch before 09h in Sao Paulo',()=>{
   const source=readFileSync(new URL('../supabase/functions/audit-email-dispatch/index.ts',import.meta.url),'utf8');
   assert.match(source,/if\(batchGroup && localHour < 9\)/);
   assert.doesNotMatch(source,/localHour < \(batchGroup==='management'\?8:9\)/);
+});
+
+test('image-load token is independent of explicit confirmation and the message discloses tracking',async()=>{
+  const secret='demo-key', key='test:dispatch-1';
+  const confirm=await receiptToken(secret,key), open=await openSignalToken(secret,key);
+  assert.match(open,/^[a-f0-9]{64}$/);
+  assert.notEqual(open,confirm);
+  assert.notEqual(open,await openSignalToken(secret,'test:dispatch-2'));
+  const html=openSignalContent(open);
+  assert.match(html,/audit-open-signal\?t=/);
+  assert.match(html,/não comprova leitura/);
+  assert.match(html,/imagem/);
+});
+test('open signal has no IP, location, user-agent or device fingerprint storage and does not confirm reading',()=>{
+  const edge=readFileSync(new URL('../supabase/functions/audit-open-signal/index.ts',import.meta.url),'utf8');
+  const migration=readFileSync(new URL('../ops/install-email-open-signal.sql',import.meta.url),'utf8');
+  const source=readFileSync(new URL('../supabase/functions/_shared/read-receipts.ts',import.meta.url),'utf8');
+  assert.match(edge,/first_opened_at=is.null/);
+  assert.match(edge,/delivered_at=not.is.null/);
+  assert.match(edge,/method:'PATCH'/);
+  assert.doesNotMatch(edge,/confirmed_at/);
+  assert.doesNotMatch(edge,/headers\.get\(['"]user-agent|x-forwarded-for/i);
+  assert.match(migration,/first_opened_at timestamptz/);
+  assert.match(source,/open_token_hash:openTokenHash/);
 });
