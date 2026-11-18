@@ -26,9 +26,17 @@ const byName=new Map();
 for(const [file,nodes] of functions)for(const node of nodes)
  byName.set(node.name,[...(byName.get(node.name)||[]),{file,...node}]);
 const duplicates=[...byName].filter(([,v])=>v.length>1).map(([name])=>name);
+// Log names only. This is not code and contains no deployment IDs or secrets.
+console.log('PR103_DECLARATIONS files='+filenames.length+' globals='+byName.size+' repeated='+duplicates.length);
+for(const name of duplicates)console.log('PR103_REPEATED_NAME '+name+
+ ' occurrenceCount='+byName.get(name).length);
 if(duplicates.length!==8||duplicates.some(n=>!allowed.has(n))||
- [...allowed].some(n=>!duplicates.includes(n)))
+ [...allowed].some(n=>!duplicates.includes(n))){
+ const missing=[...allowed].filter(name=>!duplicates.includes(name));
+ const unexpected=duplicates.filter(name=>!allowed.has(name));
+ console.log('PR103_DUPLICATE_MISMATCH missing='+missing.join(',')+' unexpected='+unexpected.join(','));
  throw Error('Conjunto de duplicatas inesperado: nenhuma mudança simulada');
+}
 for(const name of duplicates){
  const copies=byName.get(name);
  if(copies.some(x=>x.file!==isolate&&x.file!==zenvia&&x.file!==legacy))
