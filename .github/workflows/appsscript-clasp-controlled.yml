@@ -12,6 +12,7 @@ on:
       - 'apps-script/ci-clasp-dopost-contract.mjs'
       - 'apps-script/ci-clasp-dopost-voice-guard-dryrun.mjs'
       - 'apps-script/ci-clasp-voice-guard-order.mjs'
+      - 'apps-script/ci-clasp-cc-live-audit.mjs'
       - '.github/workflows/appsscript-clasp-controlled.yml'
   workflow_dispatch:
     inputs:
@@ -61,6 +62,25 @@ jobs:
           printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
           clasp pull
           node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" audit "$PWD" "$GITHUB_STEP_SUMMARY"
+      - name: Compare Apps Script HEAD with deployed versioned CC contracts (read-only)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cc-versions/head" "$RUNNER_TEMP/cc-versions/versions"
+          cp -a "$RUNNER_TEMP/remote-script/." "$RUNNER_TEMP/cc-versions/head/"
+          cd "$RUNNER_TEMP/remote-script"
+          clasp list-deployments > "$RUNNER_TEMP/cc-deployments.txt"
+          vers=$(node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-live-audit.mjs" versions "$RUNNER_TEMP/cc-deployments.txt")
+          for v in $vers; do
+            [[ "$v" =~ ^[0-9]+$ ]] || exit 1
+            mkdir -p "$RUNNER_TEMP/cc-versions/versions/v$v"
+            (
+              cd "$RUNNER_TEMP/cc-versions/versions/v$v"
+              printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
+              clasp pull --versionNumber "$v" > /dev/null
+            )
+          done
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-live-audit.mjs" report \
+            "$RUNNER_TEMP/cc-deployments.txt" "$RUNNER_TEMP/cc-versions" "$GITHUB_STEP_SUMMARY"
       - name: Checkout PR68 as data only (never execute its code)
         uses: actions/checkout@v4
         with:
