@@ -21,10 +21,10 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
       client,owner,status:status||'Sem status',last,opened,url:'https://arquem.movidesk.com/Ticket/Edit/'+id};
  });
  if(new Set(normalized.map(x=>x.id)).size!==normalized.length)throw Error('Há chamados repetidos.');
- const subject='Solicitação de andamento | '+normalized.length+' chamado(s) pendente(s)';
+ const subject='Verificação de chamado sem movimentação/tratamento | '+normalized.length+' chamado(s)'
  const requested=body===undefined?'':String(body).trim();
  if(requested.length>8500)throw Error('O texto ultrapassa 8.500 caracteres.');
- const message=requested||'Prezados,\n\nSolicito, por gentileza, uma atualização sobre os chamados abaixo, que permanecem em aberto e necessitam de acompanhamento.\n\nPeço informar o andamento de cada demanda, o próximo encaminhamento e, quando aplicável, a previsão de conclusão.\n\nAgradeço o retorno.';
+ const message=requested||'Prezados,\n\nSolicito a verificação dos chamados abaixo, que apresentam ausência de movimentação ou tratamento recente conforme os registros sincronizados.\n\nPeço confirmar a situação atual, o setor e o responsável pela próxima ação, as providências em andamento e uma previsão realista de retorno, quando aplicável. Caso tenha ocorrido uma movimentação não refletida na Central, favor atualizar o chamado no Movidesk.\n\nAgradeço o retorno.';
  // Orientacoes operacionais: criterios verificaveis. Nunca avaliam personalidade,
  // esforco ou desempenho individual e nao inferem que falta de acao = falta de horas.
  const guidance:{evidence:string;action:string}[]=[];
@@ -97,7 +97,7 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#122d4d"><tr><td style="padding:24px 28px">'+
  '<div style="font-size:12px;letter-spacing:2.5px;font-weight:700;color:#8fd5e8">ARQUEM <span style="color:#ffffff">SISTEMAS</span></div>'+
  '<div style="height:3px;width:54px;background:#55c5db;margin:15px 0"></div>'+
- '<h1 style="font-size:24px;color:#ffffff;line-height:1.25;font-weight:700;margin:0">Solicitação de andamento</h1>'+
+ '<h1 style="font-size:24px;color:#ffffff;line-height:1.25;font-weight:700;margin:0">Verificação de chamados sem movimentação/tratamento</h1>'+
  '<p style="font-size:12px;line-height:1.6;color:#c4d7e9;margin:8px 0 0">Acompanhamento de chamados · Comunicação corporativa</p>'+
  '</td></tr></table>'+
  '<div style="padding:24px 28px 8px">'+
