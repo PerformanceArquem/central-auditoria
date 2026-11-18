@@ -131,6 +131,6 @@ const append='\n### Reconciliação simulada (NÃO publicada)\n\n'+
 '- Código-fonte remoto: NÃO foi enviado ao GitHub nem incluído em artefatos\n'+
 '- Execução de funções, e-mails, push ou deployment: NENHUM\n\n'+
 '**Atenção:** passar na análise sintática não valida operações do Google, PDF, Excel, destinatários nem rotina das 09h. Origem remota permanece intacta.\n';
-const {appendFileSync}=await import('node:fs');
+
 appendFileSync(summary,append);
 console.log('CONCILIACAO_DRY_RUN_OK sourceFiles='+total+' removedDeclarations='+duplicated.length+' keptLegacyUnique='+uniqueLegacy.length+' duplicatesRemaining=0 globalNames='+afterNames.size+' criticalNames='+critical.length+' manifestUnchanged=true');
