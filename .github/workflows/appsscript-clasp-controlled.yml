@@ -42,6 +42,9 @@ on:
       cc_release_commit:
         required: false
         type: string
+      cc_approved_version_sha256:
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -326,6 +329,7 @@ jobs:
           TARGET_ID: ${{ inputs.cc_deployment_id }}
           OLD_VERSION: ${{ inputs.cc_expected_current_version }}
           NEW_VERSION: ${{ inputs.cc_approved_new_version }}
+          VERSION_SHA: ${{ inputs.cc_approved_version_sha256 }}
         run: |
           set -euo pipefail
           test "$RELEASE_ENABLED" = 'true' || { echo "::error::Production release disabled"; exit 1; }
@@ -334,6 +338,7 @@ jobs:
           [[ "$OLD_VERSION" =~ ^[1-9][0-9]*$ ]] || exit 1
           [[ "$NEW_VERSION" =~ ^[1-9][0-9]*$ ]] || exit 1
           test "$NEW_VERSION" -gt "$OLD_VERSION" || { echo "::error::New version must advance"; exit 1; }
+          [[ "$VERSION_SHA" =~ ^[a-f0-9]{64}$ ]] || { echo "::error::Missing approved version SHA-256"; exit 1; }
       - run: npm install --global @google/clasp@3.4.1
       - name: Authenticate without logging tokens
         env:
@@ -348,6 +353,7 @@ jobs:
           TARGET_ID: ${{ inputs.cc_deployment_id }}
           OLD_VERSION: ${{ inputs.cc_expected_current_version }}
           NEW_VERSION: ${{ inputs.cc_approved_new_version }}
+          VERSION_SHA: ${{ inputs.cc_approved_version_sha256 }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/cc-promotion"
@@ -362,6 +368,8 @@ jobs:
           clasp pull --versionNumber "$NEW_VERSION" > /dev/null
           node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-promotion-guard.mjs" candidate \
             "$PWD" "$GITHUB_STEP_SUMMARY" "$NEW_VERSION"
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-promotion-guard.mjs" sha256 \
+            "$PWD" "$VERSION_SHA"
       - name: Update ONLY the reviewed existing deployment ID
         env:
           TARGET_ID: ${{ inputs.cc_deployment_id }}
