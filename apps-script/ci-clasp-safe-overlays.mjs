@@ -19,7 +19,7 @@ const scan=(src,file)=>{
 const files=readdirSync(baselineDir).filter(f=>f.endsWith('.js')).sort();
 // The protected read-only audits observed exactly two baseline inventories.
 // Reject any unreviewed file/function pairing instead of accepting arbitrary growth.
-if(![6,8].includes(files.length))throw Error('Unexpected original file count: '+files.length);
+if(![6,8,9].includes(files.length))throw Error('Unexpected original file count: '+files.length);
 const canonical='ZenviaVozChat.js';
 if(!files.includes(canonical))throw Error('Missing canonical PDF/XLSX script');
 const original=new Map(files.map(f=>[f,readFileSync(join(baselineDir,f),'utf8')]));
@@ -28,9 +28,11 @@ for(const [file,src] of original)for(const [name,meta] of scan(src,file)){
  if(existingNames.has(name))throw Error('Baseline still has duplicate '+name);
  existingNames.set(name,{file,text:meta.text});
 }
-const approvedInventories=new Set(['6:39','8:48']);
+const approvedInventories=new Set(['6:39','8:48','9:49']);
 if(!approvedInventories.has(files.length+':'+existingNames.size))
  throw Error('Unexpected baseline inventory: files='+files.length+' functions='+existingNames.size);
+if(files.length===9&&!files.includes('homologacao-pr103-isolada.js'))
+ throw Error('PR103 file missing from reviewed 9:49 inventory');
 const prSource=readFileSync(prFile,'utf8');
 const reviewed=scan(prSource,'PR68');
 for(const name of ['arquemPdf_','arquemXlsx_']){
