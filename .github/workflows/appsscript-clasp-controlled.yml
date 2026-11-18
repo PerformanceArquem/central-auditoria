@@ -124,6 +124,7 @@ jobs:
             "$RUNNER_TEMP/voice-safe-final-test-only" \
             "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
   cc-readonly-audit:
+    if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
     # Runs independently of reconciliation, which may fail closed on unreviewed
     # remote inventory changes. Never executes doPost or sends messages.
     runs-on: ubuntu-latest
