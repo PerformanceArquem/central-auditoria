@@ -1785,7 +1785,7 @@ async function dispatch(payload:R = {}) {
   if(batchGroup&&!['management','individual'].includes(batchGroup))
     return json({ok:false,error:'Lote inválido'},400);
   const localHour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:TZ,hour:'2-digit',hourCycle:'h23'}).format(new Date()));
-  if(batchGroup && localHour < (batchGroup==='management'?8:9))
+  if(batchGroup && localHour < 9)
     return json({ok:true,skipped:'Aguardando horário do lote',batchGroup});
   const tasks = scheduledReports(today,hol,recipients).filter(t=>
     (!selectedIds.length||selectedIds.includes(String(t.r.id)))&&(!batchGroup||deliveryGroup(t.r)===batchGroup));
