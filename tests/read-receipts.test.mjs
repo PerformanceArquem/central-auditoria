@@ -59,3 +59,9 @@ test('links are scoped per dispatch; only a hash is stored and retries retain th
   assert.equal(a.html,b.html);assert.equal(calls,2);assert.ok(!JSON.stringify(row).includes(first));assert.equal(row.token_hash,await hashReceiptToken(first));
   assert.ok(receiptContent('https://example.invalid#token='+first).text.includes('Confirmar minha leitura'));
 });
+
+test('scheduled email batches cannot dispatch before 09h in Sao Paulo',()=>{
+  const source=readFileSync(new URL('../supabase/functions/audit-email-dispatch/index.ts',import.meta.url),'utf8');
+  assert.match(source,/if\(batchGroup && localHour < 9\)/);
+  assert.doesNotMatch(source,/localHour < \(batchGroup==='management'\?8:9\)/);
+});
