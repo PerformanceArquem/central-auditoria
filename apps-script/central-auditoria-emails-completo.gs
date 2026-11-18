@@ -15,17 +15,21 @@ function doPost(e) {
 
     if (dados.action === 'capabilities') {
       // Verificação apenas de leitura, protegida pelo mesmo segredo do envio.
-      return resposta(arquemCapacidadesAnexos_());
+      return resposta(Object.assign({},arquemCapacidadesAnexos_(),{ccSupported:true}));
     }
 
     const email = String(dados.email || '').trim();
     const assunto = String(dados.assunto || '').trim();
     const texto = String(dados.texto || '').trim();
     const html = String(dados.html || '');
+    const cc=Array.isArray(dados.cc)?dados.cc.map(x=>String(x).trim().toLowerCase()):[];
+    if(dados.cc!==undefined&&!Array.isArray(dados.cc))throw new Error('Formato de cópias inválido');
+    if(cc.length>10||new Set(cc).size!==cc.length||cc.some(x=>!/^[^@\s]+@arquem\.com\.br$/.test(x)||x===email.toLowerCase()))
+      throw new Error('Selecione até 10 cópias corporativas válidas, sem repetir o destinatário');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Destinatário inválido');
     if (!assunto || !texto) throw new Error('Relatório incompleto');
     if (texto.length > 50000 || html.length > 200000) throw new Error('Relatório muito extenso');
-    if (MailApp.getRemainingDailyQuota() < 1) throw new Error('Limite diário de envio atingido');
+    if (MailApp.getRemainingDailyQuota() < 1+cc.length) throw new Error('Limite diário de envio atingido');
 
     let anexos = [];
     if (dados.reportData !== undefined) {
@@ -43,7 +47,7 @@ function doPost(e) {
       }
     }
     MailApp.sendEmail({
-      to: email, subject: assunto, body: texto, name:'Central de Auditoria',
+      to: email, ...(cc.length?{cc:cc.join(', ')}:{}), subject: assunto, body: texto, name:'Central de Auditoria',
       ...(html ? {htmlBody: html} : {}),
       ...(anexos.length ? {attachments: anexos} : {})
     });

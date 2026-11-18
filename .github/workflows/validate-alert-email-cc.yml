@@ -1,0 +1,23 @@
+name: Validate alerts manual email with CC
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'supabase/functions/audit-email-dispatch/**'
+      - 'apps-script/central-auditoria-emails-completo.gs'
+      - 'ops/install-alert-email-cc.sql'
+      - 'tests/alert-email-cc.test.mjs'
+      - '.github/workflows/validate-alert-email-cc.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check < apps-script/central-auditoria-emails-completo.gs
+      - run: node --test tests/alert-email-cc.test.mjs
