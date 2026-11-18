@@ -3767,8 +3767,10 @@ async function alarmEmailPreview(){
   $('alarmEmailValidate').textContent='Validar e registrar início';
   $('alarmEmailValidatedAt').textContent=ccBlocked?'Bloqueado: suporte a CC não confirmado':'Validação pendente';
   button.disabled=true;
+  const ccReason=data.ccDiagnostic?.reason;
+  const ccExplanation=ccReasonMessage[ccReason]||'O serviço Gmail não confirmou suporte a cópias.';
   $('alarmEmailStatus').textContent=ccBlocked
-    ?'Prévia disponível para conferência, mas o envio com CC está bloqueado: o serviço Gmail não confirmou suporte a cópias. Verifique suporte a CC ou desmarque as cópias e gere outra prévia.'
+    ?'Prévia disponível, mas envio com CC bloqueado. '+ccExplanation+' Você pode verificar o serviço em Adicionar cópia (CC), ou desmarcar todas as cópias e gerar outra prévia.'
     :'Prévia pronta. Confira destinatário, chamados, texto e orientações antes de confirmar o envio.';
  }catch(e){
   alarmEmailApproved='';
