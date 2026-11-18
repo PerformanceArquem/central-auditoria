@@ -20,7 +20,7 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
    const openedAt=Date.parse(opened),daysOpen=Number.isFinite(openedAt)?
      Math.max(0,Math.floor((Date.now()-openedAt)/86400000)):null;
    const note=t.last_real_appointment&&typeof t.last_real_appointment==='object'?t.last_real_appointment:null;
-   const appointmentDate=typeof note?.date==='string'&&/^\\d{4}-\\d{2}-\\d{2}$/.test(note.date)?note.date:null;
+   const appointmentDate=typeof note?.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(note.date)?note.date:null;
    const appointmentMinutes=appointmentDate&&Number.isFinite(Number(note?.minutes))&&Number(note.minutes)>0?Number(note.minutes):null;
    return {id,subject:clean(p.subject||'Sem assunto'),sector:clean(p.ownerTeam?.name||p.ownerTeam||'Sem setor',90),
       client,owner,status:status||'Sem status',last,opened,daysOpen,
