@@ -17,7 +17,9 @@ const scan=(src,file)=>{
  return found;
 };
 const files=readdirSync(baselineDir).filter(f=>f.endsWith('.js')).sort();
-if(files.length!==6)throw Error('Unexpected original file count');
+// The protected read-only audits observed exactly two baseline inventories.
+// Reject any unreviewed file/function pairing instead of accepting arbitrary growth.
+if(![6,8].includes(files.length))throw Error('Unexpected original file count: '+files.length);
 const canonical='ZenviaVozChat.js';
 if(!files.includes(canonical))throw Error('Missing canonical PDF/XLSX script');
 const original=new Map(files.map(f=>[f,readFileSync(join(baselineDir,f),'utf8')]));
@@ -26,7 +28,9 @@ for(const [file,src] of original)for(const [name,meta] of scan(src,file)){
  if(existingNames.has(name))throw Error('Baseline still has duplicate '+name);
  existingNames.set(name,{file,text:meta.text});
 }
-if(existingNames.size!==39)throw Error('Unexpected baseline global function count: '+existingNames.size);
+const approvedInventories=new Set(['6:39','8:48']);
+if(!approvedInventories.has(files.length+':'+existingNames.size))
+ throw Error('Unexpected baseline inventory: files='+files.length+' functions='+existingNames.size);
 const prSource=readFileSync(prFile,'utf8');
 const reviewed=scan(prSource,'PR68');
 for(const name of ['arquemPdf_','arquemXlsx_']){
@@ -67,14 +71,14 @@ if(!readFileSync(join(candidateDir,'appsscript.json')).equals(manifest))throw Er
 const notice=[
  '### Simulação de sobreposição PDF/XLSX (não publicada)',
  '',
- '- Funções globais preservadas: 39; duplicadas: 0',
+ '- Funções globais preservadas: '+existingNames.size+'; duplicadas: 0',
  '- Funções com código substituído em memória: arquemPdf_ e arquemXlsx_',
  '- Ambas reproduzem exatamente as versões revisadas na PR #68',
- '- doPost oficial e as outras 37 funções mantidos byte a byte no corpo',
- '- Seis arquivos JS e manifesto preservados em diretório temporário do runner',
+ '- doPost oficial e as outras '+(existingNames.size-3)+' funções mantidos byte a byte no corpo',
+ '- '+files.length+' arquivos JS e manifesto preservados em diretório temporário do runner',
  '- Não é fonte aprovada para publicação. doPost da PR #68 continua **não conciliada**',
  '- Não executa serviços Google, não gera PDF/XLSX reais e não envia e-mails',
  ''
 ].join('\n');
 appendFileSync(summaryPath,'\n'+notice);
-console.log('SAFE_OVERLAY_DRY_RUN_OK functions=39 changed=2 preserved=37 duplicates=0 doPostOriginal=true manifestOriginal=true');
+console.log('SAFE_OVERLAY_DRY_RUN_OK functions='+existingNames.size+' changed=2 preserved='+(existingNames.size-2)+' duplicates=0 doPostOriginal=true manifestOriginal=true');
