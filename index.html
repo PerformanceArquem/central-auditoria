@@ -3082,13 +3082,27 @@ function alarmTeamName(t){
   return name||'Sem setor identificado';
 }
 function alarmDateLabel(t){return t?new Date(t).toLocaleDateString('pt-BR'):'—'}
+function alarmMeaningfulUpdate(t,created,updated){
+  // An internal audit reminder is not technical treatment; keep the old age of inactivity
+  // only when Movidesk's lastUpdate corresponds to that audit action.
+  const actions=Array.isArray(t.actions)?t.actions:[];
+  const isAudit=a=>/CENTRAL-AUDITORIA-COBRANCA:[0-9a-f-]+:\\d+/i.test(String(a.description||a.htmlDescription||''));
+  const auditDates=actions.filter(isAudit).map(a=>alarmDate(a.createdDate)).filter(Boolean);
+  if(!updated||!auditDates.length)return updated||created;
+  const mostRecentAudit=Math.max(...auditDates);
+  if(Math.abs(updated-mostRecentAudit)>10*60000)return updated;
+  const realActionDates=actions.filter(a=>!isAudit(a)).map(a=>alarmDate(a.createdDate)).filter(Boolean);
+  const realStatusDates=(Array.isArray(t.statusHistories)?t.statusHistories:[]).map(a=>alarmDate(a.changedDate)).filter(Boolean);
+  const lastReal=Math.max(created||0,...realActionDates,...realStatusDates);
+  return lastReal&&lastReal<mostRecentAudit?lastReal:updated;
+}
 function alarmList(){
   const now=Date.now(),items=[];
   for(const t of TK.values()){
     const status=String(t.status||'').trim();
     if(!status||alarmIsClosed(status)) continue;
     const created=alarmDate(t.createdDate),updated=alarmDate(t.lastUpdate);
-    const last=updated||created;
+    const last=alarmMeaningfulUpdate(t,created,updated);
     if(!last) continue; // não inventar data para chamados sem data válida
     const c=(t.clients||[])[0]||{},client=nm(c.organization)||nm(c)||'Não informado';
     const owner=nm(t.owner)||'Não atribuído';
