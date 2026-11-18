@@ -92,7 +92,7 @@ test('TME weighted by measured queue waits, with partial coverage in official re
   idx++;
   const queue=idx===1?{configured:true,calls:4,waitSampleCount:3,waitTotalSeconds:90,tmeSeconds:30,missingWaitSamples:1}:
     {configured:true,calls:2,waitSampleCount:2,waitTotalSeconds:120,tmeSeconds:60,missingWaitSamples:0};
-  const summary={total:4,inbound:4,outbound:0,answered:3,unanswered:1,talkSeconds:180,tmaSamples:3,tmaMissingSamples:0};
+  const summary={total:4,inbound:4,outbound:0,answered:3,unanswered:1,inProgress:0,unclassified:0,talkSeconds:180,tmaSamples:3,tmaMissingSamples:0};
   const u=new URL(input);
   return {ok:true,json:async()=>({ok:true,from:u.searchParams.get('start'),to:u.searchParams.get('end'),summary,queue,
    support:{metrics:summary},byDay:[],byExtension:[]})};
@@ -112,7 +112,7 @@ test('no queue wait measurements stays unavailable and never becomes zero',async
  const http=async(input)=>{
   const u=new URL(input);
   return {ok:true,json:async()=>({ok:true,from:u.searchParams.get('start'),to:u.searchParams.get('end'),
-   summary:{total:2,inbound:2,outbound:0,answered:1,unanswered:1},support:{metrics:{total:2,answered:1}},
+   summary:{total:2,inbound:2,outbound:0,answered:1,unanswered:1,inProgress:0,unclassified:0,talkSeconds:0,tmaSamples:0,tmaMissingSamples:1},support:{metrics:{total:2,inbound:2,outbound:0,answered:1,unanswered:1,inProgress:0,unclassified:0,talkSeconds:0,tmaSamples:0,tmaMissingSamples:1}},
    queue:{configured:true,calls:2,waitSampleCount:0,waitTotalSeconds:0,tmeSeconds:null,missingWaitSamples:2},
    byDay:[],byExtension:[]})};
  };
