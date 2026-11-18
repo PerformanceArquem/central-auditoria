@@ -21,6 +21,18 @@ Trocar a exibição de **Diferença para a mínima** e **Diferença para a jorna
 5. Conferir os nomes e alinhamento das colunas no PDF e na planilha, formatos de horas acima de 24 h e separação de apontamentos em fins de semana/feriados.
 6. Registrar evidência da prévia real e aprovação dos anexos na PR #121 antes de integrar ao `main`.
 
+## Recuperação do acesso `clasp` — bloqueio confirmado
+
+Auditoria somente leitura reexecutada em 18/11/2026: [workflow run 43925902801](https://github.com/PerformanceArquem/central-auditoria/actions/runs/43925902801), job `audit`, etapa `Read-only snapshot`. Falha no `clasp pull`: `invalid_grant`, subtipo `invalid_rapt`. O segredo existe, mas a autenticação Google armazenada exige nova verificação da conta. **Reexecutar a mesma workflow com o segredo antigo não resolve.**
+
+1. Em computador confiável, entrar com a **conta Google responsável pelo projeto** e instalar a versão do `clasp` usada no fluxo (`npm install -g @google/clasp@3.4.1`). Usar `clasp login` e concluir a autenticação interativa/MFA. O `clasp login --no-localhost` pode ser usado se necessário, conforme a documentação do Google.
+2. Confirmar localmente, em uma pasta isolada com `.clasp.json` apontando para o script correto, que `clasp pull` tem acesso. Faça cópia de segurança dos arquivos existentes; não executar `clasp push` ou `clasp deploy` nesta fase.
+3. Substituir **somente** o secret `CLASPRC_JSON` em [GitHub Actions Secrets](https://github.com/PerformanceArquem/central-auditoria/settings/secrets/actions) pelo conteúdo completo do arquivo privado `~/.clasprc.json` recém-autorizado. Não adicionar à árvore git, às mensagens de chat, às issues, aos anexos ou aos logs. Limitar acesso ao arquivo local.
+4. Abrir [workflow Apps Script](https://github.com/PerformanceArquem/central-auditoria/actions/workflows/appsscript-clasp-controlled.yml), selecionar **Run workflow**, branch `main`, operação **audit**. **Não selecionar publish.** Conferir `Read-only snapshot`, análise do contrato `doPost` e simulação de overlay. O sucesso dessa auditoria significa acesso e consistência de código, **não** que os PDF/XLSX reais foram gerados nem que o endpoint `/exec` foi atualizado.
+5. Registrar apenas os resultados não sensíveis da execução na PR #121. Prossiga com os passos de homologação e release descritos abaixo antes do merge.
+
+Referências: [guia oficial do Google para `clasp`](https://developers.google.com/apps-script/guides/clasp?hl=pt-BR) e [opções de login](https://github.com/google/clasp).
+
 ## Implantação coordenada
 
 1. Registrar versão, hashes, endpoint `/exec` ativo e plano de reversão do Apps Script, sem expor segredos no log.
