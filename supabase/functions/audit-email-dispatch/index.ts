@@ -1505,8 +1505,9 @@ function keilaFlowPeriods(today:string,hol:Set<string>) {
  const dow=weekday(today);
  const business=![0,6].includes(dow)&&!hol.has(today);
  const tasks:{kind:'daily'|'weekly'|'monthly';from:string;to:string}[]=[];
- const yesterday=shift(today,-1);
- if(business)tasks.push({kind:'daily',from:yesterday,to:yesterday});
+ let previousBusinessDay=shift(today,-1);
+ while([0,6].includes(weekday(previousBusinessDay))||hol.has(previousBusinessDay)) previousBusinessDay=shift(previousBusinessDay,-1);
+ if(business)tasks.push({kind:'daily',from:previousBusinessDay,to:previousBusinessDay});
  if(dow===1){
   const start=shift(today,-7),end=shift(today,-1);
   tasks.push({kind:'weekly',from:start,to:end});
