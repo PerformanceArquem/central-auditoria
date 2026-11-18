@@ -21,10 +21,18 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
       client,owner,status:status||'Sem status',last,opened,url:'https://arquem.movidesk.com/Ticket/Edit/'+id};
  });
  if(new Set(normalized.map(x=>x.id)).size!==normalized.length)throw Error('Há chamados repetidos.');
- const subject='Verificação de chamado sem movimentação/tratamento | '+normalized.length+' chamado(s)'
+ const subject='Acompanhamento cordial de chamados | '+normalized.length+' chamado(s)'
  const requested=body===undefined?'':String(body).trim();
  if(requested.length>8500)throw Error('O texto ultrapassa 8.500 caracteres.');
- const message=requested||'Prezados,\n\nSolicito a verificação dos chamados abaixo, que apresentam ausência de movimentação ou tratamento recente conforme os registros sincronizados.\n\nPeço confirmar a situação atual, o setor e o responsável pela próxima ação, as providências em andamento e uma previsão realista de retorno, quando aplicável. Caso tenha ocorrido uma movimentação não refletida na Central, favor atualizar o chamado no Movidesk.\n\nAgradeço o retorno.';
+ // O texto principal sempre mantém tom respeitoso. Notas opcionais são contexto,
+ // não substituem a saudação e o pedido padronizado de acompanhamento.
+ const message='Olá, equipe! Espero que estejam bem.\\n\\n'+
+  'Estamos acompanhando alguns chamados e gostaríamos de contar com o apoio de vocês para conferir a situação atual dos itens abaixo. '+
+  'Sabemos que podem existir análises em andamento, dependências ou atualizações ainda não refletidas na Central.\\n\\n'+
+  'Quando possível, poderiam atualizar o andamento no Movidesk e nos informar o próximo passo, o responsável e uma previsão realista de retorno, caso já exista? '+
+  'Se houver algum impedimento ou necessidade de apoio, por favor nos sinalizem para alinharmos juntos.\\n\\n'+
+  (requested?'Contexto complementar para esta verificação:\\n'+requested+'\\n\\n':'')+
+  'Agradecemos desde já pela atenção e parceria!\\n\\nAtenciosamente,\\nEquipe de Qualidade | Arquem Sistemas.';
  // Orientacoes operacionais: criterios verificaveis. Nunca avaliam personalidade,
  // esforco ou desempenho individual e nao inferem que falta de acao = falta de horas.
  const guidance:{evidence:string;action:string}[]=[];
@@ -97,7 +105,7 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#122d4d"><tr><td style="padding:24px 28px">'+
  '<div style="font-size:12px;letter-spacing:2.5px;font-weight:700;color:#8fd5e8">ARQUEM <span style="color:#ffffff">SISTEMAS</span></div>'+
  '<div style="height:3px;width:54px;background:#55c5db;margin:15px 0"></div>'+
- '<h1 style="font-size:24px;color:#ffffff;line-height:1.25;font-weight:700;margin:0">Verificação de chamados sem movimentação/tratamento</h1>'+
+ '<h1 style="font-size:24px;color:#ffffff;line-height:1.25;font-weight:700;margin:0">Acompanhamento de chamados</h1>'+
  '<p style="font-size:12px;line-height:1.6;color:#c4d7e9;margin:8px 0 0">Acompanhamento de chamados · Comunicação corporativa</p>'+
  '</td></tr></table>'+
  '<div style="padding:24px 28px 8px">'+
@@ -115,7 +123,7 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  '<tbody>'+table+'</tbody></table></div>'+
  guidanceHtml+
  '<div style="padding:18px 28px;background:#f6f9fc;border-top:1px solid #e2eaf3">'+
- '<p style="font-size:12px;line-height:1.6;color:#354e6a;margin:0 0 7px"><strong>Próximo encaminhamento solicitado:</strong> informar andamento, responsável e previsão realista de retorno quando aplicável.</p>'+
+ '<p style="font-size:12px;line-height:1.6;color:#354e6a;margin:0 0 7px"><strong>Alinhamento sugerido:</strong> compartilhar o andamento, o próximo responsável e uma previsão possível de retorno, quando disponível.</p>'+
  '<p style="font-size:11px;line-height:1.6;color:#708198;margin:0">Informações obtidas na Central de Auditoria a partir dos chamados sincronizados do Movidesk. Os registros refletem a situação no momento da consulta.</p>'+
  '</div></div>'+
  '<p style="max-width:780px;margin:13px auto 0;text-align:center;font-size:10px;color:#7b8ea6">ARQUEM SISTEMAS · Gestão de Qualidade · Acompanhamento de demandas</p>'+
