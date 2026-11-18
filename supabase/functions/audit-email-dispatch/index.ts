@@ -2274,7 +2274,7 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  const validation=validated[0];
  if(!validation||validation.validated_by!==sender||validation.completed_at||
     validation.recipient!==recipient||
-    JSON.stringify((validation.ticket_ids||[]).map(String))!==JSON.stringify(ids)||
+    JSON.stringify(Array.isArray(validation.ticket_ids)?validation.ticket_ids.map(String):[])!==JSON.stringify(ids)||
     JSON.stringify(validation.cc_recipients||[])!==JSON.stringify(cc))
   return json({ok:false,error:'Clique em Validado após a prévia atual. Nenhum e-mail foi enviado.'},409);
  if(registerInternalNote){
