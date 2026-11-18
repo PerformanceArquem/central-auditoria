@@ -1997,10 +1997,12 @@ async function dashboardReportAction(payload:R){
 // Apenas administradores. A seleção enviada pelo browser é revalidada no banco.
 // Histórico durável: acesso apenas via esta Edge Function (admin JWT), não expor tabela diretamente.
 async function ticketChargeHistory():Promise<Response>{
- const [records,notes]=await Promise.all([
+ const [records,notes,validations]=await Promise.all([
   db('audit_ticket_charge_history?select=id,request_id,recipient,cc_recipients,subject,ticket_ids,ticket_snapshot,status,created_at,sent_at,updated_at,sent_by,error_summary&order=created_at.desc&limit=250'),
-  db('audit_ticket_charge_internal_notes?select=request_id,ticket_id,status,processed_at,last_error&order=created_at.desc&limit=2000')
- ]) as [R[],R[]];
+  db('audit_ticket_charge_internal_notes?select=request_id,ticket_id,status,processed_at,last_error&order=created_at.desc&limit=2000'),
+  db('audit_ticket_charge_validations?select=request_id,validated_at,completed_at,validated_by&order=validated_at.desc&limit=250')
+ ]) as [R[],R[],R[]];
+ const validationMap=new Map((validations||[]).map(v=>[String(v.request_id),v]));
  const noteMap=new Map<string,R[]>();
  for(const row of notes||[]){
   const id=String(row.request_id||'');
@@ -2008,7 +2010,8 @@ async function ticketChargeHistory():Promise<Response>{
   noteMap.get(id)!.push(row);
  }
  return json({ok:true,items:Array.isArray(records)?records.map(row=>({
-   ...row,internalNotes:(noteMap.get(String(row.request_id))||[]).map(n=>({
+   ...row,validation:validationMap.get(String(row.request_id))||null,
+   internalNotes:(noteMap.get(String(row.request_id))||[]).map(n=>({
      ticketId:n.ticket_id,status:n.status,processedAt:n.processed_at
    }))
  })):[],
@@ -2236,6 +2239,18 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  const message=String(payload.message||'').trim();
  if(message.length>8500)return json({ok:false,error:'O texto é muito longo.'},400);
  const requestId=String(payload.requestId||'');
+ if(action==='ticket_charge_validate'){
+  if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestId))return json({ok:false,error:'Identificador de validação inválido.'},400);
+  const user=await ticketChargeAdminUser(req);
+  const existing=await db('audit_ticket_charge_validations?select=request_id&request_id=eq.'+encodeURIComponent(requestId)+'&limit=1') as R[];
+  if(existing.length)return json({ok:false,error:'Validação já registrada; atualize a prévia para um novo envio.'},409);
+  const rows=await db('audit_ticket_charge_validations?select=request_id,validated_at',{
+   method:'POST',headers:{Prefer:'return=representation'},
+   body:JSON.stringify({request_id:requestId,validated_by:user,ticket_ids:ids,recipient,cc_recipients:cc})
+  }) as R[];
+  if(rows.length!==1)return json({ok:false,error:'Validação não persistida.'},503);
+  return json({ok:true,validatedAt:rows[0].validated_at,requestId});
+ }
  if(action==='ticket_charge_send'){
   if(payload.confirmed!==true)return json({ok:false,error:'Confirmação explícita necessária antes do envio.'},400);
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId))
@@ -2255,6 +2270,13 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  if(action!=='ticket_charge_send')return json({ok:false,error:'Ação não autorizada.'},400);
  await verifyTicketChargeRepeat(ids,recipient);
  const sender=await ticketChargeAdminUser(req);
+ const validated=await db('audit_ticket_charge_validations?select=request_id,validated_by,ticket_ids,recipient,cc_recipients,completed_at&request_id=eq.'+encodeURIComponent(requestId)+'&limit=1') as R[];
+ const validation=validated[0];
+ if(!validation||validation.validated_by!==sender||validation.completed_at||
+    validation.recipient!==recipient||
+    JSON.stringify(Array.isArray(validation.ticket_ids)?validation.ticket_ids.map(String):[])!==JSON.stringify(ids)||
+    JSON.stringify(validation.cc_recipients||[])!==JSON.stringify(cc))
+  return json({ok:false,error:'Clique em Validado após a prévia atual. Nenhum e-mail foi enviado.'},409);
  if(registerInternalNote){
   const mapped=await db('audit_movidesk_note_profiles?user_id=eq.'+encodeURIComponent(sender)+'&active=eq.true&select=user_id&limit=1') as R[];
   if(mapped.length!==1)return json({ok:false,error:'Não há perfil Movidesk validado para registrar ação interna. Nenhum e-mail enviado.'},403);
@@ -2320,6 +2342,11 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   console.error('Gmail aceitou mas falhou atualização do histórico:',err(logError));
   return json({ok:false,error:'Serviço Gmail confirmou aceite, mas não foi possível finalizar o histórico. Não reenvie: confirme o registro com a gestão.',requestId},502);
  }
+ try{
+  await db('audit_ticket_charge_validations?request_id=eq.'+encodeURIComponent(requestId)+'&completed_at=is.null',{
+   method:'PATCH',body:JSON.stringify({completed_at:new Date().toISOString()})
+  });
+ }catch(ex){console.error('E-mail aceito; atualização do horário final pendente:',err(ex));}
  let noteStatus='não solicitado';
  if(registerInternalNote){
   try{
@@ -2545,12 +2572,12 @@ async function handleRequest(req: Request): Promise<Response> {
       try{return json(await emailDeliveryAdmin(payload,req,db,E,validUrl()));}
       catch(ex){return json({ok:false,error:err(ex)},409);}
     }
-    if (action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
+    if (action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_validate' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
       return action === 'voice_chat_preview' ? await voiceChatPreview(payload)
         : action === 'ticket_charge_capabilities' ? json({ok:true,aiAvailable:E('GEMINI_AI_DRAFT_ENABLED')==='true'&&!!E('GEMINI_API_KEY'),guidanceAvailable:true})
         : action === 'ticket_charge_ai_draft' ? await ticketChargeAiDraft(payload)
-        : (action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_send') ? await ticketChargeAction(payload,req)
+        : (action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_validate' || action === 'ticket_charge_send') ? await ticketChargeAction(payload,req)
         : action === 'dashboard_report' ? await dashboardReportAction(payload)
         : action === 'director_preview' ? await directorPreview(payload)
         : action === 'manual_official' ? await manualOfficial(payload)

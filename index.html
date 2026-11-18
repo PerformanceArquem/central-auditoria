@@ -1945,6 +1945,8 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
  <small id="alarmEmailWorkHint" class="subtle">Não é gerado apontamento de tempo apenas por enviar um e-mail.</small>
 </details>
 <button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
+                            <button type="button" class="s" id="alarmEmailValidate" onclick="alarmEmailValidate()" disabled>✓ Validado — registrar início</button>
+                            <span id="alarmEmailValidatedAt" class="subtle" aria-live="polite">Validação pendente</span>
                             <button type="button" class="b" id="alarmEmailSend" onclick="alarmEmailSend()" disabled title="Disponível somente depois de visualizar e conferir a prévia">Confirmar e enviar</button><style>#alarmEmailSend:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}</style>
                           </div>
                           <p class="subtle" style="margin:0 0 10px;color:#596c86">O Dicas do Manager pode sugerir o texto inicial com Gemini mediante autorização. O diagnóstico operacional e as orientações no rodapé são gerados pelas regras do sistema, sem enviar dados ao Gemini. Revise a sugestão antes de enviar. Os dados dos chamados selecionados poderão ser processados pelo Gemini.</p>
@@ -2000,7 +2002,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                             <table><thead><tr><th>Chamado</th><th>Destinatário</th><th>Cobranças</th><th>Último envio</th><th>Próxima revisão</th><th>Situação atual</th><th>Prévia</th></tr></thead><tbody id="alarmReviewRows"></tbody></table>
                           </div>
                           <div id="alarmEmailHistorySummary" class="subtle"></div>
-                          <div class="tw"><table><thead><tr><th>Data e hora (Brasília)</th><th>Destinatário</th><th>Em cópia (CC)</th><th>Situação</th><th>Ação interna Movidesk</th><th>Chamados incluídos</th><th>Quantidade</th><th>Reiteração</th><th>Protocolo</th></tr></thead><tbody id="alarmEmailHistoryRows"><tr><td colspan="9">Carregando...</td></tr></tbody></table></div>
+                          <div class="tw"><table><thead><tr><th>Data e hora (Brasília)</th><th>Destinatário</th><th>Em cópia (CC)</th><th>Situação</th><th>Ação interna Movidesk</th><th>Validação / horário inicial</th><th>Horário final do envio</th><th>Intervalo</th><th>Chamados incluídos</th><th>Quantidade</th><th>Reiteração</th><th>Protocolo</th></tr></thead><tbody id="alarmEmailHistoryRows"><tr><td colspan="12">Carregando...</td></tr></tbody></table></div>
                         </div>
                     </div>
                 </div>
@@ -3218,7 +3220,7 @@ async function alarmLoadRegisteredRecipients(){
 }
 
 // Histórico centralizado de cobranças; não confundir aceite do gateway com entrega/leitura.
-let alarmEmailHistory=[],alarmEmailHistoryLoading=false,alarmEmailHistoryLoaded=false,alarmEmailRequestId='';
+let alarmEmailHistory=[],alarmEmailHistoryLoading=false,alarmEmailHistoryLoaded=false,alarmEmailRequestId='',alarmEmailValidated=false;
 let alarmReminderPolicy={interval_days:5,max_reminders:3};
 
 async function alarmReviewRecheck(){
@@ -3331,10 +3333,16 @@ function alarmEmailHistoryRender(){
   const state=r.status==='sent'?'ok':r.status==='uncertain'?'alert-warn':'alert-warn';
   const notes=Array.isArray(r.internalNotes)?r.internalNotes:[];
   const noteStatus=notes.length?notes.map(n=>'#'+n.ticketId+': '+(n.status==='sent'?'registrado':n.status==='pending'?'pendente':n.status==='processing'?'processando':n.status==='held'?'aguarda envio':n.status==='uncertain'?'verificar':'bloqueado')).join(' · '):'Não solicitado';
+  const validation=r.validation||{};
+  const finished=validation.completed_at||(r.status==='sent'?r.sent_at:null);
+  const interval=validation.validated_at&&finished
+   ?Math.max(0,Math.round((new Date(finished)-new Date(validation.validated_at))/60000))+' min'
+   :'—';
   return '<tr><td>'+esc(alarmEmailTime(sentDate))+'</td><td>'+esc(r.recipient)+'</td><td>'+esc((r.cc_recipients||[]).join(', ')||'—')+'</td>'+
     '<td><span class="pill '+state+'">'+esc(alarmEmailHistoryStatus(r.status))+'</span></td><td>'+esc(noteStatus)+'</td>'+
+    '<td>'+esc(validation.validated_at?alarmEmailTime(validation.validated_at):'Não validado')+'</td><td>'+esc(finished?alarmEmailTime(finished):'Aguardando confirmação')+'</td><td>'+esc(interval)+'</td>'+ 
     '<td>'+links+'</td><td>'+ids.length+'</td><td>'+esc(ids.map(id=>'#'+id+': '+alarmReminderStatusForTicket(id).label).join(' · '))+'</td><td title="'+esc(r.id||'')+'">'+esc(String(r.request_id||r.id||'').slice(0,8))+'</td></tr>';
- }).join('')||'<tr><td colspan="9">Nenhum registro corresponde ao filtro.</td></tr>';
+ }).join('')||'<tr><td colspan="12">Nenhum registro corresponde ao filtro.</td></tr>';
 }
 function alarmEmailHistoryExport(){
  const filter=$('alarmEmailHistoryFilter')?.value||'all';
@@ -3347,8 +3355,12 @@ function alarmEmailHistoryExport(){
   if(/^[\s]*[=+\-@]/.test(v))v="'"+v;
   return '"'+v.replace(/"/g,'""')+'"';
  };
- const cols=[['Data Brasília','Destinatário','Cópias (CC)','Situação','Ação interna Movidesk','Chamados','Quantidade','Assunto','Protocolo','Registrado em UTC']];
+ const cols=[['Data Brasília','Destinatário','Cópias (CC)','Situação','Ação interna Movidesk','Validação inicial','Envio confirmado','Intervalo em minutos','Chamados','Quantidade','Assunto','Protocolo','Registrado em UTC']];
  const lines=rows.map(r=>[alarmEmailTime(r.sent_at||r.created_at),r.recipient,(r.cc_recipients||[]).join(' | '),alarmEmailHistoryStatus(r.status),(r.internalNotes||[]).map(n=>'#'+n.ticketId+': '+n.status).join(' | ')||'Não solicitado',
+  r.validation?.validated_at?alarmEmailTime(r.validation.validated_at):'',
+  r.validation?.completed_at?alarmEmailTime(r.validation.completed_at):(r.status==='sent'?alarmEmailTime(r.sent_at):''),
+  r.validation?.validated_at&&(r.validation?.completed_at||(r.status==='sent'&&r.sent_at))
+   ?Math.max(0,Math.round((new Date(r.validation.completed_at||r.sent_at)-new Date(r.validation.validated_at))/60000)):'',
   (r.ticket_ids||[]).map(id=>'#'+id).join(' | '),(r.ticket_ids||[]).length,r.subject,r.request_id||'',r.created_at]);
  const csv='\uFEFF'+cols.concat(lines).map(row=>row.map(csvCell).join(';')).join('\r\n');
  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
@@ -3451,7 +3463,9 @@ function alarmUpdateSelectedCount(){
  alarmRenderSelectedDetails();
 }
 function alarmEmailInvalidate(){
- alarmEmailApproved='';alarmEmailRequestId='';alarmEmailMissingIds=[];
+ alarmEmailApproved='';alarmEmailRequestId='';alarmEmailValidated=false;alarmEmailMissingIds=[];
+ if($('alarmEmailValidate')){$('alarmEmailValidate').disabled=true;$('alarmEmailValidate').textContent='✓ Validado — registrar início'}
+ if($('alarmEmailValidatedAt'))$('alarmEmailValidatedAt').textContent='Validação pendente';
  $('alarmEmailRemoveMissing')?.classList.add('hide');
  const button=$('alarmEmailSend');if(button)button.disabled=true;
  $('alarmEmailPreviewArea')?.classList.add('hide');
@@ -3657,7 +3671,11 @@ async function alarmEmailPreview(){
   $('alarmEmailPreviewArea').classList.remove('hide');
   alarmEmailApproved=alarmSelectionSignature();
   alarmEmailRequestId=crypto.randomUUID();
-  button.disabled=false;
+  alarmEmailValidated=false;
+  $('alarmEmailValidate').disabled=false;
+  $('alarmEmailValidate').textContent='✓ Validado — registrar início';
+  $('alarmEmailValidatedAt').textContent='Validação pendente';
+  button.disabled=true;
   $('alarmEmailStatus').textContent='Prévia pronta. Confira destinatário, chamados, texto e orientações antes de confirmar o envio.';
  }catch(e){
   alarmEmailApproved='';
@@ -3667,8 +3685,29 @@ async function alarmEmailPreview(){
    (alarmEmailMissingIds.length?' Você pode desmarcar somente os números ausentes e gerar uma nova prévia.':'');
  }
 }
+async function alarmEmailValidate(){
+ const btn=$('alarmEmailValidate');
+ if(!alarmEmailApproved||alarmEmailApproved!==alarmSelectionSignature()||!alarmEmailRequestId){
+  $('alarmEmailStatus').textContent='Atualize a prévia antes de validar.';return;
+ }
+ btn.disabled=true;
+ try{
+  const client=window.tmEmailAdminClient;
+  if(!client)throw Error('Faça login como administrador.');
+  const {data,error}=await client.functions.invoke('audit-email-dispatch',{body:{
+   action:'ticket_charge_validate',requestId:alarmEmailRequestId,
+   ticketIds:[...alarmSelected],recipient:alarmRecipientEmail(),cc:alarmCcRecipients()
+  }});
+  if(error||!data?.ok)throw Error(data?.error||error?.message||'Não foi possível registrar a validação.');
+  alarmEmailValidated=true;
+  btn.textContent='✓ Validado';
+  $('alarmEmailValidatedAt').textContent='Início: '+alarmEmailTime(data.validatedAt);
+  $('alarmEmailSend').disabled=false;
+  $('alarmEmailStatus').textContent='Validação registrada. Confira a prévia e confirme o envio.';
+ }catch(e){btn.disabled=false;$('alarmEmailStatus').textContent=String(e.message||e)}
+}
 async function alarmEmailSend(){
- if(alarmEmailSending||!alarmEmailApproved||alarmEmailApproved!==alarmSelectionSignature()){
+ if(alarmEmailSending||!alarmEmailValidated||!alarmEmailApproved||alarmEmailApproved!==alarmSelectionSignature()){
   $('alarmEmailStatus').textContent='Gere uma nova prévia após qualquer alteração.';return
  }
  const recipient=alarmRecipientEmail(),n=alarmSelected.size;
@@ -3683,11 +3722,11 @@ async function alarmEmailSend(){
  try{
   const result=await alarmEmailCall('ticket_charge_send',true);
   $('alarmEmailStatus').textContent='Solicitação enviada ao serviço Gmail para '+result.recipient+(result.cc?.length?' · CC: '+result.cc.join(', '):'')+'. Registro interno: '+(result.noteStatus||'não solicitado')+'. Confira o histórico antes de qualquer reenvio.';
-  alarmEmailApproved='';alarmEmailRequestId='';alarmSelected.clear();
+  alarmEmailApproved='';alarmEmailRequestId='';alarmEmailValidated=false;alarmSelected.clear();
   await alarmEmailHistoryLoad();renderAlerts();
  }catch(e){
   $('alarmEmailStatus').textContent='Envio não confirmado: '+(e.message||e)+'. Consulte o Gmail antes de tentar novamente.';
-  alarmEmailApproved='';alarmEmailRequestId='';
+  alarmEmailApproved='';alarmEmailRequestId='';alarmEmailValidated=false;
   await alarmEmailHistoryLoad();
  }finally{alarmEmailSending=false;$('alarmEmailSend').disabled=true}
 }
