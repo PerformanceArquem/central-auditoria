@@ -58,11 +58,11 @@ test('report TMA preserves measured calls across windows and labels missing cove
 
 test('voice distribution shows only authorized Support staff, excluding Kassio and other departments',()=>{
  const people=[
-  {extension:'1',name:'Rhyan Massayoshi',total:19,answered:15},
+  {extension:'1',name:'Rhyan Massayoshi',total:19,answered:15,unanswered:4},
   {extension:'2',name:'Bruno Oliveira',total:16,answered:13},
   {extension:'3',name:'Vitor Nascimento',total:10,answered:7},
   {extension:'4',name:'Guilherme Henrique',total:8,answered:3},
-  {extension:'5',name:'Cleverson Teixeira',total:5,answered:5},
+  {extension:'5',name:'Cleverson Teixeira',total:5,answered:5,unanswered:0},
   {extension:'6',name:'Kassio Rodrigues',total:4,answered:3},
   {extension:'7',name:'Alan Reis',total:9,answered:6},
   {extension:'8',name:'Davi Vinicius',total:6,answered:6},
@@ -76,6 +76,10 @@ test('voice distribution shows only authorized Support staff, excluding Kassio a
  for(const other of ['Kassio Rodrigues','Alan Reis','Davi Vinicius','Guilherme Bonato','Laís Lot'])
   assert.ok(!result.html.includes(other),other+' incorrectly included');
  assert.ok(result.html.includes('Bruno Oliveira'));
+ assert.ok(result.html.includes('<th>Não atendidas</th>'));
+ assert.ok(result.html.includes('<td>Rhyan Massayoshi</td><td>19</td><td>15</td><td>4</td>'));
+ assert.ok(result.html.includes('<td>Cleverson Teixeira</td><td>5</td><td>5</td><td>0</td>'));
+ assert.equal(result.text.includes('indicadores reais'),false);
  assert.equal(result.packet.total,83); // account totals remain unchanged
  assert.equal(result.packet.personScope,'Somente colaboradores do Suporte, excluindo Kassio');
 });
