@@ -1,4 +1,4 @@
-import {movideskInternalAction} from './ticket-charge-internal.ts';
+import {movideskInternalAction,type MovideskProfile,type ApprovedTimeLog} from './ticket-charge-internal.ts';
 type RecordRow=Record<string,any>;
 type Db=(path:string, init?:RequestInit)=>Promise<any>;
 export async function processChargeInternalNote(db:Db,token:string){
@@ -12,7 +12,9 @@ export async function processChargeInternalNote(db:Db,token:string){
  if(!/^[0-9a-f-]{36}$/i.test(id)||!/^\d{1,12}$/.test(ticketId))return {ok:false,processed:0,error:'Fila de notas inválida'};
  const profiles=await db('audit_movidesk_note_profiles?user_id=eq.'+encodeURIComponent(String(row.created_by_user||''))+'&active=eq.true&select=movidesk_person_id,display_name,team_id,team_name,work_type&limit=1') as RecordRow[];
  if(profiles.length!==1){await update('blocked','Identidade Movidesk não validada');return {ok:false,processed:0,error:'Perfil Movidesk não encontrado'}}
- const profile=profiles[0];
+ const raw=profiles[0];
+ const profile:MovideskProfile={movidesk_person_id:String(raw.movidesk_person_id),display_name:String(raw.display_name),team_id:Number(raw.team_id),team_name:String(raw.team_name),work_type:String(raw.work_type)};
+ const timeLog=row.time_log?row.time_log as ApprovedTimeLog:undefined;
  const history=await db('audit_ticket_charge_history?request_id=eq.'+encodeURIComponent(requestId)+'&select=status,sent_at&limit=1') as RecordRow[];
  if(history.length!==1||history[0].status!=='sent'||!history[0].sent_at){
   await update('blocked','E-mail sem aceite confirmado');return {ok:true,processed:0,blocked:1};
@@ -34,7 +36,7 @@ export async function processChargeInternalNote(db:Db,token:string){
   }
   patchAttempted=true;
   const patch=await fetch(url,{method:'PATCH',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(movideskInternalAction(String(row.note_body||''),profile,row.time_log||undefined)),signal:AbortSignal.timeout(15000)});
+    body:JSON.stringify(movideskInternalAction(String(row.note_body||''),profile,timeLog)),signal:AbortSignal.timeout(15000)});
   if(!patch.ok)throw Error('Anotação Movidesk HTTP '+patch.status);
   await update('sent','',true);
   return {ok:true,processed:1,ticketId};
