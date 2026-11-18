@@ -94,3 +94,16 @@ test('módulo de liberação usa autorização de administrador e preserva demai
  assert.match(source,/\.eq\('active',true\)/);
  assert.match(source,/Nenhum e-mail enviado/);
 });
+
+test('histórico de envios e aberturas filtra por intervalo de datas inclusivo em Brasília',()=>{
+  const source=extract('emailAdminIntegratedScript');
+  assert.doesNotThrow(()=>new Function(source));
+  for(const id of ['emailHistoryFrom','emailHistoryTo','emailHistoryClearDates']) assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(source,/dateFrom>dateTo/);
+  assert.match(source,/dateNext\(dateTo\)/);
+  assert.match(source,/logsQuery\.gte\('created_at',dateStart\)/);
+  assert.match(source,/logsQuery\.lt\('created_at',dateEnd\)/);
+  assert.match(source,/receiptQuery\.gte\('created_at',dateStart\)/);
+  assert.match(source,/receiptQuery\.lt\('created_at',dateEnd\)/);
+  assert.match(source,/emailHistoryClearDates'\)\.addEventListener\('click'/);
+});
