@@ -32,7 +32,7 @@ test('audit reports versioned CC contract without invoking doPost, sending mail 
 });
 
 test('independent CC audit runs even if inventory reconciliation fails closed',()=>{
- const section=workflow.split('  cc-readonly-audit:')[1]?.split('  zenvia-isolated-tests:')[0];
+ const section=workflow.split('  cc-readonly-audit:')[1]?.split('  pr103-dryrun:')[0];
  assert.ok(section,'independent cc audit job missing');
  assert.match(section,/clasp list-deployments/);
  assert.match(section,/clasp pull --versionNumber/);
@@ -67,7 +67,7 @@ test('remote inventory audit identifies duplicates without changing allowlist or
  }finally{rmSync(tmp,{recursive:true,force:true})}
 });
 test('inventory review remains read-only and release allowlist unchanged',()=>{
- const runner=workflow.split('  cc-readonly-audit:')[1]?.split('  zenvia-isolated-tests:')[0];
+ const runner=workflow.split('  cc-readonly-audit:')[1]?.split('  pr103-dryrun:')[0];
  assert.match(runner,/ci-clasp-inventory-triage\.mjs/);
  assert.doesNotMatch(runner,/clasp push|create-deployment|create-version/);
  const recon=readFileSync(new URL('../apps-script/ci-clasp-reconcile-dry-run.mjs',import.meta.url),'utf8');
