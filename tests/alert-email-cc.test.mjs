@@ -19,7 +19,8 @@ test('Backend validates active corporate CC, persists history, blocks unsupporte
  assert.match(api,/audit_email_recipients\?select=email&active=eq.true/);
  assert.match(api,/cc_recipients:cc/);
  assert.match(api,/ccProviderSupported\(\)/);
- assert.match(api,/ccSupported:!cc.length\|\|await ccProviderSupported\(\)/);
+ assert.match(api,/ccSupported:!cc.length\|\|ccDiagnostic\?\.supported===true/);
+ assert.match(api,/ccDiagnostic:ccDiagnostic\?\{reason:ccDiagnostic.reason/);
  assert.match(api,/\.\.\.\(cc\.length\?\{cc\}:\{\}\)/);
  assert.match(api,/source:'ticket_charge'\},cc\)/);
 });
