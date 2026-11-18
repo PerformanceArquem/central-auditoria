@@ -89,3 +89,20 @@ test('open signal has no IP, location, user-agent or device fingerprint storage 
   assert.match(migration,/first_opened_at timestamptz/);
   assert.match(source,/open_token_hash:openTokenHash/);
 });
+
+test('integration test emails also create unique automatic opening-tracking receipts without sending in preview',()=>{
+ const source=readFileSync(new URL('../supabase/functions/audit-email-dispatch/index.ts',import.meta.url),'utf8');
+ const shared=readFileSync(new URL('../supabase/functions/_shared/read-receipts.ts',import.meta.url),'utf8');
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ assert.match(source,/manual-integration-test:'\+crypto\.randomUUID\(\)/);
+ assert.match(source,/recipientName:rows\[0\]\.name,source:'test'/);
+ assert.match(source,/sendMail\(recipient,draft\.subject,draft\.text,draft\.html,undefined,false,/);
+ assert.match(source,/source:'ticket_charge'/);
+ assert.match(source,/manual-test:\$\{id\}/);
+ assert.match(source,/false,receiptContext\(key,rec,from,to\)/);
+ assert.match(shared,/\| 'ticket_charge' \| 'test'/);
+ assert.match(html,/<th>Origem<\/th>/);
+ assert.match(html,/source==='test'\?'Teste manual'/);
+ assert.match(html,/source==='ticket_charge'\?'Cobrança manual'/);
+ assert.doesNotMatch(html,/neq\('source','test'\)/);
+});
