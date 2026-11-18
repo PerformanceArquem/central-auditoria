@@ -62,3 +62,20 @@ test('não aprova inventário diferente mesmo que não haja duplicatas',()=>{
   assert.match(r.message,/Unexpected inventory/);
  }finally{rmSync(f.root,{recursive:true,force:true})}
 });
+
+test('deduplica apenas corpo byte-idêntico em memória; preserva arquivos remotos',()=>{
+ const duplicate='function arquemPdf_(){}\n';
+ const f=fixture({'homologacao-pr103-isolada.js':duplicate});
+ // The fixture is deliberately too small for approval, but its exact duplicate
+ // must not be reported as a conflicting implementation.
+ try{
+  const r=execute(f);
+  assert.notEqual(r.code,0);
+  assert.doesNotMatch(r.message,/AUDITORIA BLOQUEADA:/);
+  assert.match(r.message,/Unexpected inventory/);
+  const diagnostic=readFileSync(f.summary,'utf8');
+  assert.match(diagnostic,/Duplicidades textualmente idênticas encontradas: 1/);
+  assert.match(diagnostic,/Conflitos com implementações diferentes: 0/);
+  assert.equal(readFileSync(join(f.input,'homologacao-pr103-isolada.js'),'utf8'),duplicate);
+ }finally{rmSync(f.root,{recursive:true,force:true})}
+});
