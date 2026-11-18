@@ -1,9 +1,10 @@
 import {isProjectChargeSubject,projectChargeMetrics} from './project-charge-metrics.ts';
+import {readProjectForecast} from './project-forecast-extract.ts';
 // Busca consistente com as diferentes bases utilizadas no ranking e na importação.
 type TicketRecord=Record<string,unknown>;
 type LookupDB=(path:string)=>Promise<unknown>;
 export type ChargeLookup={records:TicketRecord[],missingIds:string[],sources:Record<string,string>};
-export type ChargeProjectOptions={dailyGoalHours?:number;periodFrom?:string;periodTo?:string};
+export type ChargeProjectOptions={dailyGoalHours?:number;periodFrom?:string;periodTo?:string;workdayHours?:number;forecastFieldId?:string};
 export async function chargeTicketLookup(ids:string[],db:LookupDB,opts:ChargeProjectOptions={}):Promise<ChargeLookup>{
  if(!Array.isArray(ids)||!ids.length||ids.length>20||
   ids.some(x=>!/^\d{1,12}$/.test(x))||new Set(ids).size!==ids.length)
@@ -87,11 +88,18 @@ export async function chargeTicketLookup(ids:string[],db:LookupDB,opts:ChargePro
      const source=found.get(id)!, forecast=forecasts.get(id);
      const forecastNum=forecast?.estimated_hours===null||forecast?.estimated_hours===undefined?
        null:Number(forecast.estimated_hours);
+     const payload=source.payload as Record<string,unknown>;
+     const fromMovidesk=readProjectForecast(payload,opts.workdayHours||8,opts.forecastFieldId||'');
+     const hasSnapshot=forecastNum!==null&&Number.isFinite(forecastNum)&&forecastNum>0;
+     const selectedForecast=hasSnapshot?forecastNum:fromMovidesk?.hours??null;
      const metrics=projectChargeMetrics(grouped.get(id)||[],opts.dailyGoalHours||4,
-       opts.periodFrom,opts.periodTo,forecastNum);
+       opts.periodFrom,opts.periodTo,selectedForecast);
      found.set(id,{...source,project_metrics:{...metrics,
-       forecastOrigin:forecast?String(forecast.evidence_origin||'Base de previsão'):null,
-       forecastUpdatedAt:forecast?String(forecast.updated_at||''):null}});
+       forecastOrigin:hasSnapshot?String(forecast?.evidence_origin||'Previsão consolidada'):
+         fromMovidesk?.origin||null,
+       forecastConfidence:hasSnapshot?String(forecast?.confidence||'não classificada'):
+         fromMovidesk?.confidence||null,
+       forecastUpdatedAt:hasSnapshot?String(forecast?.updated_at||''):null}});
    }
  }
  return {records:ids.filter(id=>found.has(id)).map(id=>found.get(id)!),missingIds:missing,sources};
