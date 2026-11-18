@@ -43,3 +43,34 @@ test('independent CC audit runs even if inventory reconciliation fails closed',(
  const main=workflow.split('  audit:')[1]?.split('  cc-readonly-audit:')[0];
  assert.ok(main?.includes('ci-clasp-reconcile-dry-run.mjs'),'reconciliation guard accidentally removed');
 });
+
+test('remote inventory audit identifies duplicates without changing allowlist or disclosing source',()=>{
+ const tmp=mkdtempSync(join(tmpdir(),'inventory-triage-'));
+ try{
+  const remote=join(tmp,'remote'),summary=join(tmp,'summary.md');
+  mkdirSync(remote,{recursive:true});
+  writeFileSync(join(remote,'Código.js'),
+    'function doPost(e){}\nfunction arquemCreateReportAttachments_(){}\nfunction arquemCapacidadesAnexos_(){}\n');
+  writeFileSync(join(remote,'homologacao-pr103-isolada.js'),
+    'function arquemCreateReportAttachments_(){}\nfunction arquemHomologarKeilaSemEnvio(){}\nfunction arquemValidarPublicacaoSemEnvio(){}\n');
+  const script=fileURLToPath(new URL('../apps-script/ci-clasp-inventory-triage.mjs',import.meta.url));
+  const result=spawnSync(process.execPath,[script,remote,summary],{encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);
+  const output=readFileSync(summary,'utf8');
+  assert.match(output,/Arquivos JavaScript: 2/);
+  assert.match(output,/Funções globais únicas: 5/);
+  assert.match(output,/Funções com múltiplas definições: 1/);
+  assert.match(output,/arquemCreateReportAttachments_/);
+  assert.match(output,/homologacao-pr103-isolada.js/);
+  assert.doesNotMatch(output,/function doPost\(e\)/);
+  assert.match(result.stdout,/INVENTORY_DUPLICATE/);
+ }finally{rmSync(tmp,{recursive:true,force:true})}
+});
+test('inventory review remains read-only and release allowlist unchanged',()=>{
+ const runner=workflow.split('  cc-readonly-audit:')[1]?.split('  zenvia-isolated-tests:')[0];
+ assert.match(runner,/ci-clasp-inventory-triage\.mjs/);
+ assert.doesNotMatch(runner,/clasp push|create-deployment|create-version/);
+ const recon=readFileSync(new URL('../apps-script/ci-clasp-reconcile-dry-run.mjs',import.meta.url),'utf8');
+ assert.match(recon,/approvedInventories = new Set\(\['6:39', '8:48'\]\)/);
+ assert.doesNotMatch(recon,/'9:49'/);
+});
