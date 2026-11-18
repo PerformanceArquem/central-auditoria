@@ -18,5 +18,8 @@ for (const path of ['arquem-relatorios-anexos.gs','central-auditoria-emails-comp
     assert.match(code,/\['Colaborador','Setor','Horas','Mínimo','Jornada','Falta mínimo','Falta jornada','Saldo mínimo','Saldo jornada','Origem'\]/);
     assert.match(code,/x\.minimumBalance!==undefined\?x\.minimumBalance/);
     assert.match(code,/x\.targetBalance!==undefined\?x\.targetBalance/);
+    assert.match(code,/\['Data','Colaborador','Setor','Horas','Jornada ref.','Meta mínima ref.','Saldo mínimo','Saldo jornada'\]/);
+    assert.match(code,/\['Data','Colaborador','Setor','Horas','Jornada','Mínimo','Saldo mínimo','Saldo jornada','Situação'\]/);
+    assert.match(code,/x\.referenceMinutes\?arquemSaldo_\(/);
   });
 }
