@@ -39,7 +39,8 @@ test('sector remains selected across empty and partial sync refresh, clears only
  assert.equal(select.value,'Produção','selected sector lost during empty sync');
  context.setOptions([{team:'Produção'},{team:'Suporte'}]);
  assert.equal(select.value,'Produção');
- context.selectTeam('');
+ select.value='';
+ context.selectTeam(select.value);
  context.setOptions([{team:'Produção'},{team:'Suporte'}]);
  assert.equal(select.value,'');
 });
