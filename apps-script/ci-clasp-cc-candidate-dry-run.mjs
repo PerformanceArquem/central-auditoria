@@ -1,6 +1,7 @@
 // Read-only CC candidate rehearsal. Never publish, upload source, execute mail or doPost.
 import {readFileSync,writeFileSync,readdirSync,mkdirSync,appendFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 const [input,output,summary,modules]=process.argv.slice(2);
 if(!input||!output||!summary||!modules)throw Error('Missing arguments');
@@ -91,5 +92,20 @@ if(names.size!==49)throw Error('Inventário 9:49 modificado');
 mkdirSync(output,{recursive:true});
 for(const [name,code] of candidate)writeFileSync(join(output,name),code,{mode:0o600});
 writeFileSync(join(output,'appsscript.json'),readFileSync(join(input,'appsscript.json')),{mode:0o600});
+// Same deterministic file digest used by the controlled release and promotion gates.
+// Only fingerprints, never source content, are written to the Actions summary.
+const hashFiles=dir=>{
+ const names=readdirSync(dir).filter(name=>name==='appsscript.json'||/\.(?:js|gs|html)$/.test(name)).sort();
+ const hash=createHash('sha256');
+ for(const name of names){hash.update(name);hash.update('\0');hash.update(readFileSync(join(dir,name)));hash.update('\0')}
+ return {sha:hash.digest('hex'),count:names.length};
+};
+const remoteFingerprint=hashFiles(input),candidateFingerprint=hashFiles(output);
+appendFileSync(summary,'\n### Assinaturas para publicação revisada de CC\n\n'+
+ 'Remoto (expected_remote_sha256): `'+remoteFingerprint.sha+'`\n\n'+
+ 'Candidato (approved_source_sha256): `'+candidateFingerprint.sha+'`\n\n'+
+ 'Arquivos: remoto '+remoteFingerprint.count+', candidato '+candidateFingerprint.count+
+ '. Somente diagnóstico, sem publicação.\n');
+console.log('APPSSCRIPT_CC_FINGERPRINT remote='+remoteFingerprint.sha+' candidate='+candidateFingerprint.sha);
 appendFileSync(summary,'\n### CC candidato: apenas simulação read-only\n\nSomente doPost modificado em cópia temporária; autenticação, outras 48 funções, anexos e manifesto preservados. Nenhum envio, push ou deploy. Candidato exige revisão adicional e homologação funcional.\n');
 console.log('APPSSCRIPT_CC_STAGING_OK globals=49 files=9 doPostOnly=true deployed=false');
