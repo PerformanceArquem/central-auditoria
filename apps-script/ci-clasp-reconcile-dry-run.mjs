@@ -35,10 +35,13 @@ const critical=['doPost','arquemCreateReportAttachments_','arquemCapacidadesAnex
 // and run 43925902801 (8 JS files, 48 unique globals).
 // Accept only these exact pairs; preserve critical-name and duplicate checks.
 // Any other inventory must be investigated before changing this allowlist.
-const approvedInventories = new Set(['6:39', '8:48']);
+const approvedInventories = new Set(['6:39', '8:48', '9:49']);
 const inventoryKey = original.length+':'+afterNames.size;
 if(!approvedInventories.has(inventoryKey))
  throw Error('Unexpected inventory: files='+original.length+' functions='+afterNames.size);
+// The 9:49 state was observed in the 2026-11-18 read-only AST review.
+if(inventoryKey==='9:49'&&!original.includes('homologacao-pr103-isolada.js'))
+ throw Error('PR103 inventory signature missing; refusing 9:49');
 const missingCritical=critical.filter(name=>!afterNames.has(name));
 if(missingCritical.length)throw Error('Funções críticas não encontradas: '+missingCritical.join(', '));
 const remainingFns=new Map();
