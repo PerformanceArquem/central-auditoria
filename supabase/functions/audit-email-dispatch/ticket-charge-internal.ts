@@ -6,18 +6,20 @@ export function internalChargeNote(requestId:string,detail:NoteDetail,recipient:
  if(!/^[0-9a-f-]{36}$/i.test(requestId)||!/^\d{1,12}$/.test(detail.id))throw Error('Referência de auditoria inválida.');
  const reference='CENTRAL-AUDITORIA-COBRANCA:'+requestId+':'+detail.id;
  const lines=[
-  '[REGISTRO INTERNO DE COBRANÇA — CENTRAL DE AUDITORIA]',
+  '[ACOMPANHAMENTO INTERNO — CENTRAL DE AUDITORIA]',
   'Referência: '+reference,
-  'Motivo: verificação de chamado sem movimentação/tratamento.',
+  'Olá, equipe! Tudo bem?',
+  'Estamos acompanhando este chamado e gostaríamos de confirmar, quando possível, como está o andamento e se há alguma dependência ou necessidade de apoio.',
+  'Se já houver novidades, pedimos a gentileza de manter as informações atualizadas no Movidesk, indicando o próximo passo, o responsável e uma previsão viável de retorno, quando disponível.',
+  'Agradecemos pela colaboração e permanecemos à disposição para alinharmos os próximos encaminhamentos.',
   'Chamado: #'+detail.id,
   'Cliente: '+clean(detail.client),
-  'Setor no momento da cobrança: '+clean(detail.sector),
-  'Responsável no momento da cobrança: '+clean(detail.owner),
+  'Setor na consulta: '+clean(detail.sector),
+  'Responsável na consulta: '+clean(detail.owner),
   'Assunto: '+clean(detail.subject,220),
-  'E-mail de cobrança enviado para: '+clean(recipient,128),
+  'Acompanhamento encaminhado por e-mail para: '+clean(recipient,128),
   'Em cópia (CC): '+(cc.length?cc.map(x=>clean(x,128)).join(', '):'Nenhum'),
-  'Solicitado: atualização do andamento no Movidesk, próxima ação, responsável e previsão de retorno.',
-  'Registro exclusivo de auditoria: não constitui tratamento técnico, resolução do chamado nem apontamento de horas.'
+  'Nota de auditoria: este registro é apenas acompanhamento administrativo; não indica falta de trabalho, não constitui tratamento técnico, resolução nem apontamento de horas.'
  ];
  return {reference,text:lines.join('\n')};
 }

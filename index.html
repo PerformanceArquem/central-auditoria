@@ -1922,10 +1922,10 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 <small id="alarmEmailManagerCcHint" class="subtle" style="display:block;margin-bottom:7px">O setor será identificado pelos chamados selecionados. Confira os gestores sugeridos antes de enviar.</small>
 <small class="subtle">Selecione até 10 contatos ativos. Todos receberão o mesmo e-mail corporativo. A abertura detectada será da mensagem, não de uma pessoa específica.</small><div id="alarmEmailCcChoices" style="max-height:170px;overflow:auto;margin-top:8px"><small class="subtle">Carregando contatos...</small></div></details>
                             </div>
-                            <div class="fg" style="min-width:180px"><label for="alarmEmailTone">Modelo de mensagem</label><select id="alarmEmailTone" onchange="alarmEmailDraft()"><option value="cordial">Cobrança cordial</option><option value="priority">Prioridade e previsão</option><option value="management">Resumo para gestão</option></select></div>
+                            <div class="fg" style="min-width:180px"><label for="alarmEmailTone">Modelo de mensagem</label><select id="alarmEmailTone" onchange="alarmEmailDraft()"><option value="cordial">Acompanhamento cordial</option><option value="priority">Prioridade e previsão</option><option value="management">Resumo para gestão</option></select></div>
                           </div>
                           <div class="fg" style="margin-top:10px"><label>Chamados selecionados · setor e responsável atuais</label><div class="tw" style="max-height:190px;overflow:auto"><table><thead><tr><th>Chamado</th><th>Cliente</th><th>Setor</th><th>Responsável</th></tr></thead><tbody id="alarmEmailSelectedDetails"><tr><td colspan="4">Selecione chamados para visualizar.</td></tr></tbody></table></div></div>
-<div class="fg" style="margin-top:10px"><label for="alarmEmailMessage">Texto de abertura (editável)</label><textarea id="alarmEmailMessage" rows="7" style="width:100%" oninput="alarmEmailInvalidate()"></textarea></div>
+<div class="fg" style="margin-top:10px"><label for="alarmEmailMessage">Contexto complementar (editável; saudação e encerramento são padronizados)</label><textarea id="alarmEmailMessage" rows="7" style="width:100%" oninput="alarmEmailInvalidate()"></textarea></div>
                           <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">
                             <button type="button" class="s" onclick="alarmEmailDraft()">Gerar texto padrão</button>
                             <button type="button" class="s" id="alarmEmailAiDraft" onclick="alarmEmailAiDraft()" disabled title="Verificando disponibilidade do Gemini..." style="border-color:#b8c7e9;background:#eef4ff;color:#1b4da0;font-weight:700">✦ Melhorar cobrança com IA</button>
@@ -3507,9 +3507,9 @@ function alarmEmailDraft(){
  const count=alarmSelected.size;
  const tone=$('alarmEmailTone').value;
  const templates={
-  cordial:'Prezados,\n\nSolicito a verificação dos '+count+' chamados abaixo, identificados nos registros da Central como sem movimentação ou tratamento recente.\n\nFavor atualizar o andamento no Movidesk e informar setor e responsável pela próxima ação, medidas adotadas e previsão de retorno, quando aplicável.\n\nObrigado pelo retorno.',
-  priority:'Prezados,\n\nIdentificamos '+count+' chamados em aberto que necessitam de prioridade no acompanhamento. Solicito uma posição objetiva sobre o que impede o andamento de cada demanda e uma previsão de tratativa.\n\nFavor informar responsável, ação prevista e data de retorno.\n\nAgradeço a atenção.',
-  management:'Prezados,\n\nEncaminho para análise gerencial os '+count+' chamados listados abaixo, com foco no tempo sem atualização e na necessidade de regularização dos encaminhamentos.\n\nSolicito retorno com situação, responsável pela próxima ação e previsão realista de conclusão.\n\nAtenciosamente.'
+  cordial:'Acompanhamento colaborativo dos '+count+' chamados selecionados. Caso existam dependências ou novidades ainda não registradas, podemos alinhar os próximos passos com a equipe.',
+  priority:'Gostaríamos de alinhar, quando possível, a prioridade dos '+count+' chamados selecionados e entender se existe algum impedimento ou apoio necessário. Uma previsão viável ajudará no acompanhamento.',
+  management:'Para alinhamento com a gestão, seguem '+count+' chamados cujo andamento merece acompanhamento conjunto. Agradecemos a confirmação dos responsáveis, das próximas ações e das previsões disponíveis.'
  };
  $('alarmEmailMessage').value=templates[tone]||templates.cordial;
  alarmEmailInvalidate();

@@ -48,8 +48,9 @@ test('sector manager button uses active registered manager metadata without gues
  assert.ok(html.includes("$('alarmEmailCcDetails').open=true"));
  assert.match(html,/Melhorar cobrança com IA/);
 });
-test('standard subject explicitly says verification of tickets without movement or treatment',()=>{
- assert.match(mail,/Verificação de chamado sem movimentação\/tratamento/);
- assert.match(mail,/Verificação de chamados sem movimentação\/tratamento/);
+test('standard subject is neutral and requests respectful follow-up',()=>{
+ assert.match(mail,/Acompanhamento cordial de chamados/);
+ assert.match(mail,/Acompanhamento de chamados/);
+ assert.match(mail,/Agradecemos desde já pela atenção e parceria/);
  assert.match(mail,/responsável/i);
 });

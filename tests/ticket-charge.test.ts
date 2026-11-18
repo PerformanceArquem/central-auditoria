@@ -34,7 +34,7 @@ Deno.test('escapes untrusted client and subject text',()=>{
 });
 Deno.test('uses edited introduction but preserves canonical ticket table',()=>{
  const a=composeTicketCharge(base,'direcao@arquem.com.br','Mensagem revisada');
- assert(a.text.startsWith('Mensagem revisada'),'editing ignored');
+ assert(a.text.includes('Olá, equipe!')&&a.text.includes('Contexto complementar para esta verificação:\nMensagem revisada'),'humanized wrapper or editing ignored');
  assert(a.text.includes('Chamado #77533'),'canonical ticket details missing');
 });
 
