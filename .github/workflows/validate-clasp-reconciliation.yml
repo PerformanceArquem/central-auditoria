@@ -1,0 +1,30 @@
+name: Validate Apps Script inventory reconciliation guard
+on:
+  pull_request:
+    paths:
+      - 'apps-script/ci-clasp-reconcile-dry-run.mjs'
+      - 'tests/clasp-reconcile-inventory.test.mjs'
+      - '.github/workflows/validate-clasp-reconciliation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  simulate-collisions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned parser in disposable location
+        run: npm install --prefix "$RUNNER_TEMP/js-parser" --no-save acorn@8.15.0
+      - name: Static syntax check
+        run: |
+          node --check apps-script/ci-clasp-reconcile-dry-run.mjs
+          node --check tests/clasp-reconcile-inventory.test.mjs
+      - name: Read-only synthetic collision and inventory tests
+        env:
+          ACORN_MODULES_DIR: ${{ runner.temp }}/js-parser
+        run: node --test tests/clasp-reconcile-inventory.test.mjs
