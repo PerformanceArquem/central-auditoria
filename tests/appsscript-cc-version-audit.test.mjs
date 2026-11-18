@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
+const workflow=readFileSync(new URL('../.github/workflows/appsscript-clasp-controlled.yml',import.meta.url),'utf8');
 const script=fileURLToPath(new URL('../apps-script/ci-clasp-cc-live-audit.mjs',import.meta.url));
 test('audit reports versioned CC contract without invoking doPost, sending mail or exposing deployment IDs',()=>{
  const tmp=mkdtempSync(join(tmpdir(),'cc-audit-'));
@@ -28,4 +29,17 @@ test('audit reports versioned CC contract without invoking doPost, sending mail 
   assert.doesNotMatch(text,/AKfySensitiveSecret/);
   assert.doesNotMatch(r.stdout,/AKfySensitiveSecret/);
  }finally{rmSync(tmp,{recursive:true,force:true})}
+});
+
+test('independent CC audit runs even if inventory reconciliation fails closed',()=>{
+ const section=workflow.split('  cc-readonly-audit:')[1]?.split('  zenvia-isolated-tests:')[0];
+ assert.ok(section,'independent cc audit job missing');
+ assert.match(section,/clasp list-deployments/);
+ assert.match(section,/clasp pull --versionNumber/);
+ assert.match(section,/ci-clasp-cc-live-audit\.mjs" report/);
+ assert.match(section,/secrets\.CLASPRC_JSON/);
+ assert.doesNotMatch(section,/clasp push|clasp create-version|clasp create-deployment|MailApp/);
+ assert.doesNotMatch(section,/needs:\s*audit/);
+ const main=workflow.split('  audit:')[1]?.split('  cc-readonly-audit:')[0];
+ assert.ok(main?.includes('ci-clasp-reconcile-dry-run.mjs'),'reconciliation guard accidentally removed');
 });
