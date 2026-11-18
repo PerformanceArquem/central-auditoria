@@ -45,6 +45,17 @@ test('read-only candidate changes only doPost; preserves file list and manifest'
   assert.match(readFileSync(join(out,'Código.js'),'utf8'),/function outraFuncao\(\)\{return 1;\}/);
   assert.equal(readFileSync(join(out,'set-0.js'),'utf8'),readFileSync(join(input,'set-0.js'),'utf8'));
   assert.notEqual(readFileSync(join(out,'Código.js'),'utf8'),source);
+  // Real Apps Script files often format object properties with a trailing comma.
+  // Rehearsal must still produce valid JS, without inserting an extra separator.
+  const withComma=source.replace("body:'x'}", "body:'x',}");
+  writeFileSync(join(input,'Código.js'),withComma);
+  const commaOut=join(root,'preview-trailing');
+  const commaRun=spawnSync(process.execPath,[script,input,commaOut,summary,modules],{encoding:'utf8'});
+  assert.equal(commaRun.status,0,commaRun.stderr);
+  const updatedMail=readFileSync(join(commaOut,'Código.js'),'utf8');
+  assert.match(updatedMail,/body:'x',\s+\.\.\.\(cc\.length/);
+  assert.doesNotMatch(updatedMail,/body:'x',\s*,\s*\.\.\./);
+  assert.match(commaRun.stdout,/STAGING_OK/);
  }finally{rmSync(root,{recursive:true,force:true})}
 });
 test('staging code does not send or publish',()=>{
