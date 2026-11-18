@@ -3086,7 +3086,7 @@ function alarmMeaningfulUpdate(t,created,updated){
   // An internal audit reminder is not technical treatment; keep the old age of inactivity
   // only when Movidesk's lastUpdate corresponds to that audit action.
   const actions=Array.isArray(t.actions)?t.actions:[];
-  const isAudit=a=>/CENTRAL-AUDITORIA-COBRANCA:[0-9a-f-]+:\\d+/i.test(String(a.description||a.htmlDescription||''));
+  const isAudit=a=>/CENTRAL-AUDITORIA-COBRANCA:[0-9a-f-]+:\d+/i.test(String(a.description||a.htmlDescription||''));
   const auditDates=actions.filter(isAudit).map(a=>alarmDate(a.createdDate)).filter(Boolean);
   if(!updated||!auditDates.length)return updated||created;
   const mostRecentAudit=Math.max(...auditDates);
