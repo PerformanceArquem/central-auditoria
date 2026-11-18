@@ -73,7 +73,7 @@ test('image-load token is independent of explicit confirmation and the message d
   assert.notEqual(open,confirm);
   assert.notEqual(open,await openSignalToken(secret,'test:dispatch-2'));
   const html=openSignalContent(open);
-  assert.match(html,/audit-open-signal\\?t=/);
+  assert.match(html,/audit-open-signal\?t=/);
   assert.match(html,/não comprova leitura/);
   assert.match(html,/imagem/);
 });
@@ -85,7 +85,7 @@ test('open signal has no IP, location, user-agent or device fingerprint storage 
   assert.match(edge,/delivered_at=not.is.null/);
   assert.match(edge,/method:'PATCH'/);
   assert.doesNotMatch(edge,/confirmed_at/);
-  assert.doesNotMatch(edge,/headers\\.get\\(['"]user-agent|x-forwarded-for/i);
+  assert.doesNotMatch(edge,/headers\.get\(['"]user-agent|x-forwarded-for/i);
   assert.match(migration,/first_opened_at timestamptz/);
   assert.match(source,/open_token_hash:openTokenHash/);
 });
