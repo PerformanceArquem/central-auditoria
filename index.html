@@ -3283,9 +3283,28 @@ document.getElementById('alarmReviewRows')?.addEventListener('click',async event
  $('alarmEmailStatus').textContent='Reiteração preparada, ainda NÃO enviada. Confira o chamado, atualize a prévia e confirme o envio, se necessário.';
 });
 
+// Um único índice de cobranças evita varrer todo o histórico para cada linha
+// do ranking, mantendo o rastreamento e os estados de envio inalterados.
+let alarmHistoryIndexSource=null,alarmHistoryIndex=new Map();
+function alarmHistoryForTicket(id){
+ if(alarmHistoryIndexSource!==alarmEmailHistory){
+   const index=new Map();
+   for(const item of alarmEmailHistory){
+     for(const ticketId of item.ticket_ids||[]){
+       const key=String(ticketId);
+       if(!index.has(key))index.set(key,[]);
+       index.get(key).push(item);
+     }
+   }
+   for(const items of index.values())items.sort((a,b)=>Date.parse(a.sent_at||a.created_at)-Date.parse(b.sent_at||b.created_at));
+   alarmHistoryIndex=index;alarmHistoryIndexSource=alarmEmailHistory;
+ }
+ return alarmHistoryIndex.get(String(id))||[];
+}
 function alarmReminderStatusForTicket(id) {
- const sent=alarmEmailHistory.filter(r=>r.status==='sent'&&(r.ticket_ids||[]).map(String).includes(String(id))).sort((a,b)=>Date.parse(a.sent_at||a.created_at)-Date.parse(b.sent_at||b.created_at));
- const uncertain=alarmEmailHistory.some(r=>r.status!=='sent'&&(r.ticket_ids||[]).map(String).includes(String(id)));
+ const related=alarmHistoryForTicket(id);
+ const sent=related.filter(r=>r.status==='sent');
+ const uncertain=related.some(r=>r.status!=='sent');
  if(uncertain)return {label:'Verificar envio anterior',eligible:false,count:sent.length};
  if(!sent.length)return {label:'Sem cobrança confirmada',eligible:false,count:0};
  const last=sent[sent.length-1],at=Date.parse(last.sent_at||last.created_at);
@@ -3412,7 +3431,7 @@ async function alarmEmailHistoryLoad(){
  }finally{alarmEmailHistoryLoading=false}
 }
 function alarmEmailTicketBadge(id){
- const relevant=alarmEmailHistory.filter(r=>(r.ticket_ids||[]).map(String).includes(String(id)));
+ const relevant=alarmHistoryForTicket(id);
  const sent=relevant.find(r=>r.status==='sent');
  if(sent){const review=alarmReminderStatusForTicket(id);return ' <span class="pill ok" title="'+esc('Aceite pelo Gmail em '+alarmEmailTime(sent.sent_at||sent.created_at)+' · '+review.label)+'">✉ E-mail enviado · '+review.count+' cobrança(s)</span>';}
  if(relevant.length)return ' <span class="pill alert-warn" title="Envio não confirmado: consulte o relatório de e-mails.">✉ Verificar envio</span>';
@@ -3750,6 +3769,7 @@ async function alarmEmailSend(){
   await alarmEmailHistoryLoad();
  }finally{alarmEmailSending=false;$('alarmEmailSend').disabled=true}
 }
+let alarmSectorChartSignature='';
 function renderAlerts(){
   if(!$('t-alerts'))return;
   const all=alarmList(),limit=alarmThreshold(),alerted=all.filter(x=>x.idle>=limit);
@@ -3799,11 +3819,15 @@ function renderAlerts(){
     missingLabel+' · ¹ sem lastUpdate, dias estimados desde a abertura.';
   if(window.Chart&&$('chIdleSector')){
     const chartGroups=groups.slice(0,15);
-    mkc('chIdleSector',{type:'bar',data:{labels:chartGroups.map(g=>g.team),
+    const chartSignature=JSON.stringify([limit,chartGroups.map(g=>[g.team,g.worst.idle])]);
+    if(chartSignature!==alarmSectorChartSignature){
+      alarmSectorChartSignature=chartSignature;
+      mkc('chIdleSector',{type:'bar',data:{labels:chartGroups.map(g=>g.team),
       datasets:[{label:'Maior nº de dias sem atualização',data:chartGroups.map(g=>g.worst.idle),
        backgroundColor:chartGroups.map(g=>g.worst.idle>=limit?'#d63a48':'#6c8ac5'),borderRadius:5}]},
        options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}},
          scales:{x:{beginAtZero:true,title:{display:true,text:'Dias parados'}}}}});
+    }
   }
 }
 async function scanHistorical(force=false){
