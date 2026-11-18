@@ -3334,12 +3334,13 @@ function alarmEmailHistoryRender(){
   const notes=Array.isArray(r.internalNotes)?r.internalNotes:[];
   const noteStatus=notes.length?notes.map(n=>'#'+n.ticketId+': '+(n.status==='sent'?'registrado':n.status==='pending'?'pendente':n.status==='processing'?'processando':n.status==='held'?'aguarda envio':n.status==='uncertain'?'verificar':'bloqueado')).join(' · '):'Não solicitado';
   const validation=r.validation||{};
-  const interval=validation.validated_at&&validation.completed_at
-   ?Math.max(0,Math.round((new Date(validation.completed_at)-new Date(validation.validated_at))/60000))+' min'
+  const finished=validation.completed_at||(r.status==='sent'?r.sent_at:null);
+  const interval=validation.validated_at&&finished
+   ?Math.max(0,Math.round((new Date(finished)-new Date(validation.validated_at))/60000))+' min'
    :'—';
   return '<tr><td>'+esc(alarmEmailTime(sentDate))+'</td><td>'+esc(r.recipient)+'</td><td>'+esc((r.cc_recipients||[]).join(', ')||'—')+'</td>'+
     '<td><span class="pill '+state+'">'+esc(alarmEmailHistoryStatus(r.status))+'</span></td><td>'+esc(noteStatus)+'</td>'+
-    '<td>'+esc(validation.validated_at?alarmEmailTime(validation.validated_at):'Não validado')+'</td><td>'+esc(validation.completed_at?alarmEmailTime(validation.completed_at):'Aguardando confirmação')+'</td><td>'+esc(interval)+'</td>'+ 
+    '<td>'+esc(validation.validated_at?alarmEmailTime(validation.validated_at):'Não validado')+'</td><td>'+esc(finished?alarmEmailTime(finished):'Aguardando confirmação')+'</td><td>'+esc(interval)+'</td>'+ 
     '<td>'+links+'</td><td>'+ids.length+'</td><td>'+esc(ids.map(id=>'#'+id+': '+alarmReminderStatusForTicket(id).label).join(' · '))+'</td><td title="'+esc(r.id||'')+'">'+esc(String(r.request_id||r.id||'').slice(0,8))+'</td></tr>';
  }).join('')||'<tr><td colspan="12">Nenhum registro corresponde ao filtro.</td></tr>';
 }
@@ -3354,8 +3355,12 @@ function alarmEmailHistoryExport(){
   if(/^[\s]*[=+\-@]/.test(v))v="'"+v;
   return '"'+v.replace(/"/g,'""')+'"';
  };
- const cols=[['Data Brasília','Destinatário','Cópias (CC)','Situação','Ação interna Movidesk','Chamados','Quantidade','Assunto','Protocolo','Registrado em UTC']];
+ const cols=[['Data Brasília','Destinatário','Cópias (CC)','Situação','Ação interna Movidesk','Validação inicial','Envio confirmado','Intervalo em minutos','Chamados','Quantidade','Assunto','Protocolo','Registrado em UTC']];
  const lines=rows.map(r=>[alarmEmailTime(r.sent_at||r.created_at),r.recipient,(r.cc_recipients||[]).join(' | '),alarmEmailHistoryStatus(r.status),(r.internalNotes||[]).map(n=>'#'+n.ticketId+': '+n.status).join(' | ')||'Não solicitado',
+  r.validation?.validated_at?alarmEmailTime(r.validation.validated_at):'',
+  r.validation?.completed_at?alarmEmailTime(r.validation.completed_at):(r.status==='sent'?alarmEmailTime(r.sent_at):''),
+  r.validation?.validated_at&&(r.validation?.completed_at||(r.status==='sent'&&r.sent_at))
+   ?Math.max(0,Math.round((new Date(r.validation.completed_at||r.sent_at)-new Date(r.validation.validated_at))/60000)):'',
   (r.ticket_ids||[]).map(id=>'#'+id).join(' | '),(r.ticket_ids||[]).length,r.subject,r.request_id||'',r.created_at]);
  const csv='\uFEFF'+cols.concat(lines).map(row=>row.map(csvCell).join(';')).join('\r\n');
  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
