@@ -2299,7 +2299,8 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   if(mapped.length!==1)return json({ok:false,error:'Não há perfil Movidesk validado para registrar ação interna. Nenhum e-mail enviado.'},403);
  }
  const snapshot=draft.tickets.map(x=>({id:x.id,subject:x.subject,client:x.client,sector:x.sector,
-  owner:x.owner,status:x.status,url:x.url}));
+  owner:x.owner,status:x.status,url:x.url,daysOpen:x.daysOpen,
+  lastAppointment:x.lastAppointment,lastAppointmentMinutes:x.lastAppointmentMinutes}));
  // A reserva é persistida ANTES da chamada externa. Unique request_id impede duplo envio por retry.
  const record={
   request_id:requestId,recipient,cc_recipients:cc,subject:draft.subject,ticket_ids:ids,
