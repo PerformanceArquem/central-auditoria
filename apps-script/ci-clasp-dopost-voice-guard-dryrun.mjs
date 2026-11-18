@@ -16,7 +16,7 @@ const funcs=(src,file)=>{
  return names;
 };
 const files=readdirSync(inputDir).filter(f=>f.endsWith('.js')).sort();
-if(files.length!==6||!files.includes('Código.js'))throw Error('Unexpected input files');
+if(![6,8].includes(files.length)||!files.includes('Código.js'))throw Error('Unexpected input files: '+files.length);
 const original=new Map(files.map(f=>[f,readFileSync(join(inputDir,f),'utf8')]));
 const source=original.get('Código.js');
 const listed=funcs(source,'Código.js');
@@ -68,7 +68,10 @@ for(const [file,src] of all)for(const [name,n] of funcs(src,file)){
  if(inventory.has(name))throw Error('Duplicate global: '+name);
  inventory.set(name,file);
 }
-if(inventory.size!==39)throw Error('Expected all 39 function names intact');
+// Only audited source/function inventories are accepted. All duplicate, doPost,
+// attachment and manifest checks above remain mandatory.
+if(!new Set(['6:39','8:48']).has(files.length+':'+inventory.size))
+ throw Error('Unexpected global inventory: files='+files.length+' functions='+inventory.size);
 mkdirSync(outputDir,{recursive:true});
 for(const [file,src] of all)writeFileSync(join(outputDir,file),src,{mode:0o600});
 const manifest=readFileSync(join(inputDir,'appsscript.json'));
@@ -77,7 +80,7 @@ if(!readFileSync(join(outputDir,'appsscript.json')).equals(manifest))throw Error
 appendFileSync(summaryPath,'\n### Protetor de anexos de Voz x Chat — apenas simulacao\n\n'+
  '- doPost oficial preservado; guarda ja existente mantida ou nova guarda simulada antes dos anexos\n'+
  '- Ausencia de capacidade Zenvia e versao esperada bloqueia geracao\n'+
- '- 39 funcoes globais, 0 duplicadas; manifesto intocado\n'+
+ '- '+inventory.size+' funcoes globais, 0 duplicadas; manifesto intocado\n'+
  '- Nenhum script executado, e-mail enviado, push ou deploy efetuado\n'+
  '- Nao equivale a homologacao com servicos Google reais\n');
-console.log('DOPOST_VOICE_GUARD_DRYRUN_OK globalFunctions=39 existingGuard='+existingGuard+' changedOnly='+(existingGuard?'none':'doPost')+' otherFunctionsPreserved=true manifestUnchanged=true');
+console.log('DOPOST_VOICE_GUARD_DRYRUN_OK globalFunctions='+inventory.size+' existingGuard='+existingGuard+' changedOnly='+(existingGuard?'none':'doPost')+' otherFunctionsPreserved=true manifestUnchanged=true');
