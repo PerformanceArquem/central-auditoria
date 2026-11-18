@@ -26,13 +26,13 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  if(requested.length>8500)throw Error('O texto ultrapassa 8.500 caracteres.');
  // O texto principal sempre mantém tom respeitoso. Notas opcionais são contexto,
  // não substituem a saudação e o pedido padronizado de acompanhamento.
- const message='Olá, equipe! Espero que estejam bem.\\n\\n'+
+ const message='Olá, equipe! Espero que estejam bem.\n\n'+
   'Estamos acompanhando alguns chamados e gostaríamos de contar com o apoio de vocês para conferir a situação atual dos itens abaixo. '+
-  'Sabemos que podem existir análises em andamento, dependências ou atualizações ainda não refletidas na Central.\\n\\n'+
+  'Sabemos que podem existir análises em andamento, dependências ou atualizações ainda não refletidas na Central.\n\n'+
   'Quando possível, poderiam atualizar o andamento no Movidesk e nos informar o próximo passo, o responsável e uma previsão realista de retorno, caso já exista? '+
-  'Se houver algum impedimento ou necessidade de apoio, por favor nos sinalizem para alinharmos juntos.\\n\\n'+
-  (requested?'Contexto complementar para esta verificação:\\n'+requested+'\\n\\n':'')+
-  'Agradecemos desde já pela atenção e parceria!\\n\\nAtenciosamente,\\nEquipe de Qualidade | Arquem Sistemas.';
+  'Se houver algum impedimento ou necessidade de apoio, por favor nos sinalizem para alinharmos juntos.\n\n'+
+  (requested?'Contexto complementar para esta verificação:\n'+requested+'\n\n':'')+
+  'Agradecemos desde já pela atenção e parceria!\n\nAtenciosamente,\nEquipe de Qualidade | Arquem Sistemas.';
  // Orientacoes operacionais: criterios verificaveis. Nunca avaliam personalidade,
  // esforco ou desempenho individual e nao inferem que falta de acao = falta de horas.
  const guidance:{evidence:string;action:string}[]=[];
