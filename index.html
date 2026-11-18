@@ -1921,7 +1921,11 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 <details id="alarmEmailCcDetails" style="margin-top:10px;padding:10px;background:#fff;border:1px solid #d9e4ef;border-radius:9px"><summary style="cursor:pointer;font-weight:600">Adicionar cópia (CC) — selecionar contatos</summary>
 <button type="button" class="s" id="alarmEmailManagerCc" onclick="alarmSuggestManagerCc()" style="margin:10px 0 5px">Adicionar gestor do setor em cópia</button>
 <small id="alarmEmailManagerCcHint" class="subtle" style="display:block;margin-bottom:7px">O setor será identificado pelos chamados selecionados. Confira os gestores sugeridos antes de enviar.</small>
-<small class="subtle">Selecione até 10 contatos ativos. Todos receberão o mesmo e-mail corporativo. A abertura detectada será da mensagem, não de uma pessoa específica.</small><div id="alarmEmailCcChoices" style="max-height:170px;overflow:auto;margin-top:8px"><small class="subtle">Carregando contatos...</small></div></details>
+<small class="subtle">Selecione até 10 contatos ativos. Todos receberão o mesmo e-mail corporativo. A abertura detectada será da mensagem, não de uma pessoa específica.</small>
+<div class="row" style="gap:9px;align-items:center;margin:8px 0;flex-wrap:wrap">
+ <button type="button" class="s" id="alarmEmailCheckCc" onclick="alarmEmailCheckCc()">Verificar suporte a cópias (CC)</button>
+ <small class="subtle" id="alarmEmailCcStatus" role="status">Suporte do serviço Gmail ainda não verificado.</small>
+</div><div id="alarmEmailCcChoices" style="max-height:170px;overflow:auto;margin-top:8px"><small class="subtle">Carregando contatos...</small></div></details>
                             </div>
                             <div class="fg" style="min-width:180px"><label for="alarmEmailTone">Modelo de mensagem</label><select id="alarmEmailTone" onchange="alarmEmailDraft()"><option value="cordial">Acompanhamento cordial</option><option value="priority">Prioridade e previsão</option><option value="management">Resumo para gestão</option></select></div>
                           </div>
@@ -3598,6 +3602,32 @@ async function emailAttachmentCheck(){
  }finally{button.disabled=false}
 }
 
+const ccReasonMessage={
+ ready:'Serviço Gmail confirmou suporte a cópias (CC).',
+ missing_secret:'Integração indisponível: chave de autenticação do serviço Gmail não configurada no servidor.',
+ invalid_url:'Endereço do Apps Script publicado inválido ou não configurado.',
+ unreachable:'O serviço Apps Script não respondeu à verificação. Confira a publicação e a conectividade.',
+ provider_http_error:'O Apps Script respondeu com erro HTTP. Confira o acesso à implantação publicada.',
+ invalid_response:'O Apps Script não retornou confirmação JSON válida. Verifique a autenticação e a versão publicada.',
+ capability_missing:'O Apps Script respondeu, mas não confirmou ccSupported=true. Atualize e publique a implantação /exec com o código aprovado.'
+};
+async function alarmEmailCheckCc(){
+ const button=$('alarmEmailCheckCc'),status=$('alarmEmailCcStatus');
+ if(!button||!status)return;
+ button.disabled=true;status.textContent='Verificando a capacidade do serviço Gmail, sem enviar e-mails...';
+ try{
+  const client=window.tmEmailAdminClient;
+  if(!client)throw Error('Sessão administrativa indisponível.');
+  const {data,error}=await client.functions.invoke('audit-email-dispatch',{body:{action:'ticket_charge_cc_health'}});
+  if(error||data?.ok!==true||!data?.cc)throw Error(data?.error||error?.message||'Falha ao consultar o serviço de e-mails.');
+  const check=data.cc;
+  status.textContent=(check.supported?'✓ ':'⚠ ')+(ccReasonMessage[check.reason]||'A capacidade não pôde ser confirmada.');
+  status.style.color=check.supported?'#167052':'#936018';
+ }catch(e){
+  status.textContent='Não foi possível verificar: '+String(e?.message||e)+'. Nenhum e-mail foi enviado.';
+  status.style.color='#a23737';
+ }finally{button.disabled=false}
+}
 async function alarmEmailAiAvailability(){
  const btn=$('alarmEmailAiDraft');
  if(!btn)return;

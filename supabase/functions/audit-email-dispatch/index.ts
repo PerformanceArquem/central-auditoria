@@ -998,17 +998,28 @@ function appendReportSection(html:string|undefined,section:string):string{
 function receiptContext(dispatchKey:string,rec:R,from:string,to:string):ReceiptContext {
   return {dispatchKey,recipientId:rec.id,recipientName:rec.name||rec.collaborator_name,from,to,source:'sector'};
 }
-async function ccProviderSupported():Promise<boolean>{
-  // Capability check is read-only and never sends an e-mail.
+type CcCapabilityDiagnostic={supported:boolean;reason:'ready'|'missing_secret'|'invalid_url'|'unreachable'|'provider_http_error'|'invalid_response'|'capability_missing';checkedAt:string};
+async function ccProviderDiagnostic():Promise<CcCapabilityDiagnostic>{
+  // Read-only probe. Never disclose endpoint, secret or a response body to the browser.
+  const checkedAt=new Date().toISOString();
+  const status=(supported:boolean,reason:CcCapabilityDiagnostic['reason']):CcCapabilityDiagnostic=>({supported,reason,checkedAt});
+  if(!E('GMAIL_MAIL_SECRET'))return status(false,'missing_secret');
+  let target:string;
+  try{target=validUrl()}catch{return status(false,'invalid_url')}
   try{
-    const response=await fetch(validUrl(),{method:'POST',redirect:'follow',
+    const response=await fetch(target,{method:'POST',redirect:'follow',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify({token:E('GMAIL_MAIL_SECRET'),action:'capabilities'}),
       signal:AbortSignal.timeout(12000)});
-    if(!response.ok)return false;
+    if(!response.ok)return status(false,'provider_http_error');
     const data=await response.json().catch(()=>null) as R|null;
-    return data?.sucesso===true&&data?.ccSupported===true;
-  }catch{return false}
+    if(!data||typeof data!=='object'||data.sucesso!==true)return status(false,'invalid_response');
+    return data.ccSupported===true?status(true,'ready'):status(false,'capability_missing');
+  }catch{return status(false,'unreachable')}
+}
+async function ccProviderSupported():Promise<boolean>{
+  // Preserve the fail-closed send gate, with the same read-only probe.
+  return (await ccProviderDiagnostic()).supported;
 }
 async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R, previewOnly=false, receipt?:ReceiptContext, cc:string[] = []) {
   if(cc.length){
@@ -2606,10 +2617,11 @@ async function handleRequest(req: Request): Promise<Response> {
       try{return json(await emailDeliveryAdmin(payload,req,db,E,validUrl()));}
       catch(ex){return json({ok:false,error:err(ex)},409);}
     }
-    if (action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_validate' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
+    if (action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_cc_health' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_validate' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
       return action === 'voice_chat_preview' ? await voiceChatPreview(payload)
         : action === 'ticket_charge_capabilities' ? json({ok:true,aiAvailable:E('GEMINI_AI_DRAFT_ENABLED')==='true'&&!!E('GEMINI_API_KEY'),rulesAvailable:true,guidanceAvailable:true})
+        : action === 'ticket_charge_cc_health' ? json({ok:true,cc:await ccProviderDiagnostic(),mailSent:false})
         : action === 'ticket_charge_ai_draft' ? await ticketChargeAiDraft(payload)
         : (action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_validate' || action === 'ticket_charge_send') ? await ticketChargeAction(payload,req)
         : action === 'dashboard_report' ? await dashboardReportAction(payload)
