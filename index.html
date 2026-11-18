@@ -1931,7 +1931,20 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                             <button type="button" class="s" id="alarmEmailAiDraft" onclick="alarmEmailAiDraft()" disabled title="Verificando disponibilidade do Gemini..." style="border-color:#b8c7e9;background:#eef4ff;color:#1b4da0;font-weight:700">✦ Melhorar cobrança com IA</button>
                             <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="alarmEmailExternalAiConsent"> Autorizo enviar dados resumidos dos chamados ao Gemini para gerar sugestões</label>
                             <label style="display:inline-flex;align-items:center;gap:7px;padding:9px 12px;background:#f2f6fd;border:1px solid #d5e2f5;border-radius:9px;font-size:12px;cursor:pointer"><input type="checkbox" id="alarmEmailIncludeGuidance" checked onchange="alarmEmailInvalidate()"> Incluir orientações práticas no rodapé do e-mail</label>
-                            <button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
+                            <label style="display:inline-flex;align-items:center;gap:7px;padding:9px 12px;background:#f1f8f5;border:1px solid #c9e4d5;border-radius:9px;font-size:12px"><input type="checkbox" id="alarmEmailInternalNote" checked onchange="alarmEmailInvalidate()"> Registrar ação interna de cobrança em cada chamado após confirmação do envio</label>
+<details id="alarmEmailTimeDetails" style="width:100%;padding:12px;border:1px solid #d6e1ef;border-radius:9px;background:#fff">
+ <summary style="font-weight:600;cursor:pointer">Apontamento real de horas — Avaliação de chamados (opcional)</summary>
+ <p class="subtle" style="margin:8px 0">O apontamento será registrado no Movidesk sob o usuário autenticado e com atividade <strong>Avaliação de chamados</strong>. Informe somente horas efetivamente trabalhadas. Para evitar duplicação, escolha exatamente um chamado.</p>
+ <label style="display:flex;align-items:center;gap:6px"><input id="alarmEmailLogHours" type="checkbox" onchange="alarmTimeLogToggle()"> Incluir apontamento de horas reais</label>
+ <div class="row" style="gap:10px;flex-wrap:wrap;margin:10px 0;align-items:end">
+  <div class="fg"><label for="alarmEmailWorkDate">Data da avaliação</label><input id="alarmEmailWorkDate" type="date" onchange="alarmEmailInvalidate()"></div>
+  <div class="fg"><label for="alarmEmailWorkStart">Início</label><input id="alarmEmailWorkStart" type="time" onchange="alarmEmailInvalidate()"></div>
+  <div class="fg"><label for="alarmEmailWorkEnd">Fim</label><input id="alarmEmailWorkEnd" type="time" onchange="alarmEmailInvalidate()"></div>
+  <div class="fg"><label for="alarmEmailWorkActivity">Atividade</label><input id="alarmEmailWorkActivity" value="Avaliação de chamados" readonly></div>
+ </div>
+ <small id="alarmEmailWorkHint" class="subtle">Não é gerado apontamento de tempo apenas por enviar um e-mail.</small>
+</details>
+<button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
                             <button type="button" class="b" id="alarmEmailSend" onclick="alarmEmailSend()" disabled title="Disponível somente depois de visualizar e conferir a prévia">Confirmar e enviar</button><style>#alarmEmailSend:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}</style>
                           </div>
                           <p class="subtle" style="margin:0 0 10px;color:#596c86">O Dicas do Manager pode sugerir o texto inicial com Gemini mediante autorização. O diagnóstico operacional e as orientações no rodapé são gerados pelas regras do sistema, sem enviar dados ao Gemini. Revise a sugestão antes de enviar. Os dados dos chamados selecionados poderão ser processados pelo Gemini.</p>
@@ -1987,7 +2000,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                             <table><thead><tr><th>Chamado</th><th>Destinatário</th><th>Cobranças</th><th>Último envio</th><th>Próxima revisão</th><th>Situação atual</th><th>Prévia</th></tr></thead><tbody id="alarmReviewRows"></tbody></table>
                           </div>
                           <div id="alarmEmailHistorySummary" class="subtle"></div>
-                          <div class="tw"><table><thead><tr><th>Data e hora (Brasília)</th><th>Destinatário</th><th>Em cópia (CC)</th><th>Situação</th><th>Chamados incluídos</th><th>Quantidade</th><th>Reiteração</th><th>Protocolo</th></tr></thead><tbody id="alarmEmailHistoryRows"><tr><td colspan="8">Carregando...</td></tr></tbody></table></div>
+                          <div class="tw"><table><thead><tr><th>Data e hora (Brasília)</th><th>Destinatário</th><th>Em cópia (CC)</th><th>Situação</th><th>Ação interna Movidesk</th><th>Chamados incluídos</th><th>Quantidade</th><th>Reiteração</th><th>Protocolo</th></tr></thead><tbody id="alarmEmailHistoryRows"><tr><td colspan="9">Carregando...</td></tr></tbody></table></div>
                         </div>
                     </div>
                 </div>
@@ -3069,13 +3082,27 @@ function alarmTeamName(t){
   return name||'Sem setor identificado';
 }
 function alarmDateLabel(t){return t?new Date(t).toLocaleDateString('pt-BR'):'—'}
+function alarmMeaningfulUpdate(t,created,updated){
+  // An internal audit reminder is not technical treatment; keep the old age of inactivity
+  // only when Movidesk's lastUpdate corresponds to that audit action.
+  const actions=Array.isArray(t.actions)?t.actions:[];
+  const isAudit=a=>/CENTRAL-AUDITORIA-COBRANCA:[0-9a-f-]+:\d+/i.test(String(a.description||a.htmlDescription||''));
+  const auditDates=actions.filter(isAudit).map(a=>alarmDate(a.createdDate)).filter(Boolean);
+  if(!updated||!auditDates.length)return updated||created;
+  const mostRecentAudit=Math.max(...auditDates);
+  if(Math.abs(updated-mostRecentAudit)>10*60000)return updated;
+  const realActionDates=actions.filter(a=>!isAudit(a)).map(a=>alarmDate(a.createdDate)).filter(Boolean);
+  const realStatusDates=(Array.isArray(t.statusHistories)?t.statusHistories:[]).map(a=>alarmDate(a.changedDate)).filter(Boolean);
+  const lastReal=Math.max(created||0,...realActionDates,...realStatusDates);
+  return lastReal&&lastReal<mostRecentAudit?lastReal:updated;
+}
 function alarmList(){
   const now=Date.now(),items=[];
   for(const t of TK.values()){
     const status=String(t.status||'').trim();
     if(!status||alarmIsClosed(status)) continue;
     const created=alarmDate(t.createdDate),updated=alarmDate(t.lastUpdate);
-    const last=updated||created;
+    const last=alarmMeaningfulUpdate(t,created,updated);
     if(!last) continue; // não inventar data para chamados sem data válida
     const c=(t.clients||[])[0]||{},client=nm(c.organization)||nm(c)||'Não informado';
     const owner=nm(t.owner)||'Não atribuído';
@@ -3302,10 +3329,12 @@ function alarmEmailHistoryRender(){
   const links=ids.map(id=>'<a target="_blank" rel="noopener noreferrer" href="https://arquem.movidesk.com/Ticket/Edit/'+encodeURIComponent(String(id))+'">#'+esc(id)+'</a>').join(' · ');
   const sentDate=r.sent_at||r.created_at;
   const state=r.status==='sent'?'ok':r.status==='uncertain'?'alert-warn':'alert-warn';
+  const notes=Array.isArray(r.internalNotes)?r.internalNotes:[];
+  const noteStatus=notes.length?notes.map(n=>'#'+n.ticketId+': '+(n.status==='sent'?'registrado':n.status==='pending'?'pendente':n.status==='processing'?'processando':n.status==='held'?'aguarda envio':n.status==='uncertain'?'verificar':'bloqueado')).join(' · '):'Não solicitado';
   return '<tr><td>'+esc(alarmEmailTime(sentDate))+'</td><td>'+esc(r.recipient)+'</td><td>'+esc((r.cc_recipients||[]).join(', ')||'—')+'</td>'+
-    '<td><span class="pill '+state+'">'+esc(alarmEmailHistoryStatus(r.status))+'</span></td>'+
+    '<td><span class="pill '+state+'">'+esc(alarmEmailHistoryStatus(r.status))+'</span></td><td>'+esc(noteStatus)+'</td>'+
     '<td>'+links+'</td><td>'+ids.length+'</td><td>'+esc(ids.map(id=>'#'+id+': '+alarmReminderStatusForTicket(id).label).join(' · '))+'</td><td title="'+esc(r.id||'')+'">'+esc(String(r.request_id||r.id||'').slice(0,8))+'</td></tr>';
- }).join('')||'<tr><td colspan="8">Nenhum registro corresponde ao filtro.</td></tr>';
+ }).join('')||'<tr><td colspan="9">Nenhum registro corresponde ao filtro.</td></tr>';
 }
 function alarmEmailHistoryExport(){
  const filter=$('alarmEmailHistoryFilter')?.value||'all';
@@ -3318,8 +3347,8 @@ function alarmEmailHistoryExport(){
   if(/^[\s]*[=+\-@]/.test(v))v="'"+v;
   return '"'+v.replace(/"/g,'""')+'"';
  };
- const cols=[['Data Brasília','Destinatário','Cópias (CC)','Situação','Chamados','Quantidade','Assunto','Protocolo','Registrado em UTC']];
- const lines=rows.map(r=>[alarmEmailTime(r.sent_at||r.created_at),r.recipient,(r.cc_recipients||[]).join(' | '),alarmEmailHistoryStatus(r.status),
+ const cols=[['Data Brasília','Destinatário','Cópias (CC)','Situação','Ação interna Movidesk','Chamados','Quantidade','Assunto','Protocolo','Registrado em UTC']];
+ const lines=rows.map(r=>[alarmEmailTime(r.sent_at||r.created_at),r.recipient,(r.cc_recipients||[]).join(' | '),alarmEmailHistoryStatus(r.status),(r.internalNotes||[]).map(n=>'#'+n.ticketId+': '+n.status).join(' | ')||'Não solicitado',
   (r.ticket_ids||[]).map(id=>'#'+id).join(' | '),(r.ticket_ids||[]).length,r.subject,r.request_id||'',r.created_at]);
  const csv='\uFEFF'+cols.concat(lines).map(row=>row.map(csvCell).join(';')).join('\r\n');
  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
@@ -3395,10 +3424,27 @@ function alarmRenderSelectedDetails(){
   return '<tr><td>#'+esc(id)+'</td><td>'+esc(client)+'</td><td>'+esc(sector)+'</td><td>'+esc(owner)+'</td></tr>';
  }).join('')||'<tr><td colspan="4">Nenhum chamado selecionado.</td></tr>';
 }
+function alarmTimeLogToggle(){
+ const checked=!!$('alarmEmailLogHours')?.checked;
+ if(checked){$('alarmEmailInternalNote').checked=true;$('alarmEmailTimeDetails').open=true}
+ alarmEmailInvalidate();
+}
+function alarmRequestedTimeLog(){
+ if(!$('alarmEmailLogHours')?.checked)return null;
+ const date=$('alarmEmailWorkDate')?.value||'',start=$('alarmEmailWorkStart')?.value||'',end=$('alarmEmailWorkEnd')?.value||'';
+ if(alarmSelected.size!==1)throw Error('Apontamento de horas somente para um chamado por vez.');
+ if(!date||!start||!end||end<=start)throw Error('Informe data, início e fim reais do trabalho.');
+ const endAt=Date.parse(date+'T'+end+':00-03:00');
+ if(!Number.isFinite(endAt)||endAt>Date.now()+60000)throw Error('Não é possível lançar horários futuros.');
+ return {date,start,end,activity:'Avaliação de chamados'};
+}
 const alarmSelectionSignature=()=>{
  const ids=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
  return JSON.stringify({ids,recipient:alarmRecipientEmail(),cc:alarmCcRecipients(),
-   message:$('alarmEmailMessage')?.value||'',includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked});
+   timeLog:$('alarmEmailLogHours')?.checked?{
+     date:$('alarmEmailWorkDate')?.value,start:$('alarmEmailWorkStart')?.value,end:$('alarmEmailWorkEnd')?.value
+   }:null,
+   message:$('alarmEmailMessage')?.value||'',registerInternalNote:!!$('alarmEmailInternalNote')?.checked,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked});
 };
 function alarmUpdateSelectedCount(){
  if($('alarmSelectedCount'))$('alarmSelectedCount').textContent=alarmSelected.size+' chamado(s) selecionado(s) · limite de 20';
@@ -3434,6 +3480,9 @@ function alarmClearSelection(){alarmSelected.clear();renderAlerts();alarmEmailIn
 function alarmOpenComposer(){
  if(!alarmSelected.size){alert('Selecione pelo menos um chamado no ranking.');return}
  $('alarmEmailPanel').classList.remove('hide');
+ if(!$('alarmEmailWorkDate').value){
+  $('alarmEmailWorkDate').value=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ }
  alarmRenderSelectedDetails();
  alarmLoadRegisteredRecipients();
  alarmEmailAiAvailability();
@@ -3545,11 +3594,11 @@ async function alarmEmailCall(action,confirmed=false){
  if(!client)throw Error('Acesso administrativo necessário. Entre novamente na Central.');
  const ids=[...alarmSelected];
  if(!ids.length||ids.length>20)throw Error('Selecione de 1 a 20 chamados.');
- const recipient=alarmRecipientEmail(),cc=alarmCcRecipients();
+ const recipient=alarmRecipientEmail(),cc=alarmCcRecipients(),timeLog=alarmRequestedTimeLog();
  if(!/^[^@\s]+@arquem\.com\.br$/.test(recipient))throw Error('Informe um destinatário @arquem.com.br.');
  if(cc.length>10||cc.some(email=>email===recipient))throw Error('Confira os contatos em cópia; limite de 10, sem repetir o destinatário.');
  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
-  body:{action,ticketIds:ids,recipient,cc,message:$('alarmEmailMessage').value,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,requestId:alarmEmailRequestId}
+  body:{action,ticketIds:ids,recipient,cc,timeLog,registerInternalNote:!!$('alarmEmailInternalNote')?.checked,message:$('alarmEmailMessage').value,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,requestId:alarmEmailRequestId}
  });
  if(error){
   let detail=error.message||'Falha no serviço de e-mail.';
@@ -3582,7 +3631,9 @@ async function alarmEmailPreview(){
   const data=await alarmEmailCall('ticket_charge_preview');
   if(typeof data.html!=='string'||!data.html.includes('<html'))throw Error('O servidor não retornou a prévia HTML corporativa. Nenhum envio foi liberado.');
   $('alarmEmailPreviewSubject').textContent='Assunto: '+data.subject;
-  $('alarmEmailPreviewRecipients').textContent='Para: '+data.recipient+(data.cc?.length?' · CC: '+data.cc.join(', '):'');
+  $('alarmEmailPreviewRecipients').textContent='Para: '+data.recipient+(data.cc?.length?' · CC: '+data.cc.join(', '):'')+
+    (data.registerInternalNote?' · Ação interna no Movidesk após aceite do e-mail':' · Sem ação interna no Movidesk')+
+    (data.timeLog?' · Horas reais: '+data.timeLog.date+' '+data.timeLog.start+'–'+data.timeLog.end:'');
   if(data.cc?.length&&data.ccSupported!==true)throw Error('O serviço de e-mail ainda não confirmou suporte a cópias (CC). Nenhum envio será liberado antes dessa validação.');
   $('alarmEmailPreviewText').textContent=data.text||'';
   $('alarmEmailPreviewFrame').srcdoc=data.html;
@@ -3622,12 +3673,16 @@ async function alarmEmailSend(){
  }
  const recipient=alarmRecipientEmail(),n=alarmSelected.size;
  const cc=alarmCcRecipients();
- if(!window.confirm('Enviar agora a cobrança de '+n+' chamado(s) para '+recipient+(cc.length?' com cópia para '+cc.join(', '):'')+'? Este envio é real e não pode ser desfeito.'))return;
+ try{alarmRequestedTimeLog()}catch(e){$('alarmEmailStatus').textContent=String(e.message||e);return}
+ if(!window.confirm('Enviar agora a cobrança de '+n+' chamado(s) para '+recipient+(cc.length?' com cópia para '+cc.join(', '):'')+
+  ($('alarmEmailInternalNote')?.checked?' e programar uma ação interna em cada chamado após o aceite do e-mail':' sem registrar ações internas')+
+  ($('alarmEmailLogHours')?.checked?' e o apontamento de horas reais conferidas':'')+
+  '? Este envio é real e não pode ser desfeito.'))return;
  alarmEmailSending=true;$('alarmEmailSend').disabled=true;
  $('alarmEmailStatus').textContent='Enviando mensagem corporativa...';
  try{
   const result=await alarmEmailCall('ticket_charge_send',true);
-  $('alarmEmailStatus').textContent='Solicitação enviada ao serviço Gmail para '+result.recipient+(result.cc?.length?' · CC: '+result.cc.join(', '):'')+'. Confirme a entrega antes de qualquer reenvio.';
+  $('alarmEmailStatus').textContent='Solicitação enviada ao serviço Gmail para '+result.recipient+(result.cc?.length?' · CC: '+result.cc.join(', '):'')+'. Registro interno: '+(result.noteStatus||'não solicitado')+'. Confira o histórico antes de qualquer reenvio.';
   alarmEmailApproved='';alarmEmailRequestId='';alarmSelected.clear();
   await alarmEmailHistoryLoad();renderAlerts();
  }catch(e){

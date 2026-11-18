@@ -10,7 +10,7 @@ test('Alerts composer provides checkbox CC selection and shows owner and team be
  for(const id of ['alarmEmailCcChoices','alarmEmailCcDetails','alarmEmailSelectedDetails','alarmEmailPreviewRecipients'])assert.match(html,new RegExp('id="'+id+'"'));
  assert.match(html,/alarmCcRecipients\(\)/);
  assert.match(html,/cc:alarmCcRecipients\(\)/);
- assert.match(html,/body:\{action,ticketIds:ids,recipient,cc,message:/);
+ assert.match(html,/body:\{action,ticketIds:ids,recipient,cc,(?:timeLog,registerInternalNote:[^,]+,)?message:/);
  assert.match(html,/data\.ccSupported!==true/);
  assert.match(html,/alarmRenderSelectedDetails\(\)/);
 });

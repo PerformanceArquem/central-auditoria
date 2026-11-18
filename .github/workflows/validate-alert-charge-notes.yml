@@ -1,0 +1,21 @@
+name: Validate internal alert notes
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'supabase/functions/audit-email-dispatch/**'
+      - 'ops/install-ticket-charge-internal-notes.sql'
+      - 'tests/alert-charge-internal-notes.test.mjs'
+      - '.github/workflows/validate-alert-charge-notes.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/alert-charge-internal-notes.test.mjs
