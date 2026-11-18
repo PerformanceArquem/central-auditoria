@@ -17,8 +17,15 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
    const owner=clean(p.owner?.businessName||p.owner?.name||p.owner||'Não atribuído',80);
    const c=p.clients?.[0]||{},client=clean(c.organization?.businessName||c.businessName||c.organization?.name||c.name||'Não informado',150);
    const last=clean(p.lastUpdate||t.last_update_source||'',50),opened=clean(p.createdDate||t.created_at_source||'',50);
-   return {id,subject:clean(p.subject||'Sem assunto'),sector:clean(p.ownerTeam||'Sem setor',90),
-      client,owner,status:status||'Sem status',last,opened,url:'https://arquem.movidesk.com/Ticket/Edit/'+id};
+   const openedAt=Date.parse(opened),daysOpen=Number.isFinite(openedAt)?
+     Math.max(0,Math.floor((Date.now()-openedAt)/86400000)):null;
+   const note=t.last_real_appointment&&typeof t.last_real_appointment==='object'?t.last_real_appointment:null;
+   const appointmentDate=typeof note?.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(note.date)?note.date:null;
+   const appointmentMinutes=appointmentDate&&Number.isFinite(Number(note?.minutes))&&Number(note.minutes)>0?Number(note.minutes):null;
+   return {id,subject:clean(p.subject||'Sem assunto'),sector:clean(p.ownerTeam?.name||p.ownerTeam||'Sem setor',90),
+      client,owner,status:status||'Sem status',last,opened,daysOpen,
+      lastAppointment:appointmentMinutes!==null?appointmentDate:null,lastAppointmentMinutes:appointmentMinutes,
+      url:'https://arquem.movidesk.com/Ticket/Edit/'+id};
  });
  if(new Set(normalized.map(x=>x.id)).size!==normalized.length)throw Error('Há chamados repetidos.');
  const subject='Acompanhamento cordial de chamados | '+normalized.length+' chamado(s)'
@@ -72,7 +79,10 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
      '<strong style="color:#173454">Ponto '+(i+1)+'</strong><div><b>Observacao:</b> '+esc(g.evidence)+'</div>'+
      '<div><b>Sugestao pratica:</b> '+esc(g.action)+'</div></div>').join('')+
    '<p style="font-size:10px;color:#60738b;margin:12px 0 0">Orientacoes para apoio, nao avaliacao individual. Ausencia de atualizacao nao comprova ausencia de trabalho.</p></div>':'';
- const lines=normalized.map((t,i)=>(i+1)+'. Chamado #'+t.id+' — '+t.subject+'\n   Cliente: '+t.client+' | Setor: '+t.sector+' | Responsável: '+t.owner+'\n   Status: '+t.status+' | Última atualização: '+(t.last||'Não informada')+'\n   '+t.url);
+ const lines=normalized.map((t,i)=>(i+1)+'. Chamado #'+t.id+' — '+t.subject+'\n   Cliente: '+t.client+' | Setor: '+t.sector+' | Responsável: '+t.owner+'\n   Status: '+t.status+' | Última atualização: '+(t.last||'Não informada')+
+   '\n   Tempo em aberto: '+(t.daysOpen===null?'Não disponível':t.daysOpen+' dia(s)')+
+   ' | Último apontamento real: '+(t.lastAppointment?(t.lastAppointment+' · '+t.lastAppointmentMinutes+' min'):'Não localizado na base sincronizada')+
+   '\n   '+t.url);
  const text=message+'\n\nCHAMADOS PARA ACOMPANHAMENTO\n'+lines.join('\n\n')+
  (includeGuidance?'\n\n'+guidanceText:'')+'\n\nFonte: Central de Auditoria / Movidesk. Os status refletem a consulta atual.';
 
@@ -94,6 +104,8 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
    '<td style="'+cell+'max-width:190px"><strong style="color:#173454">'+esc(t.client)+'</strong></td>'+ 
    '<td style="'+cell+'min-width:105px">'+esc(t.sector)+'</td>'+ 
    '<td style="'+cell+'min-width:170px">'+esc(t.subject)+'</td>'+
+   '<td style="'+cell+'white-space:nowrap">'+esc(t.daysOpen===null?'Não disponível':t.daysOpen+' dia(s)')+'</td>'+
+   '<td style="'+cell+'min-width:135px">'+esc(t.lastAppointment?(t.lastAppointment+' · '+t.lastAppointmentMinutes+' min'):'Não localizado')+'</td>'+
    '<td style="'+cell+'min-width:125px">'+esc(t.owner)+
     '<div style="font-size:11px;color:#65778f;margin-top:5px">Situação: '+esc(t.status)+'</div>'+
     '<div style="font-size:10px;color:#8794a4;margin-top:5px">Atualização: '+esc(safeDate(t.last))+'</div></td></tr>';
@@ -119,7 +131,7 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  '</div>'+
  '<div style="padding:0 18px 22px;overflow-x:auto">'+
  '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;min-width:620px">'+
- '<thead style="background:#eaf2fa"><tr>'+header('Chamado')+header('Cliente')+header('Setor')+header('Assunto')+header('Responsável / status')+'</tr></thead>'+
+ '<thead style="background:#eaf2fa"><tr>'+header('Chamado')+header('Cliente')+header('Setor')+header('Assunto')+header('Dias em aberto')+header('Último apontamento real')+header('Responsável / status')+'</tr></thead>'+
  '<tbody>'+table+'</tbody></table></div>'+
  guidanceHtml+
  '<div style="padding:18px 28px;background:#f6f9fc;border-top:1px solid #e2eaf3">'+

@@ -6,15 +6,17 @@ Deno.test('todos os chamados na base principal seguem a ordem selecionada',async
  const result=await chargeTicketLookup(['97513','96484'],async p=>{
   calls.push(p);
   if(p.startsWith('audit_direct_tickets'))return [record('96484'),record('97513')];
+  if(p.startsWith('audit_direct_appointments'))return [];
   throw Error('Tabela extra não deveria ser consultada');
  });
  assert(result.records.map(x=>x.ticket_id).join(',')==='97513,96484','ordem incorreta');
  assert(result.missingIds.length===0,'faltam chamados existentes');
- assert(calls.length===1,'consulta extra desnecessária');
+ assert(calls.length===2,'consulta obrigatória ao último apontamento ausente');
 });
 Deno.test('usa snapshot de chamados abertos se faltar na base principal',async()=>{
  const result=await chargeTicketLookup(['97513','96484'],async p=>{
   if(p.startsWith('audit_direct_tickets'))return [record('97513')];
+  if(p.startsWith('audit_direct_appointments'))return [];
   if(p.startsWith('audit_email_open_ticket_snapshot'))return [record('96484')];
   throw Error('Consulta adicional indevida');
  });
@@ -24,6 +26,7 @@ Deno.test('usa snapshot de chamados abertos se faltar na base principal',async()
 Deno.test('usa cache legado sincronizado somente para números ainda não encontrados',async()=>{
  const result=await chargeTicketLookup(['97513','98474'],async p=>{
   if(p.startsWith('audit_direct_tickets'))return [record('97513')];
+  if(p.startsWith('audit_direct_appointments'))return [];
   if(p.startsWith('audit_email_open_ticket_snapshot'))return [];
   if(p.startsWith('tm_tickets'))return [{id:'98474',data:{id:98474,status:'Fila',subject:'Chamado antigo'}}];
   throw Error('unexpected');
@@ -34,6 +37,7 @@ Deno.test('usa cache legado sincronizado somente para números ainda não encont
 Deno.test('retorna exclusivamente números faltantes sem inventar chamados',async()=>{
  const result=await chargeTicketLookup(['97513','9999999'],async p=>{
   if(p.startsWith('audit_direct_tickets'))return [record('97513')];
+  if(p.startsWith('audit_direct_appointments'))return [];
   return [];
  });
  assert(result.records.length===1,'chamado fictício foi criado');
@@ -49,7 +53,21 @@ Deno.test('rejeita identificadores inválidos ou duplicados antes da consulta',a
 Deno.test('não mistura payload de outra referência solicitada',async()=>{
  const result=await chargeTicketLookup(['97513'],async p=>{
   if(p.startsWith('audit_direct_tickets'))return [record('97513'),record('123456')];
+  if(p.startsWith('audit_direct_appointments'))return [];
   return [];
  });
  assert(result.records.length===1 && result.records[0].ticket_id==='97513','chamado estranho retornado');
+});
+
+Deno.test('last real appointment is taken only from actual recorded minutes',async()=>{
+ const rows=[{ticket_id:'97513',appointment_date:'2026-11-17',duration_minutes:45,collaborator_name:'Equipe A',activity:'Análise'},
+  {ticket_id:'97513',appointment_date:'2026-11-12',duration_minutes:30,collaborator_name:'Equipe B',activity:'Apoio'}];
+ const result=await chargeTicketLookup(['97513','96484'],async p=>{
+  if(p.startsWith('audit_direct_tickets'))return [record('97513'),record('96484')];
+  if(p.startsWith('audit_direct_appointments'))return rows;
+  return [];
+ });
+ const latest=result.records[0].last_real_appointment as Record<string,unknown>;
+ assert(latest.date==='2026-11-17'&&latest.minutes===45,'último apontamento real incorreto');
+ assert(result.records[1].last_real_appointment===null,'apontamento inventado');
 });
