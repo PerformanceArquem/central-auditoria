@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'supabase/functions/audit-email-dispatch/project-charge-metrics.ts'
+      - 'supabase/functions/audit-email-dispatch/project-forecast-extract.ts'
+      - 'tests/project-forecast-source.test.ts'
       - 'supabase/functions/audit-email-dispatch/ticket-charge.ts'
       - 'supabase/functions/audit-email-dispatch/ticket-charge-lookup.ts'
       - 'supabase/functions/audit-email-dispatch/index.ts'
@@ -20,4 +22,4 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno test tests/project-charge-metrics.test.ts tests/ticket-charge-lookup.test.ts tests/ticket-charge.test.ts
+      - run: deno test tests/project-charge-metrics.test.ts tests/project-forecast-source.test.ts tests/ticket-charge-lookup.test.ts tests/ticket-charge.test.ts
