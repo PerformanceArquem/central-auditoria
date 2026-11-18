@@ -22,7 +22,7 @@ export async function openSignalToken(secret: string, dispatchKey: string) {
 export function openSignalContent(token: string) {
   const url = 'https://dvaaicqajlppuigeyejr.supabase.co/functions/v1/audit-open-signal?t='+encodeURIComponent(token);
   // Transparent one-pixel GIF. No IP, user agent or precise location is intentionally stored.
-  return '<img src="'+url+'" width="1" height="1" alt="" aria-hidden="true" style="display:none;width:1px;height:1px" />'+
+  return '<img src="'+url+'" width="1" height="1" alt="" aria-hidden="true" style="width:1px;height:1px;opacity:0" />'+
     '<p style="font-size:11px;color:#52657a">Aviso de transparência: este e-mail pode registrar o carregamento de uma imagem como abertura detectada. Isso não comprova leitura. A confirmação de leitura é voluntária.</p>';
 }
 const esc = (x: unknown) => String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
