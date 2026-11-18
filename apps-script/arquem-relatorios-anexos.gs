@@ -362,10 +362,12 @@ function arquemPdf_(p, keep) {
   }
   if ((p.daily||[]).length) {
     arquemAddHeading_(body,'Horas por colaborador · dia a dia');
-    const rows=[['Data','Colaborador','Setor','Horas','Jornada ref.','Meta mínima ref.']];
+    const rows=[['Data','Colaborador','Setor','Horas','Jornada ref.','Meta mínima ref.','Saldo mínimo','Saldo jornada']];
     p.daily.slice(0,90).forEach(x=>rows.push([
       String(x.date||''),String(x.person||''),String(x.sector||''),
-      arquemH_(x.minutes),arquemH_(x.referenceMinutes),arquemH_(x.minimumMinutes)
+      arquemH_(x.minutes),arquemH_(x.referenceMinutes),arquemH_(x.minimumMinutes),
+      x.referenceMinutes?arquemSaldo_(x.minimumBalance==null?Number(x.minutes||0)-Number(x.minimumMinutes||0):x.minimumBalance):'—',
+      x.referenceMinutes?arquemSaldo_(x.targetBalance==null?Number(x.minutes||0)-Number(x.referenceMinutes||0):x.targetBalance):'—'
     ]));
     arquemEstilizarTabelaPdf_(body.appendTable(rows));
     if(p.daily.length>90)body.appendParagraph('Exibindo os primeiros 90 de '+p.daily.length+' registros diários agrupados.');
@@ -443,9 +445,11 @@ function arquemXlsx_(p, keep) {
      arquemSaldo_(x.targetBalance!==undefined?x.targetBalance:Number(x.minutes||0)-Number(x.targetMinutes||0)),x.ruleSource||'Padrão']));
   arquemFormatarHoras_(people,[3,4,5,6,7],p.productionQuality?0:(p.collaborators||[]).length);
   const daySheet=arquemCreateSheet_(ss,'Dia a dia',
-    ['Data','Colaborador','Setor','Horas','Jornada','Mínimo','Situação'],
+    ['Data','Colaborador','Setor','Horas','Jornada','Mínimo','Saldo mínimo','Saldo jornada','Situação'],
     (p.daily||[]).map(x=>[x.date,x.person,x.sector,arquemExcelHora_(x.minutes),
-      arquemExcelHora_(x.referenceMinutes),arquemExcelHora_(x.minimumMinutes),x.status]));
+      arquemExcelHora_(x.referenceMinutes),arquemExcelHora_(x.minimumMinutes),
+      x.referenceMinutes?arquemSaldo_(x.minimumBalance==null?Number(x.minutes||0)-Number(x.minimumMinutes||0):x.minimumBalance):'—',
+      x.referenceMinutes?arquemSaldo_(x.targetBalance==null?Number(x.minutes||0)-Number(x.referenceMinutes||0):x.targetBalance):'—',x.status]));
   arquemFormatarHoras_(daySheet,[4,5,6],(p.daily||[]).length);
   const ticketSheet=arquemCreateSheet_(ss,'Chamados',
     ['Chamado','Cliente','Responsável','Status','Idade (dias)','Link Movidesk'],
