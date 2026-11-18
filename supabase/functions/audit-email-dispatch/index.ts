@@ -837,9 +837,10 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
   const detailsHtml='<div style="margin-top:24px;border-top:2px solid #dce6f4;padding-top:12px">'+
     (reportSectionOn(rec,'daily_detail')?'<h3 style="color:#17345d;font-size:15px">Horas por colaborador, dia a dia</h3>'+ 
     (daily.length?(scopedManagement?
-      detailTable(['Colaborador','Data','Horas','Jornada','%','Falta jornada','Situação'],dailyJourney.slice(0,emailDailyLimit).map(x=>
+      detailTable(['Colaborador','Data','Horas','Jornada','%','Saldo mínimo','Saldo jornada','Situação'],dailyJourney.slice(0,emailDailyLimit).map(x=>
         [x.name,displayDate(x.day),duration(x.minutes),x.referenceMinutes?duration(x.referenceMinutes):'—',
-          showJourneyPercent(x.percent),x.referenceMinutes?duration(x.targetGap):'—',x.status])):
+          showJourneyPercent(x.percent),x.referenceMinutes?signedDuration(x.minimumBalance):'—',
+          x.referenceMinutes?signedDuration(x.targetBalance):'—',x.status])):
       detailTable(['Colaborador','Data','Horas'],daily.slice(0,emailDailyLimit).map(x=>[x.name,displayDate(x.day),duration(x.minutes)]))):
       '<p style="font-size:12px">Sem apontamentos importados.</p>')+
     (daily.length>emailDailyLimit?'<p style="font-size:12px">Resumo no e-mail: '+emailDailyLimit+' de '+daily.length+' linhas. Consulte o Excel, quando disponível, para mais detalhes.</p>':''):'')+
@@ -929,6 +930,7 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
       sector:scopedManagement?x.sector:
         scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
       minutes:x.minutes,referenceMinutes:x.referenceMinutes,minimumMinutes:x.minimumMinutes,
+      minimumBalance:x.referenceMinutes?x.minimumBalance:null,targetBalance:x.referenceMinutes?x.targetBalance:null,
       status:scopedManagement?x.status:'Apontamento importado'})),
     extraordinary:extraRows,
     customers:(reportSectionOn(rec,'customers')?companies:[]).map(x=>({name:x.name,minutes:x.minutes,tickets:x.tickets,appointments:0})), 
