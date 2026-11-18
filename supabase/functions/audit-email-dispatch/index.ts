@@ -2103,6 +2103,15 @@ async function ticketChargeAdminUser(req:Request):Promise<string>{
  if(!/^[0-9a-f-]{36}$/i.test(String(user?.id||'')))throw Error('Usuário autenticado inválido.');
  return String(user.id);
 }
+function chargeProjectOptions(payload:R){
+ const dailyGoalHours=Number(payload.projectDailyGoalHours??4);
+ const from=String(payload.projectPeriodFrom||''),to=String(payload.projectPeriodTo||'');
+ if(!Number.isFinite(dailyGoalHours)||dailyGoalHours<=0||dailyGoalHours>24)
+  throw Error('Meta diária de projetos inválida.');
+ if((from&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(from))||(to&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(to))||(from&&to&&from>to))
+  throw Error('Período de Projetos e Prazos inválido.');
+ return {dailyGoalHours,periodFrom:from||undefined,periodTo:to||undefined};
+}
 // Sugestao de IA: rascunho editavel, sem envio; dados reconsultados no servidor.
 async function ticketChargeAiDraft(payload:R):Promise<Response>{
   const ids=Array.isArray(payload.ticketIds)?payload.ticketIds.map((x:unknown)=>String(x)):[];
@@ -2119,7 +2128,7 @@ async function ticketChargeAiDraft(payload:R):Promise<Response>{
     return json({ok:false,error:'Modelo de comunicacao invalido.'},400);
   const apiKey=E('GEMINI_API_KEY');
   const geminiEnabled=E('GEMINI_AI_DRAFT_ENABLED')==='true'&&!!apiKey;
-  const found=await chargeTicketLookup(ids,db);
+  const found=await chargeTicketLookup(ids,db,chargeProjectOptions(payload));
   if(found.missingIds.length)
     return json({ok:false,error:'Chamados nao sincronizados: '+found.missingIds.map(id=>'#'+id).join(', ')+'. Atualize a sincronizacao.',
       missingIds:found.missingIds},409);
@@ -2138,7 +2147,9 @@ async function ticketChargeAiDraft(payload:R):Promise<Response>{
       assunto:trim(t.subject,155),responsavel:trim(t.owner,75),
       status:trim(t.status,65),abertura:opened,ultimaAtualizacao:last,diasSemAtualizacao:age,
       diasEmAberto:t.daysOpen,ultimoApontamentoReal:t.lastAppointment||null,
-      minutosUltimoApontamento:t.lastAppointmentMinutes||null};
+      minutosUltimoApontamento:t.lastAppointmentMinutes||null,
+      projetoPDoisAsteriscos:t.isProject,
+      metricasProjeto:t.isProject?t.projectMetrics:null};
   });
   // Sugestão determinística sempre disponível, sem enviar dados para serviços externos.
   // Identificada como "regras" para não aparentar ter usado IA.
@@ -2275,7 +2286,7 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   const existing=await db('audit_ticket_charge_history?select=id,status,recipient,created_at&request_id=eq.'+requestId+'&limit=1') as R[];
   if(existing.length)return json({ok:false,error:'Esta solicitação já foi registrada ('+existing[0].status+'). Consulte o histórico antes de reenviar.',requestId},409);
  }
- const found=await chargeTicketLookup(ids,db);
+ const found=await chargeTicketLookup(ids,db,chargeProjectOptions(payload));
  if(found.missingIds.length)
   return json({ok:false,error:'Não foi possível localizar os chamados: '+found.missingIds.map(id=>'#'+id).join(', ')+'. Atualize a sincronização ou remova esses números antes de gerar a prévia.',
    missingIds:found.missingIds,availableIds:found.records.map(x=>String(x.ticket_id)),sources:found.sources},409);
@@ -2300,7 +2311,8 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  }
  const snapshot=draft.tickets.map(x=>({id:x.id,subject:x.subject,client:x.client,sector:x.sector,
   owner:x.owner,status:x.status,url:x.url,daysOpen:x.daysOpen,
-  lastAppointment:x.lastAppointment,lastAppointmentMinutes:x.lastAppointmentMinutes}));
+  lastAppointment:x.lastAppointment,lastAppointmentMinutes:x.lastAppointmentMinutes,
+  isProject:x.isProject,projectMetrics:x.projectMetrics}));
  // A reserva é persistida ANTES da chamada externa. Unique request_id impede duplo envio por retry.
  const record={
   request_id:requestId,recipient,cc_recipients:cc,subject:draft.subject,ticket_ids:ids,
