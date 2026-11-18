@@ -1,0 +1,22 @@
+name: Validar confirmações de leitura sem envio
+on:
+  pull_request:
+    paths:
+      - 'confirmar-leitura.*'
+      - 'supabase/functions/**'
+      - 'tests/read-receipts.test.mjs'
+      - 'index.html'
+      - '.github/workflows/validate-read-receipts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - run: node --test tests/read-receipts.test.mjs tests/email-admin-ui.test.mjs tests/email-delivery-control.test.mjs tests/failed-delivery-retry.test.mjs tests/triage-mail-idempotency.test.mjs
+      - run: node --check confirmar-leitura.js

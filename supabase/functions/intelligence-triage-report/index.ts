@@ -1,5 +1,6 @@
 import {triagePresentation} from './presentation.ts';
 import {assertEmailDeliveryEnabled} from '../_shared/email-delivery-control.ts';
+import {prepareReadReceipt,markReceiptDelivered,appendReceiptHtml} from '../_shared/read-receipts.ts';
 import config from '../../../config/intelligence-triage.json' with {type:'json'};
 import {classify,summarize} from './model.mjs';
 const env=(k:string)=>Deno.env.get(k)?.trim()||'';
@@ -52,9 +53,14 @@ async function send(report:any,prepared?:any){
   const claimed=await db('audit_triage_dispatches?on_conflict=dispatch_key','POST',{dispatch_key:key,reference_date:report.date,email:recipient.email,snapshot_id:report.snapshotId,status:'processing',attachment_validation:validationMetadata},'resolution=ignore-duplicates,return=representation');
   if(!claimed.length){const [prior]=await db('audit_triage_dispatches?dispatch_key=eq.'+encodeURIComponent(key));results.push({email:recipient.email,status:prior?.status==='sent'?'already_sent':prior?.status||'unconfirmed'});continue;}
   try{
-   const {subject,text,html}=triagePresentation(report,recipient);
+   let {subject,text,html}=triagePresentation(report,recipient);
+   const receipt=await prepareReadReceipt((path,init={})=>db(path,init.method||'GET',init.body?JSON.parse(String(init.body)):undefined,new Headers(init.headers).get('Prefer')||'return=representation'),
+     env('SUPABASE_SERVICE_ROLE_KEY'),{dispatchKey:key,recipientName:recipient.name,from:report.date,to:report.date,source:'triage'},recipient.email,subject);
+   text+=receipt.text;html=appendReceiptHtml(html,receipt.html);
    const result=await provider('triage_send',{email:recipient.email,assunto:subject,texto:text,html,dispatchKey:key,report,files:validatedFiles});
    if(result.anexos!==2||!result.providerId||result.accepted!==true)throw Error('Aceite corporativo/anexos incompleto');
+   await markReceiptDelivered((path,init={})=>db(path,init.method||'GET',init.body?JSON.parse(String(init.body)):undefined),key)
+     .catch(()=>console.error('Registro de leitura da triagem requer conferência; mensagem já aceita.'));
    await db('audit_triage_dispatches?dispatch_key=eq.'+encodeURIComponent(key),'PATCH',{status:'sent',sent_at:new Date().toISOString(),provider_id:result.providerId,provider_result:result});results.push({email:recipient.email,status:'sent',providerId:result.providerId});
   }catch(e){await db('audit_triage_dispatches?dispatch_key=eq.'+encodeURIComponent(key),'PATCH',{status:'uncertain',error:String(e)});results.push({email:recipient.email,status:'uncertain'});}
  }return results;

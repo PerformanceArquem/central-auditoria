@@ -12,6 +12,7 @@ import {composeTicketCharge} from "./ticket-charge.ts";
 import {chargeTicketLookup} from "./ticket-charge-lookup.ts";
 import {corporateCopy,corporatePacket,corporateFallbackHtml,assertCorporateCopy} from "./corporate-mail-policy.ts";
 import {assertEmailDeliveryEnabled,emailDeliveryAdmin} from "../_shared/email-delivery-control.ts";
+import {prepareReadReceipt,markReceiptDelivered,appendReceiptHtml,type ReceiptContext} from "../_shared/read-receipts.ts";
 // Central de Auditoria — Supabase direto -> Google Apps Script/Gmail
 // Compatível com as ações existentes: status e test (admin JWT).
 // NUNCA colocar credenciais no HTML. Nenhum disparo automático sem flags explícitas.
@@ -992,7 +993,10 @@ function appendReportSection(html:string|undefined,section:string):string{
  if(html?.includes(marker))return html.replace(marker,section+marker);
  return /<\/body>/i.test(html||'')?(html||'').replace(/<\/body>/i,section+'</body>'):(html||'')+section;
 }
-async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R, previewOnly=false) {
+function receiptContext(dispatchKey:string,rec:R,from:string,to:string):ReceiptContext {
+  return {dispatchKey,recipientId:rec.id,recipientName:rec.name||rec.collaborator_name,from,to,source:'sector'};
+}
+async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R, previewOnly=false, receipt?:ReceiptContext) {
   await assertEmailDeliveryEnabled(db);
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
   if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
@@ -1030,8 +1034,8 @@ async function sendMail(email: string, subject: string, text: string, html?: str
   }
   // Regra obrigatoria no ultimo ponto de envio, inclusive para relatorios previamente preparados.
   const cleanSubject=corporateCopy(subject);
-  const cleanText=corporateCopy(text);
-  const cleanHtml=corporateCopy(html||corporateFallbackHtml(cleanSubject,cleanText));
+  let cleanText=corporateCopy(text);
+  let cleanHtml=corporateCopy(html||corporateFallbackHtml(cleanSubject,cleanText));
   const cleanReportData=reportData?corporatePacket(reportData):undefined;
   assertCorporateCopy({cleanSubject,cleanText,cleanHtml,cleanReportData});
   // Relatórios oficiais jamais podem sair sem os dois anexos exigidos. Testes de integração sem pacote permanecem separados.
@@ -1067,6 +1071,12 @@ async function sendMail(email: string, subject: string, text: string, html?: str
   }
   await assertEmailDeliveryEnabled(db);
   if(previewOnly)return {subject:cleanSubject,html:cleanHtml,text:cleanText};
+  // The dispatch reservation already exists. Preview/test probes never create tracking rows.
+  const acknowledgement=receipt?await prepareReadReceipt(db,E('SUPABASE_SERVICE_ROLE_KEY'),receipt,email,cleanSubject):null;
+  if(acknowledgement){
+    cleanText+=acknowledgement.text;
+    cleanHtml=appendReceiptHtml(cleanHtml,acknowledgement.html);
+  }
   const res = await fetch(endpoint, {
     method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ token: E('GMAIL_MAIL_SECRET'), email, assunto: cleanSubject,
@@ -1082,6 +1092,8 @@ async function sendMail(email: string, subject: string, text: string, html?: str
   // divergência para auditoria. Não tentar reenviar automaticamente.
   if(withAttachments && Number(result.anexos)!==2)
     throw new Error('Entrega de PDF/XLSX não confirmada pelo Apps Script. Verificar Gmail antes de qualquer reenvio.');
+  if(acknowledgement)await markReceiptDelivered(db,acknowledgement.dispatchKey)
+    .catch(()=>console.error('Aceite do e-mail recebido; registro da confirmação de leitura precisa de conferência.'));
 }
 async function isAdmin(req: Request) {
   const token = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') || '')?.[1];
@@ -1363,7 +1375,7 @@ async function manualOfficial(payload: R) {
   if (!inserted?.length) return json({ ok: true, skipped: 'Relatorio ja reservado para envio' });
   try {
     await sendMail(String(rec.email),subject,body,reportEmailHtml(rec,report,from,to,kind,partial,true,tickets.html,report.detailsHtml+quality.html,overview.html,forecast.html),
-      reportPacket(rec,report,tickets,from,to,kind,partial,checkpoint.completed!==true,clients,forecast.rows));
+      reportPacket(rec,report,tickets,from,to,kind,partial,checkpoint.completed!==true,clients,forecast.rows),false,receiptContext(key,rec,from,to));
     await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`,{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -1419,7 +1431,7 @@ async function dispatchWeeklyPreliminary() {
       if(!inserted?.length){results.push({recipientId:id,status:'skipped',reason:'Outra execução reservou o envio'});continue;}
       try{
         await sendMail(String(r.email),subject,disclaimer+report.text+overview.text+quality.text+'\n\n'+alerts.text,html,
-          reportPacket(r,report,alerts,from,to,'weekly',true,true,clients));
+          reportPacket(r,report,alerts,from,to,'weekly',true,true,clients),false,receiptContext(key,r,from,to));
         await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
           method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
         });
@@ -1606,7 +1618,7 @@ async function dispatchKeilaProductionFlow(today:string,hol:Set<string>,recipien
    if(!inserted?.length){results.push({recipient:'Keila',kind:task.kind,skipped:'Reserva já existente'});continue;}
    try{
     await sendMail(String(rec.email),reportSubject(rec,task.kind,task.from,task.to,{sector:'Produção',detail:'Rastreabilidade · '+REPORT_LABEL[task.kind]}),
-      content.text,content.html,{...content.packet,recipientId:rec.id} as R);
+      content.text,content.html,{...content.packet,recipientId:rec.id} as R,false,receiptContext(key,rec,task.from,task.to));
     await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
      method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -1670,7 +1682,7 @@ async function dispatchPreliminary(t:ScheduledReport,hol:Set<string>,clientsAndT
     await sendMail(String(t.r.email),reportSubject(t.r,t.kind,t.from,t.to,{prefix:'[PRELIMINAR - DADOS PARCIAIS]'}),
       notice+report.text+overview.text+quality.text+'\\n\\n'+alerts.text,
       reportEmailHtml(t.r,report,t.from,t.to,t.kind,true,true,alerts.html,report.detailsHtml+quality.html,overview.html),
-      reportPacket(t.r,report,alerts,t.from,t.to,t.kind,true,true,clients,[],quality));
+      reportPacket(t.r,report,alerts,t.from,t.to,t.kind,true,true,clients,[],quality),false,receiptContext(key,t.r,t.from,t.to));
     await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -1829,7 +1841,7 @@ async function dispatch(payload:R = {}) {
         handled++;
         try{
           await sendMail(String(t.r.email),String(prepared.subject),String(prepared.body_text),
-            String(prepared.body_html),{...(prepared.report_data as R),recipientId:t.r.id,reportKind:t.kind});
+            String(prepared.body_html),{...(prepared.report_data as R),recipientId:t.r.id,reportKind:t.kind},false,receiptContext(key,t.r,t.from,t.to));
           await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
             method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),
               provider_id:'gmail-apps-script'})
@@ -1880,7 +1892,7 @@ async function dispatch(payload:R = {}) {
         const label = t.includeDecember?'Anual e fechamento de dezembro':REPORT_LABEL[t.kind];
         await sendMail(String(t.r.email),reportSubject(t.r,t.kind,t.from,t.to,{detail:label}), report.text+annual.text+overview.text+quality.text+'\n\n'+tickets.text+forecast.text,
           reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,tickets.html,report.detailsHtml+quality.html,annual.html+overview.html,forecast.html),
-          reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows,quality));
+          reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows,quality),false,receiptContext(key,t.r,t.from,t.to));
         await db(`audit_email_sector_dispatches?dispatch_key=eq.${encodeURIComponent(key)}`, {
           method: 'PATCH', body: JSON.stringify({ status: 'sent', sent_at: new Date().toISOString(), provider_id: 'gmail-apps-script' }) });
         results.push({ recipientId: id, kind: t.kind, status: 'sent', ...report.metrics });
@@ -2207,7 +2219,8 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   return json({ok:false,error:'Registro não confirmado; envio bloqueado.'},503);
  const rowId=String(stored[0].id);
  try{
-  await sendMail(recipient,draft.subject,draft.text,draft.html);
+  await sendMail(recipient,draft.subject,draft.text,draft.html,undefined,false,
+    {dispatchKey:'ticket-charge:'+requestId,recipientName:recipient,source:'ticket_charge'});
  }catch(e){
   const detail=String(err(e)||'Falha de envio').slice(0,180);
   // Pode ter havido aceite antes de uma queda na conexão: classificar como indeterminado.
@@ -2330,7 +2343,7 @@ async function dispatchNoonPartial() {
    results.push({report:spec.code,status:'skipped',reason:'Reserva existente'});continue;
   }
   try{
-    await sendMail(String(rec.email),subject,textBody,html,packet);
+    await sendMail(String(rec.email),subject,textBody,html,packet,false,receiptContext(key,rec,today,today));
     await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key),{
       method:'PATCH',body:JSON.stringify({status:'sent',sent_at:new Date().toISOString(),provider_id:'gmail-apps-script'})
     });
@@ -2404,7 +2417,7 @@ async function failedReportAction(payload:R) {
  const claimed=await db(path+'&status=eq.failed&sent_at=is.null&error_message=eq.'+encodeURIComponent(String(row.error_message)),{
   method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({status:'processing',last_attempt_at:new Date().toISOString(),attempt_count:Number(row.attempt_count||1)+1,error_message:'Reenvio administrativo em andamento; conferir provedor antes de repetir.'})});
  if(claimed.length!==1)return json({ok:false,error:'Registro já reservado por outra execução.'},409);
- try{await sendMail(String(rec.email),subject,textBody,html,packet);}
+ try{await sendMail(String(rec.email),subject,textBody,html,packet,false,receiptContext(key,rec,from,to));}
  catch(ex){
   await db(path+'&status=eq.processing',{method:'PATCH',body:JSON.stringify({status:'failed',error_message:err(ex).slice(0,300)})}).catch(()=>{});
   throw ex;
