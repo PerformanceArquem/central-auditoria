@@ -30,7 +30,8 @@ test('sector remains selected across empty and partial sync refresh, clears only
  vm.createContext(context);
  vm.runInContext(code+';this.setOptions=alarmSetTeamOptions;this.selectTeam=alarmTeamChanged',context);
  context.setOptions([{team:'Suporte'},{team:'Produção'}]);
- context.selectTeam('Produção');
+ select.value='Produção'; // browser changes the selected value before onchange runs
+ context.selectTeam(select.value);
  assert.equal(select.value,'Produção');
  context.setOptions([{team:'Suporte'}]);
  assert.equal(select.value,'Produção','selected sector lost during partial sync');
