@@ -1,0 +1,21 @@
+name: Validate charge validation timing
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'supabase/functions/audit-email-dispatch/index.ts'
+      - 'ops/install-ticket-charge-validation-timing.sql'
+      - 'tests/alert-charge-validation-timing.test.mjs'
+      - '.github/workflows/validate-charge-timing.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/alert-charge-validation-timing.test.mjs
