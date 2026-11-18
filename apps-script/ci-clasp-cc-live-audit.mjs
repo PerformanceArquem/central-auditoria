@@ -55,4 +55,8 @@ const report=[
 appendFileSync(summaryPath,'\n'+report);
 console.log('CC_VERSION_AUDIT head='+head.ready+' versioned='+checks.length+
  ' checked='+completed.length+' compatible='+checks.filter(x=>x.ready).length);
+console.log('CC_HEAD_FLAGS capabilities='+head.actions+' cc_response='+head.ccResponse+' cc_send='+head.ccDelivered);
+for(const item of checks)console.log('CC_DEPLOYED_FLAGS version='+item.version+
+ ' capabilities='+item.actions+' cc_response='+item.ccResponse+
+ ' cc_send='+item.ccDelivered+' compatible='+item.ready);
 // Do not fail the whole audit because an older legacy deployment lacks CC.
