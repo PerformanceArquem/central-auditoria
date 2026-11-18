@@ -36,6 +36,8 @@ test('read-only candidate changes only doPost; preserves file list and manifest'
   const r=spawnSync(process.execPath,[script,input,out,summary,modules],{encoding:'utf8'});
   assert.equal(r.status,0,r.stderr);
   assert.match(r.stdout,/STAGING_OK/);
+  assert.match(r.stdout,/CC_CANDIDATE_SHAPE capabilityIfs=1 mailCalls=1 mailArguments=1 firstMailArgumentType=ObjectExpression capabilityBeforeMail=true/);
+  assert.doesNotMatch(r.stdout,/MAIL_SECRET|arquem\.com\.br|function doPost/);
   assert.equal(readFileSync(join(out,'appsscript.json'),'utf8'),readFileSync(join(input,'appsscript.json'),'utf8'));
   assert.match(readFileSync(join(out,'Código.js'),'utf8'),/ccSupported:true/);
   assert.match(readFileSync(join(out,'Código.js'),'utf8'),/MailApp.sendEmail\(\{to:dados.email,subject:'x',body:'x', \.\.\.\(cc.length/);
