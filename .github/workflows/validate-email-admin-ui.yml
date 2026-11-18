@@ -7,6 +7,7 @@ on:
     paths:
       - index.html
       - tests/email-admin-ui.test.mjs
+      - tests/ticket-email-status.test.mjs
       - .github/workflows/validate-email-admin-ui.yml
   workflow_dispatch:
 permissions:
@@ -21,4 +22,4 @@ jobs:
         with:
           node-version: '22'
       - name: Verify recipient manager and report scripts
-        run: node --test tests/email-admin-ui.test.mjs
+        run: node --test tests/email-admin-ui.test.mjs tests/ticket-email-status.test.mjs

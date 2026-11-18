@@ -1965,8 +1965,9 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                             <div id="alarmEmailPreviewArea" class="hide" style="border:1px solid #dce5f0;border-radius:9px;background:#fff;padding:14px;margin-top:10px">
                             <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px">
                               <div><strong id="alarmEmailPreviewSubject"></strong><div id="alarmEmailPreviewRecipients" class="subtle" style="margin-top:5px"></div></div>
-                              <span class="subtle" style="font-size:11px">Prévia real do HTML · Nenhum e-mail enviado</span>
+                              <span class="subtle" style="font-size:11px">Prévia real do HTML · Esta prévia não envia e-mail</span>
                             </div>
+                            <div id="alarmEmailPreviewHistory" role="status" aria-live="polite" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap"></div>
                             <iframe id="alarmEmailPreviewFrame" title="Prévia corporativa do e-mail de cobrança" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" style="display:block;width:100%;height:520px;border:1px solid #dfe8f3;background:#edf2f8;border-radius:9px"></iframe>
                             <details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px">Ver versão em texto do e-mail</summary>
                               <pre id="alarmEmailPreviewText" style="white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 Arial,sans-serif;color:#33465e;background:#f5f8fc;padding:14px;border:1px solid #e1eaf4;border-radius:8px;max-height:220px;overflow:auto"></pre>
@@ -3428,7 +3429,7 @@ async function alarmEmailHistoryLoad(){
   alarmEmailHistory=data.items;alarmEmailHistoryLoaded=true;
   await alarmReminderPolicyLoad();
   status.textContent='Histórico atualizado às '+alarmEmailTime(new Date().toISOString())+'.';
-  alarmEmailHistoryRender();renderAlerts();
+  alarmEmailHistoryRender();renderAlerts();alarmRenderSelectedDetails();
   // Revalidação ao abrir o histórico: consulta apenas, não envia mensagens.
   await alarmReviewRecheck();
  }catch(e){
@@ -3437,10 +3438,11 @@ async function alarmEmailHistoryLoad(){
 }
 function alarmEmailTicketBadge(id){
  const relevant=alarmHistoryForTicket(id);
- const sent=relevant.find(r=>r.status==='sent');
- if(sent){const review=alarmReminderStatusForTicket(id);return ' <span class="pill ok" title="'+esc('Aceite pelo Gmail em '+alarmEmailTime(sent.sent_at||sent.created_at)+' · '+review.label)+'">✉ E-mail enviado · '+review.count+' cobrança(s)</span>';}
+ const sent=relevant.filter(r=>r.status==='sent').at(-1);
+ if(sent){const review=alarmReminderStatusForTicket(id);return ' <span class="pill ok" title="'+esc('Para: '+sent.recipient+' · Aceite pelo Gmail · '+review.label)+'">✉ E-mail enviado · '+esc(alarmEmailTime(sent.sent_at||sent.created_at))+' · '+review.count+' cobrança(s)</span>'+(relevant.some(r=>r.status!=='sent')?' <span class="pill alert-warn">Outro envio a verificar</span>':'');}
  if(relevant.length)return ' <span class="pill alert-warn" title="Envio não confirmado: consulte o relatório de e-mails.">✉ Verificar envio</span>';
- return '';
+ if(!alarmEmailHistoryLoaded)return ' <span class="pill" title="Consulte o histórico de e-mails para confirmar.">Histórico não consultado</span>';
+ return ' <span class="pill" title="Consulta limitada aos 250 registros recentes; envios anteriores podem não aparecer.">Sem envio no histórico consultado</span>';
 }
 
 const alarmSelected=new Set();
@@ -3473,6 +3475,8 @@ function alarmSuggestManagerCc(){
 function alarmRenderSelectedDetails(){
  const body=$('alarmEmailSelectedDetails');if(!body)return;
  const ids=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
+ const previewHistory=$('alarmEmailPreviewHistory');
+ if(previewHistory)previewHistory.innerHTML=ids.map(id=>'<div><b>#'+esc(id)+'</b>'+alarmEmailTicketBadge(id)+'</div>').join('');
  body.innerHTML=ids.map(id=>{
   const t=TK.get(String(id));const owner=t?.owner?.businessName||t?.owner?.name||t?.owner||'Não informado';
   const sector=t?.ownerTeam?.name||t?.ownerTeam||'Não informado';
@@ -3486,7 +3490,7 @@ function alarmRenderSelectedDetails(){
     })).filter(p=>p.minutes>0):[]);
   realAppointments.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
   const appointment=realAppointments[0];
-  return '<tr><td>#'+esc(id)+'</td><td>'+esc(client)+'</td><td>'+esc(sector)+'</td><td>'+esc(owner)+'</td>'+
+  return '<tr><td>#'+esc(id)+alarmEmailTicketBadge(id)+'</td><td>'+esc(client)+'</td><td>'+esc(sector)+'</td><td>'+esc(owner)+'</td>'+
     '<td>'+esc(daysOpen===null?'Não disponível':daysOpen+' dia(s)')+'</td>'+
     '<td>'+esc(appointment?appointment.date.slice(0,10)+' · '+H(appointment.minutes):'Não localizado')+'</td></tr>';
  }).join('')||'<tr><td colspan="6">Nenhum chamado selecionado.</td></tr>';
