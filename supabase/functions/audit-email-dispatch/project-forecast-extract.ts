@@ -1,22 +1,22 @@
 // Conservative forecast extraction matching the deterministic rules of
 // Projetos e Prazos. Never interpret delivery dates or SLA as effort hours.
 export type ExtractedProjectForecast={hours:number;origin:string;confidence:'alta'|'média'};
-const KW=String.raw`previs[aã]o|previst[oa]s?|estimativa|estimad[oa]s?|estimo|esfor[cç]o|or[cç]ad[oa]s?|or[cç]amento|vai\\s+levar|levar[aá]|levaremos|leva\\s+(?:cerca\\s+de|uns?|aprox\\w*)|tempo\\s+(?:total\\s+)?(?:de\\s+)?(?:execu[cç][aã]o|desenvolvimento)`;
-const NUM=String.raw`(\\d{1,4}(?:[.,]\\d{1,2})?)(?:\\s*(?:a|à|-|até|ate)\\s*(\\d{1,4}(?:[.,]\\d{1,2})?))?`;
-const UN=String.raw`\\s*(horas?|hrs?|hs|h|min(?:utos?)?|dias?)(?![a-zà-ú])`;
+const KW=String.raw`previs[aã]o|previst[oa]s?|estimativa|estimad[oa]s?|estimo|esfor[cç]o|or[cç]ad[oa]s?|or[cç]amento|vai\s+levar|levar[aá]|levaremos|leva\s+(?:cerca\s+de|uns?|aprox\w*)|tempo\s+(?:total\s+)?(?:de\s+)?(?:execu[cç][aã]o|desenvolvimento)`;
+const NUM=String.raw`(\d{1,4}(?:[.,]\d{1,2})?)(?:\s*(?:a|à|-|até|ate)\s*(\d{1,4}(?:[.,]\d{1,2})?))?`;
+const UN=String.raw`\s*(horas?|hrs?|hs|h|min(?:utos?)?|dias?)(?![a-zà-ú])`;
 const EST_A=new RegExp('(?:'+KW+')([^0-9\\n]{0,30}?)'+NUM+UN,'i');
 const EST_B=new RegExp(NUM+UN+'\\s*(?:de\\s+|em\\s+)?(?:previst[ao]s?|estimad[ao]s?|esfor[cç]o|or[cç]ad[ao]s?)','i');
 const BAD=/entreg|prazo|venc|respost|retorn|sla|atendiment|reuni|hor[aá]rio|janela|plant[aã]o|dispon/i;
-const NEG=/(?:\\bsem|\\bn[aã]o|nenhum[ao]?)\\s+(?:\\w+\\s+){0,2}$/i;
+const NEG=/(?:\bsem|\bn[aã]o|nenhum[ao]?)\s+(?:\w+\s+){0,2}$/i;
 const WORDS:Record<string,number>={um:1,uma:1,dois:2,duas:2,tres:3,'três':3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10};
 const clean=(v:unknown)=>String(v??'').replace(/<[^>]*>/g,' ').replace(/&nbsp;/gi,' ')
- .replace(/\\s+/g,' ').trim().slice(0,4000);
+ .replace(/\s+/g,' ').trim().slice(0,4000);
 const prep=(v:unknown)=>clean(v)
- .replace(/(\\d{1,3})h(\\d{2})(?!\\d)/gi,(_,h,m)=>(Number(h)+Number(m)/60).toFixed(2)+'h')
- .replace(/(\\d{1,3})\\s*h(?:oras?)?\\s*e\\s*(\\d{1,2})\\s*min\\w*/gi,(_,h,m)=>(Number(h)+Number(m)/60).toFixed(2)+'h')
- .replace(/(\\d+)\\s*horas?\\s*e\\s*meia/gi,(_,h)=>String(Number(h)+0.5)+'h')
- .replace(/\\bmeia\\s+hora\\b/gi,'0.5h').replace(/\\bmeio\\s+dia\\b/gi,'0.5 dia')
- .replace(/\\b(um|uma|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez)\\s+(horas?|dias?)\\b/gi,
+ .replace(/(\d{1,3})h(\d{2})(?!\d)/gi,(_,h,m)=>(Number(h)+Number(m)/60).toFixed(2)+'h')
+ .replace(/(\d{1,3})\s*h(?:oras?)?\s*e\s*(\d{1,2})\s*min\w*/gi,(_,h,m)=>(Number(h)+Number(m)/60).toFixed(2)+'h')
+ .replace(/(\d+)\s*horas?\s*e\s*meia/gi,(_,h)=>String(Number(h)+0.5)+'h')
+ .replace(/\bmeia\s+hora\b/gi,'0.5h').replace(/\bmeio\s+dia\b/gi,'0.5 dia')
+ .replace(/\b(um|uma|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez)\s+(horas?|dias?)\b/gi,
    (_,word,unit)=>String(WORDS[word.toLowerCase()]||0)+' '+unit);
 export function readProjectForecast(payload:Record<string,unknown>,workdayHours=8,fieldId=''):ExtractedProjectForecast|null{
  if(!Number.isFinite(workdayHours)||workdayHours<=0||workdayHours>24)throw Error('Jornada configurada para o projeto inválida.');
