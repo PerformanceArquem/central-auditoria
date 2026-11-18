@@ -37,5 +37,20 @@ export async function chargeTicketLookup(ids:string[],db:LookupDB):Promise<Charg
   }));
  }
  missing=ids.filter(id=>!found.has(id));
+ // O último apontamento é um registro real de horas do Movidesk, e não
+ // 'lastUpdate' ou uma anotação interna de cobrança. Nunca inventar horas.
+ const appointments=await db('audit_direct_appointments?select=ticket_id,appointment_date,duration_minutes,collaborator_name,activity&ticket_id=in.('+ids.join(',')+')&duration_minutes=gt.0&order=appointment_date.desc&limit=1000');
+ if(!Array.isArray(appointments))throw Error('Não foi possível consultar os apontamentos reais.');
+ const latest=new Map<string,Record<string,unknown>>();
+ for(const raw of appointments){
+   if(!raw||typeof raw!=='object')continue;
+   const row=raw as Record<string,unknown>,id=String(row.ticket_id||'');
+   if(!ids.includes(id)||latest.has(id))continue;
+   latest.set(id,{date:String(row.appointment_date||''),minutes:Number(row.duration_minutes)||0,
+     collaborator:String(row.collaborator_name||''),activity:String(row.activity||'')});
+ }
+ for(const [id,row] of found){
+   found.set(id,{...row,last_real_appointment:latest.get(id)||null});
+ }
  return {records:ids.filter(id=>found.has(id)).map(id=>found.get(id)!),missingIds:missing,sources};
 }
