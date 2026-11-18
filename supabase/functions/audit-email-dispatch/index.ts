@@ -1273,10 +1273,15 @@ async function adminAction(payload: R) {
   if (!/^[a-f0-9-]{36}$/i.test(id)) return json({ error: 'recipientId invalido' }, 400);
   const rows = await db(`audit_email_recipients?id=eq.${encodeURIComponent(id)}&active=eq.true&select=id,name,email&limit=1`);
   if (!rows.length) return json({ error: 'Destinatario nao encontrado ou inativo' }, 404);
-  // Teste envia mensagem neutra, sem dados de colaboradores.
+  // Teste manual: gera identificador exclusivo e registra abertura detectada como nos envios oficiais.
+  // Não cria reserva de disparo agendado nem afeta o calendário de relatórios.
+  const testKey='manual-integration-test:'+crypto.randomUUID();
   await sendMail(String(rows[0].email), 'Central de Auditoria - Teste de integracao',
-    'Teste autorizado do Gmail com o Supabase. Nenhum dado de colaborador foi enviado. Envios automaticos permanecem separados deste teste.');
-  return json({ ok: true, sentTo: String(rows[0].email), message: 'Apps Script aceitou mensagem. Confira a caixa de entrada.' });
+    'Teste autorizado do Gmail com o Supabase. Nenhum dado de colaborador foi enviado. Envios automaticos permanecem separados deste teste.',
+    undefined,undefined,false,{dispatchKey:testKey,recipientId:rows[0].id,
+      recipientName:rows[0].name,source:'test'});
+  return json({ ok: true, sentTo: String(rows[0].email), tracking:true,
+    message: 'Apps Script aceitou mensagem. Abertura detectada disponível no Monitoramento de E-mails.' });
 }
 // Envio manual isolado: um destinatario existente e ativo, autorizado pelo administrador.
 // Nao executa a rotina automatica, nao percorre todos os destinatarios e nao altera o Cron.
