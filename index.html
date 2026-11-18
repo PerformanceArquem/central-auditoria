@@ -3368,6 +3368,7 @@ function alarmSuggestManagerCc(){
  const sectors=new Set([...alarmSelected].map(id=>TK.get(String(id))).filter(Boolean).map(t=>normalized(t.ownerTeam?.name||t.ownerTeam)).filter(Boolean));
  const hint=$('alarmEmailManagerCcHint');
  if(!sectors.size){hint.textContent='Selecione chamados com setor identificado no Movidesk.';return}
+ if(sectors.size>1){hint.textContent='A seleção contém chamados de setores diferentes. Para evitar compartilhar chamados com gestores de outro setor, filtre um setor por envio ou escolha manualmente os destinatários em cópia.';return}
  const suggested=alarmSectorManagers.filter(m=>[...m.sectors].some(label=>{
   const registered=normalized(label);
   return [...sectors].some(sector=>sector===registered||sector.startsWith(registered+' ')||registered.startsWith(sector+' '));
