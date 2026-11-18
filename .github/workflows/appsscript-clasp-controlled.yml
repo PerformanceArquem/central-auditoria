@@ -13,6 +13,7 @@ on:
       - 'apps-script/ci-clasp-dopost-voice-guard-dryrun.mjs'
       - 'apps-script/ci-clasp-voice-guard-order.mjs'
       - 'apps-script/ci-clasp-cc-live-audit.mjs'
+      - 'apps-script/ci-clasp-inventory-triage.mjs'
       - '.github/workflows/appsscript-clasp-controlled.yml'
   workflow_dispatch:
     inputs:
@@ -153,6 +154,8 @@ jobs:
           cd "$RUNNER_TEMP/remote-script"
           printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
           clasp pull > /dev/null
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-inventory-triage.mjs" \
+            "$RUNNER_TEMP/remote-script" "$GITHUB_STEP_SUMMARY"
           cp -a "$RUNNER_TEMP/remote-script/." "$RUNNER_TEMP/cc-versions/head/"
           clasp list-deployments > "$RUNNER_TEMP/cc-deployments.txt"
           vers=$(node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-live-audit.mjs" versions "$RUNNER_TEMP/cc-deployments.txt")
