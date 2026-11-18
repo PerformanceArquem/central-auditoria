@@ -3667,8 +3667,7 @@ async function alarmEmailCall(action,confirmed=false){
  if(!/^[^@\s]+@arquem\.com\.br$/.test(recipient))throw Error('Informe um destinatário @arquem.com.br.');
  if(cc.length>10||cc.some(email=>email===recipient))throw Error('Confira os contatos em cópia; limite de 10, sem repetir o destinatário.');
  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
-  body:{action,ticketIds:ids,recipient,cc,timeLog,registerInternalNote:!!$('alarmEmailInternalNote')?.checked,
-    message:$('alarmEmailMessage').value,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,
+  body:{action,ticketIds:ids,recipient,cc,timeLog,registerInternalNote:!!$('alarmEmailInternalNote')?.checked,message:$('alarmEmailMessage').value,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,
     projectDailyGoalHours:Number($('rMeta')?.value)||4,projectPeriodFrom:$('fStart')?.value||'',
     projectPeriodTo:$('fEnd')?.value||'',requestId:alarmEmailRequestId}
  });
