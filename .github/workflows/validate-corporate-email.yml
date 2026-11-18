@@ -7,6 +7,7 @@ on:
       - 'tests/corporate-email-policy.test.ts'
       - 'tests/journey-balances.test.ts'
       - 'tests/signed-journey-attachments.test.mjs'
+      - 'tests/signed-journey-output-rows.test.mjs'
       - 'apps-script/central-auditoria-emails-completo.gs'
       - '.github/workflows/validate-corporate-email.yml'
   workflow_dispatch:
@@ -26,5 +27,5 @@ jobs:
         run: |
           node --check < apps-script/arquem-relatorios-anexos.gs
           node --check < apps-script/central-auditoria-emails-completo.gs
-          node --test tests/signed-journey-attachments.test.mjs
+          node --test tests/signed-journey-attachments.test.mjs tests/signed-journey-output-rows.test.mjs
         shell: bash
