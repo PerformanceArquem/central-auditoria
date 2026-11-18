@@ -62,25 +62,6 @@ jobs:
           printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
           clasp pull
           node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" audit "$PWD" "$GITHUB_STEP_SUMMARY"
-      - name: Compare Apps Script HEAD with deployed versioned CC contracts (read-only)
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/cc-versions/head" "$RUNNER_TEMP/cc-versions/versions"
-          cp -a "$RUNNER_TEMP/remote-script/." "$RUNNER_TEMP/cc-versions/head/"
-          cd "$RUNNER_TEMP/remote-script"
-          clasp list-deployments > "$RUNNER_TEMP/cc-deployments.txt"
-          vers=$(node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-live-audit.mjs" versions "$RUNNER_TEMP/cc-deployments.txt")
-          for v in $vers; do
-            [[ "$v" =~ ^[0-9]+$ ]] || exit 1
-            mkdir -p "$RUNNER_TEMP/cc-versions/versions/v$v"
-            (
-              cd "$RUNNER_TEMP/cc-versions/versions/v$v"
-              printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
-              clasp pull --versionNumber "$v" > /dev/null
-            )
-          done
-          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-live-audit.mjs" report \
-            "$RUNNER_TEMP/cc-deployments.txt" "$RUNNER_TEMP/cc-versions" "$GITHUB_STEP_SUMMARY"
       - name: Checkout PR68 as data only (never execute its code)
         uses: actions/checkout@v4
         with:
@@ -142,6 +123,51 @@ jobs:
           node apps-script/ci-clasp-voice-guard-order.mjs \
             "$RUNNER_TEMP/voice-safe-final-test-only" \
             "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
+  cc-readonly-audit:
+    # Runs independently of reconciliation, which may fail closed on unreviewed
+    # remote inventory changes. Never executes doPost or sends messages.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@3.4.1
+      - name: Authenticate without logging tokens
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "${CLASPRC_JSON:-}" || { echo "::error::Configure CLASPRC_JSON"; exit 1; }
+          umask 077
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+      - name: Fetch live HEAD and deployed versions without modifying the script
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/remote-script" "$RUNNER_TEMP/cc-versions/head" "$RUNNER_TEMP/cc-versions/versions"
+          cd "$RUNNER_TEMP/remote-script"
+          printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
+          clasp pull > /dev/null
+          cp -a "$RUNNER_TEMP/remote-script/." "$RUNNER_TEMP/cc-versions/head/"
+          clasp list-deployments > "$RUNNER_TEMP/cc-deployments.txt"
+          vers=$(node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-live-audit.mjs" versions "$RUNNER_TEMP/cc-deployments.txt")
+          for v in $vers; do
+            [[ "$v" =~ ^[0-9]+$ ]] || exit 1
+            mkdir -p "$RUNNER_TEMP/cc-versions/versions/v$v"
+            (
+              cd "$RUNNER_TEMP/cc-versions/versions/v$v"
+              printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
+              clasp pull --versionNumber "$v" > /dev/null
+            )
+          done
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-live-audit.mjs" report \
+            "$RUNNER_TEMP/cc-deployments.txt" "$RUNNER_TEMP/cc-versions" "$GITHUB_STEP_SUMMARY"
+          # NOTE: this job detects contract presence only. CC remains blocked
+          # unless the authenticated Edge Function's live /exec probe passes.
   zenvia-isolated-tests:
     if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
     runs-on: ubuntu-latest
