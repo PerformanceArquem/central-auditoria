@@ -1932,6 +1932,18 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                             <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="alarmEmailExternalAiConsent"> Autorizo enviar dados resumidos dos chamados ao Gemini para gerar sugestões</label>
                             <label style="display:inline-flex;align-items:center;gap:7px;padding:9px 12px;background:#f2f6fd;border:1px solid #d5e2f5;border-radius:9px;font-size:12px;cursor:pointer"><input type="checkbox" id="alarmEmailIncludeGuidance" checked onchange="alarmEmailInvalidate()"> Incluir orientações práticas no rodapé do e-mail</label>
                             <label style="display:inline-flex;align-items:center;gap:7px;padding:9px 12px;background:#f1f8f5;border:1px solid #c9e4d5;border-radius:9px;font-size:12px"><input type="checkbox" id="alarmEmailInternalNote" checked onchange="alarmEmailInvalidate()"> Registrar ação interna de cobrança em cada chamado após confirmação do envio</label>
+<details id="alarmEmailTimeDetails" style="width:100%;padding:12px;border:1px solid #d6e1ef;border-radius:9px;background:#fff">
+ <summary style="font-weight:600;cursor:pointer">Apontamento real de horas — Avaliação de chamados (opcional)</summary>
+ <p class="subtle" style="margin:8px 0">O apontamento será registrado no Movidesk sob o usuário autenticado e com atividade <strong>Avaliação de chamados</strong>. Informe somente horas efetivamente trabalhadas. Para evitar duplicação, escolha exatamente um chamado.</p>
+ <label style="display:flex;align-items:center;gap:6px"><input id="alarmEmailLogHours" type="checkbox" onchange="alarmTimeLogToggle()"> Incluir apontamento de horas reais</label>
+ <div class="row" style="gap:10px;flex-wrap:wrap;margin:10px 0;align-items:end">
+  <div class="fg"><label for="alarmEmailWorkDate">Data da avaliação</label><input id="alarmEmailWorkDate" type="date" onchange="alarmEmailInvalidate()"></div>
+  <div class="fg"><label for="alarmEmailWorkStart">Início</label><input id="alarmEmailWorkStart" type="time" onchange="alarmEmailInvalidate()"></div>
+  <div class="fg"><label for="alarmEmailWorkEnd">Fim</label><input id="alarmEmailWorkEnd" type="time" onchange="alarmEmailInvalidate()"></div>
+  <div class="fg"><label for="alarmEmailWorkActivity">Atividade</label><input id="alarmEmailWorkActivity" value="Avaliação de chamados" readonly></div>
+ </div>
+ <small id="alarmEmailWorkHint" class="subtle">Não é gerado apontamento de tempo apenas por enviar um e-mail.</small>
+</details>
 <button type="button" class="b" onclick="alarmEmailPreview()">Visualizar e-mail</button>
                             <button type="button" class="b" id="alarmEmailSend" onclick="alarmEmailSend()" disabled title="Disponível somente depois de visualizar e conferir a prévia">Confirmar e enviar</button><style>#alarmEmailSend:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}</style>
                           </div>
@@ -3398,9 +3410,26 @@ function alarmRenderSelectedDetails(){
   return '<tr><td>#'+esc(id)+'</td><td>'+esc(client)+'</td><td>'+esc(sector)+'</td><td>'+esc(owner)+'</td></tr>';
  }).join('')||'<tr><td colspan="4">Nenhum chamado selecionado.</td></tr>';
 }
+function alarmTimeLogToggle(){
+ const checked=!!$('alarmEmailLogHours')?.checked;
+ if(checked){$('alarmEmailInternalNote').checked=true;$('alarmEmailTimeDetails').open=true}
+ alarmEmailInvalidate();
+}
+function alarmRequestedTimeLog(){
+ if(!$('alarmEmailLogHours')?.checked)return null;
+ const date=$('alarmEmailWorkDate')?.value||'',start=$('alarmEmailWorkStart')?.value||'',end=$('alarmEmailWorkEnd')?.value||'';
+ if(alarmSelected.size!==1)throw Error('Apontamento de horas somente para um chamado por vez.');
+ if(!date||!start||!end||end<=start)throw Error('Informe data, início e fim reais do trabalho.');
+ const endAt=Date.parse(date+'T'+end+':00-03:00');
+ if(!Number.isFinite(endAt)||endAt>Date.now()+60000)throw Error('Não é possível lançar horários futuros.');
+ return {date,start,end,activity:'Avaliação de chamados'};
+}
 const alarmSelectionSignature=()=>{
  const ids=[...alarmSelected].sort((a,b)=>a.localeCompare(b));
  return JSON.stringify({ids,recipient:alarmRecipientEmail(),cc:alarmCcRecipients(),
+   timeLog:$('alarmEmailLogHours')?.checked?{
+     date:$('alarmEmailWorkDate')?.value,start:$('alarmEmailWorkStart')?.value,end:$('alarmEmailWorkEnd')?.value
+   }:null,
    message:$('alarmEmailMessage')?.value||'',registerInternalNote:!!$('alarmEmailInternalNote')?.checked,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked});
 };
 function alarmUpdateSelectedCount(){
@@ -3437,6 +3466,9 @@ function alarmClearSelection(){alarmSelected.clear();renderAlerts();alarmEmailIn
 function alarmOpenComposer(){
  if(!alarmSelected.size){alert('Selecione pelo menos um chamado no ranking.');return}
  $('alarmEmailPanel').classList.remove('hide');
+ if(!$('alarmEmailWorkDate').value){
+  $('alarmEmailWorkDate').value=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ }
  alarmRenderSelectedDetails();
  alarmLoadRegisteredRecipients();
  alarmEmailAiAvailability();
@@ -3548,11 +3580,11 @@ async function alarmEmailCall(action,confirmed=false){
  if(!client)throw Error('Acesso administrativo necessário. Entre novamente na Central.');
  const ids=[...alarmSelected];
  if(!ids.length||ids.length>20)throw Error('Selecione de 1 a 20 chamados.');
- const recipient=alarmRecipientEmail(),cc=alarmCcRecipients();
+ const recipient=alarmRecipientEmail(),cc=alarmCcRecipients(),timeLog=alarmRequestedTimeLog();
  if(!/^[^@\s]+@arquem\.com\.br$/.test(recipient))throw Error('Informe um destinatário @arquem.com.br.');
  if(cc.length>10||cc.some(email=>email===recipient))throw Error('Confira os contatos em cópia; limite de 10, sem repetir o destinatário.');
  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
-  body:{action,ticketIds:ids,recipient,cc,registerInternalNote:!!$('alarmEmailInternalNote')?.checked,message:$('alarmEmailMessage').value,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,requestId:alarmEmailRequestId}
+  body:{action,ticketIds:ids,recipient,cc,timeLog,registerInternalNote:!!$('alarmEmailInternalNote')?.checked,message:$('alarmEmailMessage').value,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,requestId:alarmEmailRequestId}
  });
  if(error){
   let detail=error.message||'Falha no serviço de e-mail.';
@@ -3586,7 +3618,8 @@ async function alarmEmailPreview(){
   if(typeof data.html!=='string'||!data.html.includes('<html'))throw Error('O servidor não retornou a prévia HTML corporativa. Nenhum envio foi liberado.');
   $('alarmEmailPreviewSubject').textContent='Assunto: '+data.subject;
   $('alarmEmailPreviewRecipients').textContent='Para: '+data.recipient+(data.cc?.length?' · CC: '+data.cc.join(', '):'')+
-    (data.registerInternalNote?' · Ação interna no Movidesk após aceite do e-mail':' · Sem ação interna no Movidesk');
+    (data.registerInternalNote?' · Ação interna no Movidesk após aceite do e-mail':' · Sem ação interna no Movidesk')+
+    (data.timeLog?' · Horas reais: '+data.timeLog.date+' '+data.timeLog.start+'–'+data.timeLog.end:'');
   if(data.cc?.length&&data.ccSupported!==true)throw Error('O serviço de e-mail ainda não confirmou suporte a cópias (CC). Nenhum envio será liberado antes dessa validação.');
   $('alarmEmailPreviewText').textContent=data.text||'';
   $('alarmEmailPreviewFrame').srcdoc=data.html;
@@ -3626,8 +3659,10 @@ async function alarmEmailSend(){
  }
  const recipient=alarmRecipientEmail(),n=alarmSelected.size;
  const cc=alarmCcRecipients();
+ try{alarmRequestedTimeLog()}catch(e){$('alarmEmailStatus').textContent=String(e.message||e);return}
  if(!window.confirm('Enviar agora a cobrança de '+n+' chamado(s) para '+recipient+(cc.length?' com cópia para '+cc.join(', '):'')+
   ($('alarmEmailInternalNote')?.checked?' e programar uma ação interna em cada chamado após o aceite do e-mail':' sem registrar ações internas')+
+  ($('alarmEmailLogHours')?.checked?' e o apontamento de horas reais conferidas':'')+
   '? Este envio é real e não pode ser desfeito.'))return;
  alarmEmailSending=true;$('alarmEmailSend').disabled=true;
  $('alarmEmailStatus').textContent='Enviando mensagem corporativa...';
