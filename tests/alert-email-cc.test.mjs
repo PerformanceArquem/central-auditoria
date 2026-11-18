@@ -45,7 +45,7 @@ test('sector manager button uses active registered manager metadata without gues
  assert.match(html,/managementByEmail/);
  assert.match(html,/managementByEmail\.set\(email,known\)/);
  assert.match(html,/filter\(x=>x\.email!==alarmRecipientEmail\(\)\)/);
- assert.match(html,/\$('alarmEmailCcDetails'\)\.open=true/);
+ assert.ok(html.includes("$('alarmEmailCcDetails').open=true"));
  assert.match(html,/Melhorar cobrança com IA/);
 });
 test('standard subject explicitly says verification of tickets without movement or treatment',()=>{
