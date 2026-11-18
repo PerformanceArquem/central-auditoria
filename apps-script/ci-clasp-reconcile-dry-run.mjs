@@ -30,19 +30,39 @@ const lostNames=[...beforeNames].filter(name=>!afterNames.has(name));
 const newNames=[...afterNames].filter(name=>!beforeNames.has(name));
 if(lostNames.length||newNames.length)throw Error('Contrato de funções alterado: removidas='+lostNames.length+' adicionadas='+newNames.length);
 const critical=['doPost','arquemCreateReportAttachments_','arquemCapacidadesAnexos_','arquemHomologarKeilaSemEnvio','arquemValidarPublicacaoSemEnvio'];
-// A zero-duplicate result alone is NOT proof of correctness.
-// Remote inventory verified in protected audit run 43906645766: six JS files,
-// 39 unique global functions. Keep exact inventory, critical names and duplicate checks.
-if(original.length!==6 || afterNames.size!==39)
- throw Error('Unexpected inventory: files='+original.length+' functions='+afterNames.size);
+// Build an AST-backed inventory of all declarations, including duplicates within
+// the SAME file. This must run BEFORE validating counts: a changed remote inventory
+// is not safe simply because it contains an expected number of functions.
+const declarations=new Map();
+for(const [file,source] of sources)for(const f of functions(source)){
+ const owners=declarations.get(f.name)||[];
+ owners.push(file);
+ declarations.set(f.name,owners);
+}
+const conflicts=[...declarations].filter(([,owners])=>owners.length>1)
+ .map(([name,owners])=>name+' ['+owners.join(', ')+']').sort();
+if(conflicts.length)throw Error('AUDITORIA BLOQUEADA: '+conflicts.length+
+ ' funções globais repetidas após a reconciliação legada: '+conflicts.join('; ')+
+ '. É necessário revisar a origem e os arquivos de homologação isolada; não publicar.');
+// Do not automatically bless new files/functions. The two allowed inventory states
+// are explicitly audited snapshots, including exact names of remote source files.
+const originalFiles=[
+ 'Código.js','ZenviaVozChat.js','arquem-relatorios-anexos.gs.js',
+ 'homologacao-zenvia-pr68.js','intelligence-triage-mail.js','validacao-sem-envio.js'
+];
+const observedAdded=['arquem-comparativos.gs.js','homologacao-pr103-isolada.js'];
+const expectedLegacy=originalFiles;
+const expectedCurrent=[...originalFiles,...observedAdded].sort();
+const sameFiles=(expected)=>JSON.stringify([...expected].sort())===JSON.stringify(original);
+const legacyInventory=sameFiles(expectedLegacy)&&afterNames.size===39;
+const currentInventory=sameFiles(expectedCurrent)&&afterNames.size===48;
+if(!legacyInventory&&!currentInventory)
+ throw Error('Unexpected inventory: files='+original.length+' functions='+afterNames.size+
+  '; names='+original.join(', ')+'. Revisão manual obrigatória.');
 const missingCritical=critical.filter(name=>!afterNames.has(name));
 if(missingCritical.length)throw Error('Funções críticas não encontradas: '+missingCritical.join(', '));
 const remainingFns=new Map();
-for(const [file,text] of sources)for(const f of functions(text)){
- const previous=remainingFns.get(f.name);
- if(previous)throw Error('Duplicate remains in test candidate: '+f.name+' in '+previous+' and '+file);
- remainingFns.set(f.name,file);
-}
+for(const [name,owners] of declarations)remainingFns.set(name,owners[0]);
 mkdirSync(outputDir,{recursive:true});
 for(const [file,text] of sources)writeFileSync(join(outputDir,file),text,{mode:0o600});
 const manifest=readFileSync(join(remoteDir,'appsscript.json'));
