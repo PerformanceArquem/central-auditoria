@@ -1,0 +1,21 @@
+name: Validate safe PR103 rehearsal
+on:
+  pull_request:
+    paths:
+      - 'apps-script/ci-clasp-pr103-overlay-dry-run.mjs'
+      - 'tests/appsscript-pr103-overlay-dry-run.test.mjs'
+      - '.github/workflows/appsscript-clasp-controlled.yml'
+      - '.github/workflows/validate-appsscript-pr103-overlay.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --prefix "$RUNNER_TEMP/js-parser" --no-save --silent acorn@8.15.0
+      - run: ACORN_DIR="$RUNNER_TEMP/js-parser" node --test tests/appsscript-pr103-overlay-dry-run.test.mjs

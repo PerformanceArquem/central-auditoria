@@ -14,6 +14,7 @@ on:
       - 'apps-script/ci-clasp-voice-guard-order.mjs'
       - 'apps-script/ci-clasp-cc-live-audit.mjs'
       - 'apps-script/ci-clasp-inventory-triage.mjs'
+      - 'apps-script/ci-clasp-pr103-overlay-dry-run.mjs'
       - '.github/workflows/appsscript-clasp-controlled.yml'
   workflow_dispatch:
     inputs:
@@ -172,6 +173,40 @@ jobs:
             "$RUNNER_TEMP/cc-deployments.txt" "$RUNNER_TEMP/cc-versions" "$GITHUB_STEP_SUMMARY"
           # NOTE: this job detects contract presence only. CC remains blocked
           # unless the authenticated Edge Function's live /exec probe passes.
+  pr103-dryrun:
+    # Independent rehearsal; never uses clasp push, versions or mail sends.
+    if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@3.4.1
+      - name: Authenticate without logging tokens
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "${CLASPRC_JSON:-}" || { echo "::error::Configure CLASPRC_JSON"; exit 1; }
+          umask 077
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+      - name: Parse and rehearse PR103 consolidation in temporary files
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/remote-script" "$RUNNER_TEMP/js-parser"
+          npm install --prefix "$RUNNER_TEMP/js-parser" --no-save --silent acorn@8.15.0
+          cd "$RUNNER_TEMP/remote-script"
+          printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
+          clasp pull > /dev/null
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-pr103-overlay-dry-run.mjs" \
+            "$RUNNER_TEMP/remote-script" "$RUNNER_TEMP/pr103-dryrun" \
+            "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
+          # The reviewed source is NEVER uploaded or used for publishing.
   zenvia-isolated-tests:
     if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
     runs-on: ubuntu-latest
