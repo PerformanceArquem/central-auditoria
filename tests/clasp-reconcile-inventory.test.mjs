@@ -35,7 +35,7 @@ function execute(f){
  return {code:x.status,message:x.stdout+'\n'+x.stderr};
 }
 test('bloqueia função duplicada introduzida pelo arquivo de homologação isolada',()=>{
- const f=fixture({'homologacao-pr103-isolada.js':'function arquemPdf_(){}\n'});
+ const f=fixture({'homologacao-pr103-isolada.js':'function arquemPdf_(){return 1;}\n'});
  try{
   const r=execute(f);
   assert.notEqual(r.code,0);
@@ -46,7 +46,7 @@ test('bloqueia função duplicada introduzida pelo arquivo de homologação isol
  }finally{rmSync(f.root,{recursive:true,force:true})}
 });
 test('bloqueia repetição de função no mesmo arquivo',()=>{
- const f=fixture({'homologacao-pr103-isolada.js':'function arquemPrepararRevisaoVisualAjustesSemEnvio(){}\nfunction arquemPrepararRevisaoVisualAjustesSemEnvio(){}\n'});
+ const f=fixture({'homologacao-pr103-isolada.js':'function arquemPrepararRevisaoVisualAjustesSemEnvio(){}\nfunction arquemPrepararRevisaoVisualAjustesSemEnvio(){return 2;}\n'});
  try{
   const r=execute(f);
   assert.notEqual(r.code,0);
