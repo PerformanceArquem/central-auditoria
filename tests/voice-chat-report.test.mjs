@@ -58,11 +58,11 @@ test('report TMA preserves measured calls across windows and labels missing cove
 
 test('voice distribution shows only authorized Support staff, excluding Kassio and other departments',()=>{
  const people=[
-  {extension:'1',name:'Rhyan Massayoshi',total:19,answered:15},
+  {extension:'1',name:'Rhyan Massayoshi',total:19,answered:15,unanswered:4},
   {extension:'2',name:'Bruno Oliveira',total:16,answered:13},
   {extension:'3',name:'Vitor Nascimento',total:10,answered:7},
   {extension:'4',name:'Guilherme Henrique',total:8,answered:3},
-  {extension:'5',name:'Cleverson Teixeira',total:5,answered:5},
+  {extension:'5',name:'Cleverson Teixeira',total:5,answered:5,unanswered:0},
   {extension:'6',name:'Kassio Rodrigues',total:4,answered:3},
   {extension:'7',name:'Alan Reis',total:9,answered:6},
   {extension:'8',name:'Davi Vinicius',total:6,answered:6},
