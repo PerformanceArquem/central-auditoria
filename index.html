@@ -3508,7 +3508,8 @@ const alarmSelectionSignature=()=>{
      date:$('alarmEmailWorkDate')?.value,start:$('alarmEmailWorkStart')?.value,end:$('alarmEmailWorkEnd')?.value
    }:null,
    message:$('alarmEmailMessage')?.value||'',registerInternalNote:!!$('alarmEmailInternalNote')?.checked,
-   includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,projectDailyGoalHours:Number($('rMeta')?.value)||4,
+   includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,projectDailyGoalHours:Number($('rMeta')?.value)||4,projectWorkdayHours:Number($('rJor')?.value)||8,
+   projectForecastFieldId:String($('cfId')?.value||''),
    projectPeriodFrom:$('fStart')?.value||'',projectPeriodTo:$('fEnd')?.value||''});
 };
 function alarmUpdateSelectedCount(){
@@ -3633,7 +3634,8 @@ async function alarmEmailAiDraft(){
   const {data,error}=await client.functions.invoke('audit-email-dispatch',{
    body:{action:'ticket_charge_ai_draft',ticketIds:ids,tone,
      externalAiConsent:!!$('alarmEmailExternalAiConsent')?.checked,
-     projectDailyGoalHours:Number($('rMeta')?.value)||4,projectPeriodFrom:$('fStart')?.value||'',
+     projectDailyGoalHours:Number($('rMeta')?.value)||4,projectWorkdayHours:Number($('rJor')?.value)||8,
+   projectForecastFieldId:String($('cfId')?.value||''),projectPeriodFrom:$('fStart')?.value||'',
      projectPeriodTo:$('fEnd')?.value||''}
   });
   if(error){
@@ -3668,7 +3670,8 @@ async function alarmEmailCall(action,confirmed=false){
  if(cc.length>10||cc.some(email=>email===recipient))throw Error('Confira os contatos em cópia; limite de 10, sem repetir o destinatário.');
  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
   body:{action,ticketIds:ids,recipient,cc,timeLog,registerInternalNote:!!$('alarmEmailInternalNote')?.checked,message:$('alarmEmailMessage').value,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,
-    projectDailyGoalHours:Number($('rMeta')?.value)||4,projectPeriodFrom:$('fStart')?.value||'',
+    projectDailyGoalHours:Number($('rMeta')?.value)||4,projectWorkdayHours:Number($('rJor')?.value)||8,
+   projectForecastFieldId:String($('cfId')?.value||''),projectPeriodFrom:$('fStart')?.value||'',
     projectPeriodTo:$('fEnd')?.value||'',requestId:alarmEmailRequestId}
  });
  if(error){
