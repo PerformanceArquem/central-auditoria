@@ -905,6 +905,8 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 </style>
 <link rel="stylesheet" href="/ui/workspace.css">
 <script src="/ui/workspace.js" defer></script>
+<script src="/ai-reports.js" defer></script>
+<style id="ai-reports-style">#aiReportPanel .ai-report-message{padding:12px 14px;max-width:90%;border-radius:12px;background:#eff5fd;border:1px solid #d7e4f3;color:#243c55;overflow-wrap:anywhere}#aiReportPanel .ai-report-user{align-self:flex-end;background:#e4f0ff}#aiReportPanel .ai-report-assistant{align-self:flex-start}#aiReportPanel .ai-report-message strong{display:block;margin-bottom:6px;font-size:12px}#aiReportPanel .ai-report-message div{font-size:14px;line-height:1.5}#aiReportRanking ol{padding-left:25px}#aiReportRanking li{margin:5px 0}@media(max-width:700px){#aiReportPanel .fg{min-width:140px;flex:1 1 45%}#aiReportPanel .ai-report-message{max-width:100%}}</style>
 </head>
     <body class="tm-locked">
         <form id="tm-login" class="card" hidden>
@@ -1474,7 +1476,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
             <div id="t-email-admin" class="hide">
                 <div class="mh"><div><div class="eyebrow">RELATÓRIOS · ADMINISTRAÇÃO</div><h2>Central de e-mails e destinatários</h2><p>Gerencie relatórios automáticos, testes individuais e histórico de envio sem misturar com as configurações técnicas.</p></div></div>
                 <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
-  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="b" id="emailMatrixOpen">Permissões por colaborador</button><button type="button" class="b" id="emailReportReleaseOpen">Liberar relatórios</button><button type="button" class="b" id="emailMonitoringOpen">Monitorar e-mails</button><button type="button" class="s" id="emailAdminOpen">Gerenciar destinatários</button></div></div>
+  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="b" id="emailMatrixOpen">Permissões por colaborador</button><button type="button" class="b" id="emailReportReleaseOpen">Liberar relatórios</button><button type="button" class="b" id="emailMonitoringOpen">Monitorar e-mails</button><button type="button" class="b" id="aiReportOpen">✦ Chat IA · Relatórios</button><button type="button" class="s" id="emailAdminOpen">Gerenciar destinatários</button></div></div>
   <section class="email-delivery-control" aria-labelledby="emailDeliveryTitle">
     <div><h3 id="emailDeliveryTitle">Envio de e-mails</h3><div id="emailDeliveryStatus" role="status" aria-live="polite">Consultando situação dos e-mails…</div><p id="emailDeliveryHint" class="subtle">Chave geral para relatórios, Triagem e envios manuais.</p></div>
     <div class="email-delivery-actions"><label class="email-delivery-switch"><input id="emailDeliveryToggle" type="checkbox" role="switch" aria-label="Envio de e-mails" aria-describedby="emailDeliveryHint" aria-checked="false" disabled><span>Ligar / desligar</span></label><button type="button" class="s" id="emailDeliveryRefresh" aria-label="Atualizar situação dos e-mails">↻ Atualizar</button></div>
@@ -1596,6 +1598,33 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
     <h3 style="margin-top:22px">Aberturas detectadas</h3>
     <p class="subtle">O carregamento de imagem pode registrar uma abertura detectada, mas não comprova leitura (proxies e scanners podem gerar registros). O carregamento de imagem não garante leitura humana. Use Atualizar para consultar novos registros.</p>
     <div class="tw" style="max-height:400px;overflow:auto"><table><thead><tr><th>Destinatário</th><th>Relatório</th><th>Período</th><th>Enviado em</th><th>Abertura detectada</th><th>Situação</th></tr></thead><tbody id="emailReadReceipts"><tr><td colspan="6">Abra o módulo para carregar.</td></tr></tbody></table></div>
+  </section>
+  <section id="aiReportPanel" class="card" aria-labelledby="aiReportTitle" style="margin-top:18px;scroll-margin-top:80px">
+    <div class="row" style="align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h2 id="aiReportTitle" style="margin:0">✦ Ticket Manager · Chat IA de Relatórios</h2><p class="subtle" style="margin:6px 0 0">Crie análises personalizadas com dados reais de chamados e apontamentos, sem enviar e-mails.</p></div><span class="subtle">Acesso administrativo</span></div>
+    <form id="aiReportForm" style="margin-top:14px">
+      <div class="row" style="gap:10px;flex-wrap:wrap;align-items:end">
+        <div class="fg"><label for="aiReportFrom">De</label><input id="aiReportFrom" type="date" required></div>
+        <div class="fg"><label for="aiReportTo">Até</label><input id="aiReportTo" type="date" required></div>
+        <div class="fg"><label for="aiReportSector">Setor (opcional)</label><input id="aiReportSector" placeholder="Ex.: Produção" maxlength="80"></div>
+        <div class="fg"><label for="aiReportCollaborator">Colaborador (opcional)</label><input id="aiReportCollaborator" placeholder="Nome do colaborador" maxlength="80"></div>
+        <div class="fg"><label for="aiReportClient">Cliente (opcional)</label><input id="aiReportClient" placeholder="Nome da loja" maxlength="80"></div>
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin:12px 0">
+        <button type="button" class="s" data-ai-report-example="Quais colaboradores tiveram mais horas apontadas no período?">Horas por colaborador</button>
+        <button type="button" class="s" data-ai-report-example="Mostre os setores com mais horas e possíveis concentrações de esforço.">Ranking por setor</button>
+        <button type="button" class="s" data-ai-report-example="Identifique horas apontadas em feriados e finais de semana e explique como separá-las da jornada útil.">Feriados e jornada</button>
+        <button type="button" class="s" data-ai-report-example="Quais clientes demandaram mais horas de trabalho no período?">Clientes de maior impacto</button>
+      </div>
+      <div id="aiReportConversation" role="log" aria-live="polite" aria-label="Conversa do assistente de relatórios" style="display:flex;flex-direction:column;gap:10px;max-height:360px;overflow:auto;padding:12px;border:1px solid #d5e1ef;border-radius:12px;background:var(--card,#fff)"></div>
+      <label for="aiReportPrompt" style="display:block;margin-top:12px">O que deseja analisar?</label>
+      <textarea id="aiReportPrompt" maxlength="600" rows="3" required style="width:100%" placeholder="Ex.: Monte um relatório da Produção, agrupado por colaborador, com horas e apontamentos em dias não úteis."></textarea>
+      <label style="display:flex;align-items:flex-start;gap:8px;margin:10px 0;font-size:13px"><input id="aiReportConsent" type="checkbox"> Autorizo enviar os indicadores resumidos e filtros selecionados ao Gemini para interpretação. Sem autorização, o sistema gera o relatório com cálculos internos.</label>
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap"><button id="aiReportSend" type="submit" class="b">Gerar relatório</button><button id="aiReportExport" type="button" class="s" disabled>Exportar CSV / Excel</button><button id="aiReportPrint" type="button" class="s" disabled>Imprimir / salvar PDF</button></div>
+      <p id="aiReportStatus" role="status" class="subtle" style="margin:9px 0 0">Selecione um período de até 93 dias e descreva seu relatório.</p>
+    </form>
+    <div id="aiReportStats" class="kpis" style="margin-top:14px"></div>
+    <div id="aiReportRanking" style="margin-top:10px"></div>
+    <p class="subtle" style="margin-top:12px">Os indicadores são calculados a partir dos apontamentos sincronizados; sem registros não significa ausência de trabalho. Horas de feriados e finais de semana são identificadas separadamente. O Gemini não acessa o banco diretamente.</p>
   </section>
 </div>
             </div>

@@ -1,0 +1,36 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {stripTypeScriptTypes} from 'node:module';
+const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+const ui=readFileSync(new URL('../ai-reports.js',import.meta.url),'utf8');
+const edge=readFileSync(new URL('../supabase/functions/audit-ai-reports/index.ts',import.meta.url),'utf8');
+test('chat de relatórios fica acessível no painel com período, filtros e exportação',()=>{
+ for(const id of ['aiReportOpen','aiReportPanel','aiReportFrom','aiReportTo','aiReportSector','aiReportCollaborator','aiReportClient','aiReportPrompt','aiReportConsent','aiReportExport','aiReportPrint'])
+   assert.match(html,new RegExp('id="'+id+'"'));
+ assert.match(html,/<script src="\/ai-reports.js" defer>/);
+ assert.doesNotThrow(()=>new Function(ui));
+});
+test('consulta exige sessão de administrador e usa dados somente leitura',()=>{
+ assert.match(edge,/auth\/v1\/user/);
+ assert.match(edge,/audit_users\?select=role,is_active/);
+ assert.match(edge,/is_active!==false/);
+ assert.match(edge,/if\(!await authorized\(/);
+ assert.match(edge,/req.method!=='POST'/);
+ assert.match(edge,/maxRecords=4000/);
+ assert.doesNotMatch(edge,/method:'DELETE'|method:'PATCH'|method:'PUT'|method:'POST'.*rest\/v1/);
+});
+test('relatório só envia agregados ao Gemini após consentimento e possui resposta local',()=>{
+ assert.match(edge,/externalAiConsent===true/);
+ assert.match(edge,/if\(!consent\|\|!secret/);
+ assert.match(edge,/basicAnswer\(data,prompt\)/);
+ assert.match(edge,/systemInstruction/);
+ assert.match(edge,/Não invente métricas/);
+ assert.match(edge,/audit_email_holidays/);
+ assert.match(edge,/hoursOutsideBusinessDays/);
+ assert.match(ui,/textContent=message/);
+});
+test('módulo TypeScript da Edge Function tem sintaxe válida após remoção de tipos',()=>{
+ const stripped=stripTypeScriptTypes(edge);
+ assert.doesNotThrow(()=>new Function('Deno',stripped));
+});
