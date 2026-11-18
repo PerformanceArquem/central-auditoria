@@ -48,7 +48,7 @@ test('ranking mostra situação de e-mail e relatório com exportação',()=>{
  assert.match(html,/id="alarmEmailHistoryRows"/);
  assert.match(html,/id="alarmEmailHistoryFilter"/);
  assert.match(source,/ticket_charge_history/);
- assert.match(source,/alarmEmailRequestId=crypto\.randomUUID\(\)/);
+ assert.match(source,/alarmEmailRequestId=ccBlocked\?'':crypto\.randomUUID\(\)/);
  assert.match(source,/requestId:alarmEmailRequestId/);
  assert.match(source,/✉ E-mail enviado/);
  assert.match(source,/✉ Verificar envio/);
@@ -62,7 +62,7 @@ test('cobrança informa chamados não sincronizados e bloqueia envio antes da pr
  assert.match(source,/alarmEmailMissingIds/);
  assert.match(source,/e\.missingIds/);
  assert.match(source,/function alarmRemoveMissingTickets\(\)/);
- assert.match(source,/alarmEmailApproved=alarmSelectionSignature\(\)/);
+ assert.match(source,/alarmEmailApproved=ccBlocked\?'':alarmSelectionSignature\(\)/);
 });
 
 test('prévia da cobrança usa o mesmo HTML enviado, com isolamento e texto opcional',()=>{
