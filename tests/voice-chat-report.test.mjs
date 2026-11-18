@@ -76,6 +76,10 @@ test('voice distribution shows only authorized Support staff, excluding Kassio a
  for(const other of ['Kassio Rodrigues','Alan Reis','Davi Vinicius','Guilherme Bonato','Laís Lot'])
   assert.ok(!result.html.includes(other),other+' incorrectly included');
  assert.ok(result.html.includes('Bruno Oliveira'));
+ assert.ok(result.html.includes('<th>Não atendidas</th>'));
+ assert.ok(result.html.includes('<td>Rhyan Massayoshi</td><td>19</td><td>15</td><td>4</td>'));
+ assert.ok(result.html.includes('<td>Cleverson Teixeira</td><td>5</td><td>5</td><td>0</td>'));
+ assert.equal(result.text.includes('indicadores reais'),false);
  assert.equal(result.packet.total,83); // account totals remain unchanged
  assert.equal(result.packet.personScope,'Somente colaboradores do Suporte, excluindo Kassio');
 });
