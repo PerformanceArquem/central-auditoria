@@ -2826,14 +2826,19 @@ async function sync(auto){
     }
     let all=[...first],skip=100,done=first.length<100;
     const live=!auto&&full;
-    if(live){build(all);start(`API Movidesk (${all.length} tickets...)`)}
+    let lastProgressRender=0;
+    if(live){build(all);start(`API Movidesk (${all.length} tickets...)`);lastProgressRender=performance.now()}
     const W=5;
     while(!done&&all.length<20000){
       log(`Buscando em paralelo... ${all.length} tickets`);
       const pages=await Promise.all(Array.from({length:W},(_,i)=>get(EXP,skip+i*100)));
       pages.forEach(p=>{all=all.concat(p);if(p.length<100)done=true});
       skip+=W*100;
-      if(live){build(all);applyFilters()}
+      // Reduce expensive flatten/chart/DOM work while paginated requests are running.
+      // The final complete dataset is always rendered below, even when throttled.
+      if(live&&performance.now()-lastProgressRender>=1800){
+        build(all);applyFilters();lastProgressRender=performance.now();
+      }
     }
     detectTicketChanges(all);
     if(full&&lastSig&&lastSig.split('|')[0]!==dom){
@@ -3278,9 +3283,28 @@ document.getElementById('alarmReviewRows')?.addEventListener('click',async event
  $('alarmEmailStatus').textContent='Reiteração preparada, ainda NÃO enviada. Confira o chamado, atualize a prévia e confirme o envio, se necessário.';
 });
 
+// Um único índice de cobranças evita varrer todo o histórico para cada linha
+// do ranking, mantendo o rastreamento e os estados de envio inalterados.
+let alarmHistoryIndexSource=null,alarmHistoryIndex=new Map();
+function alarmHistoryForTicket(id){
+ if(alarmHistoryIndexSource!==alarmEmailHistory){
+   const index=new Map();
+   for(const item of alarmEmailHistory){
+     for(const ticketId of item.ticket_ids||[]){
+       const key=String(ticketId);
+       if(!index.has(key))index.set(key,[]);
+       index.get(key).push(item);
+     }
+   }
+   for(const items of index.values())items.sort((a,b)=>Date.parse(a.sent_at||a.created_at)-Date.parse(b.sent_at||b.created_at));
+   alarmHistoryIndex=index;alarmHistoryIndexSource=alarmEmailHistory;
+ }
+ return alarmHistoryIndex.get(String(id))||[];
+}
 function alarmReminderStatusForTicket(id) {
- const sent=alarmEmailHistory.filter(r=>r.status==='sent'&&(r.ticket_ids||[]).map(String).includes(String(id))).sort((a,b)=>Date.parse(a.sent_at||a.created_at)-Date.parse(b.sent_at||b.created_at));
- const uncertain=alarmEmailHistory.some(r=>r.status!=='sent'&&(r.ticket_ids||[]).map(String).includes(String(id)));
+ const related=alarmHistoryForTicket(id);
+ const sent=related.filter(r=>r.status==='sent');
+ const uncertain=related.some(r=>r.status!=='sent');
  if(uncertain)return {label:'Verificar envio anterior',eligible:false,count:sent.length};
  if(!sent.length)return {label:'Sem cobrança confirmada',eligible:false,count:0};
  const last=sent[sent.length-1],at=Date.parse(last.sent_at||last.created_at);
@@ -3407,7 +3431,7 @@ async function alarmEmailHistoryLoad(){
  }finally{alarmEmailHistoryLoading=false}
 }
 function alarmEmailTicketBadge(id){
- const relevant=alarmEmailHistory.filter(r=>(r.ticket_ids||[]).map(String).includes(String(id)));
+ const relevant=alarmHistoryForTicket(id);
  const sent=relevant.find(r=>r.status==='sent');
  if(sent){const review=alarmReminderStatusForTicket(id);return ' <span class="pill ok" title="'+esc('Aceite pelo Gmail em '+alarmEmailTime(sent.sent_at||sent.created_at)+' · '+review.label)+'">✉ E-mail enviado · '+review.count+' cobrança(s)</span>';}
  if(relevant.length)return ' <span class="pill alert-warn" title="Envio não confirmado: consulte o relatório de e-mails.">✉ Verificar envio</span>';
@@ -3745,6 +3769,7 @@ async function alarmEmailSend(){
   await alarmEmailHistoryLoad();
  }finally{alarmEmailSending=false;$('alarmEmailSend').disabled=true}
 }
+let alarmSectorChartSignature='';
 function renderAlerts(){
   if(!$('t-alerts'))return;
   const all=alarmList(),limit=alarmThreshold(),alerted=all.filter(x=>x.idle>=limit);
@@ -3794,11 +3819,15 @@ function renderAlerts(){
     missingLabel+' · ¹ sem lastUpdate, dias estimados desde a abertura.';
   if(window.Chart&&$('chIdleSector')){
     const chartGroups=groups.slice(0,15);
-    mkc('chIdleSector',{type:'bar',data:{labels:chartGroups.map(g=>g.team),
+    const chartSignature=JSON.stringify([limit,chartGroups.map(g=>[g.team,g.worst.idle])]);
+    if(chartSignature!==alarmSectorChartSignature||!CH.chIdleSector){
+      alarmSectorChartSignature=chartSignature;
+      mkc('chIdleSector',{type:'bar',data:{labels:chartGroups.map(g=>g.team),
       datasets:[{label:'Maior nº de dias sem atualização',data:chartGroups.map(g=>g.worst.idle),
        backgroundColor:chartGroups.map(g=>g.worst.idle>=limit?'#d63a48':'#6c8ac5'),borderRadius:5}]},
        options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}},
          scales:{x:{beginAtZero:true,title:{display:true,text:'Dias parados'}}}}});
+    }
   }
 }
 async function scanHistorical(force=false){
@@ -5030,23 +5059,29 @@ Object.entries(MODS).forEach(([k,[t,d]])=>{
   el.insertAdjacentHTML('afterbegin',`<div class="mh noprint"><div><h2>${t}</h2><p>${d}</p></div><form class="sb" onsubmit="doSearch('${k}');return false"><input id="q_${k}" type="search" placeholder="Buscar em ${t.toLowerCase()}" aria-label="Buscar em ${t}" oninput="clearTimeout(window._qt);window._qt=setTimeout(()=>doSearch('${k}'),350)"><button class="b" type="submit">Buscar</button><button class="s" type="button" onclick="clearSearch('${k}')">Limpar</button><span class="qc" id="qc_${k}"></span></form></div>`);
 });
 if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Chart.defaults.color='#667085'}
-(async()=>{ // recupera primeiro o banco central; o cache local entra como apoio e fonte de migração
-  const cloudOK=await cloudBootstrap();
-  if(!TK.size){
-    const c=await IDB.get('cache');
-    if(c&&c.tickets&&c.tickets.length){TK=new Map(c.tickets.map(t=>[String(t.id),t]));CF=c.cf||CF;lastSync=c.lastSync||0;lastFull=c.lastFull||0;lastSig=c.sig||'';}
+(async()=>{ // Cache-first: exibe os dados salvos antes das consultas de rede.
+  // Os dados do Movidesk e do Supabase continuam sendo atualizados em seguida.
+  const cached=await IDB.get('cache').catch(()=>null);
+  if(cached?.tickets?.length){
+    TK=new Map(cached.tickets.map(t=>[String(t.id),t]));
+    CF=cached.cf||CF;lastSync=cached.lastSync||0;lastFull=cached.lastFull||0;lastSig=cached.sig||'';
+    apiOn=true;
+    const list=[...TK.values()];
+    firstTicket=list.find(t=>(t.actions||[]).length)||list[0]||null;
+    build(list);start(`Dados locais (${TK.size} tickets)`);cacheLabel(cached.saved||Date.now());autoLabel();
+    log('Dados locais exibidos; verificando atualizações do Supabase e Movidesk.','okc');
   }
+  const cloudOK=await cloudBootstrap();
   if(TK.size){
     apiOn=true;const list=[...TK.values()];firstTicket=list.find(t=>(t.actions||[]).length)||list[0]||null;
-    build(list);start(`${cloudOK?'Supabase':'Dados locais'} (${TK.size} tickets)`);cacheLabel(Date.now());autoLabel();
-    await IDB.set('cache',{v:1,sig:lastSig,cf:CF,lastSync,lastFull,saved:Date.now(),tickets:list});
-    if(cloudOK)await cloudSaveTickets(list);
-    log(cloudOK?'Exibindo cache do Supabase até a consulta prioritária da API Movidesk finalizar.':'Dados locais disponíveis; tentando consultar a API Movidesk.','okc');
+    build(list);start(`${cloudOK?'Supabase':'Dados locais'} (${TK.size} tickets)`,!!cached?.tickets?.length);
+    cacheLabel(Date.now());autoLabel();
+    // Não reenviar os tickets restaurados durante a abertura. Somente uma
+    // sincronização confirmada da API Movidesk permite persistir mudanças.
+    if(cloudOK)log('Dados centrais atualizados; verificando alterações do Movidesk.','okc');
   }
-  // O cron no Supabase importa novos lotes mesmo com o navegador fechado.
-  // A interface consulta automaticamente os dados já importados.
   refreshDirectComparisons(false);
-  sync(true); // mantém sincronização legada do painel, sem alterar o cron direto
+  sync(true); // não altera cron, envio ou rastreamento de e-mails
 })();
 
         </script>
