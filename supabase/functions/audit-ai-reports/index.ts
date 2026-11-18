@@ -37,11 +37,15 @@ async function pageAppointments(from:string,to:string,base:string,key:string){
 }
 async function ticketMap(ids:string[],base:string,key:string){
  const result=new Map<string,any>();
- for(let i=0;i<ids.length;i+=75){
-  const part=ids.slice(i,i+75),items=part.map(v=>'"'+v.replace(/["\\]/g,'')+'"').join(',');
-  const path='audit_direct_tickets?select=ticket_id,payload&ticket_id=in.('+encodeURIComponent(items)+')';
-  const data=await rest(path,key,base);
-  for(const row of data||[])result.set(String(row.ticket_id),row.payload||{});
+ const cleanIds=ids.filter(x=>/^\d{1,20}$/.test(x));
+ const chunks:string[][]=[];
+ for(let i=0;i<cleanIds.length;i+=120)chunks.push(cleanIds.slice(i,i+120));
+ for(let i=0;i<chunks.length;i+=4){
+  const pages=await Promise.all(chunks.slice(i,i+4).map(async part=>{
+   const items=part.map(v=>'"'+v+'"').join(',');
+   return rest('audit_direct_tickets?select=ticket_id,payload&ticket_id=in.('+encodeURIComponent(items)+')',key,base);
+  }));
+  for(const page of pages)for(const row of page||[])result.set(String(row.ticket_id),row.payload||{});
  }
  return result;
 }
