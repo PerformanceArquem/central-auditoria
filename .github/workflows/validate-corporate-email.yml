@@ -5,6 +5,8 @@ on:
       - 'supabase/functions/audit-email-dispatch/**'
       - 'apps-script/arquem-relatorios-anexos.gs'
       - 'tests/corporate-email-policy.test.ts'
+      - 'tests/journey-balances.test.ts'
+      - 'apps-script/central-auditoria-emails-completo.gs'
       - '.github/workflows/validate-corporate-email.yml'
   workflow_dispatch:
 jobs:
@@ -18,7 +20,9 @@ jobs:
       - name: Validate email function TypeScript
         run: deno check supabase/functions/audit-email-dispatch/index.ts
       - name: Validate content policy and HTML layout
-        run: deno test tests/corporate-email-policy.test.ts
+        run: deno test tests/corporate-email-policy.test.ts tests/journey-balances.test.ts
       - name: Validate Apps Script JavaScript syntax
-        run: node --check < apps-script/arquem-relatorios-anexos.gs
+        run: |
+          node --check < apps-script/arquem-relatorios-anexos.gs
+          node --check < apps-script/central-auditoria-emails-completo.gs
         shell: bash
