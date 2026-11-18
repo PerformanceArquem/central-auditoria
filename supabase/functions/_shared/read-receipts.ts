@@ -33,20 +33,21 @@ export function appendReceiptHtml(html: string, section: string) {
 export async function prepareReadReceipt(db: Db, secret: string, ctx: ReceiptContext, email: string, subject: string) {
   const token = await receiptToken(secret, ctx.dispatchKey);
   const tokenHash = await hashReceiptToken(token);
-  const openToken = await openSignalToken(secret, ctx.dispatchKey);
-  const openTokenHash = await hashReceiptToken(openToken);
+  const openToken = ctx.source === 'triage' ? null : await openSignalToken(secret, ctx.dispatchKey);
+  const openTokenHash = openToken ? await hashReceiptToken(openToken) : null;
   const now = new Date();
   const rows = await db('audit_email_read_receipts?on_conflict=dispatch_key', {
     method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
-    body:JSON.stringify({dispatch_key:ctx.dispatchKey,token_hash:tokenHash,open_token_hash:openTokenHash,source:ctx.source||'sector',
+    body:JSON.stringify({dispatch_key:ctx.dispatchKey,token_hash:tokenHash,...(openTokenHash ? {open_token_hash:openTokenHash} : {}),source:ctx.source||'sector',
       recipient_id:ctx.recipientId||null,recipient_name:String(ctx.recipientName||'Destinatário'),
       recipient_email:email,subject,period_from:ctx.from||null,period_to:ctx.to||null,
       expires_at:new Date(now.getTime()+90*86400000).toISOString()})
   });
   // Preserve tracking tokens, expiry and any confirmation recorded for an earlier send.
   const row = rows?.[0] || (await db('audit_email_read_receipts?dispatch_key=eq.'+encodeURIComponent(ctx.dispatchKey)+'&select=token_hash,open_token_hash,recipient_email,expires_at&limit=1'))?.[0];
-  if (!row || row.token_hash!==tokenHash || row.open_token_hash!==openTokenHash || row.recipient_email!==email || Date.parse(row.expires_at)<=now.getTime())
+  if (!row || row.token_hash!==tokenHash || (openTokenHash && row.open_token_hash!==openTokenHash) || row.recipient_email!==email || Date.parse(row.expires_at)<=now.getTime())
     throw new Error('Não foi possível preparar a confirmação de leitura deste envio.');
+  if (!openToken) return {dispatchKey:ctx.dispatchKey,text:'',html:''};
   return {
     dispatchKey:ctx.dispatchKey,
     text:'\n\nAviso: imagens deste e-mail podem gerar registro automático de abertura detectada, sem comprovar leitura.\n',
