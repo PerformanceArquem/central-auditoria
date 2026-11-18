@@ -1,0 +1,21 @@
+name: Validate Apps Script CC candidate staging
+on:
+  pull_request:
+    paths:
+      - 'apps-script/ci-clasp-cc-candidate-dry-run.mjs'
+      - 'tests/appsscript-cc-candidate-dry-run.test.mjs'
+      - '.github/workflows/appsscript-clasp-controlled.yml'
+      - '.github/workflows/validate-appsscript-cc-candidate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --prefix "$RUNNER_TEMP/parser" --no-save --silent acorn@8.15.0
+      - run: ACORN_DIR="$RUNNER_TEMP/parser" node --test tests/appsscript-cc-candidate-dry-run.test.mjs

@@ -16,6 +16,7 @@ on:
       - 'apps-script/ci-clasp-inventory-triage.mjs'
       - 'apps-script/ci-clasp-pr103-overlay-dry-run.mjs'
       - 'apps-script/ci-clasp-cc-promotion-guard.mjs'
+      - 'apps-script/ci-clasp-cc-candidate-dry-run.mjs'
       - '.github/workflows/appsscript-clasp-controlled.yml'
   workflow_dispatch:
     inputs:
@@ -223,6 +224,38 @@ jobs:
             "$RUNNER_TEMP/remote-script" "$RUNNER_TEMP/pr103-dryrun" \
             "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/js-parser"
           # The reviewed source is NEVER uploaded or used for publishing.
+  cc-candidate-dryrun:
+    if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --global @google/clasp@3.4.1
+      - name: Authenticate without printing credentials
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "${CLASPRC_JSON:-}" || { echo "::error::Configure CLASPRC_JSON"; exit 1; }
+          umask 077
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+      - name: Generate temporary candidate from live HEAD without publishing
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cc-candidate/remote" "$RUNNER_TEMP/parser"
+          npm install --prefix "$RUNNER_TEMP/parser" --no-save --silent acorn@8.15.0
+          cd "$RUNNER_TEMP/cc-candidate/remote"
+          printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
+          clasp pull > /dev/null
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-candidate-dry-run.mjs" \
+            "$PWD" "$RUNNER_TEMP/cc-candidate/preview" "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/parser"
+          # No artifact upload, no push, no deployment, no email
   zenvia-isolated-tests:
     if: ${{ github.event_name == 'push' || inputs.operation == 'audit' }}
     runs-on: ubuntu-latest
