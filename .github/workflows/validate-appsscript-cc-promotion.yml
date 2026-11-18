@@ -1,0 +1,20 @@
+name: Validate Apps Script controlled CC promotion
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/appsscript-clasp-controlled.yml'
+      - 'apps-script/ci-clasp-cc-promotion-guard.mjs'
+      - 'tests/appsscript-cc-controlled-promotion.test.mjs'
+      - '.github/workflows/validate-appsscript-cc-promotion.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/appsscript-cc-controlled-promotion.test.mjs
