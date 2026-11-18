@@ -61,10 +61,16 @@ const ccCode=[
  "cc.some(v=>!/^[^@\\s]+@arquem\\.com\\.br$/.test(v)||",
  "v===String(dados.email||'').trim().toLowerCase()))throw Error('Cópias inválidas');"
 ].join('\n');
+// The original MailApp object may end with a trailing comma. Respect its
+// separator so the injected conditional CC spread remains valid JavaScript.
+const mailInner=src.slice(arg.start+1,arg.end-1);
+const trailingComma=/,\s*$/.test(mailInner);
+if(arg.properties.length===0)throw Error('MailApp object unexpectedly empty');
+const ccSeparator=trailingComma?' ':", ";
 const edits=[
  {at:caps[0].start,end:caps[0].end,text:'Object.assign({},'+src.slice(caps[0].start,caps[0].end)+',{ccSupported:true})'},
  {at:capabilityGuard.end,end:capabilityGuard.end,text:'\n'+ccCode+'\n'},
- {at:arg.end-1,end:arg.end-1,text:", ...(cc.length?{cc:cc.join(', ')}:{})"}
+ {at:arg.end-1,end:arg.end-1,text:ccSeparator+"...(cc.length?{cc:cc.join(', ')}:{})"}
 ];
 let modified=src;
 for(const edit of edits.sort((a,b)=>b.at-a.at))
