@@ -107,3 +107,16 @@ test('histórico de envios e aberturas filtra por intervalo de datas inclusivo e
   assert.match(source,/receiptQuery\.lt\('created_at',dateEnd\)/);
   assert.match(source,/emailHistoryClearDates'\)\.addEventListener\('click'/);
 });
+
+test('monitoramento de e-mails tem acesso visível, datas e somente status de abertura',()=>{
+ const source=extract('emailAdminIntegratedScript');
+ assert.doesNotThrow(()=>new Function(source));
+ assert.match(html,/id="emailMonitoringOpen"/);
+ assert.match(html,/id="emailMonitoringPanel"/);
+ assert.match(html,/id="emailHistoryFrom"/);
+ assert.match(html,/id="emailHistoryTo"/);
+ assert.match(source,/emailMonitoringPanel'\)\.scrollIntoView/);
+ assert.match(html,/Aberturas detectadas<\/h3>/);
+ assert.doesNotMatch(html,/<th>Confirmado em<\/th>/);
+ assert.match(source,/x\.first_opened_at\?'Abertura detectada':'Sem abertura detectada'/);
+});
