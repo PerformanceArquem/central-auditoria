@@ -5390,7 +5390,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
           const status=!x.delivered_at?'Envio não confirmado':x.first_opened_at?'Abertura detectada':'Sem abertura detectada';
           const period=x.period_from&&x.period_to?displayPeriodDate(x.period_from)+' a '+displayPeriodDate(x.period_to):'Conforme relatório';
           return '<tr><td>'+esc(x.recipient_name)+'<small style="display:block">'+esc(x.recipient_email)+'</small></td><td>'+esc(x.subject)+'</td><td>'+esc(period)+'</td><td>'+esc(time(x.delivered_at))+'</td><td>'+esc(time(x.first_opened_at))+'</td><td>'+esc(status)+'</td></tr>';
-        }).join('')||'<tr><td colspan="7">Nenhum envio monitorado encontrado para o período. O acompanhamento de aberturas começa nos novos envios; relatórios antigos não serão reenviados.</td></tr>';
+        }).join('')||'<tr><td colspan="6">Nenhum envio monitorado encontrado para o período. O acompanhamento de aberturas começa nos novos envios; relatórios antigos não serão reenviados.</td></tr>';
       }catch(e){$('emailReadReceipts').innerHTML='<tr><td colspan="6">Não foi possível consultar as confirmações de leitura. Atualize novamente em instantes.</td></tr>';console.warn('Consulta de confirmações indisponível');}
       loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
       try{await loadMovideskDirectory(true)}catch(err){console.warn('Diretório do Movidesk indisponível:',err)}
