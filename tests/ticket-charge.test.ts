@@ -55,3 +55,15 @@ Deno.test('HTML body escapes injected markup without losing paragraph separators
  assert(result.html.includes('&lt;script&gt;'),'HTML entity escaping missing');
  assert(result.html.includes('\nAguardo retorno.'),'line breaks lost');
 });
+
+Deno.test('shows ticket number, opened days and real last appointment without inventing hours',()=>{
+ const source=[{ticket_id:'99221',payload:{status:'Em andamento',createdDate:'2026-10-01T12:00:00Z',subject:'Verificar integração'},
+  last_real_appointment:{date:'2026-11-17',minutes:45}}];
+ const output=composeTicketCharge(source,'direcao@arquem.com.br');
+ assert(output.tickets[0].daysOpen!==null&&output.tickets[0].daysOpen>=0,'missing real open days');
+ assert(output.text.includes('Chamado #99221'),'missing ticket number');
+ assert(output.text.includes('2026-11-17 · 45 min'),'real last appointment not displayed');
+ assert(output.html.includes('Último apontamento real'),'html appointment column absent');
+ const noLog=composeTicketCharge([{ticket_id:'99222',payload:{status:'Em andamento'}}],'direcao@arquem.com.br');
+ assert(noLog.text.includes('Não localizado na base sincronizada'),'missing-record fallback incorrect');
+});
