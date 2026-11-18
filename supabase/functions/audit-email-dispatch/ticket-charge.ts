@@ -1,4 +1,5 @@
 import {corporateCopy} from "./corporate-mail-policy.ts";
+import {isProjectChargeSubject} from "./project-charge-metrics.ts";
 // Composição segura de cobranças de chamados abertos, sem envio automático.
 type TicketRow=Record<string,any>;
 export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:string,options:{includeGuidance?:boolean}={}){
@@ -22,9 +23,13 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
    const note=t.last_real_appointment&&typeof t.last_real_appointment==='object'?t.last_real_appointment:null;
    const appointmentDate=typeof note?.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(note.date)?note.date:null;
    const appointmentMinutes=appointmentDate&&Number.isFinite(Number(note?.minutes))&&Number(note.minutes)>0?Number(note.minutes):null;
-   return {id,subject:clean(p.subject||'Sem assunto'),sector:clean(p.ownerTeam?.name||p.ownerTeam||'Sem setor',90),
+   const subject=clean(p.subject||'Sem assunto');
+   const isProject=isProjectChargeSubject(subject);
+   const projectMetrics=isProject&&t.project_metrics&&typeof t.project_metrics==='object'?t.project_metrics:null;
+   return {id,subject,sector:clean(p.ownerTeam?.name||p.ownerTeam||'Sem setor',90),
       client,owner,status:status||'Sem status',last,opened,daysOpen,
       lastAppointment:appointmentMinutes!==null?appointmentDate:null,lastAppointmentMinutes:appointmentMinutes,
+      isProject,projectMetrics,
       url:'https://arquem.movidesk.com/Ticket/Edit/'+id};
  });
  if(new Set(normalized.map(x=>x.id)).size!==normalized.length)throw Error('Há chamados repetidos.');
@@ -83,7 +88,28 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
    '\n   Tempo em aberto: '+(t.daysOpen===null?'Não disponível':t.daysOpen+' dia(s)')+
    ' | Último apontamento real: '+(t.lastAppointment?(t.lastAppointment+' · '+t.lastAppointmentMinutes+' min'):'Não localizado na base sincronizada')+
    '\n   '+t.url);
+ const hfmt=(minutes:unknown)=>{
+  const v=Number(minutes);
+  if(!Number.isFinite(v)||v<0)return 'Não disponível';
+  const m=Math.round(v);return Math.floor(m/60)+'h'+String(m%60).padStart(2,'0');
+ };
+ const projectRows=normalized.filter(t=>t.isProject);
+ const projectText=projectRows.map(t=>{
+  const m=t.projectMetrics;
+  if(!m)return 'Projeto #'+t.id+' — Métricas ainda não sincronizadas.';
+  const forecast=Number(m.forecastHours),hasForecast=m.forecastHours!==null&&Number.isFinite(forecast)&&forecast>0;
+  return 'Projeto #'+t.id+' — '+t.subject+'\n'+
+    'Horas apontadas (total): '+hfmt(m.totalMinutes)+' | Horas previstas: '+(hasForecast?hfmt(forecast*60):'Sem previsão')+'\n'+
+    'Saldo previsto - apontado: '+(hasForecast?hfmt(Math.abs(Number(m.differenceHours)*60))+(Number(m.differenceHours)<0?' excedidas':' restantes'):'Não calculável')+'\n'+
+    'Consumo da previsão: '+(hasForecast?Number(m.percentUsed).toFixed(1)+'%':'Não calculável')+' | Situação: '+String(m.budgetStatus||'Sem previsão')+'\n'+
+    'Meta diária: '+hfmt(Number(m.dailyGoalHours)*60)+' | Dias com apontamentos no período: '+m.activeDays+'\n'+
+    'Horas no período: '+hfmt(m.periodMinutes)+' | Média por dia: '+(m.averageDailyHours===null?'Não disponível':hfmt(Number(m.averageDailyHours)*60))+' | Avaliação: '+(m.averageStatus||'Sem apontamentos')+'\n'+
+    'Dias abaixo / na meta / acima: '+m.belowDays+' / '+m.withinDays+' / '+m.aboveDays+
+    ' | Período: '+(m.periodFrom||'início')+' a '+(m.periodTo||'atual')+'\n'+
+    'Fonte da previsão: '+(m.forecastOrigin||'Não cadastrada');
+ }).join('\n\n');
  const text=message+'\n\nCHAMADOS PARA ACOMPANHAMENTO\n'+lines.join('\n\n')+
+ (projectRows.length?'\n\nMÉTRICAS DE PROJETOS E PRAZOS — P **\n'+projectText:'')+
  (includeGuidance?'\n\n'+guidanceText:'')+'\n\nFonte: Central de Auditoria / Movidesk. Os status refletem a consulta atual.';
 
  // O mesmo HTML é usado na prévia e no envio efetivo. CSS inline para clientes de e-mail.
@@ -110,6 +136,13 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
     '<div style="font-size:11px;color:#65778f;margin-top:5px">Situação: '+esc(t.status)+'</div>'+
     '<div style="font-size:10px;color:#8794a4;margin-top:5px">Atualização: '+esc(safeDate(t.last))+'</div></td></tr>';
  }).join('');
+ const projectHtml=projectRows.length?
+  '<div style="padding:15px 26px;border-top:1px solid #dce5f2;background:#fafcff">'+
+  '<h2 style="font-size:15px;color:#173454">Projetos e Prazos · chamados P **</h2>'+
+  '<p style="font-size:11px;color:#627997">Horas apontadas reais do Movidesk; previsão só quando cadastrada. Metas e médias diárias no período informado.</p>'+
+  projectRows.map(t=>'<div style="padding:12px;border:1px solid #dce5f2;border-radius:7px;margin:10px 0">'+
+    '<strong>Projeto #'+esc(t.id)+' — '+esc(t.subject)+'</strong>'+
+    '<p style="line-height:1.7;font-size:12px;white-space:pre-line;margin:7px 0">'+escBody(projectText.split('\n\n').find(v=>v.startsWith('Projeto #'+t.id+' — '))||'Métricas indisponíveis')+'</p></div>').join('')+'</div>':'';
  const header=(label:string)=>'<th align="left" style="padding:13px 10px;border-bottom:1px solid #cbdced;color:#1e4972;font-size:11px;letter-spacing:.3px">'+label+'</th>';
  const html='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'+
  '<body style="margin:0;padding:24px 12px;background:#edf2f8;'+font+';color:#213b58">'+
@@ -133,7 +166,7 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;min-width:620px">'+
  '<thead style="background:#eaf2fa"><tr>'+header('Chamado')+header('Cliente')+header('Setor')+header('Assunto')+header('Dias em aberto')+header('Último apontamento real')+header('Responsável / status')+'</tr></thead>'+
  '<tbody>'+table+'</tbody></table></div>'+
- guidanceHtml+
+ projectHtml+guidanceHtml+
  '<div style="padding:18px 28px;background:#f6f9fc;border-top:1px solid #e2eaf3">'+
  '<p style="font-size:12px;line-height:1.6;color:#354e6a;margin:0 0 7px"><strong>Alinhamento sugerido:</strong> compartilhar o andamento, o próximo responsável e uma previsão possível de retorno, quando disponível.</p>'+
  '<p style="font-size:11px;line-height:1.6;color:#708198;margin:0">Informações obtidas na Central de Auditoria a partir dos chamados sincronizados do Movidesk. Os registros refletem a situação no momento da consulta.</p>'+

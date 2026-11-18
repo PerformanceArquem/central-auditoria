@@ -1905,6 +1905,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                         </div>
                         <div class="card hide noprint" id="alarmEmailPanel" style="margin:12px 0;border:1px solid #c6d9ed;background:#f8fbff">
                           <h3 style="margin:0 0 6px">Cobrança corporativa · chamados selecionados</h3>
+                          <p class="subtle">Chamados cujo assunto começa com <strong>P **</strong> recebem automaticamente os indicadores de Projetos e Prazos (horas apontadas, meta diária, média, previsão e desvio quando disponíveis). Parâmetros: meta e período atualmente selecionados no módulo.</p>
                           <p class="subtle">O sistema prepara a mensagem com os chamados, clientes e responsáveis. Revise o texto e a prévia antes de autorizar o envio. Nenhum e-mail é enviado automaticamente.</p>
                           <div class="row" style="gap:12px;flex-wrap:wrap;align-items:end;margin-top:12px">
                             <div class="fg" style="flex:1;min-width:230px">
@@ -3506,7 +3507,9 @@ const alarmSelectionSignature=()=>{
    timeLog:$('alarmEmailLogHours')?.checked?{
      date:$('alarmEmailWorkDate')?.value,start:$('alarmEmailWorkStart')?.value,end:$('alarmEmailWorkEnd')?.value
    }:null,
-   message:$('alarmEmailMessage')?.value||'',registerInternalNote:!!$('alarmEmailInternalNote')?.checked,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked});
+   message:$('alarmEmailMessage')?.value||'',registerInternalNote:!!$('alarmEmailInternalNote')?.checked,
+   includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,projectDailyGoalHours:Number($('rMeta')?.value)||4,
+   projectPeriodFrom:$('fStart')?.value||'',projectPeriodTo:$('fEnd')?.value||''});
 };
 function alarmUpdateSelectedCount(){
  if($('alarmSelectedCount'))$('alarmSelectedCount').textContent=alarmSelected.size+' chamado(s) selecionado(s) · limite de 20';
@@ -3628,7 +3631,10 @@ async function alarmEmailAiDraft(){
  $('alarmEmailStatus').textContent='Gerando sugestao a partir dos chamados sincronizados. Nenhum e-mail sera enviado...';
  try{
   const {data,error}=await client.functions.invoke('audit-email-dispatch',{
-   body:{action:'ticket_charge_ai_draft',ticketIds:ids,tone,externalAiConsent:!!$('alarmEmailExternalAiConsent')?.checked}
+   body:{action:'ticket_charge_ai_draft',ticketIds:ids,tone,
+     externalAiConsent:!!$('alarmEmailExternalAiConsent')?.checked,
+     projectDailyGoalHours:Number($('rMeta')?.value)||4,projectPeriodFrom:$('fStart')?.value||'',
+     projectPeriodTo:$('fEnd')?.value||''}
   });
   if(error){
    let detail=error.message||'A IA nao respondeu.';
@@ -3661,7 +3667,9 @@ async function alarmEmailCall(action,confirmed=false){
  if(!/^[^@\s]+@arquem\.com\.br$/.test(recipient))throw Error('Informe um destinatário @arquem.com.br.');
  if(cc.length>10||cc.some(email=>email===recipient))throw Error('Confira os contatos em cópia; limite de 10, sem repetir o destinatário.');
  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
-  body:{action,ticketIds:ids,recipient,cc,timeLog,registerInternalNote:!!$('alarmEmailInternalNote')?.checked,message:$('alarmEmailMessage').value,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,requestId:alarmEmailRequestId}
+  body:{action,ticketIds:ids,recipient,cc,timeLog,registerInternalNote:!!$('alarmEmailInternalNote')?.checked,message:$('alarmEmailMessage').value,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,
+    projectDailyGoalHours:Number($('rMeta')?.value)||4,projectPeriodFrom:$('fStart')?.value||'',
+    projectPeriodTo:$('fEnd')?.value||'',requestId:alarmEmailRequestId}
  });
  if(error){
   let detail=error.message||'Falha no serviço de e-mail.';
