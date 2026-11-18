@@ -23,7 +23,7 @@ export function openSignalContent(token: string) {
   const url = 'https://dvaaicqajlppuigeyejr.supabase.co/functions/v1/audit-open-signal?t='+encodeURIComponent(token);
   // Transparent one-pixel GIF. No IP, user agent or precise location is intentionally stored.
   return '<img src="'+url+'" width="1" height="1" alt="" aria-hidden="true" style="width:1px;height:1px;opacity:0" />'+
-    '<p style="font-size:11px;color:#52657a">Aviso de transparência: este e-mail pode registrar o carregamento de uma imagem como abertura detectada. Isso não comprova leitura. A confirmação de leitura é voluntária.</p>';
+    '<p style="font-size:11px;color:#52657a">Aviso de transparência: este e-mail pode registrar o carregamento de uma imagem como abertura detectada. Isso não comprova leitura.</p>';
 }
 const esc = (x: unknown) => String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 export function receiptContent(url: string) {
@@ -43,23 +43,27 @@ export function appendReceiptHtml(html: string, section: string) {
 export async function prepareReadReceipt(db: Db, secret: string, ctx: ReceiptContext, email: string, subject: string) {
   const token = await receiptToken(secret, ctx.dispatchKey);
   const tokenHash = await hashReceiptToken(token);
+  // Preserve Triagem delivery-only tracking and its existing pending rows.
+  const trackOpening = ctx.source !== 'triage';
   const openToken = await openSignalToken(secret, ctx.dispatchKey);
   const openTokenHash = await hashReceiptToken(openToken);
   const now = new Date();
   const rows = await db('audit_email_read_receipts?on_conflict=dispatch_key', {
     method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},
-    body:JSON.stringify({dispatch_key:ctx.dispatchKey,token_hash:tokenHash,open_token_hash:openTokenHash,source:ctx.source||'sector',
+    body:JSON.stringify({dispatch_key:ctx.dispatchKey,token_hash:tokenHash,...(trackOpening?{open_token_hash:openTokenHash}:{}),source:ctx.source||'sector',
       recipient_id:ctx.recipientId||null,recipient_name:String(ctx.recipientName||'Destinatário'),
       recipient_email:email,subject,period_from:ctx.from||null,period_to:ctx.to||null,
       expires_at:new Date(now.getTime()+90*86400000).toISOString()})
   });
   // Retries keep the same link, expiry and first confirmation. Never reset an acknowledgement.
   const row = rows?.[0] || (await db('audit_email_read_receipts?dispatch_key=eq.'+encodeURIComponent(ctx.dispatchKey)+'&select=token_hash,open_token_hash,recipient_email,expires_at&limit=1'))?.[0];
-  if (!row || row.token_hash!==tokenHash || row.open_token_hash!==openTokenHash || row.recipient_email!==email || Date.parse(row.expires_at)<=now.getTime())
+  if (!row || row.token_hash!==tokenHash || (trackOpening&&row.open_token_hash!==openTokenHash) || row.recipient_email!==email || Date.parse(row.expires_at)<=now.getTime())
     throw new Error('Não foi possível preparar a confirmação de leitura deste envio.');
-  const url = 'https://central-auditoria-iota.vercel.app/confirmar-leitura.html#token='+token;
-  const ack = receiptContent(url);
-  return {dispatchKey:ctx.dispatchKey,...ack,text:ack.text+'\nAviso: imagens deste e-mail podem gerar registro automático de abertura detectada, sem comprovar leitura.\n',html:ack.html+openSignalContent(openToken)};
+  // New messages retain internal delivery/open tracking without requesting acknowledgement.
+  // Keep the confirmation token/hash and legacy handler compatible with messages already sent.
+  return {dispatchKey:ctx.dispatchKey,
+    text:ctx.source==='triage'?'':'\nAviso: imagens deste e-mail podem gerar registro automático de abertura detectada, sem comprovar leitura.\n',
+    html:ctx.source==='triage'?'':openSignalContent(openToken)};
 }
 export async function markReceiptDelivered(db: Db, dispatchKey: string) {
   await db('audit_email_read_receipts?dispatch_key=eq.'+encodeURIComponent(dispatchKey)+'&delivered_at=is.null', {

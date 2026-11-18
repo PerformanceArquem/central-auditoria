@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {stripTypeScriptTypes} from 'node:module';
 const moduleUrl=code=>'data:text/javascript;base64,'+Buffer.from(code).toString('base64');
 const receiptsUrl=moduleUrl(stripTypeScriptTypes(readFileSync(new URL('../supabase/functions/_shared/read-receipts.ts',import.meta.url),'utf8')));
-const {receiptToken,hashReceiptToken,prepareReadReceipt,receiptContent,openSignalToken,openSignalContent}=await import(receiptsUrl);
+const {receiptToken,hashReceiptToken,prepareReadReceipt,receiptContent,openSignalToken,openSignalContent,markReceiptDelivered,appendReceiptHtml}=await import(receiptsUrl);
 const handler=stripTypeScriptTypes(readFileSync(new URL('../supabase/functions/audit-read-receipt/handler.ts',import.meta.url),'utf8')).replace("'../_shared/read-receipts.ts'",JSON.stringify(receiptsUrl));
 const {handleReadReceipt}=await import(moduleUrl(handler));
 const now=new Date('2026-11-18T15:00:00Z');
@@ -64,6 +64,37 @@ test('scheduled email batches cannot dispatch before 09h in Sao Paulo',()=>{
   const source=readFileSync(new URL('../supabase/functions/audit-email-dispatch/index.ts',import.meta.url),'utf8');
   assert.match(source,/if\(batchGroup && localHour < 9\)/);
   assert.doesNotMatch(source,/localHour < \(batchGroup==='management'\?8:9\)/);
+});
+
+test('all new email sources omit acknowledgement while preserving delivery and opening tracking',async()=>{
+  for(const source of ['sector','triage','ticket_charge','test']){
+    let row;
+    const writes=[];
+    const db=async(path,init={})=>{
+      if(init.method==='POST'){row=JSON.parse(init.body);writes.push(init);return [row];}
+      if(init.method==='PATCH'){Object.assign(row,JSON.parse(init.body));writes.push(init);return [row];}
+      return [row];
+    };
+    const key='new:'+source;
+    const receipt=await prepareReadReceipt(db,'test-secret',{dispatchKey:key,source},'demo@example.invalid','Relatório');
+    for(const content of [receipt.html,receipt.text]){
+      assert.doesNotMatch(content,/confirmar|confirmação|confirmar-leitura|data-arquem-read-receipt|#token=/i);
+      assert.ok(!content.includes(await receiptToken('test-secret',key)));
+      assert.ok(!content.includes('test-secret'));
+    }
+    if(source==='triage'){assert.equal(receipt.html,'');assert.equal(receipt.text,'');assert.equal(row.open_token_hash,undefined);}
+    else assert.match(receipt.html,/audit-open-signal\?t=[a-f0-9]{64}/);
+    assert.equal(row.source,source);
+    assert.equal(row.dispatch_key,key);
+    assert.equal(row.confirmed_at,undefined);
+    await markReceiptDelivered(db,key);
+    assert.ok(Number.isFinite(Date.parse(row.delivered_at)));
+    assert.equal(writes.length,2);
+    const corporate='<html><body><h1>ARQUEM SISTEMAS</h1><footer>Central de Auditoria</footer></body></html>';
+    const rendered=appendReceiptHtml(corporate,receipt.html);
+    assert.ok(rendered.includes('<footer>Central de Auditoria</footer>'));
+    assert.ok(rendered.endsWith('</body></html>'));
+  }
 });
 
 test('image-load token is independent of explicit confirmation and the message discloses tracking',async()=>{
