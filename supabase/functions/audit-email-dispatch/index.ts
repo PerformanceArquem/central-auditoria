@@ -2121,9 +2121,9 @@ function chargeProjectOptions(payload:R){
  const from=String(payload.projectPeriodFrom||''),to=String(payload.projectPeriodTo||'');
  if(!Number.isFinite(dailyGoalHours)||dailyGoalHours<=0||dailyGoalHours>24)
   throw Error('Meta diária de projetos inválida.');
- if(!Number.isFinite(workdayHours)||workdayHours<=0||workdayHours>24||forecastFieldId.length>80||!/^[\\w-]*$/.test(forecastFieldId))
+ if(!Number.isFinite(workdayHours)||workdayHours<=0||workdayHours>24||forecastFieldId.length>80||!/^[\w-]*$/.test(forecastFieldId))
   throw Error('Configuração de previsão de projetos inválida.');
- if((from&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(from))||(to&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(to))||(from&&to&&from>to))
+ if((from&&!/^\d{4}-\d{2}-\d{2}$/.test(from))||(to&&!/^\d{4}-\d{2}-\d{2}$/.test(to))||(from&&to&&from>to))
   throw Error('Período de Projetos e Prazos inválido.');
  return {dailyGoalHours,workdayHours,forecastFieldId,periodFrom:from||undefined,periodTo:to||undefined};
 }

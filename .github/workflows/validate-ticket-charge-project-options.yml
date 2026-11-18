@@ -1,0 +1,19 @@
+name: Validate AI ticket charge project options
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/audit-email-dispatch/index.ts'
+      - 'tests/ticket-charge-project-options.test.mjs'
+      - '.github/workflows/validate-ticket-charge-project-options.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/ticket-charge-project-options.test.mjs
