@@ -33,6 +33,18 @@ Auditoria somente leitura reexecutada em 18/11/2026: [workflow run 43925902801](
 
 Referências: [guia oficial do Google para `clasp`](https://developers.google.com/apps-script/guides/clasp?hl=pt-BR) e [opções de login](https://github.com/google/clasp).
 
+## Reconciliação de duplicidades da auditoria remota (18/11/2026)
+
+A auditoria `clasp pull` foi restabelecida, mas encontrou **8 nomes duplicados** no projeto. O job de consolidação anterior bloqueou 8 arquivos JavaScript / 48 funções globais em vez de 6 / 39. Entre os conflitos: `arquemCreateReportAttachments_`, `arquemPdf_` e `arquemXlsx_` com implementações diferentes em `ZenviaVozChat.js` e `homologacao-pr103-isolada.js`.
+
+O novo guard da PR #121:
+- compara o corpo de cada declaração pela AST;
+- elimina **somente cópias byte-idênticas**, **apenas no diretório temporário** da simulação (sem `clasp push`);
+- interrompe a auditoria se restarem definições distintas sob o mesmo nome;
+- não trata atualização de inventário por contagem como autorização de publicação.
+
+**Revisão obrigatória antes do release:** decidir explicitamente as implementações canônicas dos geradores PDF/XLSX e as funções de homologação, confirmar compatibilidade com o `doPost` oficial e os modelos atuais, e registrar a decisão. A execução de CI com dados sintéticos não comprova que os conflitos reais foram resolvidos.
+
 ## Implantação coordenada
 
 1. Registrar versão, hashes, endpoint `/exec` ativo e plano de reversão do Apps Script, sem expor segredos no log.
