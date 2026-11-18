@@ -627,8 +627,9 @@ function workdays(from: string, to: string, ignored: Set<string>) {
 }
 
 const emailEsc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]||ch));
+const signedDuration=(minutes:number)=> (minutes>=0?'+':'−')+duration(Math.abs(minutes));
 const displayDate=(d:string)=>/^\d{4}-\d{2}-\d{2}$/.test(d)?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):d;
-function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;exportData?:R;metrics:{appointments:number;tickets:number;minutes:number;days:number;people?:number;referenceTargetMinutes?:number;referenceMinimumMinutes?:number;targetGapMinutes?:number;minimumGapMinutes?:number}},from:string,to:string,kind:ReportKind,partial:boolean,manual:boolean,alertsHtml='',detailsHtml='',executiveHtml='',forecastHtml=''){
+function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;exportData?:R;metrics:{appointments:number;tickets:number;minutes:number;days:number;people?:number;referenceTargetMinutes?:number;referenceMinimumMinutes?:number;targetGapMinutes?:number;minimumGapMinutes?:number;minimumBalanceMinutes?:number;targetBalanceMinutes?:number}},from:string,to:string,kind:ReportKind,partial:boolean,manual:boolean,alertsHtml='',detailsHtml='',executiveHtml='',forecastHtml=''){
  const m=report.metrics;
  const targetPerDay=Number(rec.daily_target_minutes??480);
  const minPercent=Number(rec.minimum_percent??80);
@@ -636,6 +637,8 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;expor
  const minimum=m.referenceMinimumMinutes??Math.round(target*minPercent/100);
  const targetGap=m.targetGapMinutes??Math.max(0,target-m.minutes);
  const minimumGap=m.minimumGapMinutes??Math.max(0,minimum-m.minutes);
+ const minimumBalance=m.minimumBalanceMinutes??m.minutes-minimum;
+ const targetBalance=m.targetBalanceMinutes??m.minutes-target;
  const teamLabel=(m.people??1)>1?' (equipe)':'';
  const missing=m.appointments===0;
  const identity=reportIdentity(rec);
@@ -656,8 +659,8 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;expor
  const missingMetrics=missing?'<div style="color:#66768d;font-size:13px;margin-top:12px">Metas de referência não avaliadas por ausência de apontamentos importados.</div>':
    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px"><tr>'+
      tile('Meta mínima de referência'+teamLabel,duration(minimum))+tile('Jornada de referência'+teamLabel,duration(target))+'</tr><tr>'+
-     tile('Diferença para a mínima'+teamLabel,duration(minimumGap))+
-     tile('Diferença para a jornada'+teamLabel,duration(targetGap))+'</tr></table>';
+     tile('Diferença para a mínima'+teamLabel,signedDuration(minimumBalance))+
+     tile('Diferença para a jornada'+teamLabel,signedDuration(targetBalance))+'</tr></table>';
  const test=manual?'<div style="background:#eaf3ff;color:#174c99;border:1px solid #c8ddff;padding:14px 16px;border-radius:8px;margin:0 0 18px;font-size:13px"><strong>ENVIO DE TESTE</strong> — Mensagem para verificar o recebimento. Não substitui um relatório definitivo.</div>':'';
  const warning=(partial||missing)?'<div style="background:#fff8e9;color:#86520f;border-left:4px solid #e4ad38;padding:14px 16px;border-radius:7px;font-size:13px;margin:18px 0">'+esc(completeness)+'<div style="margin-top:7px">'+esc(note)+'</div></div>':
    '<p style="color:#65748b;font-size:12px;line-height:1.5">'+esc(note)+'</p>';
@@ -784,6 +787,8 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     percent:capacity>0?Math.round(100*minutes/capacity):null,
     minimumGap:Math.max(0,min-minutes),
     targetGap:Math.max(0,capacity-minutes),
+    minimumBalance:Math.round(minutes-min),
+    targetBalance:Math.round(minutes-capacity),
     status:capacity===0?'Sem jornada de referência':minutes>=min?'Mínimo atingido':'Abaixo do mínimo de referência'
   });
   const journey=[...teamMembers].map(([name,member])=>{
@@ -811,8 +816,8 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     (journey.length?detailTable(['Colaborador','Equipe','Apontadas','Capacidade','Mínimo','%'],emailTeam.map(x=>
       [x.name,x.sector,duration(x.minutes),duration(x.targetMinutes),duration(x.minimumMinutes),showJourneyPercent(x.percent)]))+
     '<h3 style="font-size:14px;color:#17345d">Diferenças e situação</h3>'+
-    detailTable(['Colaborador','Falta mínimo','Falta jornada','Situação'],emailTeam.map(x=>
-      [x.name,duration(x.minimumGap),duration(x.targetGap),x.status]))+
+    detailTable(['Colaborador','Saldo mínimo','Saldo jornada','Situação'],emailTeam.map(x=>
+      [x.name,signedDuration(x.minimumBalance),signedDuration(x.targetBalance),x.status]))+
     '<h3 style="font-size:14px;color:#17345d">Volume de apontamentos</h3>'+
     detailTable(['Colaborador','Lançamentos','Chamados','Clientes','Dias','Média/dia','Dias não úteis'],emailTeam.map(x=>
       [x.name,String(x.entries),String(x.tickets),String(x.clients),String(x.days),x.averageMinutes===null?'—':duration(x.averageMinutes),duration(x.offMinutes)]))+
@@ -865,14 +870,14 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     '────────────────────────────────────────',
     ...(scopedManagement ? [
       journeyNote,
-      ...emailTeam.map(x=>`${safe(x.name)} | ${safe(x.sector)} | ${duration(x.minutes)} apontadas | jornada ${duration(x.targetMinutes)} | mínimo ${duration(x.minimumMinutes)} | ${showJourneyPercent(x.percent)} | faltam ${duration(x.minimumGap)} para o mínimo e ${duration(x.targetGap)} para a jornada | ${x.status}`),
+      ...emailTeam.map(x=>`${safe(x.name)} | ${safe(x.sector)} | ${duration(x.minutes)} apontadas | jornada ${duration(x.targetMinutes)} | mínimo ${duration(x.minimumMinutes)} | ${showJourneyPercent(x.percent)} | saldo mínimo ${signedDuration(x.minimumBalance)} | saldo jornada ${signedDuration(x.targetBalance)} | ${x.status}`),
       ...(journey.length>emailTeam.length?[`Mostrando ${emailTeam.length} de ${journey.length} colaboradores. Consulte o Excel, quando disponível, para mais detalhes.`]:[]),
       ...(!journey.length?['Sem apontamentos importados nos setores vinculados.']:[])
     ] : selected.length ? [
       `Meta mínima de referência . ${duration(journeyGaps.referenceMinimumMinutes)}`,
       `Jornada de referência ..... ${duration(journeyGaps.referenceTargetMinutes)}`,
-      `Diferença para a mínima ... ${duration(journeyGaps.minimumGapMinutes)}`,
-      `Diferença para a jornada .. ${duration(journeyGaps.targetGapMinutes)}`,
+      `Diferença para a mínima ... ${signedDuration(journeyGaps.minimumBalanceMinutes)}`,
+      `Diferença para a jornada .. ${signedDuration(journeyGaps.targetBalanceMinutes)}`,
       `Tempo acima da jornada .... ${duration([...byPerson.values()].reduce((sum,value)=>sum+Math.max(0,value-target),0))}`
     ] : [
       'Metas não avaliadas: nenhum apontamento importado neste período.',
@@ -912,12 +917,14 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     visual:{sectors:[...bySector].map(([sector,minutes])=>({sector,minutes})),daily:[...chartDays].map(([date,minutes])=>({date,minutes}))},
     collaborators:scopedManagement?journey.slice(0,70).map(x=>({
       name:x.name,sector:x.sector,minutes:x.minutes,minimumMinutes:x.minimumMinutes,targetMinutes:x.targetMinutes,
-      minimumGap:x.minimumGap,targetGap:x.targetGap,ruleSource:'Referência do cadastro; não é controle de ponto'
+      minimumGap:x.minimumGap,targetGap:x.targetGap,minimumBalance:x.minimumBalance,targetBalance:x.targetBalance,ruleSource:'Referência do cadastro; não é controle de ponto'
     })):[...byPerson.entries()].sort((a,b)=>b[1]-a[1]).slice(0,70)
       .map(([name,minutes])=>({name,sector:scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
         minutes,minimumMinutes:days.length*targetPerDay*minimumPercent/100,
         targetMinutes:days.length*targetPerDay,minimumGap:Math.max(0,days.length*targetPerDay*minimumPercent/100-minutes),
-        targetGap:Math.max(0,days.length*targetPerDay-minutes),ruleSource:'Referência padrão; não é controle de ponto'})),
+        targetGap:Math.max(0,days.length*targetPerDay-minutes),
+        minimumBalance:Math.round(minutes-days.length*targetPerDay*minimumPercent/100),
+        targetBalance:Math.round(minutes-days.length*targetPerDay),ruleSource:'Referência padrão; não é controle de ponto'})),
     daily:(reportSectionOn(rec,'daily_detail')?dailyJourney:[]).slice(0,90).map(x=>({date:x.day,person:x.name,
       sector:scopedManagement?x.sector:
         scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
@@ -2318,7 +2325,7 @@ async function dispatchNoonPartial() {
     partial:true,historicalIncomplete:false,
     metrics:{tickets:tickets.size,appointments:picked.length,minutes,days:1},
     collaborators:team.map(x=>({name:x.name,sector:x.sector,minutes:x.minutes,
-      minimumMinutes:0,targetMinutes:0,minimumGap:0,targetGap:0,
+      minimumMinutes:0,targetMinutes:0,minimumGap:0,targetGap:0,minimumBalance:0,targetBalance:0,
       ruleSource:'Janela parcial 09h00-11h50, sem jornada de referência'})),
     daily:[],customers:[],activities:[],tickets:[],forecastVariances:[]};
   const reserved=await db('audit_email_sector_dispatches?on_conflict=dispatch_key',{
