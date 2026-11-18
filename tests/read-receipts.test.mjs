@@ -73,6 +73,20 @@ test('scheduled email batches cannot dispatch before 09h in Sao Paulo',()=>{
   assert.doesNotMatch(source,/localHour < \(batchGroup==='management'\?8:9\)/);
 });
 
+test('triage keeps its dispatch record without adding a confirmation or tracking image',async()=>{
+  const ctx={dispatchKey:'triage:sample',source:'triage'};
+  let row;
+  const db=async(path,init)=>{
+    row=JSON.parse(init.body);
+    return [row];
+  };
+  const content=await prepareReadReceipt(db,'test-secret',ctx,'sample@example.invalid','Relatório');
+  assert.deepEqual(content,{dispatchKey:ctx.dispatchKey,text:'',html:''});
+  assert.equal(row.source,'triage');
+  assert.match(row.token_hash,/^[a-f0-9]{64}$/);
+  assert.ok(!Object.hasOwn(row,'open_token_hash'));
+});
+
 test('image-load token is independent of explicit confirmation and the message discloses tracking',async()=>{
   const secret='demo-key', key='test:dispatch-1';
   const confirm=await receiptToken(secret,key), open=await openSignalToken(secret,key);
