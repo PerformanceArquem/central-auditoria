@@ -26,14 +26,14 @@ if(mode==='deployment'){
  const [folder,expectedSha]=args;
  if(!folder||!expectedSha||!(/^[a-f0-9]{64}$/.test(expectedSha)))throw Error('Assinatura SHA-256 aprovada obrigatória');
  const files=readdirSync(folder,{withFileTypes:true})
-  .filter(entry=>entry.isFile()&&(entry.name==='appsscript.json'||/\\.(js|gs|html)$/.test(entry.name)))
+  .filter(entry=>entry.isFile()&&(entry.name==='appsscript.json'||/\.(js|gs|html)$/.test(entry.name)))
   .map(entry=>entry.name).sort();
  if(!files.includes('appsscript.json')||files.length<7)
   throw Error('Inventário de versão candidata incompleto');
  const hash=createHash('sha256');
  for(const file of files){
-  hash.update(file);hash.update('\\0');
-  hash.update(readFileSync(join(folder,file)));hash.update('\\0');
+  hash.update(file);hash.update('\0');
+  hash.update(readFileSync(join(folder,file)));hash.update('\0');
  }
  const actual=hash.digest('hex');
  if(actual!==expectedSha)throw Error('SHA-256 da versão candidata divergiu da versão aprovada');
