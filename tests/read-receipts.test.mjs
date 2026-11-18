@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {stripTypeScriptTypes} from 'node:module';
 const moduleUrl=code=>'data:text/javascript;base64,'+Buffer.from(code).toString('base64');
 const receiptsUrl=moduleUrl(stripTypeScriptTypes(readFileSync(new URL('../supabase/functions/_shared/read-receipts.ts',import.meta.url),'utf8')));
-const {receiptToken,hashReceiptToken,prepareReadReceipt,receiptContent,openSignalToken,openSignalContent}=await import(receiptsUrl);
+const {receiptToken,hashReceiptToken,prepareReadReceipt,openSignalToken,openSignalContent}=await import(receiptsUrl);
 const handler=stripTypeScriptTypes(readFileSync(new URL('../supabase/functions/audit-read-receipt/handler.ts',import.meta.url),'utf8')).replace("'../_shared/read-receipts.ts'",JSON.stringify(receiptsUrl));
 const {handleReadReceipt}=await import(moduleUrl(handler));
 const now=new Date('2026-11-18T15:00:00Z');
@@ -48,7 +48,7 @@ test('forbidden origins, malformed tokens and database failure are rejected with
   const unavailable=await handleReadReceipt(f.req('inspect'),async()=>{throw Error('service-role-secret');},now);
   assert.equal(unavailable.status,503);assert.ok(!(await unavailable.text()).includes('service-role-secret'));
 });
-test('links are scoped per dispatch; only a hash is stored and retries retain the link',async()=>{
+test('new emails disclose opening detection without including a reading confirmation',async()=>{
   const first=await receiptToken('test-secret','dispatch:1'),second=await receiptToken('test-secret','dispatch:2');
   assert.match(first,/^[a-f0-9]{64}$/);assert.notEqual(first,second);assert.notEqual(first,await hashReceiptToken(first));
   let row;let calls=0;
@@ -57,7 +57,14 @@ test('links are scoped per dispatch; only a hash is stored and retries retain th
   const a=await prepareReadReceipt(db,'test-secret',ctx,'sample@example.invalid','Relatório');
   const b=await prepareReadReceipt(db,'test-secret',ctx,'sample@example.invalid','Relatório');
   assert.equal(a.html,b.html);assert.equal(calls,2);assert.ok(!JSON.stringify(row).includes(first));assert.equal(row.token_hash,await hashReceiptToken(first));
-  assert.ok(receiptContent('https://example.invalid#token='+first).text.includes('Confirmar minha leitura'));
+  const open=await openSignalToken('test-secret',ctx.dispatchKey);
+  assert.equal(row.open_token_hash,await hashReceiptToken(open));
+  assert.match(a.html,/audit-open-signal\?t=/);
+  assert.match(a.text,/abertura detectada/);
+  for(const content of [a.html,a.text]){
+    assert.doesNotMatch(content,/confirmação de leitura|confirmar .*leitura|confirmar-leitura\.html|data-arquem-read-receipt/i);
+    assert.ok(!content.includes(first));
+  }
 });
 
 test('scheduled email batches cannot dispatch before 09h in Sao Paulo',()=>{
