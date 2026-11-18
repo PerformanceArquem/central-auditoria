@@ -1997,8 +1997,21 @@ async function dashboardReportAction(payload:R){
 // Apenas administradores. A seleção enviada pelo browser é revalidada no banco.
 // Histórico durável: acesso apenas via esta Edge Function (admin JWT), não expor tabela diretamente.
 async function ticketChargeHistory():Promise<Response>{
- const records=await db('audit_ticket_charge_history?select=id,recipient,cc_recipients,subject,ticket_ids,ticket_snapshot,status,created_at,sent_at,updated_at,sent_by,error_summary&order=created_at.desc&limit=250') as R[];
- return json({ok:true,items:Array.isArray(records)?records:[],
+ const [records,notes]=await Promise.all([
+  db('audit_ticket_charge_history?select=id,request_id,recipient,cc_recipients,subject,ticket_ids,ticket_snapshot,status,created_at,sent_at,updated_at,sent_by,error_summary&order=created_at.desc&limit=250'),
+  db('audit_ticket_charge_internal_notes?select=request_id,ticket_id,status,processed_at,last_error&order=created_at.desc&limit=2000')
+ ]) as [R[],R[]];
+ const noteMap=new Map<string,R[]>();
+ for(const row of notes||[]){
+  const id=String(row.request_id||'');
+  if(!noteMap.has(id))noteMap.set(id,[]);
+  noteMap.get(id)!.push(row);
+ }
+ return json({ok:true,items:Array.isArray(records)?records.map(row=>({
+   ...row,internalNotes:(noteMap.get(String(row.request_id))||[]).map(n=>({
+     ticketId:n.ticket_id,status:n.status,processedAt:n.processed_at
+   }))
+ })):[],
   note:'Enviado = aceite confirmado pelo serviço de e-mail; não implica leitura pelo destinatário.'});
 }
 /**
@@ -2509,6 +2522,9 @@ async function handleRequest(req: Request): Promise<Response> {
     if(action==='ticket_charge_notes_dispatch'){
       const expected=E('REPORT_CRON_SECRET');
       if(!expected||req.headers.get('x-report-secret')!==expected)return json({ok:false,error:'Processador de notas não autorizado'},401);
+      const today=dateBR();
+      if([0,6].includes(weekday(today))||(await holidays()).has(today))
+        return json({ok:true,processed:0,skipped:'Dia não útil — processamento retomado no próximo dia útil'});
       const status=await processChargeInternalNote(db,E('MOVIDESK_TOKEN'));
       return json(status,status.ok?200:503);
     }
