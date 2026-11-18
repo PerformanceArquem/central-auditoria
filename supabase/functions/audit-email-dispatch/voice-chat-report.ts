@@ -24,7 +24,7 @@ export async function collectVoiceReport(from:string,to:string,serviceKey:string
    }
    if(source.talkSeconds!=null)target.talkSeconds+=Number(source.talkSeconds);
   }
-  if(!body.queue?.configured||body.queue.tmeSeconds==null)queueReady=false;
+  if(!body.queue?.configured||body.queue.calls==null)queueReady=false;
   queueCalls+=Number(body.queue?.calls||0);waitSamples+=Number(body.queue?.waitSampleCount||0);
   weightedWait+=Number(body.queue?.waitTotalSeconds||0);
   days.push(...(body.byDay||[]));
@@ -55,7 +55,11 @@ export async function collectVoiceReport(from:string,to:string,serviceKey:string
   value.tmaSeconds=value.tmaSamples>0?Math.round(value.talkSeconds/value.tmaSamples):null;
   value.talkCoverageComplete=value.answered>0&&value.tmaMissingSamples===0;
  }
- sum.tmeSeconds=queueReady&&queueCalls>0&&waitSamples===queueCalls?Math.round(weightedWait/queueCalls):null;
+ sum.tmeSeconds=queueReady&&waitSamples>0?Math.round(weightedWait/waitSamples):null;
+ sum.queueWaitSamples=waitSamples;
+ sum.queueCalls=queueCalls;
+ sum.queueWaitMissingSamples=queueCalls>waitSamples?queueCalls-waitSamples:0;
+ sum.queueWaitCoverageComplete=queueReady&&queueCalls>0&&waitSamples===queueCalls;
  return {...sum,supportMetrics:supportReady?support:null,byDay:days,byExtension:[...people.values()].map((p):Row=>({...p,talkCoverageComplete:p.answered>0&&!p.missingTalkSamples})).sort((a,b)=>b.total-a.total).slice(0,30),source:'Zenvia Voice',coverageVerified:true};
 }
 // Department roster is supplied from the existing authorized support-report configuration.
@@ -76,9 +80,10 @@ export function composeVoiceChat(voice:Row,chat:Row,approvedSupport:string[]=[])
  const supportPeople=supportVoicePeople(Array.isArray(voice.byExtension)?voice.byExtension:[],approvedSupport);
  const packet={...voice,byExtension:supportPeople,personScope:'Somente colaboradores do Suporte, excluindo Kassio',
   chatSummary:chat.metrics,chatMetrics:{tickets:Number(chat.metrics?.tickets||0),...chat.measuredChat},quality:ratings};
- const rows=[['Ligações recebidas · conta Zenvia',voice.inbound,'—'],['Ligações efetuadas · conta Zenvia',voice.outbound,'—'],['Atendimentos',voice.total,packet.chatMetrics.tickets],['Atendidas',voice.answered,'—'],['Não atendidas',voice.unanswered,'—'],['TMA'+(voice.tmaMissingSamples?' (parcial: '+voice.tmaSamples+'/'+voice.answered+' chamadas)':''),duration(voice.tmaSeconds),duration(chat.measuredChat?.tmaSeconds)],['TME da fila',duration(voice.tmeSeconds),duration(chat.measuredChat?.tmeSeconds)],...['voz','chat'].map(channel=>{const q=ratings[channel];return ['CSAT · '+channel,q.total?(q.positive/q.total*100).toFixed(2)+'%':'Sem avaliações',q.total+' avaliações válidas']})];
+ const rows=[['Ligações recebidas · conta Zenvia',voice.inbound,'—'],['Ligações efetuadas · conta Zenvia',voice.outbound,'—'],['Atendimentos',voice.total,packet.chatMetrics.tickets],['Atendidas',voice.answered,'—'],['Não atendidas',voice.unanswered,'—'],['TMA'+(voice.tmaMissingSamples?' (parcial: '+voice.tmaSamples+'/'+voice.answered+' chamadas)':''),duration(voice.tmaSeconds),duration(chat.measuredChat?.tmaSeconds)],['TME da fila'+(voice.tmeSeconds!=null&&!voice.queueWaitCoverageComplete?' (parcial: '+voice.queueWaitSamples+'/'+voice.queueCalls+' chamadas)':''),duration(voice.tmeSeconds),duration(chat.measuredChat?.tmeSeconds)],...['voz','chat'].map(channel=>{const q=ratings[channel];return ['CSAT · '+channel,q.total?(q.positive/q.total*100).toFixed(2)+'%':'Sem avaliações',q.total+' avaliações válidas']})];
  const note='Voz: toda a conta Zenvia. Chat: Suporte no mesmo período. A distribuição usa a identificação atual do cadastro Zenvia. '+
   (voice.tmaMissingSamples?'TMA voz é PARCIAL: '+voice.tmaSamples+' chamadas com duração entre '+voice.answered+' atendidas; tempo falado identificado é subtotal, não o total do período. ':'')+
+  (voice.tmeSeconds!=null&&!voice.queueWaitCoverageComplete?'TME da fila é PARCIAL: '+voice.queueWaitSamples+' tempos de espera válidos entre '+voice.queueCalls+' chamadas da fila. ':'')+
   'A distribuição por pessoa mostra apenas a equipe autorizada do Suporte, sem Kassio; os totais acima continuam da conta inteira da Zenvia. Sem medição significa indisponível, nunca zero.';
  const heading='Voz × Chat · indicadores reais';
  const text='\n\n'+heading+'\n'+rows.map(r=>r.join(' | ')).join('\n')+'\n'+note;
