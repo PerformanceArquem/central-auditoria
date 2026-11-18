@@ -28,6 +28,12 @@ walk(post,n=>{
  if(n.type==='CallExpression'&&n.callee?.type==='MemberExpression'&&
  n.callee.object?.name==='MailApp'&&n.callee.property?.name==='sendEmail')mails.push(n);
 });
+// Structural diagnostics contain only counts and AST types, not remote code.
+const shape={capabilityIfs:actions.length,mailCalls:mails.length,
+ mailArguments:mails.length===1?mails[0].arguments.length:-1,
+ firstMailArgumentType:mails.length===1?(mails[0].arguments[0]?.type||'none'):'unknown',
+ capabilityBeforeMail:actions.length===1&&mails.length===1?actions[0].end<mails[0].start:false};
+console.log('CC_CANDIDATE_SHAPE '+Object.entries(shape).map(([k,v])=>k+'='+v).join(' '));
 if(actions.length!==1||mails.length!==1||mails[0].arguments.length!==1||
  mails[0].arguments[0].type!=='ObjectExpression'||actions[0].end>=mails[0].start)
  throw Error('Formato de envio ou capabilities não revisado');
