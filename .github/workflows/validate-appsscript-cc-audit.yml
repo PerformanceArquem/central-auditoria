@@ -1,0 +1,20 @@
+name: Validate read-only Apps Script CC version audit
+on:
+  pull_request:
+    paths:
+      - 'apps-script/ci-clasp-cc-live-audit.mjs'
+      - 'tests/appsscript-cc-version-audit.test.mjs'
+      - '.github/workflows/appsscript-clasp-controlled.yml'
+      - '.github/workflows/validate-appsscript-cc-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/appsscript-cc-version-audit.test.mjs
