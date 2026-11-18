@@ -1918,7 +1918,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                               </div>
                               <input id="alarmEmailRecipientOther" type="email" autocomplete="off" class="hide" placeholder="outro@arquem.com.br" oninput="alarmEmailInvalidate()" aria-label="Outro e-mail corporativo">
                               <small id="alarmEmailRecipientHelp" class="subtle">Carregando e-mails ativos da Central de Auditoria...</small>
-<details id="alarmEmailCcDetails" style="margin-top:10px;padding:10px;background:#fff;border:1px solid #d9e4ef;border-radius:9px"><summary style="cursor:pointer;font-weight:600">Adicionar cópia (CC) — selecionar contatos</summary>
+<details id="alarmEmailCcDetails" ontoggle="if(this.open)alarmEmailCheckCc()" style="margin-top:10px;padding:10px;background:#fff;border:1px solid #d9e4ef;border-radius:9px"><summary style="cursor:pointer;font-weight:600">Adicionar cópia (CC) — selecionar contatos</summary>
 <button type="button" class="s" id="alarmEmailManagerCc" onclick="alarmSuggestManagerCc()" style="margin:10px 0 5px">Adicionar gestor do setor em cópia</button>
 <small id="alarmEmailManagerCcHint" class="subtle" style="display:block;margin-bottom:7px">O setor será identificado pelos chamados selecionados. Confira os gestores sugeridos antes de enviar.</small>
 <small class="subtle">Selecione até 10 contatos ativos. Todos receberão o mesmo e-mail corporativo. A abertura detectada será da mensagem, não de uma pessoa específica.</small>
@@ -3552,6 +3552,7 @@ function alarmClearSelection(){alarmSelected.clear();renderAlerts();alarmEmailIn
 function alarmOpenComposer(){
  if(!alarmSelected.size){alert('Selecione pelo menos um chamado no ranking.');return}
  $('alarmEmailPanel').classList.remove('hide');
+ if($('alarmEmailCcDetails')?.open)alarmEmailCheckCc();
  if(!$('alarmEmailWorkDate').value){
   $('alarmEmailWorkDate').value=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  }
