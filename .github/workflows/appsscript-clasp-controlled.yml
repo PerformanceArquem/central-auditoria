@@ -23,7 +23,7 @@ on:
       operation:
         required: true
         type: choice
-        options: [audit, publish, activate_cc]
+        options: [audit, publish, publish_cc_candidate, activate_cc]
         default: audit
       expected_remote_sha256:
         required: false
@@ -282,6 +282,80 @@ jobs:
             tests/zenvia-email-attachments.test.mjs \
             tests/zenvia-keila-preservation.test.mjs \
             tests/appsscript-zenvia-sample-label-dates.test.mjs
+  publish-cc-candidate:
+    # Create a numbered, INACTIVE version from the exact audited remote snapshot.
+    # Does not change existing /exec deployments or send emails.
+    if: ${{ inputs.operation == 'publish_cc_candidate' && github.ref_name == 'main' }}
+    runs-on: ubuntu-latest
+    environment: apps-script-production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check explicit release approval and fingerprints
+        env:
+          RELEASE_ENABLED: ${{ vars.APPS_SCRIPT_RELEASE_ENABLED }}
+          APPROVED_COMMIT: ${{ inputs.cc_release_commit }}
+          EXPECTED_REMOTE: ${{ inputs.expected_remote_sha256 }}
+          APPROVED_SOURCE: ${{ inputs.approved_source_sha256 }}
+        run: |
+          set -euo pipefail
+          test "$RELEASE_ENABLED" = 'true' || { echo "::error::Production release disabled"; exit 1; }
+          test "$APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "::error::Reviewed commit mismatch"; exit 1; }
+          [[ "$EXPECTED_REMOTE" =~ ^[a-f0-9]{64}$ ]] || { echo "::error::Missing audited remote SHA-256"; exit 1; }
+          [[ "$APPROVED_SOURCE" =~ ^[a-f0-9]{64}$ ]] || { echo "::error::Missing approved candidate SHA-256"; exit 1; }
+          test "$EXPECTED_REMOTE" != "$APPROVED_SOURCE" || { echo "::error::CC candidate must differ from remote"; exit 1; }
+      - run: npm install --global @google/clasp@3.4.1
+      - name: Authenticate securely
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "${CLASPRC_JSON:-}" || exit 1
+          umask 077
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+      - name: Recreate candidate and compare exact audited source
+        env:
+          EXPECTED_REMOTE: ${{ inputs.expected_remote_sha256 }}
+          APPROVED_SOURCE: ${{ inputs.approved_source_sha256 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cc-release/remote" "$RUNNER_TEMP/cc-release/parser"
+          npm install --prefix "$RUNNER_TEMP/cc-release/parser" --no-save --silent acorn@8.15.0
+          cd "$RUNNER_TEMP/cc-release/remote"
+          printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
+          clasp pull > /dev/null
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-candidate-dry-run.mjs" \
+            "$PWD" "$RUNNER_TEMP/cc-release/candidate" "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/cc-release/parser"
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" verify \
+            "$PWD" "$RUNNER_TEMP/cc-release/candidate" "$EXPECTED_REMOTE" "$APPROVED_SOURCE"
+          node --check "$RUNNER_TEMP/cc-release/candidate/Código.js"
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-promotion-guard.mjs" sha256 \
+            "$RUNNER_TEMP/cc-release/candidate" "$APPROVED_SOURCE"
+      - name: Recheck remote and create version only (no deployment update)
+        env:
+          EXPECTED_REMOTE: ${{ inputs.expected_remote_sha256 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cc-release/recheck"
+          (
+            cd "$RUNNER_TEMP/cc-release/recheck"
+            printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
+            clasp pull > /dev/null
+          )
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" compare \
+            "$RUNNER_TEMP/cc-release/recheck" "$EXPECTED_REMOTE"
+          cd "$RUNNER_TEMP/cc-release/candidate"
+          printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
+          clasp push --force
+          clasp create-version "Arquem CC candidate - reviewed SHA"
+          echo "CC candidate code pushed and numbered version created; /exec unchanged, NO EMAIL SENT." >> "$GITHUB_STEP_SUMMARY"
+          echo "Before activate_cc, verify version number, deployment ID and approved SHA-256." >> "$GITHUB_STEP_SUMMARY"
   publish:
     if: ${{ inputs.operation == 'publish' && github.ref_name == 'main' }}
     runs-on: ubuntu-latest
