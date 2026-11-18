@@ -59,7 +59,7 @@ export async function prepareReadReceipt(db: Db, secret: string, ctx: ReceiptCon
     throw new Error('Não foi possível preparar a confirmação de leitura deste envio.');
   const url = 'https://central-auditoria-iota.vercel.app/confirmar-leitura.html#token='+token;
   const ack = receiptContent(url);
-  return {dispatchKey:ctx.dispatchKey,...ack,html:ack.html+openSignalContent(openToken)};
+  return {dispatchKey:ctx.dispatchKey,...ack,text:ack.text+'\nAviso: imagens deste e-mail podem gerar registro automático de abertura detectada, sem comprovar leitura.\n',html:ack.html+openSignalContent(openToken)};
 }
 export async function markReceiptDelivered(db: Db, dispatchKey: string) {
   await db('audit_email_read_receipts?dispatch_key=eq.'+encodeURIComponent(dispatchKey)+'&delivered_at=is.null', {
