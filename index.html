@@ -1580,7 +1580,11 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
     <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Frequências</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="7">Abra o módulo para carregar.</td></tr></tbody></table></div>
     <div class="row" style="align-items:center;justify-content:space-between;margin-top:22px;gap:12px;flex-wrap:wrap">
       <div><h3 style="margin:0">Histórico e rastreabilidade dos e-mails</h3><small class="subtle">“Enviado” significa que o provedor aceitou a mensagem, não que ela foi lida. Sem registro não significa necessariamente falha.</small></div>
-      <div class="row" style="gap:8px"><label for="emailHistoryFilter">Situação</label><select id="emailHistoryFilter"><option value="">Todas</option><option value="sent">Enviados</option><option value="processing">Em processo</option><option value="failed">Falhas</option><option value="pending">Pendentes (sem registro)</option></select><button type="button" class="s" id="emailHistoryRefresh">↻ Atualizar</button><button type="button" class="s" id="emailFailedReview">Revisar e enviar falhas</button></div>
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+        <label for="emailHistoryFrom">De</label><input type="date" id="emailHistoryFrom" aria-label="Data inicial de envio" style="max-width:165px">
+        <label for="emailHistoryTo">Até</label><input type="date" id="emailHistoryTo" aria-label="Data final de envio" style="max-width:165px">
+        <button type="button" class="s" id="emailHistoryClearDates">Limpar datas</button>
+        <label for="emailHistoryFilter">Situação</label><select id="emailHistoryFilter"><option value="">Todas</option><option value="sent">Enviados</option><option value="processing">Em processo</option><option value="failed">Falhas</option><option value="pending">Pendentes (sem registro)</option></select><button type="button" class="s" id="emailHistoryRefresh">↻ Atualizar</button><button type="button" class="s" id="emailFailedReview">Revisar e enviar falhas</button></div>
       <dialog id="emailRetryDialog" style="width:min(960px,95vw)"><h3>Revisão do relatório antes do reenvio</h3><p id="emailRetrySummary"></p><iframe id="emailRetryPreview" title="Prévia do e-mail recalculado" sandbox="" style="width:100%;height:55vh;border:1px solid #dce7f3"></iframe><p id="emailRetryStatus" role="status"></p><div class="row"><button type="button" id="emailRetrySend">Enviar este relatório revisado</button><button type="button" class="s" id="emailRetryCancel">Fechar</button></div></dialog>
     </div>
     <div id="emailHistoryKpis" class="kpis" style="margin:12px 0"></div>
@@ -5344,14 +5348,23 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         const allow=x.allowed_report_types==null?'Regras atuais':x.allowed_report_types.length?x.allowed_report_types.map(k=>({general:'Geral',production_flow:'Fluxo Produção',ticket_followup:'Cobranças'}[k]||k)).join(', '):'Nenhum relatório';
         return `<tr><td>${esc(x.name)}</td><td>${esc(x.email)}<small style="display:block;color:var(--muted)">${esc(bound)}</small></td><td>${x.scope==='management'?(x.sectors?.length?'Gestão · '+esc(x.sectors.join(', ')):'Gestão · Todos'):esc(Array.isArray(x.sectors)&&x.sectors.length?x.sectors.join(', '):x.sector)}</td><td>${esc(Array.isArray(x.collaborator_names)&&x.collaborator_names.length?x.collaborator_names.join(', '):(x.collaborator_name||'Todos'))}</td><td>${esc(cadence||'—')}<small style="display:block;color:var(--muted)">${esc(allow)}</small></td><td>${x.active?'Sim':'Não'}</td><td><button type="button" class="s" data-email-edit="${esc(x.id)}">Editar</button></td></tr>`;
       }).join('')||'<tr><td colspan="7">Nenhum destinatário cadastrado.</td></tr>';
-      const logs=await client.from('audit_email_sector_dispatches').select('dispatch_key,recipient_id,report_kind,period_from,period_to,status,created_at,last_attempt_at,sent_at,attempt_count,error_message').order('created_at',{ascending:false}).limit(150);
+      const dateFrom=$('emailHistoryFrom').value,dateTo=$('emailHistoryTo').value;
+      if(dateFrom&&dateTo&&dateFrom>dateTo){say('A data inicial não pode ser maior que a final.');return;}
+      // Datas são interpretadas na zona de Brasília. O limite superior é exclusivo para incluir o dia final inteiro.
+      const dateNext=d=>{const v=new Date(d+'T12:00:00Z');v.setUTCDate(v.getUTCDate()+1);return v.toISOString().slice(0,10)};
+      const dateStart=dateFrom?dateFrom+'T00:00:00-03:00':null;
+      const dateEnd=dateTo?dateNext(dateTo)+'T00:00:00-03:00':null;
+      let logsQuery=client.from('audit_email_sector_dispatches').select('dispatch_key,recipient_id,report_kind,period_from,period_to,status,created_at,last_attempt_at,sent_at,attempt_count,error_message');
+      if(dateStart)logsQuery=logsQuery.gte('created_at',dateStart);
+      if(dateEnd)logsQuery=logsQuery.lt('created_at',dateEnd);
+      const logs=await logsQuery.order('created_at',{ascending:false}).limit(150);
             if(logs.error)throw logs.error;
       const items=logs.data||[];
       const time=v=>{if(!v)return '—';const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})};
       const late=x=>x.status==='processing' && (Date.now()-Date.parse(x.last_attempt_at||x.created_at)>20*60000);
       const counts={sent:items.filter(x=>x.status==='sent').length,processing:items.filter(x=>x.status==='processing').length,failed:items.filter(x=>x.status==='failed').length,stalled:items.filter(late).length};
       const known=new Set(items.map(x=>String(x.recipient_id)));
-      const withoutRecord=records.filter(x=>x.active&&!known.has(String(x.id)));
+      const withoutRecord=(!dateFrom&&!dateTo)?records.filter(x=>x.active&&!known.has(String(x.id))):[];
       $('emailHistoryKpis').innerHTML=[['Enviados',counts.sent],['Em processo',counts.processing],['Falhas',counts.failed],['Aguardando conferência',withoutRecord.length],['Processo demorado',counts.stalled]].map(([label,n])=>'<div class="card"><small>'+esc(label)+'</small><h3>'+Number(n)+'</h3></div>').join('');
       const filter=$('emailHistoryFilter').value;
       const existing=items.filter(x=>!filter||x.status===filter).map(x=>{
@@ -5365,7 +5378,10 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
       const pending=(!filter||filter==='pending')?withoutRecord.map(x=>'<tr><td>—</td><td>'+esc(x.name)+'</td><td>'+esc(x.scope==='management'?'Gestão':'Setorial')+'</td><td>—</td><td>Pendente de registro</td><td>—</td><td>Nenhum envio encontrado entre os 150 registros consultados; verificar agendamento e período.</td></tr>'):[];
       $('emailDispatches').innerHTML=existing.concat(pending).join('')||'<tr><td colspan="7">Nenhum registro corresponde ao filtro.</td></tr>';
       try{
-        const receipts=await client.from('audit_email_read_receipts').select('dispatch_key,recipient_name,recipient_email,subject,period_from,period_to,created_at,expires_at,delivered_at,first_opened_at,confirmed_at').neq('source','test').order('created_at',{ascending:false}).limit(150);
+        let receiptQuery=client.from('audit_email_read_receipts').select('dispatch_key,recipient_name,recipient_email,subject,period_from,period_to,created_at,expires_at,delivered_at,first_opened_at,confirmed_at').neq('source','test');
+        if(dateStart)receiptQuery=receiptQuery.gte('created_at',dateStart);
+        if(dateEnd)receiptQuery=receiptQuery.lt('created_at',dateEnd);
+        const receipts=await receiptQuery.order('created_at',{ascending:false}).limit(150);
         if(receipts.error)throw receipts.error;
         $('emailReadReceipts').innerHTML=(receipts.data||[]).map(x=>{
           const status=x.confirmed_at?'Leitura confirmada':!x.delivered_at?'Envio não confirmado':Date.parse(x.expires_at)<=Date.now()?'Link expirado':x.first_opened_at?'Abertura detectada, leitura não confirmada':'Aguardando confirmação';
@@ -5565,6 +5581,9 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   $('emailNew').addEventListener('click',reset);
   $('emailReload').addEventListener('click',reload);
   $('emailHistoryRefresh').addEventListener('click',reload);
+  $('emailHistoryFrom').addEventListener('change',reload);
+  $('emailHistoryTo').addEventListener('change',reload);
+  $('emailHistoryClearDates').addEventListener('click',()=>{$('emailHistoryFrom').value='';$('emailHistoryTo').value='';reload()});
   let retryReview=null,retryBusy=false;
   $('emailFailedReview').addEventListener('click',()=>{$('emailHistoryFilter').value='failed';reload()});
   $('emailRetryCancel').addEventListener('click',()=>{if(!retryBusy)$('emailRetryDialog').close()});
