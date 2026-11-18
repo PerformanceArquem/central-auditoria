@@ -42,7 +42,7 @@ test('bloqueia função duplicada introduzida pelo arquivo de homologação isol
   assert.match(r.message,/AUDITORIA BLOQUEADA:/);
   assert.match(r.message,/arquemPdf_/);
   assert.match(r.message,/homologacao-pr103-isolada\.js/);
-  assert.match(readFileSync(f.summary,'utf8'),/homologacao-pr103-isolada\\.js \\([0-9a-f]{16}\\)/);
+  assert.match(readFileSync(f.summary,'utf8'),/homologacao-pr103-isolada\.js \([0-9a-f]{16}\)/);
   assert.equal(readFileSync(join(f.input,'homologacao-pr103-isolada.js'),'utf8'),'function arquemPdf_(){return 1;}\n');
  }finally{rmSync(f.root,{recursive:true,force:true})}
 });
