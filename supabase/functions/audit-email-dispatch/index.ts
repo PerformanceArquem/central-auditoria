@@ -996,7 +996,24 @@ function appendReportSection(html:string|undefined,section:string):string{
 function receiptContext(dispatchKey:string,rec:R,from:string,to:string):ReceiptContext {
   return {dispatchKey,recipientId:rec.id,recipientName:rec.name||rec.collaborator_name,from,to,source:'sector'};
 }
-async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R, previewOnly=false, receipt?:ReceiptContext) {
+async function ccProviderSupported():Promise<boolean>{
+  // Capability check is read-only and never sends an e-mail.
+  try{
+    const response=await fetch(validUrl(),{method:'POST',redirect:'follow',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({token:E('GMAIL_MAIL_SECRET'),action:'capabilities'}),
+      signal:AbortSignal.timeout(12000)});
+    if(!response.ok)return false;
+    const data=await response.json().catch(()=>null) as R|null;
+    return data?.sucesso===true&&data?.ccSupported===true;
+  }catch{return false}
+}
+async function sendMail(email: string, subject: string, text: string, html?: string, reportData?:R, previewOnly=false, receipt?:ReceiptContext, cc:string[] = []) {
+  if(cc.length){
+    if(cc.length>10||new Set(cc).size!==cc.length||cc.some(x=>!/^[^@\s]+@arquem\.com\.br$/.test(x)||x===email.toLowerCase()))
+      throw new Error('Cópias inválidas: use até dez contatos corporativos distintos do destinatário.');
+    if(!await ccProviderSupported())throw new Error('O serviço Gmail ainda não confirma suporte a cópias (CC). Envio cancelado com segurança.');
+  }
   await assertEmailDeliveryEnabled(db);
   if (!isEmail(email)) throw new Error('Endereco de e-mail invalido');
   if (!E('GMAIL_MAIL_SECRET')) throw new Error('GMAIL_MAIL_SECRET nao configurado');
@@ -1080,7 +1097,7 @@ async function sendMail(email: string, subject: string, text: string, html?: str
   const res = await fetch(endpoint, {
     method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ token: E('GMAIL_MAIL_SECRET'), email, assunto: cleanSubject,
-      texto: cleanText, html: cleanHtml,
+      texto: cleanText, html: cleanHtml, ...(cc.length?{cc}:{}),
       ...(withAttachments?{reportData:cleanReportData}:{}) }),
     signal: AbortSignal.timeout(60000)
   });
@@ -1978,7 +1995,7 @@ async function dashboardReportAction(payload:R){
 // Apenas administradores. A seleção enviada pelo browser é revalidada no banco.
 // Histórico durável: acesso apenas via esta Edge Function (admin JWT), não expor tabela diretamente.
 async function ticketChargeHistory():Promise<Response>{
- const records=await db('audit_ticket_charge_history?select=id,recipient,subject,ticket_ids,ticket_snapshot,status,created_at,sent_at,updated_at,sent_by,error_summary&order=created_at.desc&limit=250') as R[];
+ const records=await db('audit_ticket_charge_history?select=id,recipient,cc_recipients,subject,ticket_ids,ticket_snapshot,status,created_at,sent_at,updated_at,sent_by,error_summary&order=created_at.desc&limit=250') as R[];
  return json({ok:true,items:Array.isArray(records)?records:[],
   note:'Enviado = aceite confirmado pelo serviço de e-mail; não implica leitura pelo destinatário.'});
 }
@@ -2184,6 +2201,17 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  const recipient=String(payload.recipient||'').trim().toLowerCase();
  if(!/^[^@\s]+@arquem\.com\.br$/.test(recipient))
   return json({ok:false,error:'Destinatário deve ser um e-mail corporativo @arquem.com.br.'},400);
+ const ccRaw=payload.cc??[];
+ if(!Array.isArray(ccRaw)||ccRaw.length>10||ccRaw.some(x=>typeof x!=='string'))
+   return json({ok:false,error:'Selecione até 10 contatos cadastrados em cópia.'},400);
+ const cc=ccRaw.map(x=>String(x).trim().toLowerCase());
+ if(new Set(cc).size!==cc.length||cc.some(x=>!/^[^@\s]+@arquem\.com\.br$/.test(x)||x===recipient))
+   return json({ok:false,error:'Contatos em cópia devem ser corporativos, distintos e diferentes do destinatário.'},400);
+ if(cc.length){
+  const records=await db('audit_email_recipients?select=email&active=eq.true&limit=500') as R[];
+  const allowed=new Set(records.map(x=>String(x.email||'').toLowerCase()));
+  if(cc.some(x=>!allowed.has(x)))return json({ok:false,error:'Selecione somente contatos ativos da Central para cópia.'},403);
+ }
  const message=String(payload.message||'').trim();
  if(message.length>8500)return json({ok:false,error:'O texto é muito longo.'},400);
  const requestId=String(payload.requestId||'');
@@ -2201,7 +2229,7 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  const includeGuidance=payload.includeGuidance===true;
  const draft=composeTicketCharge(found.records,recipient,message,{includeGuidance});
  if(action==='ticket_charge_preview')
-  return json({ok:true,preview:true,recipient,subject:corporateCopy(draft.subject),text:corporateCopy(draft.text),
+  return json({ok:true,preview:true,recipient,cc,ccSupported:!cc.length||await ccProviderSupported(),subject:corporateCopy(draft.subject),text:corporateCopy(draft.text),
     html:corporateCopy(draft.html),ticketCount:draft.tickets.length,ids,guidance:draft.guidance});
  if(action!=='ticket_charge_send')return json({ok:false,error:'Ação não autorizada.'},400);
  await verifyTicketChargeRepeat(ids,recipient);
@@ -2210,7 +2238,7 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   owner:x.owner,status:x.status,url:x.url}));
  // A reserva é persistida ANTES da chamada externa. Unique request_id impede duplo envio por retry.
  const record={
-  request_id:requestId,recipient,subject:draft.subject,ticket_ids:ids,
+  request_id:requestId,recipient,cc_recipients:cc,subject:draft.subject,ticket_ids:ids,
   ticket_snapshot:snapshot,status:'sending',sent_by:sender
  };
  let stored:R[];
@@ -2226,7 +2254,7 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  const rowId=String(stored[0].id);
  try{
   await sendMail(recipient,draft.subject,draft.text,draft.html,undefined,false,
-    {dispatchKey:'ticket-charge:'+requestId,recipientName:recipient,source:'ticket_charge'});
+    {dispatchKey:'ticket-charge:'+requestId,recipientName:recipient,source:'ticket_charge'},cc);
  }catch(e){
   const detail=String(err(e)||'Falha de envio').slice(0,180);
   // Pode ter havido aceite antes de uma queda na conexão: classificar como indeterminado.
@@ -2247,7 +2275,7 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   console.error('Gmail aceitou mas falhou atualização do histórico:',err(logError));
   return json({ok:false,error:'Serviço Gmail confirmou aceite, mas não foi possível finalizar o histórico. Não reenvie: confirme o registro com a gestão.',requestId},502);
  }
- return json({ok:true,sent:true,recorded:true,requestId,recipient,subject:draft.subject,
+ return json({ok:true,sent:true,recorded:true,requestId,recipient,cc,subject:draft.subject,
   ticketCount:draft.tickets.length,ids,sentAt:new Date().toISOString(),
   info:'Aceite confirmado pelo serviço Gmail. A entrega/leitura na caixa postal não foi verificada.'});
 }
