@@ -1474,7 +1474,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
             <div id="t-email-admin" class="hide">
                 <div class="mh"><div><div class="eyebrow">RELATÓRIOS · ADMINISTRAÇÃO</div><h2>Central de e-mails e destinatários</h2><p>Gerencie relatórios automáticos, testes individuais e histórico de envio sem misturar com as configurações técnicas.</p></div></div>
                 <div class="card" id="emailAdminCard" style="border-left:4px solid var(--blue)">
-  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="b" id="emailMatrixOpen">Permissões por colaborador</button><button type="button" class="b" id="emailReportReleaseOpen">Liberar relatórios</button><button type="button" class="s" id="emailAdminOpen">Gerenciar destinatários</button></div></div>
+  <div class="row" style="align-items:center;justify-content:space-between"><div><h3>✉ Relatórios automáticos por e-mail</h3><p class="subtle">Primeira tentativa às 9h de Brasília. Diário do dia útil anterior, semanal da semana fechada, mensal no dia 1º e anual da Direção em janeiro. Fechamentos aguardam a conciliação dos dados.</p></div><div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="b" id="emailMatrixOpen">Permissões por colaborador</button><button type="button" class="b" id="emailReportReleaseOpen">Liberar relatórios</button><button type="button" class="b" id="emailMonitoringOpen">Monitorar e-mails</button><button type="button" class="s" id="emailAdminOpen">Gerenciar destinatários</button></div></div>
   <section class="email-delivery-control" aria-labelledby="emailDeliveryTitle">
     <div><h3 id="emailDeliveryTitle">Envio de e-mails</h3><div id="emailDeliveryStatus" role="status" aria-live="polite">Consultando situação dos e-mails…</div><p id="emailDeliveryHint" class="subtle">Chave geral para relatórios, Triagem e envios manuais.</p></div>
     <div class="email-delivery-actions"><label class="email-delivery-switch"><input id="emailDeliveryToggle" type="checkbox" role="switch" aria-label="Envio de e-mails" aria-describedby="emailDeliveryHint" aria-checked="false" disabled><span>Ligar / desligar</span></label><button type="button" class="s" id="emailDeliveryRefresh" aria-label="Atualizar situação dos e-mails">↻ Atualizar</button></div>
@@ -1578,6 +1578,10 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
       <div id="emailOfficialPreviewResult" class="hide" style="border:1px solid #d6e1f0;background:#fff;border-radius:10px;padding:14px;margin-top:12px"></div>
     </div>
     <h3 style="margin-top:22px">Destinatários cadastrados</h3><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Relatório</th><th>Colaborador</th><th>Frequências</th><th>Ativo</th><th>Ação</th></tr></thead><tbody id="emailRecipients"><tr><td colspan="7">Abra o módulo para carregar.</td></tr></tbody></table></div>
+    <p class="subtle" style="margin-top:12px">O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
+  </div>
+  <section id="emailMonitoringPanel" class="card" aria-label="Monitoramento de e-mails" style="margin-top:18px">
+    <div class="row" style="align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px"><h2 style="margin:0">Monitoramento de e-mails</h2><span class="subtle">Envios e aberturas detectadas</span></div>
     <div class="row" style="align-items:center;justify-content:space-between;margin-top:22px;gap:12px;flex-wrap:wrap">
       <div><h3 style="margin:0">Histórico e rastreabilidade dos e-mails</h3><small class="subtle">“Enviado” significa que o provedor aceitou a mensagem, não que ela foi lida. Sem registro não significa necessariamente falha.</small></div>
       <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
@@ -1589,11 +1593,10 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
     </div>
     <div id="emailHistoryKpis" class="kpis" style="margin:12px 0"></div>
     <div class="tw" style="max-height:400px;overflow:auto"><table><thead><tr><th>Agendado/registrado</th><th>Destinatário</th><th>Relatório</th><th>Período</th><th>Situação</th><th>Enviado em</th><th>Detalhes</th></tr></thead><tbody id="emailDispatches"></tbody></table></div>
-    <h3 style="margin-top:22px">Aberturas detectadas e confirmações de leitura</h3>
-    <p class="subtle">O carregamento de imagem pode registrar uma abertura detectada, mas não comprova leitura (proxies e scanners podem gerar registros). A confirmação de leitura exige clique voluntário. Use Atualizar para consultar novos registros.</p>
-    <div class="tw" style="max-height:400px;overflow:auto"><table><thead><tr><th>Destinatário</th><th>Relatório</th><th>Período</th><th>Enviado em</th><th>Abertura detectada</th><th>Leitura</th><th>Confirmado em</th></tr></thead><tbody id="emailReadReceipts"><tr><td colspan="7">Abra o módulo para carregar.</td></tr></tbody></table></div>
-    <p class="subtle" style="margin-top:12px">O cadastro usa a sessão atual e exige perfil administrador. Disparos dependem da Edge Function e do agendamento no Supabase; esta tela não envia e-mails por conta própria.</p>
-  </div>
+    <h3 style="margin-top:22px">Aberturas detectadas</h3>
+    <p class="subtle">O carregamento de imagem pode registrar uma abertura detectada, mas não comprova leitura (proxies e scanners podem gerar registros). O carregamento de imagem não garante leitura humana. Use Atualizar para consultar novos registros.</p>
+    <div class="tw" style="max-height:400px;overflow:auto"><table><thead><tr><th>Destinatário</th><th>Relatório</th><th>Período</th><th>Enviado em</th><th>Abertura detectada</th><th>Situação</th></tr></thead><tbody id="emailReadReceipts"><tr><td colspan="6">Abra o módulo para carregar.</td></tr></tbody></table></div>
+  </section>
 </div>
             </div>
             <div id="t-cfg" class="hide">
@@ -5384,11 +5387,11 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
         const receipts=await receiptQuery.order('created_at',{ascending:false}).limit(150);
         if(receipts.error)throw receipts.error;
         $('emailReadReceipts').innerHTML=(receipts.data||[]).map(x=>{
-          const status=x.confirmed_at?'Leitura confirmada':!x.delivered_at?'Envio não confirmado':Date.parse(x.expires_at)<=Date.now()?'Link expirado':x.first_opened_at?'Abertura detectada, leitura não confirmada':'Aguardando confirmação';
+          const status=!x.delivered_at?'Envio não confirmado':x.first_opened_at?'Abertura detectada':'Sem abertura detectada';
           const period=x.period_from&&x.period_to?displayPeriodDate(x.period_from)+' a '+displayPeriodDate(x.period_to):'Conforme relatório';
-          return '<tr><td>'+esc(x.recipient_name)+'<small style="display:block">'+esc(x.recipient_email)+'</small></td><td>'+esc(x.subject)+'</td><td>'+esc(period)+'</td><td>'+esc(time(x.delivered_at))+'</td><td>'+esc(time(x.first_opened_at))+'</td><td>'+esc(status)+'</td><td>'+esc(time(x.confirmed_at))+'</td></tr>';
-        }).join('')||'<tr><td colspan="7">Nenhuma confirmação solicitada. O acompanhamento começa nos novos envios; relatórios antigos não serão reenviados.</td></tr>';
-      }catch(e){$('emailReadReceipts').innerHTML='<tr><td colspan="7">Não foi possível consultar as confirmações de leitura. Atualize novamente em instantes.</td></tr>';console.warn('Consulta de confirmações indisponível');}
+          return '<tr><td>'+esc(x.recipient_name)+'<small style="display:block">'+esc(x.recipient_email)+'</small></td><td>'+esc(x.subject)+'</td><td>'+esc(period)+'</td><td>'+esc(time(x.delivered_at))+'</td><td>'+esc(time(x.first_opened_at))+'</td><td>'+esc(status)+'</td></tr>';
+        }).join('')||'<tr><td colspan="7">Nenhum envio monitorado encontrado para o período. O acompanhamento de aberturas começa nos novos envios; relatórios antigos não serão reenviados.</td></tr>';
+      }catch(e){$('emailReadReceipts').innerHTML='<tr><td colspan="6">Não foi possível consultar as confirmações de leitura. Atualize novamente em instantes.</td></tr>';console.warn('Consulta de confirmações indisponível');}
       loaded=true;say('Cadastros carregados. O envio automático precisa estar ativado no Supabase.');
       try{await loadMovideskDirectory(true)}catch(err){console.warn('Diretório do Movidesk indisponível:',err)}
     }catch(e){say('Não foi possível carregar: '+e.message)}finally{loading=false}
@@ -5580,6 +5583,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
   $('emailCoverageRefresh').addEventListener('click',()=>loadMovideskDirectory(true).catch(err=>{$('emailCoverageSummary').textContent='Erro ao consultar cobertura: '+(err?.message||err)}));
   $('emailNew').addEventListener('click',reset);
   $('emailReload').addEventListener('click',reload);
+  $('emailMonitoringOpen').addEventListener('click',()=>{$('emailMonitoringPanel').scrollIntoView({behavior:'smooth',block:'start'});reload()});
   $('emailHistoryRefresh').addEventListener('click',reload);
   $('emailHistoryFrom').addEventListener('change',reload);
   $('emailHistoryTo').addEventListener('change',reload);
