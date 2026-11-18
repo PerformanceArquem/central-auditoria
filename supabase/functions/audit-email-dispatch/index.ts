@@ -10,7 +10,7 @@ import {dashboardReport} from "./dashboard-report.ts";
 import {KEILA_PRODUCTION_FLOW_RECIPIENT_ID,buildKeilaProductionFlow,keilaProductionReport} from "./production-flow-keila.ts";
 import {composeTicketCharge} from "./ticket-charge.ts";
 import {chargeTicketLookup} from "./ticket-charge-lookup.ts";
-import {internalChargeNote} from "./ticket-charge-internal.ts";
+import {internalChargeNote,validateTimeLog} from "./ticket-charge-internal.ts";
 import {processChargeInternalNote} from "./ticket-charge-note-worker.ts";
 import {corporateCopy,corporatePacket,corporateFallbackHtml,assertCorporateCopy} from "./corporate-mail-policy.ts";
 import {assertEmailDeliveryEnabled,emailDeliveryAdmin} from "../_shared/email-delivery-control.ts";
@@ -2227,6 +2227,11 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   const allowed=new Set(records.map(x=>String(x.email||'').toLowerCase()));
   if(cc.some(x=>!allowed.has(x)))return json({ok:false,error:'Selecione somente contatos ativos da Central para cópia.'},403);
  }
+ const timeLogRaw=payload.timeLog||null;
+ if(timeLogRaw&&!payload.registerInternalNote)return json({ok:false,error:'Apontamentos de horas exigem ação interna registrada.'},400);
+ if(timeLogRaw&&ids.length!==1)return json({ok:false,error:'Para evitar contagem duplicada, faça o apontamento de horas em apenas um chamado por envio.'},400);
+ let timeLog=null;
+ try{if(timeLogRaw)timeLog=validateTimeLog(timeLogRaw)}catch(ex){return json({ok:false,error:String((ex as Error).message||ex)},400)}
  const registerInternalNote=payload.registerInternalNote!==false;
  const message=String(payload.message||'').trim();
  if(message.length>8500)return json({ok:false,error:'O texto é muito longo.'},400);
@@ -2245,11 +2250,15 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  const includeGuidance=payload.includeGuidance===true;
  const draft=composeTicketCharge(found.records,recipient,message,{includeGuidance});
  if(action==='ticket_charge_preview')
-  return json({ok:true,preview:true,recipient,cc,registerInternalNote,ccSupported:!cc.length||await ccProviderSupported(),subject:corporateCopy(draft.subject),text:corporateCopy(draft.text),
+  return json({ok:true,preview:true,recipient,cc,registerInternalNote,timeLog,ccSupported:!cc.length||await ccProviderSupported(),subject:corporateCopy(draft.subject),text:corporateCopy(draft.text),
     html:corporateCopy(draft.html),ticketCount:draft.tickets.length,ids,guidance:draft.guidance});
  if(action!=='ticket_charge_send')return json({ok:false,error:'Ação não autorizada.'},400);
  await verifyTicketChargeRepeat(ids,recipient);
  const sender=await ticketChargeAdminUser(req);
+ if(registerInternalNote){
+  const mapped=await db('audit_movidesk_note_profiles?user_id=eq.'+encodeURIComponent(sender)+'&active=eq.true&select=user_id&limit=1') as R[];
+  if(mapped.length!==1)return json({ok:false,error:'Não há perfil Movidesk validado para registrar ação interna. Nenhum e-mail enviado.'},403);
+ }
  const snapshot=draft.tickets.map(x=>({id:x.id,subject:x.subject,client:x.client,sector:x.sector,
   owner:x.owner,status:x.status,url:x.url}));
  // A reserva é persistida ANTES da chamada externa. Unique request_id impede duplo envio por retry.
@@ -2270,8 +2279,11 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  const rowId=String(stored[0].id);
  if(registerInternalNote){
   const notes=draft.tickets.map(detail=>({
-   request_id:requestId,ticket_id:detail.id,status:'held',
-   note_body:internalChargeNote(requestId,detail,recipient,cc).text
+   request_id:requestId,ticket_id:detail.id,status:'held',created_by_user:sender,
+   ...(timeLog?{time_log:timeLog}:{}),
+   note_body:internalChargeNote(requestId,detail,recipient,cc).text+
+    (timeLog?'\nAvaliação de chamados realizada em '+timeLog.date+
+     ' das '+timeLog.start+' às '+timeLog.end+' ('+timeLog.minutes+' minutos reais confirmados pelo usuário).':'')
   }));
   try{
    const queued=await db('audit_ticket_charge_internal_notes?on_conflict=request_id,ticket_id',{
