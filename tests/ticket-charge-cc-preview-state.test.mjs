@@ -19,7 +19,10 @@ test('preview renders while CC unavailable, without enabling validation or sendi
  assert.match(preview,/alarmEmailRequestId=ccBlocked\?'':crypto\.randomUUID\(\)/);
  assert.match(preview,/\$\('alarmEmailValidate'\)\.disabled=ccBlocked/);
  assert.match(preview,/\$\('alarmEmailPreviewArea'\)\.classList\.remove\('hide'\)/);
- assert.match(preview,/Verifique suporte a CC ou desmarque as cópias/);
+ assert.match(preview,/const ccReason=data\.ccDiagnostic\?\.reason/);
+ assert.match(preview,/ccReasonMessage\[ccReason\]/);
+ assert.match(preview,/desmarcar todas as cópias e gerar outra prévia/);
+ assert.match(server,/ccDiagnostic:ccDiagnostic\?/);
 });
 test('server refuses CC validation while provider has not confirmed support',()=>{
  assert.match(validate,/if\(cc\.length&&!await ccProviderSupported\(\)\)/);
