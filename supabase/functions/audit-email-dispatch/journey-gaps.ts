@@ -11,6 +11,9 @@ export function calculateJourneyGaps(minutesByPerson:Iterable<number>,targetPerP
     referenceTargetMinutes:Math.round(capacity*minutes.length),
     referenceMinimumMinutes:Math.round(minimum*minutes.length),
     targetGapMinutes:Math.round(minutes.reduce((sum,value)=>sum+Math.max(0,capacity-value),0)),
-    minimumGapMinutes:Math.round(minutes.reduce((sum,value)=>sum+Math.max(0,minimum-value),0))
+    minimumGapMinutes:Math.round(minutes.reduce((sum,value)=>sum+Math.max(0,minimum-value),0)),
+    // Signed balances retain surplus and deficit, unlike shortage-only gap indicators.
+    minimumBalanceMinutes:Math.round(minutes.reduce((sum,value)=>sum+value-minimum,0)),
+    targetBalanceMinutes:Math.round(minutes.reduce((sum,value)=>sum+value-capacity,0))
   };
 }
