@@ -17,7 +17,7 @@ export async function receiptToken(secret: string, dispatchKey: string) {
 }
 export async function openSignalToken(secret: string, dispatchKey: string) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), {name:'HMAC',hash:'SHA-256'}, false, ['sign']);
-  return bytesHex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('arquem-open-signal-v1\\n'+dispatchKey)));
+  return bytesHex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('arquem-open-signal-v1\n'+dispatchKey)));
 }
 export function openSignalContent(token: string) {
   const url = 'https://dvaaicqajlppuigeyejr.supabase.co/functions/v1/audit-open-signal?t='+encodeURIComponent(token);
