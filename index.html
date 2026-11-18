@@ -4,12 +4,12 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
         <title>Auditoria de Chamados · Ticket Manager</title>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+        <script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+        <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+        <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+        <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+        <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
         <style>
             :root {
                 --navy: #14213d;
@@ -903,6 +903,8 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 @media(prefers-reduced-motion:reduce){main .card,main .row.noprint button,main .card button{transition:none}}
 @media print{main .card{box-shadow:none!important;border:1px solid #d1d5db!important;background:#fff!important}}
 </style>
+<link rel="stylesheet" href="/ui/workspace.css">
+<script src="/ui/workspace.js" defer></script>
 </head>
     <body class="tm-locked">
         <form id="tm-login" class="card" hidden>
@@ -929,6 +931,8 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
         </header>
         <nav id="tabs" aria-label="Menu principal">
           <div class="nav-head"><strong>MENU PRINCIPAL</strong><button type="button" id="navCollapseAll" aria-label="Recolher todas as pastas" title="Recolher todas as pastas">−</button></div>
+          <label class="workspace-nav-search"><span>ENCONTRAR MÓDULO · CTRL K</span><input type="search" id="workspaceNavSearch" placeholder="Buscar módulo" autocomplete="off"></label>
+          <p id="workspaceNavEmpty" role="status" hidden>Nenhum módulo encontrado.</p>
           <details class="nav-folder" data-folder="0" open>
             <summary><span class="nav-folder-icon" aria-hidden="true">◈</span><span>Monitoramento</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary>
             <div class="nav-folder-items">
@@ -974,6 +978,11 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
           </details>
         </nav>
         <main>
+            <div class="workspace-bar noprint">
+              <div class="workspace-location"><button type="button" id="workspaceMenuToggle" aria-controls="tabs" aria-expanded="false">Menu</button><span id="workspaceCategory">Central de Auditoria</span><span aria-hidden="true">/</span><strong id="workspaceCurrent">Início</strong></div>
+              <div class="workspace-tools"><label for="workspaceDensity">Visualização</label><select id="workspaceDensity"><option value="comfortable">Confortável</option><option value="compact">Compacta</option></select></div>
+            </div>
+            <div class="workspace-section-links noprint" id="workspaceSections" role="navigation" aria-label="Seções deste relatório" hidden></div>
 
             <div id="t-report-preview" class="hide">
               <div class="mh"><div><div class="eyebrow">RELATÓRIOS · SOMENTE LEITURA</div><h2>Pré-visualização dos colaboradores</h2><p>Resumo diário e semanal dos apontamentos sincronizados pelo Movidesk.</p></div></div>
@@ -1733,27 +1742,30 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
             </div>
             <div id="app" class="hide">
                 <div class="card filters">
+                    <div class="filter-heading"><h3>Período e filtros</h3><span class="filter-summary" id="filterSummary" role="status">Selecione os critérios da análise</span></div>
                     <div class="row" id="filters">
                         <div class="fg">
-                            <label>Início</label>
+                            <label for="fStart">Início</label>
                             <input type="date" id="fStart" onchange="applyFilters()">
                         </div>
                         <div class="fg">
-                            <label>Fim</label>
+                            <label for="fEnd">Fim</label>
                             <input type="date" id="fEnd" onchange="applyFilters()">
                         </div>
                     </div>
-                    <div class="row" style="margin-top:12px">
-                        <span style="align-self:center;font-size:12px;font-weight:700;color:var(--muted)">Período rápido:</span>
+                    <details class="filter-advanced"><summary>Mais filtros <span id="filterAdvancedCount"></span></summary><div id="filtersAdvanced"></div></details>
+                    <div class="filter-footer"><div class="filter-periods">
+                        <span>Período rápido:</span>
                         <button class="s" onclick="quick('today')">Hoje</button>
                         <button class="s" onclick="quick('7')">Últimos 7 dias</button>
                         <button class="s" onclick="quick('m')">Mês atual</button>
                         <button class="s" onclick="quick('all')">Tudo carregado</button>
                         <button class="s" onclick="resetFilters()">Limpar filtros</button>
+                        </div><div class="filter-exports" aria-label="Exportar análise">
                         <button class="g b" onclick="exportXLSX()">Excel da aba</button>
                         <button class="b" style="background:var(--bad)" onclick="exportPDF()">PDF da aba</button>
                         <button class="s" onclick="print()">Imprimir</button>
-                    </div>
+                    </div></div>
                 </div>
                 <details class="card noprint" id="legend">
                     <summary>Como ler horas e dias (clique para abrir)</summary>
@@ -2921,13 +2933,13 @@ function start(src,keep){
 function buildFilters(keep){
   const box=$('filters'),old={};
   FIELDS.forEach(([k])=>{const e=$('f_'+k);if(e)old[k]=e.value});
-  box.querySelectorAll('.dyn').forEach(n=>n.remove());
+  box.closest('.filters').querySelectorAll('.dyn').forEach(n=>n.remove());
   FIELDS.forEach(([k,label])=>{
     const vals=[...new Set(raw.map(r=>r[k]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-    const d=document.createElement('div');d.className='fg dyn';
-    d.innerHTML=`<label>${label}</label><select id="f_${k}" onchange="applyFilters()"><option value="">Todos</option>${vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>`;
+    const d=document.createElement('div');d.className='fg dyn';d.dataset.field=k;
+    d.innerHTML=`<label for="f_${k}">${label}</label><select id="f_${k}" onchange="applyFilters()"><option value="">Todos</option>${vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>`;
     if(old[k]&&vals.includes(old[k])) d.querySelector('select').value=old[k];
-    box.appendChild(d);
+    (['owner_name','sector','client_name'].includes(k)?box:$('filtersAdvanced')).appendChild(d);
   });
   if(!keep){$('fStart').value=$('startDate').value;$('fEnd').value=$('endDate').value}
   initPivot();
@@ -2939,6 +2951,9 @@ function applyFilters(){
   const q=(ACT==='load'||ACT==='cfg'||ACT==='diag')?[]:qn(ACT).split(' ').filter(Boolean);lastQ=q.join(' ');
   rows=raw.filter(r=>(!s||!r.date||r.date>=s)&&(!e||!r.date||r.date<=e)&&sel.every(([k,v])=>r[k]===v)&&(!q.length||q.every(w=>hay(r).includes(w))));
   const qe=$('qc_'+ACT);if(qe) qe.textContent=q.length?`${rows.length} lançamento(s) encontrados`:'';
+  const advanced=sel.filter(([key])=>!['owner_name','sector','client_name'].includes(key)).length;
+  $('filterAdvancedCount').textContent=advanced?'('+advanced+' ativo'+(advanced>1?'s':'')+')':'';
+  $('filterSummary').textContent=rows.length.toLocaleString('pt-BR')+' de '+raw.length.toLocaleString('pt-BR')+' lançamentos'+(sel.length?' · '+sel.length+' filtro'+(sel.length>1?'s':'')+' ativo'+(sel.length>1?'s':''):'');
   try{render()}catch(e){console.error(e);$('status').textContent='Erro ao desenhar: '+e.message}
 }
 function resetFilters(){Object.keys(CFLT).forEach(k=>delete CFLT[k]);FIELDS.forEach(([k])=>$('f_'+k).value='');$('fStart').value='';$('fEnd').value='';applyFilters()}
@@ -2960,6 +2975,20 @@ function render(){
   $('kA').textContent=new Set(rows.map(r=>r.owner_name)).size;
   $('kC').textContent=new Set(rows.map(r=>r.client_name)).size;
 
+  if(ACT==='entries')renderEntries(kd);
+  if(ACT==='diag')renderDiag();
+  if(ACT==='live'){renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();}
+  if(ACT==='proj'){renderProj(c);renderBudget(c);renderForecastAudit();renderBot(c);}
+  if(ACT==='occ')renderOcc(c);
+  if(ACT==='mgmt')renderMgmt(c);
+  if(ACT==='vip')renderVip(c);
+  if(ACT==='charts'){renderCharts(c);renderComparisons();}
+  if(ACT==='pivot')renderPivot();
+  // Global alarm counts stay fresh; its tables/charts render only in the open module.
+  renderAlerts();
+  enhanceTables();
+}
+function renderEntries(kd){
   const LIM=1000;
   $('tEntries').innerHTML=rows.slice(0,LIM).map(r=>{
     const u=ticketUrl(r.ticket_id);
@@ -2968,9 +2997,6 @@ function render(){
   $('cap').textContent=rows.length>LIM?`Mostrando ${LIM} de ${rows.length} lançamentos. O Excel exporta todos.`:'';
 
 
-  renderPivot();renderDiag();renderLiveDaily();if(ACT==='live'&&!window.managerReportEdited)generateManagerReport();
-  renderProj(c);renderBudget(c);renderForecastAudit();renderOcc(c);renderMgmt(c);renderVip(c);renderCharts(c);renderComparisons();renderBot(c);renderAlerts();
-  enhanceTables();
 }
 
 
@@ -3509,6 +3535,19 @@ async function alarmEmailSend(){
 function renderAlerts(){
   if(!$('t-alerts'))return;
   const all=alarmList(),limit=alarmThreshold(),alerted=all.filter(x=>x.idle>=limit);
+  const header=$('headerSiren'),headerText=$('headerSirenText'),nav=$('navAlarmCount');
+  const worst=all[0];
+  header.classList.toggle('hot',alerted.length>0);
+  headerText.textContent=alerted.length?
+    `${alerted.length} parado(s) ≥ ${limit}d · mais antigo #${worst.id} (${worst.idle}d)`:
+    !TK.size?'Aguardando tickets do Movidesk':all.length?`Sem alertas ≥ ${limit} dias`:'Sem chamados abertos classificados';
+  nav.textContent=String(alerted.length);nav.classList.toggle('hot',alerted.length>0);
+  const summary=$('executiveAlarmText');
+  if(summary)summary.textContent=alerted.length?
+    `${alerted.length} ticket(s) sem atualização há ${limit} dias ou mais em ${new Set(alerted.map(x=>x.team)).size} setor(es). Maior paralisação: #${worst.id}, ${worst.idle} dias (${worst.team}).`:
+    !TK.size?'Aguardando carregamento dos tickets do Movidesk.':
+    `Nenhum chamado acima do limite de ${limit} dias entre os ${all.length} abertos identificados.`;
+  if(ACT!=='alerts')return;
   alarmSetTeamOptions(all);
   const teams=new Map();
   all.forEach(t=>{
@@ -3540,18 +3579,6 @@ function renderAlerts(){
     (stamp?`varredura histórica ${complete?'concluída':'parcial'} em ${new Date(stamp).toLocaleString('pt-BR')}`:
       'varredura histórica completa ainda não confirmada; use o botão para buscar antigos fora do período de horas')+
     missingLabel+' · ¹ sem lastUpdate, dias estimados desde a abertura.';
-  const header=$('headerSiren'),headerText=$('headerSirenText'),nav=$('navAlarmCount');
-  const worst=all[0];
-  header.classList.toggle('hot',alerted.length>0);
-  headerText.textContent=alerted.length?
-    `${alerted.length} parado(s) ≥ ${limit}d · mais antigo #${worst.id} (${worst.idle}d)`:
-    !TK.size?'Aguardando tickets do Movidesk':all.length?`Sem alertas ≥ ${limit} dias`:'Sem chamados abertos classificados';
-  nav.textContent=String(alerted.length);nav.classList.toggle('hot',alerted.length>0);
-  const summary=$('executiveAlarmText');
-  if(summary)summary.textContent=alerted.length?
-    `${alerted.length} ticket(s) sem atualização há ${limit} dias ou mais em ${new Set(alerted.map(x=>x.team)).size} setor(es). Maior paralisação: #${worst.id}, ${worst.idle} dias (${worst.team}).`:
-    !TK.size?'Aguardando carregamento dos tickets do Movidesk.':
-    `Nenhum chamado acima do limite de ${limit} dias entre os ${all.length} abertos identificados.`;
   if(window.Chart&&$('chIdleSector')){
     const chartGroups=groups.slice(0,15);
     mkc('chIdleSector',{type:'bar',data:{labels:chartGroups.map(g=>g.team),
@@ -3627,9 +3654,12 @@ function showTab(t){
   revealActiveNavigation(t);
   $('t-cfg').classList.toggle('hide',t!=='cfg');
   ['live','alerts','mgmt','vip','charts','entries','pivot','proj','occ','diag','report-preview','email-admin','support-quality','production-audit','zenvia-voice','intelligence-triage','client-impact'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
-  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='zenvia-voice')window.zenviaVoiceInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='intelligence-triage')window.intelligenceTriageInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();liveStatus()} if(t==='alerts'){renderAlerts();alarmEmailHistoryLoad();} if(t==='charts'){if(raw.length)renderCharts(R());renderComparisons();if($('cmpSource')?.value==='direct')refreshDirectComparisons(false)}
+  if(t==='report-preview' && window.previewInit){window.previewInit();window.executiveReportInit?.();} if(t==='support-quality')window.supportQualityInit?.(); if(t==='zenvia-voice')window.zenviaVoiceInit?.(); if(t==='production-audit')window.productionAuditInit?.(); if(t==='intelligence-triage')window.intelligenceTriageInit?.(); if(t==='proj')loadForecastSnapshots(); if(t==='client-impact')window.clientImpactInit?.(); if(t==='live'){showLiveEvents();liveStatus()} if(t==='alerts')alarmEmailHistoryLoad();
   $('filters').closest('.filters').classList.toggle('hide',t==='load'||t==='cfg'||t==='diag'||t==='email-admin'||t==='report-preview'||t==='support-quality'||t==='production-audit'||t==='zenvia-voice'||t==='intelligence-triage'||t==='client-impact');
   if(raw.length&&!['load','cfg','diag','alerts','email-admin','report-preview','support-quality','production-audit','zenvia-voice','intelligence-triage','client-impact'].includes(t)&&qn(t)!==lastQ) applyFilters();
+  else render();
+  if(t==='charts'&&$('cmpSource')?.value==='direct')refreshDirectComparisons(false);
+  document.dispatchEvent(new CustomEvent('audit:tabchange',{detail:{tab:t}}));
 }
 $('tabs').addEventListener('click',e=>{const btn=e.target.closest('button');if(btn&&btn.dataset.t)showTab(btn.dataset.t)});
 
@@ -4044,10 +4074,9 @@ function renderPivot(){
 const CH={},PAL=['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#475569','#ea580c'];
 const HOUR_CHARTS=new Set(['chDay','chWeek','chCli','chAct']);
 const mkc=(id,cfg)=>{
-  if(CH[id])CH[id].destroy();
   if(!window.Chart)return;
   cfg.options=cfg.options||{};
-  if(cfg.options.animation===undefined)cfg.options.animation={duration:1200,easing:'easeOutQuart'};
+  if(cfg.options.animation===undefined)cfg.options.animation=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?false:{duration:350,easing:'easeOutQuart'};
   const hourChart=HOUR_CHARTS.has(id)||(['chMonthly','chAnnual'].includes(id)&&$('cmpMetric')?.value==='hours');
   if(hourChart){
     cfg.options.plugins=cfg.options.plugins||{};
@@ -4060,6 +4089,11 @@ const mkc=(id,cfg)=>{
     cfg.options.scales[axis]=cfg.options.scales[axis]||{};
     cfg.options.scales[axis].ticks={...(cfg.options.scales[axis].ticks||{}),callback:value=>H(Number(value))};
   }
+  const previous=CH[id];
+  if(previous&&previous.canvas===$(id)&&previous.config.type===cfg.type){
+    previous.data=cfg.data;previous.options=cfg.options;previous.update('none');return;
+  }
+  if(previous)previous.destroy();
   CH[id]=new Chart($(id),cfg);
 };
 const rangeDays=(a,b)=>{const o=[];for(let d=new Date(a+'T12:00:00'),x=new Date(b+'T12:00:00');d<=x;d.setDate(d.getDate()+1))o.push(iso(d));return o};
@@ -4434,7 +4468,7 @@ function sortTable(t,c,d){
 }
 function enhanceTables(){
   const saved=colState();
-  document.querySelectorAll('#app .tw table').forEach(t=>{
+  document.querySelectorAll('#app #t-'+ACT+' .tw table').forEach(t=>{
     const key=tkey(t);if(!key||key==='pvTable'||!t.tHead) return;
     unperm(t,ORD[key]);const ths=[...t.tHead.rows[0].cells];
     ths.forEach((h,ix)=>{if(h.dataset.n==null){h.dataset.i=ix;h.draggable=true;h.insertAdjacentHTML('beforeend','<span class="rz" title="Arraste para mudar a largura; duplo clique restaura"></span>');h.dataset.n=h.textContent;h.classList.add('sortable');h.title='Clique para ordenar; arraste o título para mover a coluna';const a=document.createElement('span');a.className='ar';h.appendChild(a);h.insertAdjacentHTML('beforeend','<button class="fb" type="button" title="Filtrar por nome" aria-label="Filtrar esta coluna">▾</button>')}});
