@@ -9,6 +9,7 @@
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
         <script defer src="audit-readonly-insights-ui.js"></script>
+        <script defer src="audit-alert-policy-ui.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
         <style>
@@ -1902,6 +1903,30 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                         <p class="coverage-note" id="alarmCoverage" role="status">Aguardando a leitura dos chamados.</p>
                         <div class="kpis alert-kpis" id="alertKpis"></div>
                     </div>
+                    <section class="card noprint" id="policyPreviewPanel" aria-label="Simular políticas de cobrança" style="margin:12px 0">
+                        <div class="alert-heading">
+                            <div><div class="eyebrow">ETAPA 2 · REGRAS POR SETOR · SEM ENVIOS</div>
+                              <h3>Simulador de cobrança e escalonamento</h3>
+                              <p class="subtle">Classifica alertas preventivos, SLA vencido, paralisação e candidatos a escalonamento. Não publica cobranças ou designa gestores automaticamente.</p></div>
+                            <div class="alert-hero-actions"><div class="fg">
+                              <label for="policyPreviewTeam">Equipe</label>
+                              <select id="policyPreviewTeam">
+                                <option value="Implantação" selected>Implantação</option>
+                                <option value="Produção">Produção</option>
+                                <option value="Suporte">Suporte</option>
+                                <option value="Inteligência">Inteligência</option>
+                              </select></div>
+                              <button type="button" class="b" id="policyPreviewRun" onclick="runPolicyPreview()">Simular sem enviar</button>
+                            </div>
+                        </div>
+                        <p id="policyPreviewStatus" class="coverage-note" role="status">Nenhuma simulação realizada. Envio e publicação não autorizados.</p>
+                        <p id="policyPreviewMetrics" class="subtle" aria-live="polite"></p>
+                        <div class="tw"><table><thead><tr>
+                          <th>Chamado</th><th>Responsável atual</th><th>Equipe</th><th>Regra</th>
+                          <th>Vencimento SLA</th><th>Última ação real</th><th>Destinatário previsto</th><th>Prévia</th>
+                        </tr></thead><tbody id="policyPreviewRows"><tr><td colspan="8">Selecione a equipe e execute a simulação.</td></tr></tbody></table></div>
+                        <p class="subtle">Proposta de regras: preventivo até 24h antes do vencimento; corretivo para SLA vencido; revisão do gestor após 72h de atraso e 48h sem ação comprovada; alerta de inatividade após 7 dias. Os prazos são contados em horas corridas a partir das datas do Movidesk. Escalonamento requer conferência e cadastro de gestor; não há histórico real de envios vinculado nesta etapa.</p>
+                    </section>
                     <section class="card noprint" id="auditInsightsPanel" aria-label="Prévia da auditoria inteligente" style="margin:12px 0">
                         <div class="alert-heading">
                             <div><div class="eyebrow">ETAPA 1 · HOMOLOGAÇÃO · SOMENTE LEITURA</div><h3>Auditoria inteligente — indicadores e prévias</h3>
