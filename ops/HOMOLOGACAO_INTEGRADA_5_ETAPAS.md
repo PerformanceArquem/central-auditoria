@@ -63,3 +63,35 @@ horas reais, controle de acesso e ausência de escritas.
 
 **Status:** esta etapa valida somente testes automatizados.
 Homologação visual e operacional com dados reais não foi realizada.
+
+
+## Contrato de datas e status confirmado na homologação de leitura
+
+A documentação oficial do Movidesk declara UTC para slaSolutionDate,
+lastActionDate e ownerHistories.changedDate, embora a API serialize algumas
+datas sem Z ou offset explícito. Fonte:
+https://atendimento.movidesk.com/kb/pt-br/article/256/movidesk-ticket-api
+
+- O parser unificado audit-movidesk-datetime.cjs trata esses valores sem
+  offset como UTC e rejeita datas inválidas. **Não** aplica UTC-03 às datas
+  de origem antes do cálculo; só converte para America/Sao_Paulo ao exibir.
+- Chamados com baseStatus Resolved ou Closed não integram filas abertas mesmo
+  quando closed_at_source está nulo. O status é a evidência de encerramento.
+- A falta de slaSolutionDate impede alerta por vencimento. A revisão de
+  Qualidade pode propor conferir o preenchimento, mas isso não comprova
+  descumprimento de norma, nem autoriza abrir NC.
+- ownerHistories com equipe, data ou ordem duvidosa não comprova tempo na
+  equipe; o indicador deve permanecer ausente e ser revisado.
+- Apontamentos somente geram horas quando existem duration_minutes válidos
+  com data de trabalho dentro da janela do comparativo.
+
+**Escopo da verificação:** metadados e totais agregados por consulta
+somente leitura. Nenhuma identificação de pessoa, cliente ou ticket real foi
+copiada para o repositório. A cobertura do histórico completo e o teste
+visual autenticado continuam pendentes.
+
+Testes adicionais:
+- tests/audit-movidesk-datetime.test.mjs — UTC sem Z, precisão, fuso de
+  exibição e rejeição de datas inválidas;
+- tests/audit-integrated-homologation.test.mjs — status Resolved sem
+  closed_at_source e chamados ativos sem SLA.
