@@ -1,3 +1,4 @@
+import {sectorEntries,validEntriesPeriod} from "./sector-entries.ts";
 import {assertFailedRetry,RETRY_POLICY} from "./failed-delivery-policy.ts";
 import {buildComparisons,renderComparisons,comparisonWindow,COMPARISON_POLICY} from "./report-comparisons.ts";
 import {voiceReportEligible,collectVoiceReport,composeVoiceChat} from "./voice-chat-report.ts";
@@ -2004,6 +2005,16 @@ async function dashboardReportAction(payload:R){
  });
  return json(result);
 }
+async function sectorEntriesAction(payload:R) {
+ const from=String(payload.from??''),to=String(payload.to??'');
+ if(!validEntriesPeriod(from,to,dateBR()))return json({ok:false,error:'Informe um período válido até a data de hoje.'},400);
+ const [tickets,checkpoint]=await Promise.all([
+  list('audit_direct_tickets','?select=ticket_id,owner_histories:payload->ownerHistories&order=ticket_id.asc',100000),
+  state()
+ ]);
+ const report=sectorEntries(tickets,from,to);
+ return json({ok:true,from,to,...report,historyComplete:checkpoint.completed===true&&!checkpoint.last_error&&report.incomplete===0});
+}
 // Apenas administradores. A seleção enviada pelo browser é revalidada no banco.
 // Histórico durável: acesso apenas via esta Edge Function (admin JWT), não expor tabela diretamente.
 async function ticketChargeHistory():Promise<Response>{
@@ -2626,7 +2637,7 @@ async function handleRequest(req: Request): Promise<Response> {
       try{return json(await emailDeliveryAdmin(payload,req,db,E,validUrl()));}
       catch(ex){return json({ok:false,error:err(ex)},409);}
     }
-    if (action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_cc_health' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_validate' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
+    if (action === 'voice_chat_preview' || action === 'ticket_charge_capabilities' || action === 'ticket_charge_cc_health' || action === 'ticket_charge_ai_draft' || action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_validate' || action === 'ticket_charge_send' || action === 'dashboard_report' || action === 'sector_entries_report' || action === 'director_preview' || action === 'status' || action === 'test' || action === 'directory' || action === 'manual_official' || action === 'preview_audit' || action === 'dispatch_health' || action === 'attachment_health' || action === 'support_quality_metrics') {
       if (!await isAdmin(req)) return json({ error: 'Acesso reservado ao administrador autenticado' }, 403);
       return action === 'voice_chat_preview' ? await voiceChatPreview(payload)
         : action === 'ticket_charge_capabilities' ? json({ok:true,aiAvailable:E('GEMINI_AI_DRAFT_ENABLED')==='true'&&!!E('GEMINI_API_KEY'),rulesAvailable:true,guidanceAvailable:true})
@@ -2634,6 +2645,7 @@ async function handleRequest(req: Request): Promise<Response> {
         : action === 'ticket_charge_ai_draft' ? await ticketChargeAiDraft(payload)
         : (action === 'ticket_charge_history' || action === 'ticket_followup_review' || action === 'ticket_charge_preview' || action === 'ticket_charge_validate' || action === 'ticket_charge_send') ? await ticketChargeAction(payload,req)
         : action === 'dashboard_report' ? await dashboardReportAction(payload)
+        : action === 'sector_entries_report' ? await sectorEntriesAction(payload)
         : action === 'director_preview' ? await directorPreview(payload)
         : action === 'manual_official' ? await manualOfficial(payload)
         : action === 'preview_audit' ? await manualOfficial({...payload,previewOnly:true})
