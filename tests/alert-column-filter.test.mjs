@@ -53,3 +53,17 @@ test('código aplica filtros depois de reorganizar as colunas',()=>{
  assert.match(body,/perm\(t,ORD\[key\]\);applyRowFilter\(t,key\)/);
  assert.match(html,/onclick="alarmClearColumnFilters\(\)"/);
 });
+
+test('atualização direta da tabela reaplica os filtros e a seleção respeita linhas visíveis',()=>{
+ const start=html.indexOf('function renderAlerts(){');
+ const render=html.slice(start,html.indexOf('async function scanHistorical(',start));
+ assert.match(render,/\$\('tAlarmOldest'\)\.innerHTML=[^\n]*\n\s+enhanceTables\(\)/);
+ const a=html.indexOf('function alarmSelectVisible(){');
+ const b=html.indexOf('function alarmClearSelection()',a);
+ const selected=new Set();
+ const rows=[{id:'1',display:'none'},{id:'2',display:''}];
+ const table={querySelectorAll:()=>rows.map(({id,display})=>({dataset:{alarmTicket:id},closest:()=>({style:{display}})}))};
+ const select=new Function('$','alarmSelected','renderAlerts','alarmEmailInvalidate',html.slice(a,b)+'return alarmSelectVisible;')(()=>table,selected,()=>{},()=>{});
+ select();
+ assert.deepEqual([...selected],['2']);
+});
