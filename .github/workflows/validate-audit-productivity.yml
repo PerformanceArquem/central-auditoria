@@ -1,0 +1,25 @@
+name: Validate productivity real-hours stage 5
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'audit-productivity-preview-ui.js'
+      - 'api/audit-productivity-preview.js'
+      - 'lib/audit-productivity-comparisons.cjs'
+      - 'tests/audit-productivity-comparisons.test.mjs'
+      - '.github/workflows/validate-audit-productivity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check lib/audit-productivity-comparisons.cjs
+      - run: node --check api/audit-productivity-preview.js
+      - run: node --check audit-productivity-preview-ui.js
+      - run: node --test tests/audit-productivity-comparisons.test.mjs
