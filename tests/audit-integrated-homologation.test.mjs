@@ -189,3 +189,34 @@ test('integrated previews do not call email cron, Movidesk writes or notice acti
     assert.doesNotMatch(content,/audit-email-dispatch|sendMail\(|sendEmail\(|processChargeInternalNote\(/);
   }
 });
+
+
+test('real-world Resolved status is closed even if closed_at_source was not populated',()=>{
+  const resolved=clone(rawTicket);
+  resolved.payload.baseStatus='Resolved';
+  resolved.payload.resolvedIn='2026-11-18T19:00:00';
+  resolved.closed_at_source=null;
+  const foundation=core.evaluateAuditInsights([resolved],[],{now:NOW});
+  const policy=alerts.evaluateAlertPolicies([resolved],{now:NOW,team:'Implantação'});
+  const flow=queues.analyzeQueueFlow([resolved],{now:NOW});
+  const review=quality.evaluateQualityRecords([resolved],{now:NOW});
+  assert.equal(foundation.coverage.openTickets,0);
+  assert.equal(policy.qualified,0);
+  assert.equal(flow.coverage.openTicketsInSnapshot,0);
+  assert.equal(review.candidates,0);
+});
+
+test('missing SLA is not invented; missing prazo is only an orientative quality check',()=>{
+  const lackingSla=clone(rawTicket);
+  lackingSla.payload.slaSolutionDate=null;
+  lackingSla.payload.lastActionDate='2026-11-19T18:00:00';
+  const foundation=core.evaluateAuditInsights([lackingSla],[],{now:NOW});
+  const policy=alerts.evaluateAlertPolicies([lackingSla],{now:NOW,team:'Implantação'});
+  const review=quality.evaluateQualityRecords([lackingSla],{now:NOW});
+  assert.equal(foundation.alerts.total,0);
+  assert.equal(policy.qualified,0);
+  assert.equal(review.candidates,1);
+  assert.deepEqual(review.preview[0].signals.map(x=>x.code),['PRAZO_NAO_DISPONIVEL']);
+  assert.equal(review.preview[0].formalNonConformity,false);
+  assert.equal(review.preview[0].severity,'NÃO_CLASSIFICADA');
+});
