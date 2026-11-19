@@ -2008,11 +2008,12 @@ async function dashboardReportAction(payload:R){
 async function sectorEntriesAction(payload:R) {
  const from=String(payload.from??''),to=String(payload.to??'');
  if(!validEntriesPeriod(from,to,dateBR()))return json({ok:false,error:'Informe um período válido até a data de hoje.'},400);
- const [tickets,checkpoint]=await Promise.all([
+ const [tickets,appointments,checkpoint]=await Promise.all([
   list('audit_direct_tickets','?select=ticket_id,owner_histories:payload->ownerHistories&order=ticket_id.asc',100000),
+  list('audit_direct_appointments',`?select=ticket_id,sector,activity,appointment_date&sector=in.(Treinamento,Qualidade)&appointment_date=gte.${from}&appointment_date=lte.${to}&order=appointment_date.asc,appointment_key.asc`,100000),
   state()
  ]);
- const report=sectorEntries(tickets,from,to);
+ const report=sectorEntries(tickets,appointments,from,to);
  return json({ok:true,from,to,...report,historyComplete:checkpoint.completed===true&&!checkpoint.last_error&&report.incomplete===0});
 }
 // Apenas administradores. A seleção enviada pelo browser é revalidada no banco.

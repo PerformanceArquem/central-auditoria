@@ -989,23 +989,23 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
             <div id="t-report-preview" class="hide">
               <div class="mh"><div><div class="eyebrow">RELATÓRIOS · SOMENTE LEITURA</div><h2>Pré-visualização dos colaboradores</h2><p>Resumo diário e semanal dos apontamentos sincronizados pelo Movidesk.</p></div></div>
               <section class="card" aria-labelledby="sectorEntriesHeading">
-                <div class="mh"><div><h2 id="sectorEntriesHeading">Entradas de chamados por setor</h2><p>Primeira atribuição e mudanças de setor registradas no Movidesk.</p></div></div>
+                <div class="mh"><div><h2 id="sectorEntriesHeading">Chamados por setor</h2><p>Entradas registradas no Movidesk e atividades de Treinamento e Qualidade.</p></div></div>
                 <form id="sectorEntriesForm" class="row noprint" style="align-items:flex-end">
                   <div class="fg"><label for="sectorEntriesFrom">De</label><input id="sectorEntriesFrom" type="date" required></div>
                   <div class="fg"><label for="sectorEntriesTo">Até</label><input id="sectorEntriesTo" type="date" required></div>
-                  <button class="b" type="submit" id="sectorEntriesLoad">Consultar entradas</button>
+                  <button class="b" type="submit" id="sectorEntriesLoad">Consultar chamados</button>
                 </form>
                 <p class="subtle" id="sectorEntriesStatus" role="status"></p>
                 <div id="sectorEntriesResult" hidden>
                   <div class="kpis" id="sectorEntriesKpis"></div>
-                  <h3>Distribuição das entradas</h3>
+                  <h3>Distribuição por setor</h3>
                   <div id="sectorEntriesBars" aria-hidden="true" style="display:grid;gap:12px;margin:12px 0 20px"></div>
                   <div class="tw"><table>
-                    <thead><tr><th scope="col">Setor</th><th scope="col">Chamados que entraram</th></tr></thead>
+                    <thead><tr><th scope="col">Setor</th><th scope="col">Critério</th><th scope="col">Chamados</th></tr></thead>
                     <tbody id="sectorEntriesRows"></tbody>
-                    <tfoot><tr><th scope="row">Soma por setor</th><td id="sectorEntriesTotal"></td></tr></tfoot>
+                    <tfoot><tr><th scope="row" colspan="2">Soma por setor</th><td id="sectorEntriesTotal"></td></tr></tfoot>
                   </table></div>
-                  <p class="subtle" style="margin-top:12px">Cada chamado conta uma vez por setor no período. Um chamado pode aparecer em mais de um setor.</p>
+                  <p class="subtle" style="margin-top:12px">Cada chamado conta uma vez por setor no período. O total de chamados distintos elimina repetições entre setores.</p>
                 </div>
               </section>
 
@@ -5291,7 +5291,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    result.hidden=true;
    if(from.value>to.value){status.textContent='A data inicial deve ser anterior ou igual à final.';return;}
    from.disabled=to.disabled=button.disabled=true;
-   status.textContent='Consultando o histórico de entradas…';
+   status.textContent='Consultando entradas e atividades…';
    try{
      const client=window.tmEmailAdminClient;
      if(!client)throw Error('Faça login novamente para consultar o relatório.');
@@ -5304,7 +5304,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
      }
      if(!data?.ok||!Array.isArray(data.rows))throw Error('O serviço retornou um relatório inválido.');
      render(data);
-     status.textContent=day(data.from)+' a '+day(data.to)+(data.historyComplete?'':' · Histórico incompleto. Os números podem estar parciais.');
+     status.textContent=day(data.from)+' a '+day(data.to)+(data.historyComplete?'':' · Histórico de entradas incompleto. Os números podem estar parciais.');
      result.hidden=false;
    }catch(error){status.textContent=error.message||'Não foi possível consultar o histórico.';}
    finally{from.disabled=to.disabled=button.disabled=false;}
@@ -5322,9 +5322,10 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
      kpis.append(card);
    }
    const max=Math.max(1,...rows.map(row=>row.entries));
-   for(const {sector,entries} of rows){
+   for(const {sector,entries,basis} of rows){
      const row=body.insertRow();
      row.insertCell().textContent=sector;
+     row.insertCell().textContent=basis;
      row.insertCell().textContent=format.format(entries);
      const bar=document.createElement('div'),label=document.createElement('div');
      const track=document.createElement('div'),fill=document.createElement('div');
