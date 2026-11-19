@@ -47,13 +47,9 @@ async function requireAdmin(req,db,signal){
 async function appointments(db,period,signal){
   const list=[],queryBase={
     select:'appointment_date,ticket_id,sector,collaborator_name,activity,duration_minutes',
-    appointment_date:'gte.'+period.from,
-    'appointment_date':'gte.'+period.from,
     and:'(appointment_date.gte.'+period.from+',appointment_date.lte.'+period.to+')',
     order:'appointment_date.asc,ticket_id.asc,collaborator_name.asc,activity.asc'
   };
-  // A coluna appointment_date possui operadores bounds em and; excluir filtro redundante.
-  delete queryBase.appointment_date;
   for(let page=0;page<MAX_PAGES_PER_PERIOD;page++){
     const chunk=await query(db,'audit_direct_appointments',{
       ...queryBase,limit:PAGE,offset:page*PAGE
