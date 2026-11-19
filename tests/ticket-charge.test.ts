@@ -67,3 +67,13 @@ Deno.test('shows ticket number, opened days and real last appointment without in
  const noLog=composeTicketCharge([{ticket_id:'99222',payload:{status:'Em andamento'}}],'direcao@arquem.com.br');
  assert(noLog.text.includes('Não localizado na base sincronizada'),'missing-record fallback incorrect');
 });
+
+Deno.test('custom subject and main message appear in the corporate preview',()=>{
+ const draft=composeTicketCharge(base,'direcao@arquem.com.br','Olá! Podemos ajudar com <prioridade>?',{subject:'Revisão dos chamados',customBody:true});
+ assert(draft.subject==='Revisão dos chamados','custom subject missing');
+ assert(draft.text.startsWith('Olá! Podemos ajudar com <prioridade>?'),'custom message missing');
+ assert(!draft.text.includes('Contexto complementar'),'default introduction was prepended');
+ assert(draft.html.includes('&lt;prioridade&gt;'),'custom HTML was not escaped');
+ assert(draft.html.includes('77533'),'ticket table missing');
+ assert(composeTicketCharge(base,'direcao@arquem.com.br','Observação').text.includes('Contexto complementar'),'default mode changed');
+});

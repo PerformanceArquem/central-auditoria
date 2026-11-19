@@ -15,7 +15,7 @@ test('validation button must not claim it was already validated',()=>{
 test('preview renders while CC unavailable, without enabling validation or sending',()=>{
  assert.match(preview,/const ccBlocked=!!data\.cc\?\.length&&data\.ccSupported!==true/);
  assert.doesNotMatch(preview,/if\(data\.cc\?\.length&&data\.ccSupported!==true\)throw/);
- assert.match(preview,/alarmEmailApproved=ccBlocked\?'':alarmSelectionSignature\(\)/);
+ assert.match(preview,/alarmEmailApproved=ccBlocked\?'':signature/);
  assert.match(preview,/alarmEmailRequestId=ccBlocked\?'':crypto\.randomUUID\(\)/);
  assert.match(preview,/\$\('alarmEmailValidate'\)\.disabled=ccBlocked/);
  assert.match(preview,/\$\('alarmEmailPreviewArea'\)\.classList\.remove\('hide'\)/);

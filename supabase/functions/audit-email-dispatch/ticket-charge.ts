@@ -2,7 +2,7 @@ import {corporateCopy} from "./corporate-mail-policy.ts";
 import {isProjectChargeSubject} from "./project-charge-metrics.ts";
 // Composição segura de cobranças de chamados abertos, sem envio automático.
 type TicketRow=Record<string,any>;
-export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:string,options:{includeGuidance?:boolean}={}){
+export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:string,options:{includeGuidance?:boolean;subject?:string;customBody?:boolean}={}){
  if(!Array.isArray(rows)||rows.length<1||rows.length>20)throw Error('Selecione de 1 a 20 chamados.');
  if(!/^[^@\s]+@arquem\.com\.br$/i.test(recipient))throw Error('Informe um destinatário corporativo @arquem.com.br.');
  const clean=(v:unknown,max=230)=>String(v??'').replace(/[\x00-\x1f\x7f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,max);
@@ -33,12 +33,11 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
       url:'https://arquem.movidesk.com/Ticket/Edit/'+id};
  });
  if(new Set(normalized.map(x=>x.id)).size!==normalized.length)throw Error('Há chamados repetidos.');
- const subject='Acompanhamento cordial de chamados | '+normalized.length+' chamado(s)'
+ const subject=clean(options.subject,160)||'Acompanhamento cordial de chamados | '+normalized.length+' chamado(s)';
  const requested=body===undefined?'':String(body).trim();
  if(requested.length>8500)throw Error('O texto ultrapassa 8.500 caracteres.');
- // O texto principal sempre mantém tom respeitoso. Notas opcionais são contexto,
- // não substituem a saudação e o pedido padronizado de acompanhamento.
- const message='Olá, equipe! Espero que estejam bem.\n\n'+
+ if(options.customBody&&!requested)throw Error('Preencha a mensagem principal do e-mail.');
+ const message=options.customBody?requested:'Olá, equipe! Espero que estejam bem.\n\n'+
   'Estamos acompanhando alguns chamados e gostaríamos de contar com o apoio de vocês para conferir a situação atual dos itens abaixo. '+
   'Sabemos que podem existir análises em andamento, dependências ou atualizações ainda não refletidas na Central.\n\n'+
   'Quando possível, poderiam atualizar o andamento no Movidesk e nos informar o próximo passo, o responsável e uma previsão realista de retorno, caso já exista? '+

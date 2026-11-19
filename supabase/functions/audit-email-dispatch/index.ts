@@ -2292,6 +2292,10 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
  const registerInternalNote=payload.registerInternalNote!==false;
  const message=String(payload.message||'').trim();
  if(message.length>8500)return json({ok:false,error:'O texto é muito longo.'},400);
+ const subject=String(payload.subject??'').trim();
+ if(subject.length>160||/[\x00-\x1f\x7f]/.test(subject))return json({ok:false,error:'Informe um assunto de até 160 caracteres em uma única linha.'},400);
+ const customBody=payload.customBody===true;
+ if(customBody&&!message)return json({ok:false,error:'Preencha a mensagem principal do e-mail.'},400);
  const requestId=String(payload.requestId||'');
  if(action==='ticket_charge_validate'){
   // Never persist an approval for CC while the published provider cannot deliver it.
@@ -2320,7 +2324,7 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   return json({ok:false,error:'Não foi possível localizar os chamados: '+found.missingIds.map(id=>'#'+id).join(', ')+'. Atualize a sincronização ou remova esses números antes de gerar a prévia.',
    missingIds:found.missingIds,availableIds:found.records.map(x=>String(x.ticket_id)),sources:found.sources},409);
  const includeGuidance=payload.includeGuidance===true;
- const draft=composeTicketCharge(found.records,recipient,message,{includeGuidance});
+ const draft=composeTicketCharge(found.records,recipient,message,{includeGuidance,subject,customBody});
  if(action==='ticket_charge_preview'){
   // Diagnóstico somente de leitura: informar a causa sem expor segredo nem URL do provedor.
   // O gate de envio permanece no backend, independentemente desta prévia.
