@@ -12,6 +12,7 @@
         <script defer src="audit-alert-policy-ui.js"></script>
         <script defer src="audit-queue-flow-ui.js"></script>
         <script defer src="audit-quality-review-ui.js"></script>
+        <script defer src="audit-productivity-preview-ui.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
         <style>
@@ -1991,6 +1992,54 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                         <pre id="qualityAiDraft" style="white-space:pre-wrap;font:inherit;border:1px solid var(--line);padding:12px;border-radius:8px;max-height:350px;overflow:auto">Selecione um chamado para visualizar orientações locais.</pre>
                       </div>
                       <p class="subtle">Nenhuma NC é registrada automaticamente, nenhum feedback é enviado e nenhuma medida disciplinar é sugerida. A Qualidade verifica o procedimento publicado, o contexto e a causa real antes de classificar qualquer ocorrência.</p>
+                    </section>
+                    <section class="card noprint" id="productivityPreviewPanel" aria-label="Comparativo avançado de produtividade com horas reais" style="margin:12px 0">
+                        <div class="alert-heading">
+                            <div><div class="eyebrow">ETAPA 5 · PRODUTIVIDADE · HORAS APONTADAS</div>
+                              <h3>Produtividade — comparativos de apontamentos reais</h3>
+                              <p class="subtle">Compara horas sincronizadas do Movidesk por equipe, colaborador e atividade. Não representa automaticamente produtividade, capacidade ou jornada individual.</p>
+                            </div>
+                            <div class="alert-hero-actions" style="flex-wrap:wrap">
+                              <div class="fg"><label for="productivityDays">Janela</label>
+                                <select id="productivityDays"><option value="7">7 dias</option>
+                                  <option value="28" selected>28 dias</option><option value="56">56 dias</option>
+                                  <option value="84">84 dias</option></select></div>
+                              <div class="fg"><label for="productivityCompare">Comparar com</label>
+                                <select id="productivityCompare"><option value="previous">Período anterior</option>
+                                  <option value="year-prior">Mesmo período do ano passado</option></select></div>
+                              <button type="button" class="b" id="productivityPreviewRun" onclick="previewProductivity()">Comparar sem alterar dados</button>
+                              <button type="button" class="s" id="productivityCsv" disabled onclick="exportProductivityCsv()">Exportar resumo CSV</button>
+                            </div>
+                        </div>
+                        <p id="productivityPreviewStatus" class="coverage-note" role="status">Nenhum comparativo executado. São utilizados apenas dias completos anteriores a hoje.</p>
+                        <p id="productivityPreviewMetrics" class="subtle" aria-live="polite"></p>
+                        <details open><summary><b>Horas apontadas por setor de lançamento</b></summary>
+                          <div class="tw"><table><thead><tr>
+                            <th>Setor</th><th>Horas atuais</th><th>Horas na base</th><th>Diferença</th>
+                            <th>Variação</th><th>Apontamentos</th><th>Chamados distintos</th>
+                          </tr></thead><tbody id="productivityTeamRows"><tr><td colspan="7">Gere o comparativo para visualizar os dados.</td></tr></tbody></table></div>
+                        </details>
+                        <details><summary><b>Colaboradores com horas apontadas</b></summary>
+                          <div class="tw"><table><thead><tr>
+                            <th>Colaborador</th><th>Horas atuais</th><th>Horas na base</th><th>Diferença</th>
+                            <th>Variação</th><th>Apontamentos</th><th>Chamados distintos</th>
+                          </tr></thead><tbody id="productivityPersonRows"><tr><td colspan="7">Gere o comparativo.</td></tr></tbody></table></div>
+                        </details>
+                        <details><summary><b>Distribuição das atividades</b></summary>
+                          <div class="tw"><table><thead><tr>
+                            <th>Atividade</th><th>Horas atuais</th><th>Horas na base</th><th>Diferença</th>
+                            <th>Variação</th><th>Apontamentos</th><th>Chamados distintos</th>
+                          </tr></thead><tbody id="productivityActivityRows"><tr><td colspan="7">Gere o comparativo.</td></tr></tbody></table></div>
+                        </details>
+                        <details><summary><b>Evolução por blocos de 7 dias</b></summary>
+                          <div class="tw"><table><thead><tr>
+                            <th>Semana móvel atual</th><th>Semana equivalente</th><th>Horas atuais</th>
+                            <th>Horas na base</th><th>Diferença</th><th>Variação</th><th>Apontamentos atuais</th>
+                          </tr></thead><tbody id="productivityWeekRows"><tr><td colspan="7">Gere o comparativo.</td></tr></tbody></table></div>
+                        </details>
+                        <p id="productivityOutOfDays" class="subtle">Horas de fins de semana e feriados serão apresentadas separadamente quando houver cadastro.</p>
+                        <p id="productivityCapacity" class="subtle">Capacidade e diferença de jornada: indisponíveis até validação das escalas reais.</p>
+                        <p class="subtle">Os dados podem ser parciais por paginação ou sincronização; nomes semelhantes podem representar colaboradores diferentes. A exportação CSV depende de uma ação manual do administrador.</p>
                     </section>
                     <section class="card noprint" id="auditInsightsPanel" aria-label="Prévia da auditoria inteligente" style="margin:12px 0">
                         <div class="alert-heading">
