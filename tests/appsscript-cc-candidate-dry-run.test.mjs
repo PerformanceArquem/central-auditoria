@@ -86,3 +86,34 @@ test('numbered CC candidate release requires exact approved commit and hashes, n
  assert.match(run,/clasp create-version/);
  assert.doesNotMatch(run,/clasp update-deployment|MailApp\.sendEmail/);
 });
+
+test('release guard ignores nested names but rejects actual global duplicates',()=>{
+ assert.ok(modules,'ACORN_DIR required');
+ const guard=fileURLToPath(new URL('../apps-script/ci-clasp-guard.mjs',import.meta.url));
+ const root=mkdtempSync(join(tmpdir(),'cc-guard-scope-'));
+ try{
+  const remote=join(root,'remote'),candidate=join(root,'candidate'),summary=join(root,'audit.md');
+  for(const dir of [remote,candidate]){
+   mkdirSync(dir);
+   writeFileSync(join(dir,'appsscript.json'),'{}');
+   writeFileSync(join(dir,'a.js'),'function pdf(){}\n');
+   writeFileSync(join(dir,'b.js'),'function fixture(){\nfunction pdf(){}\n}\n');
+  }
+  const run=(...args)=>spawnSync(process.execPath,[guard,...args],{encoding:'utf8'});
+  const hash=dir=>{
+   const result=run('audit',dir,summary,modules);
+   assert.equal(result.status,0,result.stderr);
+   return result.stdout.match(/SHA-256: ([a-f0-9]{64})/)[1];
+  };
+  const remoteHash=hash(remote);
+  const clean=run('verify',remote,candidate,remoteHash,hash(candidate),modules);
+  assert.equal(clean.status,0,clean.stderr);
+  writeFileSync(join(candidate,'b.js'),'async function pdf(){}\n');
+  const duplicate=run('verify',remote,candidate,remoteHash,hash(candidate),modules);
+  assert.equal(duplicate.status,1);
+  assert.match(duplicate.stderr,/pdf \[a.js, b.js\]/);
+  const mismatch=run('verify',remote,candidate,remoteHash,remoteHash,modules);
+  assert.equal(mismatch.status,1);
+  assert.match(mismatch.stderr,/hash aprovado/);
+ }finally{rmSync(root,{recursive:true,force:true})}
+});
