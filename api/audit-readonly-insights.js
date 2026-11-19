@@ -79,12 +79,13 @@ export default async function handler(req,res) {
     const [tickets,appointments]=await Promise.all([
       readPaged(c,'audit_direct_tickets',{
         select:'ticket_id,payload,created_at_source,closed_at_source,source_synced_at',
-        order:'ticket_id.asc'
+        closed_at_source:'is.null',
+        order:'source_synced_at.desc.nullslast,ticket_id.desc'
       },PAGE_TICKETS,MAX_TICKET_PAGES,controller.signal),
       readPaged(c,'audit_direct_appointments',{
         select:'ticket_id,appointment_date,duration_minutes,collaborator_name,activity',
-        appointment_date:'gte.'+from,
-        order:'appointment_date.desc'
+        and:'(appointment_date.gte.'+from+',appointment_date.lte.'+to+')',
+        order:'appointment_date.desc,ticket_id.desc'
       },PAGE_APPOINTMENTS,MAX_APPOINTMENT_PAGES,controller.signal)
     ]);
     const result=evaluateAuditInsights(tickets.rows,appointments.rows);
