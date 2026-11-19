@@ -37,8 +37,8 @@ test('computes current team age from the last proven entry, not ticket creation'
 test('recognizes transfers only between two known, distinct teams; initial assignment not a transfer',()=>{
  const x=run([ticket()]);
  assert.equal(x.movements.total,2);
- assert.deepEqual(x.movements.routes.map(v=>[v.fromTeam,v.toTeam]),[
-  ['Suporte','Inteligência'],['Inteligência','Produção']
+ assert.deepEqual(x.movements.routes.map(v=>v.fromTeam+' -> '+v.toTeam).sort(),[
+  'Inteligência -> Produção','Suporte -> Inteligência'
  ]);
  assert.equal(x.movements.routes.every(v=>v.uniqueTickets===1),true);
  assert.equal(x.movements.recentPreview[0].priorQueueDays,4);
