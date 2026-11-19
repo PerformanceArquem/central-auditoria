@@ -163,20 +163,20 @@ test('desktop: five working previews, local AI consent gate and offline CSV',asy
     const {page,errors}=await harness(browser,{width:1440,height:900});
     try{
       await page.locator('#auditInsightsRun').click();
-      await page.locator('#auditInsightsStatus').getByText(/Prévia gerada sem envios/i).waitFor();
+      await page.waitForFunction(() => document.getElementById('auditInsightsStatus')?.textContent.includes('Prévia gerada sem envios'));
       assert.equal(await page.locator('#auditInsightsAlerts tr').count(),1);
 
       await page.locator('#policyPreviewTeam').selectOption('Suporte');
       await page.locator('#policyPreviewRun').click();
-      await page.locator('#policyPreviewStatus').getByText(/Simulação concluída para Suporte/i).waitFor();
+      await page.waitForFunction(() => document.getElementById('policyPreviewStatus')?.textContent.includes('Simulação concluída para Suporte'));
       assert.equal(await page.locator('#policyPreviewRows tr').count(),1);
 
       await page.locator('#queueFlowPreviewRun').click();
-      await page.locator('#queueFlowPreviewStatus').getByText(/Prévia concluída/i).waitFor();
+      await page.waitForFunction(() => document.getElementById('queueFlowPreviewStatus')?.textContent.includes('Prévia concluída'));
       assert.equal(await page.locator('#queueFlowRouteRows tr').count(),1);
 
       await page.locator('#qualityReviewRun').click();
-      await page.locator('#qualityReviewStatus').getByText(/Nenhuma não conformidade registrada/i).waitFor();
+      await page.waitForFunction(() => document.getElementById('qualityReviewStatus')?.textContent.includes('Nenhuma não conformidade registrada'));
       await page.locator('button[data-quality-index="0"]').click();
       assert.match(await page.locator('#qualityAiDraft').innerText(),/Nenhuma conclusão de NC/i);
 
@@ -187,11 +187,11 @@ test('desktop: five working previews, local AI consent gate and offline CSV',asy
 
       await page.locator('#qualityAiConsent').check();
       await page.locator('#qualityAiGenerate').click();
-      await page.locator('#qualityAiStatus').getByText(/Gemini não utilizado/i).waitFor();
+      await page.waitForFunction(() => document.getElementById('qualityAiStatus')?.textContent.includes('Gemini não utilizado'));
       assert.match(await page.locator('#qualityAiDraft').innerText(),/Orientação local simulada/i);
 
       await page.locator('#productivityPreviewRun').click();
-      await page.locator('#productivityPreviewStatus').getByText(/Comparação:/i).waitFor();
+      await page.waitForFunction(() => document.getElementById('productivityPreviewStatus')?.textContent.includes('Comparação:'));
       assert.match(await page.locator('#productivityCapacity').innerText(),/não calculadas/i);
       assert.equal(await page.locator('#productivityTeamRows tr').count(),1);
 
@@ -227,9 +227,9 @@ test('mobile: five panels render and remain usable without live requests',async(
         assert.equal(await btn.isVisible(),true,'Mobile button hidden: '+id);
       }
       await page.locator('#queueFlowPreviewRun').click();
-      await page.locator('#queueFlowPreviewStatus').getByText(/Prévia concluída/i).waitFor();
+      await page.waitForFunction(() => document.getElementById('queueFlowPreviewStatus')?.textContent.includes('Prévia concluída'));
       await page.locator('#productivityPreviewRun').click();
-      await page.locator('#productivityPreviewStatus').getByText(/Comparação:/i).waitFor();
+      await page.waitForFunction(() => document.getElementById('productivityPreviewStatus')?.textContent.includes('Comparação:'));
       assert.deepEqual(errors,[]);
       await page.screenshot({path:resolve(screenshotDir,'mobile-five-panels.png'),fullPage:true});
     }finally{await page.close()}
@@ -243,9 +243,9 @@ test('expired session: no analytics fetch or accidental notifications',async()=>
     try{
       await page.evaluate(()=>window.__authEnabled=false);
       await page.locator('#auditInsightsRun').click();
-      await page.locator('#auditInsightsStatus').getByText(/Entre novamente/i).waitFor();
+      await page.waitForFunction(() => document.getElementById('auditInsightsStatus')?.textContent.includes('Entre novamente'));
       await page.locator('#qualityReviewRun').click();
-      await page.locator('#qualityReviewStatus').getByText(/Faça login novamente/i).waitFor();
+      await page.waitForFunction(() => document.getElementById('qualityReviewStatus')?.textContent.includes('Faça login novamente'));
       assert.equal((await page.evaluate(()=>window.__auditVisualRequests)).length,0);
       assert.deepEqual(errors,[]);
     }finally{await page.close()}
