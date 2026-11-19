@@ -1,0 +1,25 @@
+name: Validate Implantação SLA dry-run
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'sla-alert-simulation-ui.js'
+      - 'api/audit-sla-simulation.js'
+      - 'lib/sla-alert-simulation.cjs'
+      - 'tests/sla-alert-simulation.test.mjs'
+      - '.github/workflows/validate-sla-implantacao-dry-run.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check api/audit-sla-simulation.js
+      - run: node --check lib/sla-alert-simulation.cjs
+      - run: node --check sla-alert-simulation-ui.js
+      - run: node --test tests/sla-alert-simulation.test.mjs
