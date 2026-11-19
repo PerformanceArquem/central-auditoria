@@ -1,0 +1,27 @@
+name: Validate quality review and Gemini privacy stage 4
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'audit-quality-review-ui.js'
+      - 'api/audit-quality-review.js'
+      - 'api/audit-quality-ai-draft.js'
+      - 'lib/audit-quality-review.cjs'
+      - 'tests/audit-quality-review.test.mjs'
+      - '.github/workflows/validate-audit-quality-review.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check lib/audit-quality-review.cjs
+      - run: node --check api/audit-quality-review.js
+      - run: node --check api/audit-quality-ai-draft.js
+      - run: node --check audit-quality-review-ui.js
+      - run: node --test tests/audit-quality-review.test.mjs
