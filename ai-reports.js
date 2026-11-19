@@ -10,6 +10,31 @@
   const content=document.createElement('div');content.style.whiteSpace='pre-wrap';content.textContent=message;
   el.append(label,content);$('aiReportConversation').append(el);el.scrollIntoView({block:'nearest',behavior:'smooth'});return el;
  }
+ const normalized=value=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ const sectorMatchers=[
+  ['Treinamento',/\btreinamento\b/],['Qualidade',/\bqualidade\b/],
+  ['Implantação',/\bimplantacao\b/],['Sucesso do Cliente',/\bsucesso(?: do cliente)?\b/],
+  ['Testes (QA)',/\b(?:qa|testes)\b/]
+ ];
+ const namedSectors=value=>sectorMatchers.filter(([,pattern])=>pattern.test(normalized(value))).map(([name])=>name);
+ const sectorRequest=prompt=>{
+  const text=normalized(prompt);
+  return /\bchamados?\b/.test(text)&&/\b(?:entrad[ao]s?|entra(?:ram|m|r)|recebid[oa]s?)\b/.test(text)&&
+   (/\bsetor(?:es)?\b/.test(text)||namedSectors(prompt).length>0);
+ };
+ function renderSectorStats(rows){
+  $('aiReportStats').replaceChildren();
+  const ranking=$('aiReportRanking');ranking.replaceChildren();
+  const heading=document.createElement('h4');heading.textContent='Chamados por setor';ranking.append(heading);
+  const cap=Math.max(1,...rows.map(row=>row.entries));
+  for(const {sector,entries,basis} of rows){
+   const line=document.createElement('div'),label=document.createElement('strong'),bar=document.createElement('progress'),criterion=document.createElement('small');
+   label.textContent=sector+' · '+fmt(entries);bar.max=cap;bar.value=entries;
+   bar.setAttribute('aria-label',sector);bar.style.cssText='display:block;width:100%;margin:3px 0';
+   criterion.textContent=basis;line.style.marginBottom='10px';line.append(label,bar,criterion);ranking.append(line);
+  }
+  $('aiReportExport').disabled=false;$('aiReportPrint').disabled=false;
+ }
  const cols=[['Setores','bySector'],['Colaboradores','byCollaborator'],['Clientes','byClient'],['Atividades','byActivity']];
  function renderStats(data){
   const stats=$('aiReportStats');stats.replaceChildren();
@@ -32,8 +57,10 @@
  function csvField(v){const s=String(v??'');return '"'+s.replace(/"/g,'""')+'"'}
  function exportCsv(){
   if(!last)return;
-  const out=[['Grupo','Nome','Horas','Apontamentos','Chamados']];
-  for(const [title,key] of cols)for(const row of last[key]||[])out.push([title,row.name,String(row.hours).replace('.',','),row.entries,row.tickets]);
+  const out=last.sectorRows
+   ? [['Setor','Critério','Chamados'],...last.sectorRows.map(row=>[row.sector,row.basis,row.entries])]
+   : [['Grupo','Nome','Horas','Apontamentos','Chamados']];
+  if(!last.sectorRows)for(const [title,key] of cols)for(const row of last[key]||[])out.push([title,row.name,String(row.hours).replace('.',','),row.entries,row.tickets]);
   const csv='\uFEFF'+out.map(row=>row.map(csvField).join(';')).join('\r\n');
   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a');a.href=url;a.download='relatorio-personalizado-'+last.summary.periodFrom+'_'+last.summary.periodTo+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
@@ -43,6 +70,11 @@
   if(!last)return;
   const w=window.open('','_blank');
   if(!w){$('aiReportStatus').textContent='Permita pop-ups para imprimir o relatório.';return}
+  if(last.sectorRows){
+   w.document.open();
+   w.document.write('<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Chamados por setor</title><body style="font:14px/1.55 Arial,sans-serif;color:#173c64;margin:32px"><h1>ARQUEM SISTEMAS · Central de Auditoria</h1><h2>Chamados por setor</h2><p style="white-space:pre-wrap">'+htmlEsc(lastNarrative)+'</p></body></html>');
+   w.document.close();w.focus();w.print();return;
+  }
   const sections=cols.map(([title,key])=>{
    const rows=(last[key]||[]).map(x=>'<tr><td>'+htmlEsc(x.name)+'</td><td>'+htmlEsc(fmt(x.hours))+'</td><td>'+htmlEsc(x.entries)+'</td><td>'+htmlEsc(x.tickets)+'</td></tr>').join('');
    return '<h2>'+htmlEsc(title)+'</h2><table><thead><tr><th>Nome</th><th>Horas</th><th>Apontamentos</th><th>Chamados</th></tr></thead><tbody>'+rows+'</tbody></table>';
@@ -64,9 +96,30 @@
   $('aiReportStatus').textContent='Calculando indicadores e preparando a resposta...';
   post('user',prompt);input.value='';
   try{
-   const {data,error}=await client.functions.invoke('audit-ai-reports',{body:{prompt,from,to,sector:$('aiReportSector').value.trim(),collaborator:$('aiReportCollaborator').value.trim(),client:$('aiReportClient').value.trim(),externalAiConsent:$('aiReportConsent').checked}});
+   const sectorMode=sectorRequest(prompt);
+   const sector=$('aiReportSector').value.trim(),collaborator=$('aiReportCollaborator').value.trim(),customer=$('aiReportClient').value.trim();
+   const requested=namedSectors(prompt),selected=sector?namedSectors(sector):requested;
+   if(sectorMode&&(collaborator||customer))throw Error('Limpe os filtros de colaborador e cliente para consultar os totais por setor.');
+   if(sectorMode&&sector&&!selected.length)throw Error('Setor indisponível neste relatório. Escolha Treinamento, Qualidade, Implantação, Sucesso do Cliente ou QA.');
+   const {data,error}=sectorMode
+    ? await client.functions.invoke('audit-email-dispatch',{body:{action:'sector_entries_report',from,to}})
+    : await client.functions.invoke('audit-ai-reports',{body:{prompt,from,to,sector,collaborator,client:customer,externalAiConsent:$('aiReportConsent').checked}});
    if(error){let detail=error.message||'Falha na consulta';try{const body=await error.context?.json();if(body?.error)detail=body.error}catch{}throw Error(detail)}
    if(!data?.ok)throw Error(data?.error||'Não foi possível gerar o relatório');
+   if(sectorMode){
+    if(!Array.isArray(data.rows))throw Error('O serviço retornou um relatório inválido.');
+    const rows=data.rows.filter(row=>!selected.length||selected.includes(row.sector));
+    const total=rows.reduce((sum,row)=>sum+row.entries,0);
+    const br=value=>value.split('-').reverse().join('/');
+    lastNarrative=['Período de '+br(data.from)+' a '+br(data.to),
+     ...rows.map(row=>row.sector+' · '+fmt(row.entries)+' · '+row.basis),
+     'Soma por setor · '+fmt(total),'Cada chamado conta uma vez por setor.',
+     ...(!data.historyComplete?['Histórico de entradas incompleto. Os números podem estar parciais.']:[])].join('\n');
+    last={sectorRows:rows,summary:{periodFrom:data.from,periodTo:data.to}};
+    renderSectorStats(rows);post('assistant',lastNarrative);
+    $('aiReportStatus').textContent='Relatório por setor atualizado com os dados sincronizados.';
+    return;
+   }
    last=data;lastNarrative=data.answer;renderStats(data);post('assistant',data.answer+(data.aiUsed?'\n\n✓ Análise Gemini com indicadores do sistema.':'\n\nℹ Resumo calculado sem IA externa. '+(data.reason||'')));
    $('aiReportStatus').textContent='Relatório atualizado a partir dos dados sincronizados. '+(data.aiUsed?'Interpretação feita pelo Gemini.':'Interpretação automática externa não utilizada.');
   }catch(err){post('assistant','Não foi possível gerar este relatório: '+String(err?.message||err));$('aiReportStatus').textContent='Falha na consulta. Os relatórios anteriores foram preservados.'}
