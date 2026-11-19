@@ -10,6 +10,7 @@
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
         <script defer src="audit-readonly-insights-ui.js"></script>
         <script defer src="audit-alert-policy-ui.js"></script>
+        <script defer src="audit-queue-flow-ui.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
         <style>
@@ -1926,6 +1927,35 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                           <th>Vencimento SLA</th><th>Última ação real</th><th>Destinatário previsto</th><th>Prévia</th>
                         </tr></thead><tbody id="policyPreviewRows"><tr><td colspan="8">Selecione a equipe e execute a simulação.</td></tr></tbody></table></div>
                         <p class="subtle">Proposta de regras: preventivo até 24h antes do vencimento; corretivo para SLA vencido; revisão do gestor após 72h de atraso e 48h sem ação comprovada; alerta de inatividade após 7 dias. Os prazos são contados em horas corridas a partir das datas do Movidesk. Escalonamento requer conferência e cadastro de gestor; não há histórico real de envios vinculado nesta etapa.</p>
+                    </section>
+                    <section class="card noprint" id="queueFlowPreviewPanel" aria-label="Fiscalização das filas em modo de teste" style="margin:12px 0">
+                        <div class="alert-heading">
+                            <div><div class="eyebrow">ETAPA 3 · HOMOLOGAÇÃO · SOMENTE LEITURA</div>
+                              <h3>Fiscalização das filas — movimentos e gargalos</h3>
+                              <p class="subtle">Tempo de permanência comprovado em cada equipe, transferências e chamados aguardando há 15 dias ou mais. Não envia mensagens nem altera chamados.</p>
+                            </div>
+                            <div class="alert-hero-actions"><button type="button" class="b" id="queueFlowPreviewRun" onclick="runQueueFlowPreview()">Analisar filas sem enviar</button></div>
+                        </div>
+                        <p id="queueFlowPreviewStatus" class="coverage-note" role="status">Nenhuma consulta executada. Envio desativado.</p>
+                        <p id="queueFlowPreviewMetrics" class="subtle" aria-live="polite"></p>
+                        <details open><summary><b>Visão consolidada por equipe</b></summary>
+                          <div class="tw"><table><thead><tr>
+                            <th>Equipe</th><th>Chamados abertos</th><th>Entradas comprovadas</th><th>Tempo desconhecido</th>
+                            <th>Média de dias comprovados</th><th>Na fila ≥ 15 dias</th><th>Sem ação real ≥ 7 dias</th>
+                          </tr></thead><tbody id="queueFlowTeamRows"><tr><td colspan="7">Execute a prévia para consultar as equipes.</td></tr></tbody></table></div>
+                        </details>
+                        <details><summary><b>Transferências entre equipes — últimos 30 dias</b></summary>
+                          <div class="tw"><table><thead><tr>
+                            <th>Origem</th><th>Destino</th><th>Transferências registradas</th><th>Chamados distintos</th>
+                          </tr></thead><tbody id="queueFlowRouteRows"><tr><td colspan="4">Execute a prévia para consultar os movimentos.</td></tr></tbody></table></div>
+                        </details>
+                        <details><summary><b>Chamados mais antigos na equipe atual</b></summary>
+                          <div class="tw"><table><thead><tr>
+                            <th>Chamado</th><th>Equipe atual</th><th>Responsável</th><th>Tempo na equipe</th>
+                            <th>Entrada comprovada</th><th>Última ação real</th><th>Critério</th>
+                          </tr></thead><tbody id="queueFlowOldestRows"><tr><td colspan="7">Execute a prévia para consultar os chamados.</td></tr></tbody></table></div>
+                        </details>
+                        <p class="subtle">A primeira atribuição no histórico não é classificada como transferência. Tempos sem comprovação não são estimados. Resultados representam apenas os registros sincronizados e lidos nesta amostra, não um relatório histórico completo.</p>
                     </section>
                     <section class="card noprint" id="auditInsightsPanel" aria-label="Prévia da auditoria inteligente" style="margin:12px 0">
                         <div class="alert-heading">
