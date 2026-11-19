@@ -16,9 +16,9 @@ for(const [tab,expected] of Object.entries({mgmt:['renderMgmt'],charts:['renderC
 }
 test('global idle alarm remains current without rendering its closed tables',()=>{
   const source=slice('function renderAlerts(){','async function scanHistorical(');
-  const nodes=Object.fromEntries(['t-alerts','headerSiren','headerSirenText','navAlarmCount','executiveAlarmText'].map(id=>[id,{classList:{toggle(){}},textContent:''}]));
+  const nodes=Object.fromEntries(['t-alerts','navAlarmCount','executiveAlarmText'].map(id=>[id,{classList:{toggle(){}},textContent:''}]));
   const fn=new Function('ACT','$','alarmList','alarmThreshold','TK','alarmSetTeamOptions',source+'return renderAlerts;')('mgmt',id=>{assert.ok(id in nodes,'unexpected hidden DOM access '+id);return nodes[id]},()=>[{id:2,idle:18,team:'Suporte'},{id:3,idle:2,team:'Produção'}],()=>7,new Map([['2',{}]]),()=>assert.fail('closed alert tables rendered'));
-  fn();assert.equal(nodes.navAlarmCount.textContent,'1');assert.match(nodes.headerSirenText.textContent,/#2 \(18d\)/);
+  fn();assert.equal(nodes.navAlarmCount.textContent,'1');assert.match(nodes.executiveAlarmText.textContent,/#2, 18 dias/);
 });
 test('chart update reuses a matching instance; type change destroys the old one',()=>{
   const source=slice('const mkc=(id,cfg)=>{','const rangeDays=');
