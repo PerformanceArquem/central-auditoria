@@ -659,8 +659,8 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;expor
  const missingMetrics=missing?'<div style="color:#66768d;font-size:13px;margin-top:12px">Metas de referência não avaliadas por ausência de apontamentos importados.</div>':
    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px"><tr>'+
      tile('Meta mínima de referência'+teamLabel,duration(minimum))+tile('Jornada de referência'+teamLabel,duration(target))+'</tr><tr>'+
-     tile('Diferença para a mínima'+teamLabel,duration(minimumGap))+
-     tile('Diferença para a jornada'+teamLabel,duration(targetGap))+'</tr></table>';
+     tile('Falta para a meta mínima'+teamLabel,duration(minimumGap))+
+     tile('Falta para a jornada'+teamLabel,duration(targetGap))+'</tr></table>';
  const test=manual?'<div style="background:#eaf3ff;color:#174c99;border:1px solid #c8ddff;padding:14px 16px;border-radius:8px;margin:0 0 18px;font-size:13px"><strong>ENVIO DE TESTE</strong> — Mensagem para verificar o recebimento. Não substitui um relatório definitivo.</div>':'';
  const warning=(partial||missing)?'<div style="background:#fff8e9;color:#86520f;border-left:4px solid #e4ad38;padding:14px 16px;border-radius:7px;font-size:13px;margin:18px 0">'+esc(completeness)+'<div style="margin-top:7px">'+esc(note)+'</div></div>':
    '<p style="color:#65748b;font-size:12px;line-height:1.5">'+esc(note)+'</p>';
@@ -874,8 +874,8 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
     ] : selected.length ? [
       `Meta mínima de referência . ${duration(journeyGaps.referenceMinimumMinutes)}`,
       `Jornada de referência ..... ${duration(journeyGaps.referenceTargetMinutes)}`,
-      `Diferença para a mínima ... ${duration(journeyGaps.minimumGapMinutes)}`,
-      `Diferença para a jornada .. ${duration(journeyGaps.targetGapMinutes)}`,
+      `Falta para a meta mínima ... ${duration(journeyGaps.minimumGapMinutes)}`,
+      `Falta para a jornada .. ${duration(journeyGaps.targetGapMinutes)}`,
       `Tempo acima da jornada .... ${duration([...byPerson.values()].reduce((sum,value)=>sum+Math.max(0,value-target),0))}`
     ] : [
       'Metas não avaliadas: nenhum apontamento importado neste período.',
@@ -918,9 +918,8 @@ function buildReport(rec: R, appts: R[], from: string, to: string, kind: ReportK
       minimumGap:x.minimumGap,targetGap:x.targetGap,ruleSource:'Referência do cadastro; não é controle de ponto'
     })):[...byPerson.entries()].sort((a,b)=>b[1]-a[1]).slice(0,70)
       .map(([name,minutes])=>({name,sector:scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
-        minutes,minimumMinutes:days.length*targetPerDay*minimumPercent/100,
-        targetMinutes:days.length*targetPerDay,minimumGap:Math.max(0,days.length*targetPerDay*minimumPercent/100-minutes),
-        targetGap:Math.max(0,days.length*targetPerDay-minutes),ruleSource:'Referência padrão; não é controle de ponto'})),
+        minutes,minimumMinutes:minimum,targetMinutes:target,
+        ...periodReference(byOrdinary.get(name)||0,target,minimum),ruleSource:'Referência padrão; não é controle de ponto'})),
     daily:(reportSectionOn(rec,'daily_detail')?dailyJourney:[]).slice(0,90).map(x=>({date:x.day,person:x.name,
       sector:scopedManagement?x.sector:
         scope==='management'?'Setores selecionados':String(rec.sector||(Array.isArray(rec.sectors)?rec.sectors[0]:'')||''),
