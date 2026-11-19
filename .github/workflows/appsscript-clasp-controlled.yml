@@ -80,7 +80,8 @@ jobs:
           cd "$RUNNER_TEMP/remote-script"
           printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
           clasp pull
-          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" audit "$PWD" "$GITHUB_STEP_SUMMARY"
+          npm install --prefix "$RUNNER_TEMP/audit-parser" --no-save --silent acorn@8.15.0
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" audit "$PWD" "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/audit-parser"
       - name: Checkout PR68 as data only (never execute its code)
         uses: actions/checkout@v4
         with:
@@ -333,7 +334,7 @@ jobs:
           node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-candidate-dry-run.mjs" \
             "$PWD" "$RUNNER_TEMP/cc-release/candidate" "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/cc-release/parser"
           node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" verify \
-            "$PWD" "$RUNNER_TEMP/cc-release/candidate" "$EXPECTED_REMOTE" "$APPROVED_SOURCE"
+            "$PWD" "$RUNNER_TEMP/cc-release/candidate" "$EXPECTED_REMOTE" "$APPROVED_SOURCE" "$RUNNER_TEMP/cc-release/parser"
           node --check "$RUNNER_TEMP/cc-release/candidate/Código.js"
           node "$GITHUB_WORKSPACE/apps-script/ci-clasp-cc-promotion-guard.mjs" sha256 \
             "$RUNNER_TEMP/cc-release/candidate" "$APPROVED_SOURCE"
@@ -399,7 +400,8 @@ jobs:
           cd "$RUNNER_TEMP/remote-script"
           printf '{"scriptId":"%s"}\n' "$SCRIPT_ID" > .clasp.json
           clasp pull
-          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" verify "$PWD" "$GITHUB_WORKSPACE/apps-script/deploy-source" "$EXPECTED_REMOTE" "$APPROVED_SOURCE"
+          npm install --prefix "$RUNNER_TEMP/release-parser" --no-save --silent acorn@8.15.0
+          node "$GITHUB_WORKSPACE/apps-script/ci-clasp-guard.mjs" verify "$PWD" "$GITHUB_WORKSPACE/apps-script/deploy-source" "$EXPECTED_REMOTE" "$APPROVED_SOURCE" "$RUNNER_TEMP/release-parser"
       - name: Publish ONLY after environment approval and exact hash match
         env:
           EXPECTED_REMOTE: ${{ inputs.expected_remote_sha256 }}

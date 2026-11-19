@@ -1,7 +1,8 @@
 import {createHash} from 'node:crypto';
 import {readdirSync,readFileSync,appendFileSync} from 'node:fs';
-import {join} from 'node:path';
-const [mode,remote,other,expectedRemote,expectedSource]=process.argv.slice(2);
+import {join,resolve} from 'node:path';
+import {createRequire} from 'node:module';
+const [mode,remote,other,expectedRemote,expectedSource,parserDir]=process.argv.slice(2);
 const allowed=['.js','.gs','.html','.json'];
 function walk(dir,prefix=''){
  const out=[];
@@ -20,50 +21,31 @@ function snapshot(dir){
  for(const p of paths){h.update(p);h.update('\0');h.update(readFileSync(join(dir,p)));h.update('\0');}
  return {paths,sha:h.digest('hex')};
 }
-function duplicateTopLevelFunctions(dir,paths){
+function duplicateTopLevelFunctions(dir,paths,parserDir){
+ if(!parserDir)throw Error('Diretório do analisador JavaScript ausente.');
+ const {parse}=createRequire(resolve(parserDir,'package.json'))('acorn');
  const declarations=new Map();
  for(const path of paths.filter(p=>p.endsWith('.js')||p.endsWith('.gs'))){
   const source=readFileSync(join(dir,path),'utf8');
-  for(const match of source.matchAll(/^function\s+([A-Za-z_$][\w$]*)\s*\(/gm)){
-   const name=match[1];
-   const matches=declarations.get(name)||[];
-   matches.push(path);
-   declarations.set(name,matches);
+  const {body}=parse(source,{ecmaVersion:'latest',sourceType:'script'});
+  for(const node of body){
+   if(node.type!=='FunctionDeclaration'||!node.id)continue;
+   const matches=declarations.get(node.id.name)||[];
+   matches.push({path,hash:createHash('sha256').update(source.slice(node.start,node.end)).digest('hex')});
+   declarations.set(node.id.name,matches);
   }
  }
- return [...declarations.entries()].filter(([,paths])=>paths.length>1).sort(([a],[b])=>a.localeCompare(b));
-}
-// Comparacao conservadora de trechos: nao comprova equivalencia semantica.
-function duplicateTextFingerprints(dir,duplicates){
- const records=new Map();
- for(const [,paths] of duplicates){
-  for(const path of paths){
-   if(records.has(path))continue;
-   const source=readFileSync(join(dir,path),'utf8');
-   const matches=[...source.matchAll(/^function\s+([A-Za-z_$][\w$]*)\s*\(/gm)];
-   const fragments=new Map();
-   for(let i=0;i<matches.length;i++){
-    const start=matches[i].index;
-    const end=i+1<matches.length?matches[i+1].index:source.length;
-    const section=source.slice(start,end).trim();
-    fragments.set(matches[i][1],createHash('sha256').update(section).digest('hex'));
-   }
-   records.set(path,fragments);
-  }
- }
- return duplicates.map(([name,paths])=>{
-  const hashes=paths.map(path=>records.get(path).get(name));
-  return {name,paths,identicalText:hashes.every(hash=>hash===hashes[0])};
- });
+ return [...declarations.entries()].filter(([,matches])=>matches.length>1)
+  .sort(([a],[b])=>a.localeCompare(b));
 }
 if(mode==='audit'){
  const d=snapshot(remote);
  appendFileSync(other,'### Auditoria read-only\n\nArquivos: '+d.paths.length+'\n\nSHA-256: '+d.sha+'\n\nArquivos: '+d.paths.join(', ')+'\n');
- const duplicates=duplicateTopLevelFunctions(remote,d.paths);
- appendFileSync(other,'\n### Verificação de funções top-level duplicadas\n\n'+(duplicates.length?duplicates.map(([name,paths])=>'- \`'+name+'\`: '+paths.map(p=>'\`'+p+'\`').join(', ')).join('\n'):'Nenhuma declaração duplicada encontrada pelo verificador estático.')+'\n');
+ const duplicates=duplicateTopLevelFunctions(remote,d.paths,expectedRemote);
+ appendFileSync(other,'\n### Verificação de funções top-level duplicadas\n\n'+(duplicates.length?duplicates.map(([name,paths])=>'- \`'+name+'\`: '+paths.map(({path})=>'\`'+path+'\`').join(', ')).join('\n'):'Nenhuma declaração duplicada encontrada pelo verificador estático.')+'\n');
  console.log('Funções top-level duplicadas identificadas: '+duplicates.length);
- for(const [name, locations] of duplicates) console.log('DUPLICADA '+name+' em '+locations.join(', '));
- const fingerprints=duplicateTextFingerprints(remote,duplicates);
+ for(const [name, locations] of duplicates) console.log('DUPLICADA '+name+' em '+locations.map(({path})=>path).join(', '));
+ const fingerprints=duplicates.map(([name,matches])=>({name,identicalText:matches.every(({hash})=>hash===matches[0].hash)}));
  const same=fingerprints.filter(f=>f.identicalText);
  const different=fingerprints.filter(f=>!f.identicalText);
  console.log('TRECHOS COM TEXTO IGUAL (comparacao conservadora): '+same.length);
@@ -80,7 +62,7 @@ if(mode==='audit'){
  if(current.sha!==expectedRemote)throw Error('Remoto divergiu da auditoria.');
  if(source.sha!==expectedSource)throw Error('Origem revisada divergiu do hash aprovado.');
  if(current.paths.join('|')!==source.paths.join('|'))throw Error('Lista de arquivos difere; possível exclusão de função.');
- const remaining=duplicateTopLevelFunctions(other,source.paths);
- if(remaining.length)throw Error('Publicação bloqueada: '+remaining.length+' funções top-level duplicadas na origem revisada: '+remaining.map(([name,paths])=>name+' ['+paths.join(', ')+']').join('; '));
+ const remaining=duplicateTopLevelFunctions(other,source.paths,parserDir);
+ if(remaining.length)throw Error('Publicação bloqueada: '+remaining.length+' funções top-level duplicadas na origem revisada: '+remaining.map(([name,paths])=>name+' ['+paths.map(({path})=>path).join(', ')+']').join('; '));
  console.log('Hashes e inventário dos arquivos validados.');
 }else throw Error('Modo inválido');
