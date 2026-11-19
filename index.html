@@ -11,6 +11,7 @@
         <script defer src="audit-readonly-insights-ui.js"></script>
         <script defer src="audit-alert-policy-ui.js"></script>
         <script defer src="audit-queue-flow-ui.js"></script>
+        <script defer src="audit-quality-review-ui.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
         <style>
@@ -1956,6 +1957,40 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                           </tr></thead><tbody id="queueFlowOldestRows"><tr><td colspan="7">Execute a prévia para consultar os chamados.</td></tr></tbody></table></div>
                         </details>
                         <p class="subtle">A primeira atribuição no histórico não é classificada como transferência. Tempos sem comprovação não são estimados. Resultados representam apenas os registros sincronizados e lidos nesta amostra, não um relatório histórico completo.</p>
+                    </section>
+                    <section class="card noprint" id="qualityReviewPanel" aria-label="Análise preliminar de qualidade" style="margin:12px 0">
+                      <div class="alert-heading">
+                        <div>
+                          <div class="eyebrow">ETAPA 4 · QUALIDADE · REVISÃO HUMANA</div>
+                          <h3>Auditoria de Qualidade — evidências e orientações</h3>
+                          <p class="subtle">Identifica sinais para conferência, nunca NCs definitivas. A validação requer evidência e procedimento vigente publicado na intranet.</p>
+                        </div>
+                        <div class="alert-hero-actions">
+                          <button type="button" class="b" id="qualityReviewRun" onclick="runQualityReviewPreview()">Analisar sem registrar NCs</button>
+                        </div>
+                      </div>
+                      <p id="qualityReviewStatus" class="coverage-note" role="status">Nenhuma análise executada. Registro de NC e envios bloqueados.</p>
+                      <p id="qualityReviewMetrics" class="subtle" aria-live="polite"></p>
+                      <div class="tw">
+                        <table><thead><tr>
+                          <th>Chamado</th><th>Setor</th><th>Responsável</th><th>Assunto</th>
+                          <th>Sinais técnicos para revisão</th><th>Orientações</th>
+                        </tr></thead><tbody id="qualityReviewRows">
+                          <tr><td colspan="6">Execute a análise para visualizar os candidatos.</td></tr>
+                        </tbody></table>
+                      </div>
+                      <div class="card noprint" style="margin-top:10px">
+                        <h4 id="qualityAiPreviewTitle">Orientações da Qualidade</h4>
+                        <p class="subtle">A sugestão de IA é opcional, controlada no servidor e desativada por padrão. Nenhum conteúdo individual de chamado é enviado ao Gemini: apenas códigos genéricos, caso expressamente autorizado.</p>
+                        <input type="hidden" id="qualityAiCodes" value="">
+                        <label><input type="checkbox" id="qualityAiConsent"> Autorizo a elaboração de um rascunho de orientações com códigos genéricos de verificação, se a função Gemini estiver habilitada.</label>
+                        <div class="row" style="margin-top:8px">
+                          <button type="button" class="s" id="qualityAiGenerate" onclick="qualityGenerateGuidance()">Gerar rascunho de orientação</button>
+                        </div>
+                        <p id="qualityAiStatus" class="subtle" role="status">Sem solicitações à IA.</p>
+                        <pre id="qualityAiDraft" style="white-space:pre-wrap;font:inherit;border:1px solid var(--line);padding:12px;border-radius:8px;max-height:350px;overflow:auto">Selecione um chamado para visualizar orientações locais.</pre>
+                      </div>
+                      <p class="subtle">Nenhuma NC é registrada automaticamente, nenhum feedback é enviado e nenhuma medida disciplinar é sugerida. A Qualidade verifica o procedimento publicado, o contexto e a causa real antes de classificar qualquer ocorrência.</p>
                     </section>
                     <section class="card noprint" id="auditInsightsPanel" aria-label="Prévia da auditoria inteligente" style="margin:12px 0">
                         <div class="alert-heading">
