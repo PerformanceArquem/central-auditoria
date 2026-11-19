@@ -8,6 +8,7 @@
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+        <script defer src="audit-readonly-insights-ui.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
         <style>
@@ -1901,6 +1902,33 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                         <p class="coverage-note" id="alarmCoverage" role="status">Aguardando a leitura dos chamados.</p>
                         <div class="kpis alert-kpis" id="alertKpis"></div>
                     </div>
+                    <section class="card noprint" id="auditInsightsPanel" aria-label="Prévia da auditoria inteligente" style="margin:12px 0">
+                        <div class="alert-heading">
+                            <div><div class="eyebrow">ETAPA 1 · HOMOLOGAÇÃO · SOMENTE LEITURA</div><h3>Auditoria inteligente — indicadores e prévias</h3>
+                            <p class="subtle">Alertas, filas, sinais de qualidade e horas reais. Resultado limitado à base sincronizada, sem IA executando ações.</p></div>
+                            <div class="alert-hero-actions"><button id="auditInsightsRun" type="button" class="b" onclick="runAuditReadonlyInsights()">Gerar prévia sem enviar</button></div>
+                        </div>
+                        <p class="coverage-note" id="auditInsightsStatus" role="status">Nenhuma prévia executada. Envios e gravações bloqueados.</p>
+                        <p class="subtle" id="auditInsightsMetrics" aria-live="polite"></p>
+                        <details><summary><b>1. Alertas preventivos, vencidos e sem movimentação</b></summary>
+                          <div class="tw"><table><thead><tr><th>Chamado</th><th>Setor</th><th>Responsável</th><th>Motivo</th><th>Data de referência</th><th>Mensagem sugerida</th></tr></thead>
+                          <tbody id="auditInsightsAlerts"><tr><td colspan="6">Execute uma prévia.</td></tr></tbody></table></div>
+                        </details>
+                        <details><summary><b>2. Fiscalização das filas</b></summary>
+                          <div class="tw"><table><thead><tr><th>Equipe</th><th>Chamados abertos</th><th>Entradas confirmadas</th><th>Tempo médio na fila</th><th>Parados ≥ 7 dias</th><th>SLA vencido</th></tr></thead>
+                          <tbody id="auditInsightsQueues"><tr><td colspan="6">Execute uma prévia.</td></tr></tbody></table></div>
+                        </details>
+                        <details><summary><b>3. Qualidade — achados para revisão humana</b></summary>
+                          <p class="subtle">Sinais de triagem determinísticos, não uma não conformidade confirmada. Integração com IA será homologada em etapa própria.</p>
+                          <div class="tw"><table><thead><tr><th>Chamado</th><th>Equipe</th><th>Responsável</th><th>Assunto</th><th colspan="2">Evidências para revisão</th></tr></thead>
+                          <tbody id="auditInsightsQuality"><tr><td colspan="6">Execute uma prévia.</td></tr></tbody></table></div>
+                        </details>
+                        <details><summary><b>4. Produtividade — horas realmente apontadas</b></summary>
+                          <div class="tw"><table><thead><tr><th>Colaborador</th><th>Horas</th><th>Apontamentos</th><th>Chamados</th><th>Setores identificados</th><th>Atividades</th></tr></thead>
+                          <tbody id="auditInsightsProductivity"><tr><td colspan="6">Execute uma prévia.</td></tr></tbody></table></div>
+                        </details>
+                        <p class="subtle">Amostras e totais podem ser parciais. Nenhuma avaliação de desempenho, não conformidade ou cobrança é registrada automaticamente.</p>
+                    </section>
                     <div class="alert-split">
                         <div class="card"><h3><span class="siren-visual" aria-hidden="true">🚨</span> Mais antigo por setor</h3>
                             <p class="subtle">O ticket com mais tempo sem atualização em cada equipe.</p>
