@@ -62,7 +62,7 @@ test('cobrança informa chamados não sincronizados e bloqueia envio antes da pr
  assert.match(source,/alarmEmailMissingIds/);
  assert.match(source,/e\.missingIds/);
  assert.match(source,/function alarmRemoveMissingTickets\(\)/);
- assert.match(source,/alarmEmailApproved=ccBlocked\?'':alarmSelectionSignature\(\)/);
+ assert.match(source,/alarmEmailApproved=ccBlocked\?'':signature/);
 });
 
 test('prévia da cobrança usa o mesmo HTML enviado, com isolamento e texto opcional',()=>{

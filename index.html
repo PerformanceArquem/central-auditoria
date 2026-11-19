@@ -1944,7 +1944,10 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                             <div class="fg" style="min-width:180px"><label for="alarmEmailTone">Modelo de mensagem</label><select id="alarmEmailTone" onchange="alarmEmailDraft()"><option value="cordial">Acompanhamento cordial</option><option value="priority">Prioridade e previsão</option><option value="management">Resumo para gestão</option></select></div>
                           </div>
                           <div class="fg" style="margin-top:10px"><label>Chamados selecionados · setor e responsável atuais</label><div class="tw" style="max-height:190px;overflow:auto"><table><thead><tr><th>Chamado</th><th>Cliente</th><th>Setor</th><th>Responsável</th><th>Dias em aberto</th><th>Último apontamento real</th></tr></thead><tbody id="alarmEmailSelectedDetails"><tr><td colspan="6">Selecione chamados para visualizar.</td></tr></tbody></table></div></div>
-<div class="fg" style="margin-top:10px"><label for="alarmEmailMessage">Contexto complementar (editável; saudação e encerramento são padronizados)</label><textarea id="alarmEmailMessage" rows="7" style="width:100%" oninput="alarmEmailInvalidate()"></textarea></div>
+<div class="fg" style="margin-top:10px"><label for="alarmEmailSubject">Assunto (opcional)</label><input id="alarmEmailSubject" type="text" maxlength="160" placeholder="Deixe em branco para usar o assunto padrão" oninput="alarmEmailInvalidate()"></div>
+<div class="fg" style="margin-top:10px"><label for="alarmEmailMessage">Sua mensagem</label><textarea id="alarmEmailMessage" rows="7" maxlength="8500" style="width:100%" oninput="alarmEmailInvalidate()"></textarea></div>
+<label><input id="alarmEmailCustomBody" type="checkbox" onchange="alarmEmailInvalidate()"> Usar minha mensagem como texto principal</label>
+<p class="subtle">Se desmarcado, sua mensagem entra como complemento do texto padrão. A tabela de chamados acompanha o e-mail.</p>
                           <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">
                             <button type="button" class="s" onclick="alarmEmailDraft()">Gerar texto padrão</button>
                             <button type="button" class="s" id="alarmEmailAiDraft" onclick="alarmEmailAiDraft()" disabled title="Verificando disponibilidade do Gemini..." style="border-color:#b8c7e9;background:#eef4ff;color:#1b4da0;font-weight:700">✦ Melhorar cobrança com IA</button>
@@ -3534,6 +3537,7 @@ const alarmSelectionSignature=()=>{
    timeLog:$('alarmEmailLogHours')?.checked?{
      date:$('alarmEmailWorkDate')?.value,start:$('alarmEmailWorkStart')?.value,end:$('alarmEmailWorkEnd')?.value
    }:null,
+   subject:$('alarmEmailSubject')?.value||'',customBody:!!$('alarmEmailCustomBody')?.checked,
    message:$('alarmEmailMessage')?.value||'',registerInternalNote:!!$('alarmEmailInternalNote')?.checked,
    includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,projectDailyGoalHours:Number($('rMeta')?.value)||4,projectWorkdayHours:Number($('rJor')?.value)||8,
    projectForecastFieldId:String($('cfId')?.value||''),
@@ -3722,7 +3726,7 @@ async function alarmEmailCall(action,confirmed=false){
  if(!/^[^@\s]+@arquem\.com\.br$/.test(recipient))throw Error('Informe um destinatário @arquem.com.br.');
  if(cc.length>10||cc.some(email=>email===recipient))throw Error('Confira os contatos em cópia; limite de 10, sem repetir o destinatário.');
  const {data,error}=await client.functions.invoke('audit-email-dispatch',{
-  body:{action,ticketIds:ids,recipient,cc,timeLog,registerInternalNote:!!$('alarmEmailInternalNote')?.checked,message:$('alarmEmailMessage').value,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,
+  body:{action,ticketIds:ids,recipient,cc,timeLog,registerInternalNote:!!$('alarmEmailInternalNote')?.checked,message:$('alarmEmailMessage').value,subject:$('alarmEmailSubject').value,customBody:$('alarmEmailCustomBody').checked,includeGuidance:!!$('alarmEmailIncludeGuidance')?.checked,confirmed,
     projectDailyGoalHours:Number($('rMeta')?.value)||4,projectWorkdayHours:Number($('rJor')?.value)||8,
    projectForecastFieldId:String($('cfId')?.value||''),projectPeriodFrom:$('fStart')?.value||'',
     projectPeriodTo:$('fEnd')?.value||'',requestId:alarmEmailRequestId}
@@ -3755,7 +3759,9 @@ async function alarmEmailPreview(){
  const button=$('alarmEmailSend');button.disabled=true;
  $('alarmEmailStatus').textContent='Conferindo chamados e preparando a prévia...';
  try{
+  const signature=alarmSelectionSignature();
   const data=await alarmEmailCall('ticket_charge_preview');
+  if(signature!==alarmSelectionSignature())throw Error('O e-mail mudou durante a consulta. Gere uma nova prévia.');
   if(typeof data.html!=='string'||!data.html.includes('<html'))throw Error('O servidor não retornou a prévia HTML corporativa. Nenhum envio foi liberado.');
   $('alarmEmailPreviewSubject').textContent='Assunto: '+data.subject;
   $('alarmEmailPreviewRecipients').textContent='Para: '+data.recipient+(data.cc?.length?' · CC: '+data.cc.join(', '):'')+
@@ -3782,7 +3788,7 @@ async function alarmEmailPreview(){
   }
 
   $('alarmEmailPreviewArea').classList.remove('hide');
-  alarmEmailApproved=ccBlocked?'':alarmSelectionSignature();
+  alarmEmailApproved=ccBlocked?'':signature;
   alarmEmailRequestId=ccBlocked?'':crypto.randomUUID();
   alarmEmailValidated=false;
   $('alarmEmailValidate').disabled=ccBlocked;
@@ -3807,21 +3813,23 @@ async function alarmEmailValidate(){
  if(!alarmEmailApproved||alarmEmailApproved!==alarmSelectionSignature()||!alarmEmailRequestId){
   $('alarmEmailStatus').textContent='Atualize a prévia antes de validar.';return;
  }
+ const requestId=alarmEmailRequestId;
  btn.disabled=true;
  try{
   const client=window.tmEmailAdminClient;
   if(!client)throw Error('Faça login como administrador.');
   const {data,error}=await client.functions.invoke('audit-email-dispatch',{body:{
-   action:'ticket_charge_validate',requestId:alarmEmailRequestId,
+   action:'ticket_charge_validate',requestId,
    ticketIds:[...alarmSelected],recipient:alarmRecipientEmail(),cc:alarmCcRecipients()
   }});
+  if(requestId!==alarmEmailRequestId||alarmEmailApproved!==alarmSelectionSignature())return;
   if(error||!data?.ok)throw Error(data?.error||error?.message||'Não foi possível registrar a validação.');
   alarmEmailValidated=true;
   btn.textContent='✓ Validado';
   $('alarmEmailValidatedAt').textContent='Início: '+alarmEmailTime(data.validatedAt);
   $('alarmEmailSend').disabled=false;
   $('alarmEmailStatus').textContent='Validação registrada. Confira a prévia e confirme o envio.';
- }catch(e){btn.disabled=false;$('alarmEmailStatus').textContent=String(e.message||e)}
+ }catch(e){if(requestId!==alarmEmailRequestId)return;btn.disabled=false;$('alarmEmailStatus').textContent=String(e.message||e)}
 }
 async function alarmEmailSend(){
  if(alarmEmailSending||!alarmEmailValidated||!alarmEmailApproved||alarmEmailApproved!==alarmSelectionSignature()){
