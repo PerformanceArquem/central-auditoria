@@ -922,14 +922,6 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                 <b>Auditoria de Chamados</b>
                 <small>Ticket Manager · Movidesk</small>
             </div>
-            <div class="header-actions">
-                <button id="headerSiren" class="header-siren" type="button" onclick="showTab('alerts')" title="Abrir alertas dos chamados parados" aria-live="polite"><span class="siren-icon">🚨</span> <span id="headerSirenText">Monitorando pendências</span></button>
-            <div class="chip" id="chip">
-                <span class="dot"></span>
-                <span id="status">Aguardando dados</span>
-                <span id="auto"></span><span id="directSyncStatus" style="margin-left:8px;color:#dbeafe" role="status"> · Supabase: verificando...</span>
-            </div>
-            </div>
         </header>
         <nav id="tabs" aria-label="Menu principal">
           <div class="nav-head"><strong>MENU PRINCIPAL</strong><button type="button" id="navCollapseAll" aria-label="Recolher todas as pastas" title="Recolher todas as pastas">−</button></div>
@@ -2466,6 +2458,11 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                 <div id="t-diag" class="hide">
                     <div class="card">
                         <h3>Diagnóstico da extração</h3>
+                        <div class="chip" id="chip" style="color:var(--muted);border:1px solid var(--line);white-space:normal;flex-wrap:wrap;margin-bottom:12px" role="status">
+                <span class="dot"></span>
+                <span id="status">Aguardando dados</span>
+                <span id="auto"></span><span id="directSyncStatus"> · Supabase: verificando...</span>
+            </div>
                         <div id="diagSummary"></div>
                         <pre id="rawJson">Sem dados.</pre>
                     </div>
@@ -3855,12 +3852,7 @@ let alarmSectorChartSignature='';
 function renderAlerts(){
   if(!$('t-alerts'))return;
   const all=alarmList(),limit=alarmThreshold(),alerted=all.filter(x=>x.idle>=limit);
-  const header=$('headerSiren'),headerText=$('headerSirenText'),nav=$('navAlarmCount');
-  const worst=all[0];
-  header.classList.toggle('hot',alerted.length>0);
-  headerText.textContent=alerted.length?
-    `${alerted.length} parado(s) ≥ ${limit}d · mais antigo #${worst.id} (${worst.idle}d)`:
-    !TK.size?'Aguardando tickets do Movidesk':all.length?`Sem alertas ≥ ${limit} dias`:'Sem chamados abertos classificados';
+  const nav=$('navAlarmCount'),worst=all[0];
   nav.textContent=String(alerted.length);nav.classList.toggle('hot',alerted.length>0);
   const summary=$('executiveAlarmText');
   if(summary)summary.textContent=alerted.length?
