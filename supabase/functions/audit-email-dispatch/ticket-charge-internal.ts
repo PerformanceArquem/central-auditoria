@@ -1,28 +1,18 @@
 // Internal notes are audit communications, NOT workTime appointments or customer-visible notes.
 const clean=(v:unknown,max=180)=>String(v??'').replace(/[\x00-\x1f\x7f]+/g,' ').trim().slice(0,max);
 const htmlEsc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-export type NoteDetail={id:string;client:string;sector:string;owner:string;subject:string;daysOpen?:number|null;lastAppointment?:string|null;lastAppointmentMinutes?:number|null};
-export function internalChargeNote(requestId:string,detail:NoteDetail,recipient:string,cc:string[]){
+export function internalChargeNote(requestId:string,detail:{id:string;client:string;subject:string}){
  if(!/^[0-9a-f-]{36}$/i.test(requestId)||!/^\d{1,12}$/.test(detail.id))throw Error('Referência de auditoria inválida.');
+ // The Movidesk worker locates this marker before writing to avoid duplicate actions.
  const reference='CENTRAL-AUDITORIA-COBRANCA:'+requestId+':'+detail.id;
  const lines=[
-  '[ACOMPANHAMENTO INTERNO — CENTRAL DE AUDITORIA]',
-  'Referência: '+reference,
-  'Olá, equipe! Tudo bem?',
-  'Estamos acompanhando este chamado e gostaríamos de confirmar, quando possível, como está o andamento e se há alguma dependência ou necessidade de apoio.',
-  'Se já houver novidades, pedimos a gentileza de manter as informações atualizadas no Movidesk, indicando o próximo passo, o responsável e uma previsão viável de retorno, quando disponível.',
-  'Agradecemos pela colaboração e permanecemos à disposição para alinharmos os próximos encaminhamentos.',
-  'Chamado: #'+detail.id,
-  'Cliente: '+clean(detail.client),
-  'Setor na consulta: '+clean(detail.sector),
-  'Responsável na consulta: '+clean(detail.owner),
-  'Assunto: '+clean(detail.subject,220),
-  'Tempo em aberto (consulta): '+(Number.isFinite(detail.daysOpen)?String(detail.daysOpen)+' dia(s)':'Não disponível'),
-  'Último apontamento real de horas: '+(detail.lastAppointment&&Number.isFinite(detail.lastAppointmentMinutes)?
-    clean(detail.lastAppointment,20)+' · '+detail.lastAppointmentMinutes+' min':'Não localizado na base sincronizada'),
-  'Acompanhamento encaminhado por e-mail para: '+clean(recipient,128),
-  'Em cópia (CC): '+(cc.length?cc.map(x=>clean(x,128)).join(', '):'Nenhum'),
-  'Nota de auditoria: este registro é apenas acompanhamento administrativo; não indica falta de trabalho, não constitui tratamento técnico, resolução nem apontamento de horas.'
+  'Auditoria de chamado · Central de Auditoria',
+  '',
+  'Na revisão do chamado #'+detail.id+' — '+clean(detail.subject,220)+', do cliente '+clean(detail.client)+', enviamos um e-mail de acompanhamento para entender como está o atendimento e como podemos ajudar a dar andamento.',
+  '',
+  'Quando possível, pedimos que atualize o chamado com o próximo passo. Se houver alguma dúvida, impedimento ou necessidade de apoio, pode sinalizar por aqui. Estamos à disposição para ajudar.',
+  '',
+  reference
  ];
  return {reference,text:lines.join('\n')};
 }
