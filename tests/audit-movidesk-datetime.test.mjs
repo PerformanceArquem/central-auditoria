@@ -67,5 +67,4 @@ test('all analytic engines share UTC contract, not runtime-local interpretation'
   const plain='2026-11-17T10:30:00';
   assert.equal(core.utc(plain),parseMovideskUtc(plain));
   assert.equal(flow.utc(plain),parseMovideskUtc(plain));
-  assert.equal(process.env.TZ||'UTC',process.env.TZ||'UTC');
 });
