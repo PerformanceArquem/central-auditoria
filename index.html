@@ -988,6 +988,27 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 
             <div id="t-report-preview" class="hide">
               <div class="mh"><div><div class="eyebrow">RELATÓRIOS · SOMENTE LEITURA</div><h2>Pré-visualização dos colaboradores</h2><p>Resumo diário e semanal dos apontamentos sincronizados pelo Movidesk.</p></div></div>
+              <section class="card" aria-labelledby="sectorEntriesHeading">
+                <div class="mh"><div><h2 id="sectorEntriesHeading">Chamados por setor</h2><p>Entradas registradas no Movidesk e atividades de Treinamento e Qualidade.</p></div></div>
+                <form id="sectorEntriesForm" class="row noprint" style="align-items:flex-end">
+                  <div class="fg"><label for="sectorEntriesFrom">De</label><input id="sectorEntriesFrom" type="date" required></div>
+                  <div class="fg"><label for="sectorEntriesTo">Até</label><input id="sectorEntriesTo" type="date" required></div>
+                  <button class="b" type="submit" id="sectorEntriesLoad">Consultar chamados</button>
+                </form>
+                <p class="subtle" id="sectorEntriesStatus" role="status"></p>
+                <div id="sectorEntriesResult" hidden>
+                  <div class="kpis" id="sectorEntriesKpis"></div>
+                  <h3>Distribuição por setor</h3>
+                  <div id="sectorEntriesBars" aria-hidden="true" style="display:grid;gap:12px;margin:12px 0 20px"></div>
+                  <div class="tw"><table>
+                    <thead><tr><th scope="col">Setor</th><th scope="col">Critério</th><th scope="col">Chamados</th></tr></thead>
+                    <tbody id="sectorEntriesRows"></tbody>
+                    <tfoot><tr><th scope="row" colspan="2">Soma por setor</th><td id="sectorEntriesTotal"></td></tr></tfoot>
+                  </table></div>
+                  <p class="subtle" style="margin-top:12px">Cada chamado conta uma vez por setor no período. O total de chamados distintos elimina repetições entre setores.</p>
+                </div>
+              </section>
+
               <div class="card" style="border-left:4px solid #d69a38;background:#fffaf0" id="previewCoverage" role="status">Os dados ainda podem estar incompletos. Nenhum e-mail será enviado.</div>
               <div class="card">
                 <div class="row noprint" style="align-items:flex-end">
@@ -5246,6 +5267,80 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
           })();
         })();
         </script>
+<script id="sectorEntriesScript">
+(()=>{
+ const el=id=>document.getElementById(id);
+ const format=new Intl.NumberFormat('pt-BR');
+ const day=value=>value.split('-').reverse().join('/');
+ window.sectorEntriesInit=today=>{
+   const form=el('sectorEntriesForm');
+   const from=el('sectorEntriesFrom'),to=el('sectorEntriesTo');
+   const yesterday=new Date(today+'T12:00:00Z');
+   yesterday.setUTCDate(yesterday.getUTCDate()-1);
+   to.value=yesterday.toISOString().slice(0,10);
+   yesterday.setUTCDate(yesterday.getUTCDate()-6);
+   from.value=yesterday.toISOString().slice(0,10);
+   from.max=to.max=today;
+   form.addEventListener('submit',load);
+ };
+ async function load(event){
+   event.preventDefault();
+   const from=el('sectorEntriesFrom'),to=el('sectorEntriesTo'),button=el('sectorEntriesLoad');
+   const status=el('sectorEntriesStatus'),result=el('sectorEntriesResult');
+   if(button.disabled)return;
+   result.hidden=true;
+   if(from.value>to.value){status.textContent='A data inicial deve ser anterior ou igual à final.';return;}
+   from.disabled=to.disabled=button.disabled=true;
+   status.textContent='Consultando entradas e atividades…';
+   try{
+     const client=window.tmEmailAdminClient;
+     if(!client)throw Error('Faça login novamente para consultar o relatório.');
+     const {data,error}=await client.functions.invoke('audit-email-dispatch',{
+       body:{action:'sector_entries_report',from:from.value,to:to.value}
+     });
+     if(error){
+       const detail=await error.context?.json?.().catch(()=>null);
+       throw Error(detail?.error||'Não foi possível consultar o histórico.');
+     }
+     if(!data?.ok||!Array.isArray(data.rows))throw Error('O serviço retornou um relatório inválido.');
+     render(data);
+     status.textContent=day(data.from)+' a '+day(data.to)+(data.historyComplete?'':' · Histórico de entradas incompleto. Os números podem estar parciais.');
+     result.hidden=false;
+   }catch(error){status.textContent=error.message||'Não foi possível consultar o histórico.';}
+   finally{from.disabled=to.disabled=button.disabled=false;}
+ }
+ function render({rows,total,distinct}){
+   const kpis=el('sectorEntriesKpis'),bars=el('sectorEntriesBars'),body=el('sectorEntriesRows');
+   kpis.replaceChildren();
+   bars.replaceChildren();
+   body.replaceChildren();
+   for(const [label,value] of [['Soma por setor',total],['Chamados distintos',distinct]]){
+     const card=document.createElement('div'),heading=document.createElement('strong');
+     card.className='card';
+     heading.textContent=format.format(value);
+     card.append(heading,document.createElement('br'),label);
+     kpis.append(card);
+   }
+   const max=Math.max(1,...rows.map(row=>row.entries));
+   for(const {sector,entries,basis} of rows){
+     const row=body.insertRow();
+     row.insertCell().textContent=sector;
+     row.insertCell().textContent=basis;
+     row.insertCell().textContent=format.format(entries);
+     const bar=document.createElement('div'),label=document.createElement('div');
+     const track=document.createElement('div'),fill=document.createElement('div');
+     label.textContent=sector+' · '+format.format(entries);
+     track.style.cssText='height:10px;border-radius:5px;background:#e5edf6;overflow:hidden';
+     fill.style.cssText='height:100%;border-radius:5px;background:#226b9b';
+     fill.style.width=100*entries/max+'%';
+     track.append(fill);
+     bar.append(label,track);
+     bars.append(bar);
+   }
+   el('sectorEntriesTotal').textContent=format.format(total);
+ }
+})();
+</script>
 <script id="reportPreviewScript">
 (()=>{'use strict';
  const el=id=>document.getElementById(id); let loaded=false,latest=null,started=false,collaboratorNames=[];
@@ -5256,6 +5351,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
  window.previewInit=()=>{
    if(started)return;started=true;
    el('previewDate').value=zoneDate();
+   window.sectorEntriesInit(zoneDate());
    el('previewLoad').addEventListener('click',load);
    el('previewCopy').addEventListener('click',async()=>{
      const value=el('previewText').value;
