@@ -28,11 +28,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install pinned browser test dependency only in disposable runner
+      - name: Install pinned test library in disposable runner (no browser download)
         run: |
           npm init -y >/dev/null
           npm install --no-save --no-package-lock --ignore-scripts playwright@1.55.0
-          npx --no-install playwright install --with-deps chromium
+      - name: Use Chrome already available on the hosted runner
+        run: |
+          CHROME_BIN="$(command -v google-chrome || command -v google-chrome-stable || true)"
+          if [ -z "$CHROME_BIN" ]; then
+            echo "No system Chrome available. Do not fetch external browsers automatically."
+            exit 1
+          fi
+          "$CHROME_BIN" --version
+          echo "AUDIT_CHROME_BIN=$CHROME_BIN" >> "$GITHUB_ENV"
       - name: Execute visual smoke with fictitious data and blocked external network
         run: node --test tests/audit-visual-smoke.test.mjs
       - name: Store synthetic screenshots for review (no production data)
