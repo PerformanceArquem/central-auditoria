@@ -1,0 +1,25 @@
+name: Validate queue movement read-only stage 3
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'audit-queue-flow-ui.js'
+      - 'api/audit-queue-flow-preview.js'
+      - 'lib/audit-queue-flow.cjs'
+      - 'tests/audit-queue-flow.test.mjs'
+      - '.github/workflows/validate-audit-queue-flow.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check lib/audit-queue-flow.cjs
+      - run: node --check api/audit-queue-flow-preview.js
+      - run: node --check audit-queue-flow-ui.js
+      - run: node --test tests/audit-queue-flow.test.mjs
