@@ -1,0 +1,53 @@
+name: Validate isolated audit UI with Chromium
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'audit-readonly-insights-ui.js'
+      - 'audit-alert-policy-ui.js'
+      - 'audit-queue-flow-ui.js'
+      - 'audit-quality-review-ui.js'
+      - 'audit-productivity-preview-ui.js'
+      - 'tests/audit-visual-smoke.test.mjs'
+      - '.github/workflows/validate-audit-visual-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  visual-smoke:
+    runs-on: ubuntu-24.04 # Playwright 1.55.0 supports 24.04; 26.04 was unsupported
+    timeout-minutes: 18
+    env:
+      # Prevent external cloud calls: all browser API responses are fictitious.
+      QUALITY_GEMINI_DRAFT_ENABLED: "false"
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned test library in disposable runner (no browser download)
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save --no-package-lock --ignore-scripts playwright@1.55.0
+      - name: Use Chrome already available on the hosted runner
+        run: |
+          CHROME_BIN="$(command -v google-chrome || command -v google-chrome-stable || true)"
+          if [ -z "$CHROME_BIN" ]; then
+            echo "No system Chrome available. Do not fetch external browsers automatically."
+            exit 1
+          fi
+          "$CHROME_BIN" --version
+          echo "AUDIT_CHROME_BIN=$CHROME_BIN" >> "$GITHUB_ENV"
+      - name: Execute visual smoke with fictitious data and blocked external network
+        run: node --test tests/audit-visual-smoke.test.mjs
+      - name: Store synthetic screenshots for review (no production data)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-five-stage-fake-ui-screenshots
+          path: artifacts/audit-visual-smoke/*.png
+          retention-days: 7
+          if-no-files-found: ignore

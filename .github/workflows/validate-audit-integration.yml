@@ -1,0 +1,44 @@
+name: Validate integrated audit five-stage homologation
+on:
+  pull_request:
+    paths:
+      - 'tests/audit-integrated-homologation.test.mjs'
+      - 'tests/audit-movidesk-datetime.test.mjs'
+      - 'ops/HOMOLOGACAO_INTEGRADA_5_ETAPAS.md'
+      - '.github/workflows/validate-audit-integration.yml'
+      - 'api/audit-*.js'
+      - 'lib/audit-*.cjs'
+      - 'audit-*-ui.js'
+      - 'index.html'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Static syntax validation of all five stages
+        run: |
+          for file in lib/audit-movidesk-datetime.cjs lib/audit-readonly-insights.cjs lib/audit-alert-policy.cjs lib/audit-queue-flow.cjs lib/audit-quality-review.cjs lib/audit-productivity-comparisons.cjs; do
+            node --check "$file"
+          done
+          for file in api/audit-readonly-insights.js api/audit-alert-policy-preview.js api/audit-queue-flow-preview.js api/audit-quality-review.js api/audit-quality-ai-draft.js api/audit-productivity-preview.js; do
+            node --check "$file"
+          done
+          for file in audit-readonly-insights-ui.js audit-alert-policy-ui.js audit-queue-flow-ui.js audit-quality-review-ui.js audit-productivity-preview-ui.js; do
+            node --check "$file"
+          done
+      - name: All isolated and integrated synthetic tests
+        run: |
+          node --test \
+            tests/audit-readonly-insights.test.mjs \
+            tests/audit-alert-policy.test.mjs \
+            tests/audit-queue-flow.test.mjs \
+            tests/audit-quality-review.test.mjs \
+            tests/audit-productivity-comparisons.test.mjs \
+            tests/audit-integrated-homologation.test.mjs \
+            tests/audit-movidesk-datetime.test.mjs
