@@ -1,7 +1,6 @@
 const sectors = ['Treinamento', 'Qualidade', 'Implantação', 'Sucesso do Cliente', 'Testes (QA)'];
-const trainingActivity = 'TRE - Aplicação do treinamento';
 const activityCriteria = new Map([
-  ['Treinamento', trainingActivity],
+  ['Treinamento', 'Atividade registrada no setor'],
   ['Qualidade', 'Atividade registrada no setor']
 ]);
 const dateFormat = new Intl.DateTimeFormat('sv-SE', {
@@ -62,7 +61,6 @@ export function sectorEntries(tickets: Ticket[], appointments: Appointment[], fr
     const id = String(appointment.ticket_id ?? '').trim();
     const entries = bySector.get(team);
     if (!entries || !activityCriteria.has(team) || !activity || !id || date < from || date > to) continue;
-    if (team === 'Treinamento' && activity !== trainingActivity) continue;
     entries.add(id);
     distinct.add(id);
   }
