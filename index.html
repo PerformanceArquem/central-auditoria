@@ -8,6 +8,7 @@
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+        <script defer src="sla-alert-simulation-ui.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
         <style>
@@ -1901,6 +1902,21 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                         <p class="coverage-note" id="alarmCoverage" role="status">Aguardando a leitura dos chamados.</p>
                         <div class="kpis alert-kpis" id="alertKpis"></div>
                     </div>
+                    <section class="card noprint" id="slaSimulationPanel" aria-label="Simulador SLA da Implantação" style="margin:12px 0">
+                        <div class="alert-heading">
+                            <div><div class="eyebrow">HOMOLOGAÇÃO · SOMENTE LEITURA</div>
+                                <h3>Simular alerta de SLA — Implantação</h3>
+                                <p class="subtle">Avalia o SLA de solução vencido, responsável atual e pausas do Movidesk. Não envia notas internas nem e-mails.</p>
+                            </div>
+                            <div class="alert-hero-actions"><button type="button" class="b" id="slaSimulationRun" onclick="runSlaSimulation()">Simular sem enviar</button></div>
+                        </div>
+                        <p id="slaSimulationStatus" role="status" class="coverage-note">Nenhuma simulação executada. Envio real bloqueado.</p>
+                        <p id="slaSimulationMetrics" class="subtle" aria-live="polite"></p>
+                        <div class="tw"><table><thead><tr>
+                            <th>Chamado</th><th>Responsável</th><th>Assunto</th><th>SLA vencido há</th><th>Última ação</th><th>Mensagem simulada</th>
+                        </tr></thead><tbody id="slaSimulationRows"><tr><td colspan="6">Execute uma simulação para visualizar a prévia.</td></tr></tbody></table></div>
+                        <p class="subtle">A consulta pode ser parcial: a API principal do Movidesk restringe chamados sem atualização há mais de 90 dias. Duplicidade verificada apenas dentro desta simulação.</p>
+                    </section>
                     <div class="alert-split">
                         <div class="card"><h3><span class="siren-visual" aria-hidden="true">🚨</span> Mais antigo por setor</h3>
                             <p class="subtle">O ticket com mais tempo sem atualização em cada equipe.</p>
