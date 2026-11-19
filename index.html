@@ -3073,7 +3073,7 @@ function render(){
   if(ACT==='pivot')renderPivot();
   // Global alarm counts stay fresh; its tables/charts render only in the open module.
   renderAlerts();
-  enhanceTables();
+  if(ACT!=='alerts')enhanceTables();
 }
 function renderEntries(kd){
   const LIM=1000;
@@ -3564,11 +3564,10 @@ function alarmSelectionToggle(checkbox){
  alarmUpdateSelectedCount();alarmEmailInvalidate();
 }
 function alarmSelectVisible(){
- const visible=alarmList().filter(t=>{
-  const team=$('alarmTeam')?.value||'',q=norm(($('alarmSearch')?.value||'')+' '+(Q.alerts||'')).trim();
-  return (!team||t.team===team)&&(!q||norm([t.id,t.team,t.client,t.subject,t.owner,t.status].join(' ')).includes(q));
- });
- for(const item of visible){if(alarmSelected.size>=20)break;alarmSelected.add(item.id)}
+ for(const checkbox of $('tAlarmOldest').querySelectorAll('[data-alarm-ticket]')){
+  if(alarmSelected.size>=20)break;
+  if(checkbox.closest('tr').style.display!=='none')alarmSelected.add(checkbox.dataset.alarmTicket);
+ }
  renderAlerts();alarmEmailInvalidate();
 }
 function alarmClearSelection(){alarmSelected.clear();renderAlerts();alarmEmailInvalidate()}
@@ -3881,6 +3880,7 @@ function renderAlerts(){
   const groups=[...teams.values()].sort((a,b)=>(b.worst?.idle||0)-(a.worst?.idle||0));
   $('tAlarmSector').innerHTML=groups.length?groups.map(g=>`<tr><td><b>${esc(g.team)}</b></td><td>${g.total}</td><td><b>${g.alert}</b></td><td>${alarmCellTicket(g.worst.id)}</td><td>${alarmBadge(g.worst.idle,limit)}</td><td>${alarmDateLabel(g.worst.last)}${g.worst.estimated?' <small title="Sem lastUpdate; usada data de abertura">¹</small>':''}</td></tr>`).join(''):'<tr><td colspan="6">Ainda não há chamados com informações suficientes para esse ranking.</td></tr>';
   $('tAlarmOldest').innerHTML=display.length?display.map(t=>`<tr><td class="noprint"><input aria-label="Selecionar chamado ${esc(t.id)}" type="checkbox" data-alarm-ticket="${esc(t.id)}" onchange="alarmSelectionToggle(this)" ${alarmSelected.has(t.id)?'checked':''}></td><td><b>${alarmCellTicket(t.id)}</b>${alarmEmailTicketBadge(t.id)}</td><td>${esc(t.team)}</td><td>${esc(t.client)}</td><td title="${esc(t.subject)}">${esc(t.subject)}</td><td>${esc(t.owner)}</td><td><span class="pill">${esc(t.status)}</span></td><td>${alarmDateLabel(t.created)}</td><td>${alarmDateLabel(t.last)}${t.estimated?' <span title="Sem última atualização informada; usada a abertura">¹</span>':''}</td><td>${alarmBadge(t.idle,limit)}</td><td>${t.open==null?'—':t.open+' d'}</td><td>${ticketUrl(t.id)?`<a href="${esc(ticketUrl(t.id))}" target="_blank" rel="noopener noreferrer">Abrir ↗</a>`:'Sem portal'}</td></tr>`).join(''):'<tr><td colspan="12">Nenhum chamado corresponde aos critérios ou não há dados carregados.</td></tr>';
+  enhanceTables();
   alarmUpdateSelectedCount();
   $('alarmRowsCount').textContent=`Exibindo ${display.length} de ${list.length} chamados abertos identificados.${display.length<list.length?' A exportação Excel inclui todos.':''} O total não depende das horas apontadas.`;
   const missingLabel=hiddenUnknown?` · ${hiddenUnknown} chamado(s) sem status ou data suficiente para classificar`:'';
