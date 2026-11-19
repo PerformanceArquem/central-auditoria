@@ -2369,9 +2369,7 @@ async function ticketChargeAction(payload:R,req:Request):Promise<Response>{
   const notes=draft.tickets.map(detail=>({
    request_id:requestId,ticket_id:detail.id,status:'held',created_by_user:sender,
    ...(timeLog?{time_log:timeLog}:{}),
-   note_body:internalChargeNote(requestId,detail,recipient,cc).text+
-    (timeLog?'\nAvaliação de chamados realizada em '+timeLog.date+
-     ' das '+timeLog.start+' às '+timeLog.end+' ('+timeLog.minutes+' minutos reais confirmados pelo usuário).':'')
+   note_body:internalChargeNote(requestId,detail).text
   }));
   try{
    const queued=await db('audit_ticket_charge_internal_notes?on_conflict=request_id,ticket_id',{
