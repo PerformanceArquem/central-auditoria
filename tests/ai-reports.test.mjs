@@ -34,3 +34,21 @@ test('módulo TypeScript da Edge Function tem sintaxe válida após remoção de
  const stripped=stripTypeScriptTypes(edge);
  assert.doesNotThrow(()=>new Function('Deno',stripped));
 });
+
+test('preflight permite os cabeçalhos do cliente Supabase nos domínios oficiais',async()=>{
+ let handler;
+ new Function('Deno',stripTypeScriptTypes(edge))({serve(fn){handler=fn}});
+ const origin='https://centralauditoria.ddns.net';
+ const request=(domain)=>new Request('https://example.com',{method:'OPTIONS',headers:{
+  origin:domain,'Access-Control-Request-Method':'POST',
+  'Access-Control-Request-Headers':'authorization,apikey,content-type,x-client-info'
+ }});
+ const response=await handler(request(origin));
+ assert.equal(response.status,204);
+ assert.equal(response.headers.get('Access-Control-Allow-Origin'),origin);
+ const allowed=response.headers.get('Access-Control-Allow-Headers').split(/,\s*/);
+ for(const header of ['authorization','apikey','content-type','x-client-info'])assert.ok(allowed.includes(header));
+ const forbidden=await handler(request('https://example.org'));
+ assert.equal(forbidden.status,403);
+ assert.equal(forbidden.headers.has('Access-Control-Allow-Origin'),false);
+});
