@@ -94,7 +94,7 @@ async function answerWithGemini(data:any,prompt:string,consent:boolean){
 Deno.serve(async(req)=>{
  const origin=req.headers.get('origin');
  if(origin&&!origins.has(origin))return json(403,{ok:false,error:'Origem não autorizada'},origin);
- if(req.method==='OPTIONS')return new Response(null,{status:204,headers:{...Object.fromEntries(headers(origin)),'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'authorization, content-type, apikey'}});
+ if(req.method==='OPTIONS')return new Response(null,{status:204,headers:{...Object.fromEntries(headers(origin)),'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'authorization, content-type, apikey, x-client-info'}});
  if(req.method!=='POST')return json(405,{ok:false,error:'Método não permitido'},origin);
  try{
   const base=env('SUPABASE_URL').replace(/\/$/,''),key=env('SUPABASE_SERVICE_ROLE_KEY');
