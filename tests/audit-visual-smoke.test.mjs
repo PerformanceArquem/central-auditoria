@@ -158,7 +158,7 @@ async function harness(browser,viewport) {
 }
 
 test('desktop: five working previews, local AI consent gate and offline CSV',async()=>{
-  const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+  const browser=await chromium.launch({headless:true,executablePath:process.env.AUDIT_CHROME_BIN||undefined,args:['--no-sandbox']});
   try{
     const {page,errors}=await harness(browser,{width:1440,height:900});
     try{
@@ -216,7 +216,7 @@ test('desktop: five working previews, local AI consent gate and offline CSV',asy
 });
 
 test('mobile: five panels render and remain usable without live requests',async()=>{
-  const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+  const browser=await chromium.launch({headless:true,executablePath:process.env.AUDIT_CHROME_BIN||undefined,args:['--no-sandbox']});
   try{
     const {page,errors}=await harness(browser,{width:390,height:844});
     try{
@@ -237,7 +237,7 @@ test('mobile: five panels render and remain usable without live requests',async(
 });
 
 test('expired session: no analytics fetch or accidental notifications',async()=>{
-  const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+  const browser=await chromium.launch({headless:true,executablePath:process.env.AUDIT_CHROME_BIN||undefined,args:['--no-sandbox']});
   try{
     const {page,errors}=await harness(browser,{width:1280,height:800});
     try{
