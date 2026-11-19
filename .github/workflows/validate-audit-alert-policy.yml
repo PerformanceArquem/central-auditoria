@@ -1,0 +1,25 @@
+name: Validate alert policy read-only stage 2
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'audit-alert-policy-ui.js'
+      - 'api/audit-alert-policy-preview.js'
+      - 'lib/audit-alert-policy.cjs'
+      - 'tests/audit-alert-policy.test.mjs'
+      - '.github/workflows/validate-audit-alert-policy.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check lib/audit-alert-policy.cjs
+      - run: node --check api/audit-alert-policy-preview.js
+      - run: node --check audit-alert-policy-ui.js
+      - run: node --test tests/audit-alert-policy.test.mjs
