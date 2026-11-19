@@ -120,7 +120,7 @@
     $('aiReportStatus').textContent='Relatório por setor atualizado com os dados sincronizados.';
     return;
    }
-   last=data;lastNarrative=data.answer;renderStats(data);post('assistant',data.answer+(data.aiUsed?'\n\n✓ Análise Gemini com indicadores do sistema.':'\n\nℹ Resumo calculado sem IA externa. '+(data.reason||'')));
+   last=data;lastNarrative=data.answer;renderStats(data);post('assistant',data.answer);
    $('aiReportStatus').textContent='Relatório atualizado a partir dos dados sincronizados. '+(data.aiUsed?'Interpretação feita pelo Gemini.':'Interpretação automática externa não utilizada.');
   }catch(err){post('assistant','Não foi possível gerar este relatório: '+String(err?.message||err));$('aiReportStatus').textContent='Falha na consulta. Os relatórios anteriores foram preservados.'}
   finally{processing=false;$('aiReportSend').disabled=false}
