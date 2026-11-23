@@ -93,3 +93,11 @@ test('the response never claims proof that calls reached the URA menu from DID a
  assert.match(source,/uraEntryVerified:false/);
  assert.match(source,/não confirma que o menu da URA foi executado/);
 });
+
+test('URA scope never queries account-wide inbound call reports',()=>{
+ assert.match(source,/voice-api\.zenvia\.com\/did'/);
+ assert.match(source,/encodeURIComponent\(String\(did\.id\)\)\+'\/relatorio'/);
+ assert.doesNotMatch(source,/voice-api\.zenvia\.com\/did\/relatorio/);
+ assert.match(source,/approvedDids\.has\(didNumber\(row\.numero\)\)/);
+ assert.match(source,/calls\.some\(call=>didNumber\(call\.numero_destino\)!==didNumber\(did\.numero\)\)/);
+});
