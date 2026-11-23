@@ -6879,6 +6879,8 @@ function showReconciliation(){
   el('zvRefresh').addEventListener('click',load);
   el('zvReconcile').addEventListener('click',runReconciliation);
   el('zvReconcileFilter').addEventListener('change',showReconciliation);
+  el('zvReconcileSector').addEventListener('change',()=>{fillReconciliationPeople();showReconciliation();});
+  el('zvReconcileEmployee').addEventListener('change',showReconciliation);
   el('zvReconcileCsv').addEventListener('click',downloadReconciliation);
   el('zvCheck').addEventListener('click',diagnose);
   el('zvReportPreview').addEventListener('click',async()=>{
