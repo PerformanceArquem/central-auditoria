@@ -96,6 +96,18 @@
   $('aiReportStatus').textContent='Calculando indicadores e preparando a resposta...';
   post('user',prompt);input.value='';
   try{
+   const operational=/parad|movimenta|inativ|vip|capacidade|cobranca|cobre|humaniz/.test(normalized(prompt))||(/jornada/.test(normalized(prompt))&&/compar|equipe/.test(normalized(prompt)))||(/relatorio|e-?mail|09h|09:00/.test(normalized(prompt))&&/falh|erro|timeout/.test(normalized(prompt)));
+   if(operational){
+    const session=await client.auth.getSession();const token=session.data?.session?.access_token;
+    if(!token)throw Error('Faça login novamente na Central.');
+    const response=await fetch('/api/ticket-manager-assistant',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({prompt,from,to,sector:$('aiReportSector').value.trim(),collaborator:$('aiReportCollaborator').value.trim(),client:$('aiReportClient').value.trim(),externalAiConsent:$('aiReportConsent').checked}),signal:AbortSignal.timeout(30000)});
+    const result=await response.json();if(!response.ok||!result.ok)throw Error(result.error||'Consulta indisponível');
+    last=null;lastNarrative='';$('aiReportStats').replaceChildren();$('aiReportRanking').replaceChildren();$('aiReportExport').disabled=true;$('aiReportPrint').disabled=true;
+    const lines=(result.rows||[]).map(row=>row.id?'#'+row.id+' | '+row.sector+' | '+row.owner+' | '+row.customer:row.name?row.name+' | '+row.sector+' | '+fmt(row.minutes/60)+' h | Jornada: indisponível':(row.recipientName||row.recipientId)+' | '+row.kind+' | '+row.status+' | '+row.reason);
+    post('assistant',[result.answer,...lines,...(result.warnings||[]),result.aiSuggestion?'Sugestão da IA para revisão humana: '+result.aiSuggestion:'',result.sources?.length?'Fonte: '+result.sources.join(', '):'',result.generatedAt?'Consultado em '+new Date(result.generatedAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):''].filter(Boolean).join('\n\n'));
+    $('aiReportStatus').textContent='Consulta concluída. Nenhuma mensagem enviada ou dado alterado.';
+    return;
+   }
    const sectorMode=sectorRequest(prompt);
    const sector=$('aiReportSector').value.trim(),collaborator=$('aiReportCollaborator').value.trim(),customer=$('aiReportClient').value.trim();
    const requested=namedSectors(prompt),selected=sector?namedSectors(sector):requested;
@@ -133,6 +145,10 @@
   $('aiReportPrint').addEventListener('click',printReport);
   $('aiReportOpen').addEventListener('click',()=>{$('aiReportPanel').scrollIntoView({block:'start',behavior:'smooth'});$('aiReportPrompt').focus()});
   document.querySelectorAll('[data-ai-report-example]').forEach(b=>b.addEventListener('click',()=>{$('aiReportPrompt').value=b.dataset.aiReportExample||'';$('aiReportPrompt').focus()}));
+  const examples=[['Chamados parados','Quais chamados da Produção estão parados há mais de 15 dias?'],['Risco VIP','Quais clientes VIPs estão com maior risco?'],['Horas e jornada','Compare as horas apontadas da equipe com a jornada.'],['Rascunho de cobrança','Gere uma cobrança humanizada para os chamados vencidos.'],['Falhas das 09h','Quais relatórios das 09h falharam e por quê?']];
+  const box=document.createElement('div');box.className='row';
+  for(const [label,prompt] of examples){const button=document.createElement('button');button.type='button';button.className='s';button.textContent=label;button.addEventListener('click',()=>{$('aiReportPrompt').value=prompt;$('aiReportPrompt').focus()});box.append(button)}
+  $('aiReportPrompt').before(box);
   post('assistant','Olá! Peça um relatório, por exemplo: “Quais colaboradores apontaram mais horas no período?” ou “Compare horas por setor e destaque os apontamentos em feriados.” Escolha as datas e os filtros antes de enviar.');
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
