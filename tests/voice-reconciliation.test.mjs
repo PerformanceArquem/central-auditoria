@@ -56,3 +56,24 @@ test('index screen keeps reconciliation embedded in the existing voice tab',()=>
  for(const text of ['id="zvReconcilePanel"','id="zvReconcile"','/api/voice-reconciliation?',
   'window.tmAuth?.getSession?.()','zvReconcileCsv']) assert.ok(html.includes(text),text);
 });
+
+test('two calls pointing to one ticket are not incorrectly labeled missing',()=>{
+ const calls=[
+  call(21,'2026-11-20T10:00:00-03:00','41988887777'),
+  call(22,'2026-11-20T10:05:00-03:00','41988887777')
+ ];
+ const r=run(calls,[ticket(99,'2026-11-20T10:02:00-03:00','41988887777')]);
+ assert.equal(r.stats.vinculado,1);
+ assert.equal(r.stats.ticket_ja_utilizado,1);
+ assert.equal(r.stats.sem_vinculo_identificado,0);
+});
+test('coverage separates missing phone data from actual unmatched calls',()=>{
+ const r=run([call(31,'2026-11-20T10:00:00-03:00','41988887777'),
+  call(32,'2026-11-20T11:00:00-03:00',null)],
+  [ticket(103,'2026-11-20T10:01:00-03:00','41988887777'),
+   {ticket_id:'104',payload:{},created_at_source:'2026-11-20T12:00:00-03:00'}]);
+ assert.equal(r.coverage.callsWithPhone,1);
+ assert.equal(r.coverage.callsWithoutPhone,1);
+ assert.equal(r.coverage.ticketsWithPhone,1);
+ assert.equal(r.coverage.ticketsWithoutPhone,1);
+});
