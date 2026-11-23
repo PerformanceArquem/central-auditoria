@@ -132,6 +132,7 @@ export default async function handler(req,res){
  const base=(process.env.SUPABASE_URL||'').replace(/\/$/,'');
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY,token=process.env.ZENVIA_VOICE_ACCESS_TOKEN;
  if(!/^https:\/\//.test(base)||!key||!token)return res.status(503).json({ok:false,error:'Integrações não configuradas no servidor'});
+ try{uraDidFilter();}catch(_){return res.status(503).json({ok:false,error:'Configure e valide os números DID de entrada da URA no servidor para habilitar a conciliação.'});}
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),45000);
  try{
   const access=await auth(req,base,key,controller.signal);
