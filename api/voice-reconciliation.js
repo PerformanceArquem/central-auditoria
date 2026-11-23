@@ -89,7 +89,10 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
   if(!choices.length&&number&&at!==null){
    // Movidesk pode criar o ticket muito antes/depois do evento de telefonia.
    // O instante da ação de telefonia é a única referência para aproximação.
-   choices=prepared.filter(t=>t.actions.length&&t.phones.includes(number))
+   choices=prepared.filter(t=>t.actions.length&&t.phones.includes(number)&&
+     // Não considerar como possível vínculo um chamado já identificado por
+     // ID explícito diferente desta ligação.
+     (!t.callId||t.callId===id))
     .map(t=>{
       const deltas=t.actions.map(a=>parsedAt(a.createdDate)).filter(time=>time!==null)
        .map(time=>Math.abs(time-at));
