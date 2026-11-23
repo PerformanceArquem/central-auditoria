@@ -73,3 +73,45 @@ test('shared-settings limit remains bounded and rejects before writing',async()=
  assert.equal(res.statusCode,413);assert.equal(called,false);
  assert.match(res.body.error,/Configurações compartilhadas/);
 });
+test('isolated UTF-16 surrogates are repaired only in the transmitted copy',async()=>{
+ const broken=String.fromCharCode(0xD83D),ticket={id:100,subject:'Texto '+broken,actions:[{description:broken+' fim'}]},warnings=[],warn=console.warn;
+ let saved;
+ console.warn=(...args)=>warnings.push(args);
+ try{
+  setFetch(async(_url,opts)=>{saved=JSON.parse(opts.body)[0];
+   // The JSON accepted by JS must also contain only Unicode scalar strings.
+   assert.equal(saved.data.subject.isWellFormed(),true);
+   assert.equal(saved.data.actions[0].description.isWellFormed(),true);
+   return {ok:true,status:201,text:async()=>'',headers:new Headers()};
+  });
+  const res=result();await handler(req({tickets:[ticket]}),res);
+  assert.equal(res.statusCode,200);assert.equal(res.body.normalizedUnicodeStrings,2);
+  assert.equal(saved.data.subject,'Texto \uFFFD');assert.equal(ticket.subject,'Texto '+broken);
+  assert.equal(ticket.actions[0].description,broken+' fim');
+  assert.doesNotMatch(JSON.stringify(warnings),/Texto|bearer-unit-test|test-private-server-key/);
+ }finally{console.warn=warn;}
+});
+test('valid emoji, accents and literal escape text remain unchanged',async()=>{
+ const ticket={id:101,subject:'Ação — João 😀',literal:'\\ud83d',nested:{text:'café'}};
+ setFetch(async(_url,opts)=>{assert.deepEqual(JSON.parse(opts.body)[0].data,ticket);return {ok:true,status:201,text:async()=>'',headers:new Headers()};});
+ const res=result();await handler(req({tickets:[ticket]}),res);assert.equal(res.statusCode,200);assert.equal(res.body.normalizedUnicodeStrings,0);
+});
+test('malformed keys and identifiers fail before writing rather than changing identity',async()=>{
+ let called=false;setFetch(async()=>{called=true;throw Error('Must not write');});
+ for(const ticket of [{id:String.fromCharCode(0xD83D)},{id:100,[String.fromCharCode(0xD83D)]:1}]){
+  const res=result();await handler(req({tickets:[ticket]}),res);assert.equal(res.statusCode,400);
+ }
+ assert.equal(called,false);
+});
+test('shared settings normalize incomplete Unicode without exposing or mutating settings',async()=>{
+ const state={md_ia:'Nota '+String.fromCharCode(0xDC00),md_token:'do-not-send'},warn=console.warn;let saved;
+ console.warn=()=>{};
+ try{
+  globalThis.fetch=async(url,opts)=>{
+   if(String(url).includes('/auth/v1/user'))return {ok:true,json:async()=>({id:'test',email:'quality@example.com'})};
+   saved=JSON.parse(opts.body)[0];return {ok:true,status:201,text:async()=>'',headers:new Headers()};
+  };
+  const res=result();await handler({...req({state}),query:{action:'saveState'}},res);
+  assert.equal(res.statusCode,200);assert.equal(res.body.normalizedUnicodeStrings,1);assert.equal(saved.state.md_ia,'Nota \uFFFD');assert.equal(saved.state.md_token,undefined);assert.equal(state.md_ia.isWellFormed(),false);
+ }finally{console.warn=warn;}
+});
