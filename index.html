@@ -1316,7 +1316,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    </div>
    <p id="zvReconcileStatus" class="subtle" role="status">Para verificar as ligações que chegaram à URA, os números DID devem estar homologados no servidor. Selecione até 7 dias e execute a comparação.</p>
    <div id="zvReconcileKpis" class="kpis"></div>
-   <div class="tablewrap"><table><thead><tr><th>Data</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação</th><th>Conciliação</th><th>Chamado</th><th>Critério</th></tr></thead><tbody id="zvReconcileRows"></tbody></table></div>
+   <div class="tablewrap"><table><thead><tr><th>Data</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação</th><th>Conciliação</th><th>Chamado</th><th>Evento Movidesk</th><th>Critério</th></tr></thead><tbody id="zvReconcileRows"></tbody></table></div>
    <p class="subtle">O telefone e o horário sugerem vínculo, mas somente um identificador compartilhado comprova a ligação ao chamado. A chamada no DID não confirma que o cliente ouviu o menu da URA. A ausência de vínculo não prova falha de abertura: depende da regra de criação, do histórico da URA e dos identificadores disponíveis em ambas as APIs.</p>
   </div>
   <p class="subtle">TMA = tempo médio falado nas ligações atendidas. TME é calculado apenas com os tempos de espera reais da fila configurada, quando houver cobertura integral; registros sem tempo de espera suspendem o indicador.</p>
@@ -6817,10 +6817,10 @@ window.clientImpactInit=()=>{
   const rows=(data.records||[]).filter(r=>filter==='all'||r.reconciliation===filter);
   for(const r of rows){
    const tr=document.createElement('tr');
-   for(const v of [r.startedAt,r.callId,r.phoneMasked,names[r.status]||r.status,names[r.reconciliation]||r.reconciliation,r.ticketId,names[r.matchMethod]||r.matchMethod])addCell(tr,v??'—');
+   for(const v of [r.startedAt,r.callId,r.phoneMasked,names[r.status]||r.status,names[r.reconciliation]||r.reconciliation,r.ticketId,(r.movideskTelephonyOrigins||[]).join(', ')||'—',names[r.matchMethod]||r.matchMethod])addCell(tr,v??'—');
    root.appendChild(tr);
   }
-  el('zvReconcileStatus').textContent=rows.length+' ligação(ões) exibidas de '+data.records.length+'. '+data.metadata.ticketsExamined+' chamados examinados. Cobertura: '+data.coverage.callsWithPhone+' ligações com telefone e '+data.coverage.ticketsWithPhone+' chamados com telefone. Nenhuma alteração realizada.';
+  el('zvReconcileStatus').textContent=rows.length+' ligação(ões) exibidas de '+data.records.length+'. '+data.metadata.ticketsExamined+' chamados examinados. Sem ID de chamada nas ações de telefonia: '+data.coverage.telephonyActionsWithoutCallId+'. Cobertura: '+data.coverage.callsWithPhone+' ligações com telefone e '+data.coverage.ticketsWithPhone+' chamados com telefone. Nenhuma alteração realizada.';
  }
  async function runReconciliation(){
   const btn=el('zvReconcile');btn.disabled=true;reconcileDataset=null;
@@ -6844,7 +6844,7 @@ window.clientImpactInit=()=>{
  }
  function downloadReconciliation(){
   if(!reconcileDataset)return;
-  const columns=['startedAt','callId','phoneMasked','status','reconciliation','ticketId','matchMethod'];
+  const columns=['startedAt','callId','phoneMasked','status','reconciliation','ticketId','movideskTelephonyOrigins','matchMethod'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   const filter=el('zvReconcileFilter').value;
   const data=reconcileDataset.records.filter(r=>filter==='all'||r.reconciliation===filter);
