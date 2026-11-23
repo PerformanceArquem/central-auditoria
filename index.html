@@ -906,6 +906,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 <link rel="stylesheet" href="/ui/workspace.css">
 <script src="/ui/workspace.js" defer></script>
 <script src="/ai-reports.js" defer></script>
+<script type="module" src="/ui/ticket-inspection.mjs"></script>
 <style id="ai-reports-style">#aiReportPanel .ai-report-message{padding:12px 14px;max-width:90%;border-radius:12px;background:#eff5fd;border:1px solid #d7e4f3;color:#243c55;overflow-wrap:anywhere}#aiReportPanel .ai-report-user{align-self:flex-end;background:#e4f0ff}#aiReportPanel .ai-report-assistant{align-self:flex-start}#aiReportPanel .ai-report-message strong{display:block;margin-bottom:6px;font-size:12px}#aiReportPanel .ai-report-message div{font-size:14px;line-height:1.5}#aiReportRanking ol{padding-left:25px}#aiReportRanking li{margin:5px 0}@media(max-width:700px){#aiReportPanel .fg{min-width:140px;flex:1 1 45%}#aiReportPanel .ai-report-message{max-width:100%}}</style>
 </head>
     <body class="tm-locked">
@@ -2374,7 +2375,14 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                             </table>
                         </div>
                     </div>
-                    <div class="card" id="forecastAuditCard">
+                    <section class="card" id="ticketInspection" aria-label="Fiscalização Inteligente de Chamados">
+<h3>Ticket Manager — Fiscalização Inteligente de Chamados · Testes</h3>
+<p class="subtle">Análise dos chamados carregados. Sem ações automáticas ou envios. Histórico de ocorrências mantido nesta sessão; dados ausentes precisam de conferência. Transferências exibidas somente quando disponíveis na origem.</p>
+<div class="row"><button type="button" class="b">Executar fiscalização</button><label>Setor <select name="sector"><option value="">Todos os setores</option></select></label><label>Cliente <input name="client" type="search"></label><label>Criticidade <select name="criticality"><option value="">Todas</option><option>Crítica</option><option>Alta</option><option>Média</option><option>Baixa</option></select></label></div>
+<p role="status" aria-live="polite">Aguardando análise dos dados carregados.</p>
+<div class="tw"><table><thead><tr><th>Chamado</th><th>Assunto</th><th>Cliente</th><th>Setor</th><th>Responsável</th><th>Risco</th><th>Ocorrências</th><th>Critérios do risco</th><th>Histórico</th></tr></thead><tbody></tbody></table></div>
+</section>
+<div class="card" id="forecastAuditCard">
                         <h3>Auditoria de previsões · chamados resolvidos ou fechados</h3>
                         <p style="color:var(--muted);margin:0 0 12px">
                             Robô de regras: compara a previsão informada com <b>todos os apontamentos carregados</b> do chamado.
@@ -2515,6 +2523,7 @@ let stats={},CF='';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function build(all){stats={tk:all.length,ac:0,ap:0,tw:0};raw=all.flatMap(flatten)}
 
+window.ticketInspectionSource=()=>[...TK.values()];
 let TK=new Map(),syncing=false,apiOn=false,EXP=null,lastSync=0,lastTry=0,lastFull=0,lastSig='',lastToday='',fails=0,lastErr='';
 let liveEvents=JSON.parse(localStorage.getItem('md_live_events')||'[]');
 function dueValue(t){const direct=t.slaSolutionDate||t.dueDate||t.expectedDate||t.forecastDate||'';if(direct)return String(direct);const vals=t.customFieldValues||[];const found=vals.filter(x=>(CF&&String(x.customFieldId)===String(CF))||/prazo|previs|venc|solu[cç][aã]o|entrega|data limite/i.test(String(x.customFieldName||x.name||x.label||''))).map(x=>String(x.value??''));return found.join(' | ')}
@@ -3057,6 +3066,7 @@ function groupAgents(){
 }
 
 function render(){
+  window.dispatchEvent?.(new Event('audit:tickets-updated'));
   const c=R(),kd=mk(c);
   const tot=rows.reduce((s,r)=>s+r.hours,0);
   $('kT').textContent=new Set(rows.map(r=>r.ticket_id)).size;

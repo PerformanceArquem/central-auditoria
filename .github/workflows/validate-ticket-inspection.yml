@@ -1,0 +1,17 @@
+name: Validate ticket inspection
+on:
+  pull_request:
+    paths: ['lib/ticket-inspection.mjs', 'ui/ticket-inspection.mjs', 'tests/ticket-inspection.test.mjs', 'index.html', '.github/workflows/validate-ticket-inspection.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check ui/ticket-inspection.mjs
+      - run: node --test tests/ticket-inspection.test.mjs
