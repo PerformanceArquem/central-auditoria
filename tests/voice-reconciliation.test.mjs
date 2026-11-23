@@ -366,3 +366,23 @@ test('provider rejection reports the failing stage without returning upstream se
  assert.ok(!JSON.stringify({body:res.body,logs}).includes('voice-secret'));
  assert.ok(!JSON.stringify({body:res.body,logs}).includes('service-secret'));
 });
+
+
+test('unlinked detail lists all 72 of 101 calls independently of department filters',()=>{
+ const html=readFileSync('index.html','utf8');
+ const fn=html.slice(html.indexOf('function buildUnlinkedReport(data){'),html.indexOf('function showUnlinkedReport(){'));
+ const ctx=vm.createContext({Date,Intl,Number});vm.runInContext(fn+';this.build=buildUnlinkedReport;',ctx);
+ const records=Array.from({length:101},(_,i)=>({callId:String(i+1),startedAt:'2026-11-19T16:25:01-03:00',phoneMasked:'****3280',status:'atendida',reconciliation:i<72?'sem_vinculo_identificado':i<96?'ambiguo':'possivel_vinculo',sector:i<72?'':'Suporte'}));
+ const data={from:'2026-11-01',to:'2026-11-23',records};
+ const r=ctx.build(data);
+ assert.equal(r.total,101);assert.equal(r.count,72);assert.equal(r.rows.length,72);
+ assert.ok(r.summary.startsWith('Das 101'));assert.ok(r.summary.includes('72 ficaram'));
+ assert.ok(r.period.includes('01/11/2026'));assert.ok(r.period.includes('23/11/2026'));
+ assert.equal(r.rows[0][2],'1');assert.equal(r.rows[71][2],'72');
+ assert.ok(r.rows[0][1].includes('19/11/2026'));assert.ok(r.rows[0][1].includes('16:25:01'));
+ assert.equal(r.rows[0].length,r.headers.length);
+ assert.equal(ctx.build({...data,records:[]}).count,0);
+ const exportFn=html.slice(html.indexOf('function downloadUnlinkedReport(){'),html.indexOf('function showReconciliation(){'));
+ assert.ok(exportFn.includes('buildUnlinkedReport(reconcileDataset)'));
+ assert.ok(!exportFn.includes('zvReconcileSector'));assert.ok(!exportFn.includes('zvReconcileEmployee'));
+});

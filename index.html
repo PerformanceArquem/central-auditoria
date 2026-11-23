@@ -1329,6 +1329,16 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    <div class="tablewrap"><table><thead><tr><th>Data</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação</th><th>Conciliação</th><th>Chamado</th><th>Setor</th><th>Funcionário</th><th>Evento Movidesk</th><th>Diferença (seg.)</th><th>Critério</th></tr></thead><tbody id="zvReconcileRows"></tbody></table></div>
    <p class="subtle">O telefone e o horário sugerem vínculo, mas somente um identificador compartilhado comprova a ligação ao chamado. A chamada no DID não confirma que o cliente ouviu o menu da URA. A ausência de vínculo não prova falha de abertura: depende da regra de criação, do histórico da URA e dos identificadores disponíveis em ambas as APIs.</p>
   </div>
+  <div class="card" id="zvUnlinkedReport" style="display:none">
+   <div class="eyebrow">ARQUEM SISTEMAS · CENTRAL DE AUDITORIA</div>
+   <h3>Ligações da URA sem vínculo identificado — detalhamento</h3>
+   <p id="zvUnlinkedSummary" role="status"></p>
+   <p id="zvUnlinkedPeriod" class="subtle"></p>
+   <p class="subtle">Lista completa do período, independente dos filtros de setor e funcionário. Sem chamado associado, não é possível atribuir um setor ou responsável a essas ligações.</p>
+   <button type="button" id="zvUnlinkedCsv" class="b noprint" disabled>Exportar detalhamento sem vínculo (CSV)</button>
+   <div class="tablewrap"><table><thead><tr><th>Nº</th><th>Data e horário</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação da ligação</th><th>Resultado do cruzamento</th></tr></thead><tbody id="zvUnlinkedRows"></tbody></table></div>
+   <p class="subtle">Sem vínculo identificado não comprova ausência de chamado nem falha de abertura. O cruzamento não encontrou correspondência nos dados disponíveis. Horários de Brasília.</p>
+  </div>
   <p class="subtle">TMA = tempo médio falado nas ligações atendidas. TME é calculado apenas com os tempos de espera reais da fila configurada, quando houver cobertura integral; registros sem tempo de espera suspendem o indicador.</p>
   <div class="grid2">
    <div class="card"><h3>Volume por dia</h3><div class="tablewrap"><table><thead><tr><th>Data</th><th>Ligações</th><th>Atendidas</th><th>Não atendidas</th><th>Em andamento</th><th>Sem classificação</th></tr></thead><tbody id="zvDays"></tbody></table></div></div>
@@ -6850,6 +6860,38 @@ async function loadReconciliationPeople(){
   }catch(e){status.textContent='Cadastro indisponível: '+e.message;}
   finally{button.disabled=false;}
  }
+function buildUnlinkedReport(data){
+  const records=data?.records||[];
+  const missing=records.filter(r=>r.reconciliation==='sem_vinculo_identificado');
+  const day=value=>/^\d{4}-\d{2}-\d{2}$/.test(value||'')?value.split('-').reverse().join('/'):'Não informado';
+  const at=value=>{const t=Date.parse(value||'');return Number.isFinite(t)
+   ?new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'medium'}).format(t):'Não informado';};
+  const labels={atendida:'Atendida',nao_atendida:'Não atendida',abandonada_ou_cancelada:'Abandonada/cancelada',em_andamento:'Em andamento',indeterminada:'Indeterminada'};
+  return {total:records.length,count:missing.length,
+   summary:'Das '+records.length+' ligações consultadas, '+missing.length+' ficaram sem vínculo identificado com chamado do Movidesk.',
+   period:'Período: '+day(data?.from)+' a '+day(data?.to),
+   headers:['Nº','Data e horário (Brasília)','ID Zenvia','Telefone mascarado','Situação da ligação','Resultado do cruzamento'],
+   rows:missing.map((r,i)=>[i+1,at(r.startedAt),r.callId||'Não informado',r.phoneMasked||'Indisponível',labels[r.status]||'Indeterminada','Sem vínculo identificado'])};
+ }
+ function showUnlinkedReport(){
+  const card=el('zvUnlinkedReport'),root=el('zvUnlinkedRows');root.replaceChildren();
+  card.style.display=reconcileDataset?'':'none';el('zvUnlinkedCsv').disabled=!reconcileDataset;
+  if(!reconcileDataset)return;
+  const report=buildUnlinkedReport(reconcileDataset);
+  el('zvUnlinkedSummary').textContent=report.summary;
+  el('zvUnlinkedPeriod').textContent=report.period;
+  for(const row of report.rows){const tr=document.createElement('tr');for(const v of row)addCell(tr,v);root.appendChild(tr);}
+  if(!report.count){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=6;td.textContent='Nenhuma ligação sem vínculo identificado neste período.';tr.appendChild(td);root.appendChild(tr);}
+ }
+ function downloadUnlinkedReport(){
+  if(!reconcileDataset)return;
+  const report=buildUnlinkedReport(reconcileDataset);
+  const q=v=>'"'+String(v??'').replace(/^[=+@-]/,"'$&").replace(/"/g,'""')+'"';
+  const lines=[['ARQUEM SISTEMAS / Central de Auditoria'],['Ligações da URA sem vínculo identificado'],[report.period],
+   [report.summary],['Sem vínculo não comprova ausência de chamado. Lista completa do período, sem filtros de setor ou funcionário.'],report.headers,...report.rows];
+  const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.map(row=>row.map(q).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a');a.href=url;a.download='ura-sem-vinculo-'+reconcileDataset.from+'-'+reconcileDataset.to+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
 function showReconciliation(){
   const root=el('zvReconcileRows');root.replaceChildren();
   const data=reconcileDataset;if(!data)return;
@@ -6866,6 +6908,7 @@ function showReconciliation(){
  }
  async function runReconciliation(){
   const btn=el('zvReconcile');btn.disabled=true;reconcileDataset=null;
+  showUnlinkedReport();
   el('zvReconcileCsv').disabled=true;el('zvReconcileRows').replaceChildren();el('zvReconcileKpis').replaceChildren();
   el('zvReconcileStatus').textContent='Consultando as APIs...';
   try{
@@ -6881,7 +6924,7 @@ function showReconciliation(){
    fillReconciliationPeople();
    const metrics=[['Entradas nos DIDs da URA',data.stats.total],['Confirmadas por ID',data.stats.vinculado],['Por gravação',data.stats.vinculado_gravacao],['Possíveis (não comprovadas)',data.stats.possivel_vinculo],['Sem vínculo',data.stats.sem_vinculo_identificado],['Ambíguas',data.stats.ambiguo],['Reutilização de chamado',data.stats.ticket_ja_utilizado],['Insuficientes',data.stats.dados_insuficientes],['Abandonadas/canceladas',data.stats.abandonada_ou_cancelada]];
    for(const [label,value] of metrics){const box=document.createElement('div');box.className='kpi';const title=document.createElement('div');title.textContent=label;const strong=document.createElement('strong');strong.textContent=String(value||0);box.append(title,strong);el('zvReconcileKpis').appendChild(box);}
-   el('zvReconcileCsv').disabled=!data.records?.length;showReconciliation();
+   el('zvReconcileCsv').disabled=!data.records?.length;showReconciliation();showUnlinkedReport();
   }catch(e){el('zvReconcileStatus').textContent='Conciliação indisponível: '+e.message;}
   finally{btn.disabled=false;}
  }
@@ -6910,6 +6953,7 @@ function showReconciliation(){
   el('zvReconcileSector').addEventListener('change',()=>{fillReconciliationPeople();showReconciliation();});
   el('zvReconcileEmployee').addEventListener('change',showReconciliation);
   el('zvReconcileCsv').addEventListener('click',downloadReconciliation);
+  el('zvUnlinkedCsv').addEventListener('click',downloadUnlinkedReport);
   el('zvCheck').addEventListener('click',diagnose);
   el('zvReportPreview').addEventListener('click',async()=>{
    const button=el('zvReportPreview');button.disabled=true;el('zvReportStatus').textContent='Preparando prévia sem envio...';
