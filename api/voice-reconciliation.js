@@ -40,9 +40,36 @@ const linkedCallId=t=>{
  }
  return '';
 };
+// A referência de gravação é uma pista independente: só comparar IDs contra
+// url_gravacao da própria Zenvia; nunca expor URLs ou tokens de acesso.
+const recordingIdFromTicket=t=>{
+ for(const action of telephonyActions(t)){
+  const html=String(action.htmlDescription||'').replace(/&amp;/g,'&');
+  const matches=html.match(/https:\/\/voice-app\.zenvia\.com\/rec\?[^"'<>\\s]+/g)||[];
+  for(const link of matches){
+   try{
+    const url=new URL(link);
+    if(url.hostname==='voice-app.zenvia.com'&&url.pathname==='/rec'){
+     const id=url.searchParams.get('id');
+     if(/^\d{6,15}$/.test(id||''))return id;
+    }
+   }catch(_){/* ignorar URLs inválidas */}
+  }
+ }
+ return '';
+};
+const recordingIdFromCall=c=>{
+ const raw=String(c.url_gravacao||'');
+ try{
+  const url=new URL(raw);
+  if(url.protocol!=='https:'||url.hostname!=='voice-api.zenvia.com')return '';
+  const match=/^\/rec\/(\d{6,15})$/.exec(url.pathname);
+  return match?.[1]||'';
+ }catch(_){return '';}
+};
 export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
  const prepared=tickets.map(t=>({...t,phones:ticketPhone(t),callId:linkedCallId(t),
-  actions:telephonyActions(t),time:parsedAt(t.created_at_source||t.payload?.createdDate)}));
+  actions:telephonyActions(t),recordingId:recordingIdFromTicket(t),time:parsedAt(t.created_at_source||t.payload?.createdDate)}));
  const unique=new Set(),entries=[];
  for(const call of calls){
   const id=String(call.id??'').trim();
@@ -50,6 +77,9 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
   if(unique.has(key))continue;unique.add(key);
   const at=parsedAt(originDate(call)),number=callPhone(call);
   let choices=prepared.filter(t=>id&&t.callId===id).map(t=>({ticket:t,method:'id',delta:0}));
+  const recordingId=recordingIdFromCall(call);
+  if(!choices.length&&recordingId)choices=prepared.filter(t=>t.recordingId===recordingId)
+    .map(t=>({ticket:t,method:'gravacao',delta:0}));
   if(!choices.length&&number&&at!==null){
    // Movidesk pode criar o ticket muito antes/depois do evento de telefonia.
    // O instante da ação de telefonia é a única referência para aproximação.
@@ -85,15 +115,16 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
    ticketId:match?.ticket.ticket_id||null,matchMethod:match?.method||null,
    deltaSeconds:match?Math.round(match.delta/1000):null,
    movideskTelephonyOrigins:match?[...new Set(match.ticket.actions.map(a=>String(a.origin)))]:[],
-   reconciliation:match?(match.method==='id'?'vinculado':'possivel_vinculo'):
+   reconciliation:match?(match.method==='id'?'vinculado':match.method==='gravacao'?'vinculado_gravacao':'possivel_vinculo'):
       collision?'ambiguo':number?'sem_vinculo_identificado':'dados_insuficientes'});
  }
- const stats={total:records.length,vinculado:0,possivel_vinculo:0,sem_vinculo_identificado:0,
+ const stats={total:records.length,vinculado:0,vinculado_gravacao:0,possivel_vinculo:0,sem_vinculo_identificado:0,
   ambiguo:0,dados_insuficientes:0,ticket_ja_utilizado:0,atendida:0,
   nao_atendida:0,abandonada_ou_cancelada:0,em_andamento:0,indeterminada:0};
  for(const r of records){stats[r.reconciliation]++;stats[r.status]++;}
  const ticketsWithPhone=prepared.filter(t=>t.phones.length>0).length;
  const ticketsWithCallId=prepared.filter(t=>t.callId.length>0).length;
+ const ticketsWithRecordingReference=prepared.filter(t=>t.recordingId.length>0).length;
  const ticketsWithTelephonyAction=prepared.filter(t=>t.actions.length>0).length;
  const telephonyActionsWithoutCallId=prepared.reduce((n,t)=>n+t.actions.filter(a=>
   ![a.zenviaCallId,a.voiceCallId,a.callId,a.telephonyCallId].some(v=>
@@ -101,7 +132,7 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
  const withPhone=records.filter(r=>r.phoneMasked!=='Indisponível').length;
  return {stats,records,coverage:{callsWithPhone:withPhone,
   callsWithoutPhone:records.length-withPhone,ticketsWithPhone,ticketsWithCallId,
-  ticketsWithTelephonyAction,telephonyActionsWithoutCallId,
+  ticketsWithTelephonyAction,ticketsWithRecordingReference,telephonyActionsWithoutCallId,
   ticketsWithoutPhone:prepared.length-ticketsWithPhone}};
 }
 async function auth(req,base,key,signal){
