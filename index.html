@@ -1307,6 +1307,18 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
   <div id="zvReportStatus" role="status"></div><iframe id="zvReportFrame" title="Prévia do relatório Voz e Chat" sandbox="" style="display:none;width:100%;height:650px;border:1px solid #d8e1ec"></iframe>
   <div id="zvQueues" class="subtle" role="status"></div>
   <div id="zvKpis" class="kpis" style="margin:12px 0"></div>
+  <div class="card" id="zvReconcilePanel"><h3>Conciliação Zenvia × Movidesk</h3>
+   <p class="subtle">Ligações recebidas, abandonadas e vínculo com chamados. Apenas administradores; nenhuma alteração é realizada nas fontes.</p>
+   <div class="row noprint" style="gap:10px;flex-wrap:wrap">
+    <button type="button" id="zvReconcile" class="b">Cruzar dados das duas APIs</button>
+    <select id="zvReconcileFilter"><option value="all">Todas</option><option value="sem_vinculo_identificado">Sem vínculo identificado</option><option value="vinculado">Vinculadas</option><option value="ambiguo">Ambíguas</option><option value="dados_insuficientes">Dados insuficientes</option></select>
+    <button type="button" id="zvReconcileCsv" class="b" disabled>Exportar CSV</button>
+   </div>
+   <p id="zvReconcileStatus" class="subtle" role="status">Selecione até 7 dias e execute a comparação.</p>
+   <div id="zvReconcileKpis" class="kpis"></div>
+   <div class="tablewrap"><table><thead><tr><th>Data</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação</th><th>Conciliação</th><th>Chamado</th><th>Critério</th></tr></thead><tbody id="zvReconcileRows"></tbody></table></div>
+   <p class="subtle">A ausência de vínculo identificado não prova falha de abertura: depende da regra de criação e da disponibilidade de identificadores em ambas as APIs.</p>
+  </div>
   <p class="subtle">TMA = tempo médio falado nas ligações atendidas. TME é calculado apenas com os tempos de espera reais da fila configurada, quando houver cobertura integral; registros sem tempo de espera suspendem o indicador.</p>
   <div class="grid2">
    <div class="card"><h3>Volume por dia</h3><div class="tablewrap"><table><thead><tr><th>Data</th><th>Ligações</th><th>Atendidas</th><th>Não atendidas</th><th>Em andamento</th><th>Sem classificação</th></tr></thead><tbody id="zvDays"></tbody></table></div></div>
@@ -6795,10 +6807,58 @@ window.clientImpactInit=()=>{
   }
   finally{button.disabled=false;}
  }
+
+ let reconcileDataset=null;
+ function showReconciliation(){
+  const root=el('zvReconcileRows');root.replaceChildren();
+  const data=reconcileDataset;if(!data)return;
+  const names={vinculado:'Vinculado',sem_vinculo_identificado:'Sem vínculo identificado',ambiguo:'Ambíguo',dados_insuficientes:'Dados insuficientes',atendida:'Atendida',nao_atendida:'Não atendida',abandonada_ou_cancelada:'Abandonada/cancelada',em_andamento:'Em andamento',indeterminada:'Indeterminada',id:'ID explícito',telefone_horario:'Telefone e horário'};
+  const filter=el('zvReconcileFilter').value;
+  const rows=(data.records||[]).filter(r=>filter==='all'||r.reconciliation===filter);
+  for(const r of rows){
+   const tr=document.createElement('tr');
+   for(const v of [r.startedAt,r.callId,r.phoneMasked,names[r.status]||r.status,names[r.reconciliation]||r.reconciliation,r.ticketId,names[r.matchMethod]||r.matchMethod])addCell(tr,v??'—');
+   root.appendChild(tr);
+  }
+  el('zvReconcileStatus').textContent=rows.length+' ligação(ões) exibidas de '+data.records.length+'. '+data.metadata.ticketsExamined+' chamados examinados. Nenhuma alteração realizada.';
+ }
+ async function runReconciliation(){
+  const btn=el('zvReconcile');btn.disabled=true;reconcileDataset=null;
+  el('zvReconcileCsv').disabled=true;el('zvReconcileRows').replaceChildren();el('zvReconcileKpis').replaceChildren();
+  el('zvReconcileStatus').textContent='Consultando as APIs...';
+  try{
+   const start=el('zvStart').value,end=el('zvEnd').value;
+   if(!valid(start)||!valid(end)||start>end||(Date.parse(end)-Date.parse(start))/86400000>7)throw Error('Selecione até 7 dias.');
+   const session=await window.tmAuth?.getSession?.();
+   if(!session?.access_token)throw Error('É necessário entrar na Central.');
+   const resp=await fetch('/api/voice-reconciliation?'+new URLSearchParams({start,end}),{headers:{Authorization:'Bearer '+session.access_token},cache:'no-store'});
+   const data=await resp.json().catch(()=>({}));
+   if(!resp.ok||!data.ok)throw Error(data.error||'As APIs não retornaram dados válidos.');
+   if(start!==el('zvStart').value||end!==el('zvEnd').value)throw Error('Período alterado durante a consulta.');
+   reconcileDataset=data;
+   const metrics=[['Recebidas',data.stats.total],['Vinculadas',data.stats.vinculado],['Sem vínculo',data.stats.sem_vinculo_identificado],['Ambíguas',data.stats.ambiguo],['Insuficientes',data.stats.dados_insuficientes],['Abandonadas/canceladas',data.stats.abandonada_ou_cancelada]];
+   for(const [label,value] of metrics){const box=document.createElement('div');box.className='kpi';const title=document.createElement('div');title.textContent=label;const strong=document.createElement('strong');strong.textContent=String(value||0);box.append(title,strong);el('zvReconcileKpis').appendChild(box);}
+   el('zvReconcileCsv').disabled=!data.records?.length;showReconciliation();
+  }catch(e){el('zvReconcileStatus').textContent='Conciliação indisponível: '+e.message;}
+  finally{btn.disabled=false;}
+ }
+ function downloadReconciliation(){
+  if(!reconcileDataset)return;
+  const columns=['startedAt','callId','phoneMasked','status','reconciliation','ticketId','matchMethod'];
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const filter=el('zvReconcileFilter').value;
+  const data=reconcileDataset.records.filter(r=>filter==='all'||r.reconciliation===filter);
+  const lines=[columns.join(';'),...data.map(r=>columns.map(k=>q(r[k])).join(';'))];
+  const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a');a.href=url;a.download='conciliacao-voz-'+reconcileDataset.from+'-'+reconcileDataset.to+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
  window.zenviaVoiceInit=()=>{
   if(initialized)return;initialized=true;
   const today=dateToday();el('zvEnd').value=today;el('zvStart').value=today.slice(0,7)+'-01';
   el('zvRefresh').addEventListener('click',load);
+  el('zvReconcile').addEventListener('click',runReconciliation);
+  el('zvReconcileFilter').addEventListener('change',showReconciliation);
+  el('zvReconcileCsv').addEventListener('click',downloadReconciliation);
   el('zvCheck').addEventListener('click',diagnose);
   el('zvReportPreview').addEventListener('click',async()=>{
    const button=el('zvReportPreview');button.disabled=true;el('zvReportStatus').textContent='Preparando prévia sem envio...';
