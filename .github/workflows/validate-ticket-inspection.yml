@@ -1,7 +1,7 @@
 name: Validate ticket inspection
 on:
   pull_request:
-    paths: ['lib/ticket-inspection.mjs', 'ui/ticket-inspection.mjs', 'api/audit-ticket-inspection.js', 'supabase/migrations/*ticket_inspection*', 'tests/ticket-inspection*.mjs', 'index.html', '.github/workflows/validate-ticket-inspection.yml']
+    paths: ['lib/ticket-inspection.mjs', 'ui/ticket-inspection.mjs', 'server/audit-ticket-inspection.mjs', 'supabase/migrations/*ticket_inspection*', 'tests/ticket-inspection*.mjs', 'index.html', '.github/workflows/validate-ticket-inspection.yml']
   workflow_dispatch:
 permissions:
   contents: read

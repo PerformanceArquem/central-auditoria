@@ -1,7 +1,7 @@
 import {test,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-const js=readFileSync(new URL('../api/audit-forecast-variances.js',import.meta.url),'utf8');
+const js=readFileSync(new URL('../server/audit-forecast-variances.mjs',import.meta.url),'utf8');
 const {default:handler}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
 const originalFetch=globalThis.fetch;
 const originalUrl=process.env.SUPABASE_URL;

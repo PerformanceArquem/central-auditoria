@@ -2,7 +2,7 @@ name: Validate forecast audit API
 on:
   pull_request:
     paths:
-      - 'api/audit-forecast-variances.js'
+      - 'server/audit-forecast-variances.mjs'
       - 'tests/forecast-api.test.mjs'
       - '.github/workflows/validate-forecast-api.yml'
   workflow_dispatch:

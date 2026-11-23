@@ -2,7 +2,7 @@ import {test,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const model=new URL('../lib/ticket-inspection.mjs',import.meta.url).href;
-const code=readFileSync(new URL('../api/audit-ticket-inspection.js',import.meta.url),'utf8').replace("'../lib/ticket-inspection.mjs'",JSON.stringify(model));
+const code=readFileSync(new URL('../server/audit-ticket-inspection.mjs',import.meta.url),'utf8').replace("'../lib/ticket-inspection.mjs'",JSON.stringify(model));
 const {default:handler}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
 const original=globalThis.fetch,env={...process.env};
 const keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','TICKET_INSPECTION_ENABLED','TICKET_INSPECTION_PERSIST','TICKET_INSPECTION_HISTORY_URL','TICKET_INSPECTION_HISTORY_SERVICE_ROLE_KEY','VERCEL_ENV'];
