@@ -1342,6 +1342,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    <div id="zvUnlinkedEvidence" class="kpis"></div>
    <p class="subtle">Lista completa do período, independente dos filtros de setor e funcionário. Sem chamado associado, não é possível atribuir um setor ou responsável a essas ligações.</p>
    <button type="button" id="zvUnlinkedCsv" class="b noprint" disabled>Exportar detalhamento sem vínculo (CSV)</button>
+   <button type="button" id="zvUnlinkedXlsx" class="b noprint" disabled>Excel sem vínculo — abas por situação</button>
    <div class="tablewrap"><table><thead><tr><th>Nº</th><th>Data e horário</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação da ligação</th><th>Gravação</th><th>Duração total</th><th>Tempo falado</th><th>Ramal informado</th><th>Conclusão da URA</th><th>Resultado do cruzamento</th><th>Mês</th><th>Link da gravação</th></tr></thead><tbody id="zvUnlinkedRows"></tbody></table></div>
    <p class="subtle">Gravação e situação são informações independentes: uma ligação cancelada também pode ter gravação. Gravação informada indica uma referência retornada pela Zenvia; não verifica o áudio. Atendimento, duração ou ramal não comprovam que o cliente percorreu a URA até o final. O relatório de chamadas não fornece essa confirmação.</p>
    <p class="subtle">Sem vínculo identificado não comprova ausência de chamado nem falha de abertura. O cruzamento não encontrou correspondência nos dados disponíveis. Horários de Brasília.</p>
@@ -6890,7 +6891,7 @@ function buildUnlinkedReport(data){
   const labels={atendida:'Atendida',nao_atendida:'Não atendida',abandonada_ou_cancelada:'Abandonada/cancelada',em_andamento:'Em andamento',indeterminada:'Indeterminada'};
   const recordingLabels={informada:'Gravação informada',nao_informada:'Sem referência de gravação',desconhecida:'Não informado pela API'};
   const duration=v=>v===null||v===undefined||!Number.isFinite(v)?'Não informado':Math.floor(v/3600).toString().padStart(2,'0')+':'+Math.floor(v%3600/60).toString().padStart(2,'0')+':'+(v%60).toString().padStart(2,'0');
-  return {total:records.length,count:missing.length,
+  return {total:records.length,count:missing.length,records:missing,
    evidence:[['Com gravação informada',missing.filter(r=>r.recordingState==='informada').length],
     ['Sem referência de gravação',missing.filter(r=>r.recordingState==='nao_informada').length],
     ['Gravação não informada pela API',missing.filter(r=>!['informada','nao_informada'].includes(r.recordingState)).length],
@@ -6908,6 +6909,7 @@ function buildUnlinkedReport(data){
  function showUnlinkedReport(){
   const card=el('zvUnlinkedReport'),root=el('zvUnlinkedRows');root.replaceChildren();el('zvUnlinkedEvidence').replaceChildren();
   card.style.display=reconcileDataset?'':'none';el('zvUnlinkedCsv').disabled=!reconcileDataset;
+  el('zvUnlinkedXlsx').disabled=!reconcileDataset;
   if(!reconcileDataset)return;
   const report=buildUnlinkedReport(reconcileDataset);
   el('zvUnlinkedSummary').textContent=report.summary;
@@ -6924,6 +6926,35 @@ function buildUnlinkedReport(data){
    [report.summary],...report.evidence,['Gravação e cancelamento são independentes. Atendimento, duração e ramal não comprovam conclusão da URA.'],['Sem vínculo não comprova ausência de chamado. Lista completa do período, sem filtros de setor ou funcionário.'],report.headers,...report.rows];
   const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.map(row=>row.map(q).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a');a.href=url;a.download='ura-sem-vinculo-'+reconcileDataset.from+'-'+reconcileDataset.to+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
+ function buildUnlinkedWorkbook(data,X){
+  const report=buildUnlinkedReport(data),wb=X.utils.book_new();
+  wb.Props={Title:'Ligações URA sem vínculo — por mês e situação',Author:'ARQUEM SISTEMAS',Company:'ARQUEM SISTEMAS'};
+  const header=['Mês',...report.headers.slice(0,11),'Link da gravação'];
+  const prefix=title=>[['ARQUEM SISTEMAS / Central de Auditoria'],[title],[report.period],[report.summary],['Somente ligações sem vínculo identificado. Atendimento não comprova conclusão da URA.'],[]];
+  function append(name,title,headers,rows){
+   const matrix=[...prefix(title),headers,...rows],ws=X.utils.aoa_to_sheet(matrix);
+   ws['!cols']=headers.map((h,i)=>({wch:i===2?24:Math.min(36,Math.max(14,h.length+3))}));
+   ws['!merges']=[0,1,2,3,4].map(r=>({s:{r,c:0},e:{r,c:headers.length-1}}));
+   ws['!autofilter']={ref:X.utils.encode_range({s:{r:6,c:0},e:{r:Math.max(6,matrix.length-1),c:headers.length-1}})};
+   for(let i=7;i<matrix.length;i++){const value=matrix[i].at(-1);if(typeof value==='string'&&value.startsWith('https://central-auditoria-iota.vercel.app/?uraRecording=')){const cell=ws[X.utils.encode_cell({r:i,c:headers.length-1})];cell.l={Target:value,Tooltip:'Ouvir gravação — acesso administrativo na Central'};cell.v='Ouvir gravação';}}
+   X.utils.book_append_sheet(wb,ws,name);
+  }
+  const allMissing={...data,records:report.records};
+  const monthly=UraPeriods.monthly(allMissing).map(g=>{
+   const rows=report.records.filter(r=>UraPeriods.month(r)===g.month);
+   return [UraPeriods.label(g.month),rows.length,rows.filter(r=>r.status==='atendida').length,rows.filter(r=>r.status==='nao_atendida').length,rows.filter(r=>r.status==='abandonada_ou_cancelada').length,rows.filter(r=>r.recordingState==='informada').length,rows.filter(r=>!['atendida','nao_atendida','abandonada_ou_cancelada'].includes(r.status)).length];
+  });
+  append('Resumo mensal','Resumo mensal — ligações sem vínculo',['Mês','Sem vínculo','Atendidas','Não atendidas','Canceladas/abandonadas','Com gravação','Outras situações'],monthly);
+  const groups=[['Atendidas','Ligações atendidas sem vínculo',r=>r.status==='atendida'],['Não atendidas e canceladas','Não atendidas, canceladas e abandonadas sem vínculo',r=>['nao_atendida','abandonada_ou_cancelada'].includes(r.status)]];
+  if(report.records.some(r=>!['atendida','nao_atendida','abandonada_ou_cancelada'].includes(r.status)))groups.push(['Outras situações','Outras situações sem vínculo',r=>!['atendida','nao_atendida','abandonada_ou_cancelada'].includes(r.status)]);
+  for(const [name,title,accept] of groups){const rows=report.rows.filter((row,i)=>accept(report.records[i])).map(row=>[row[11],...row.slice(0,11),row[12]]);append(name,title+' — ordenadas por mês',header,rows);}
+  return wb;
+ }
+ function downloadUnlinkedWorkbook(){
+  if(!reconcileDataset)return;
+  if(!window.XLSX){alert('A biblioteca de Excel não carregou. Atualize a página e tente novamente.');return;}
+  XLSX.writeFile(buildUnlinkedWorkbook(reconcileDataset,XLSX),'ura-sem-vinculo-por-mes-'+reconcileDataset.from+'-'+reconcileDataset.to+'.xlsx');
  }
 function showReconciliation(){
   const root=el('zvReconcileRows');root.replaceChildren();
@@ -6997,6 +7028,7 @@ function showReconciliation(){
   el('zvReconcileEmployee').addEventListener('change',showReconciliation);
   el('zvReconcileCsv').addEventListener('click',downloadReconciliation);
   el('zvUnlinkedCsv').addEventListener('click',downloadUnlinkedReport);
+  el('zvUnlinkedXlsx').addEventListener('click',downloadUnlinkedWorkbook);
   el('zvMonthlyCsv').addEventListener('click',downloadMonthlyReconciliation);
   el('zvCheck').addEventListener('click',diagnose);
   el('zvReportPreview').addEventListener('click',async()=>{

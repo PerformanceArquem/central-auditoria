@@ -460,3 +460,23 @@ test('recording link only returns approved-host audio from the authorized DID',a
  callData.numero_destino='+554130135878';callData.url_gravacao='https://evil.example/audio';assert.equal((await ctx.link('12','secret')).code,404);
  callData.url_gravacao='https://user:secret@voice-api.zenvia.com/rec/1';assert.equal((await ctx.link('12','secret')).code,404);
 });
+
+
+test('Excel separates answered and missed/canceled calls, only unmatched, sorted by month with authenticated hyperlinks',()=>{
+ const html=readFileSync('index.html','utf8');
+ const rec=html.slice(html.indexOf('function recordingPage('),html.indexOf('function appendRecordingCell('));
+ const report=html.slice(html.indexOf('function buildUnlinkedReport(data){'),html.indexOf('function showUnlinkedReport(){'));
+ const workbook=html.slice(html.indexOf('function buildUnlinkedWorkbook(data,X){'),html.indexOf('function downloadUnlinkedWorkbook(){'));
+ const ctx=vm.createContext({Date,Intl,Number,Math,UraPeriods});vm.runInContext(rec+report+workbook+';this.build=buildUnlinkedWorkbook;',ctx);
+ const X={utils:{book_new:()=>({SheetNames:[],Sheets:{}}),aoa_to_sheet:matrix=>{const ws={matrix};matrix.forEach((row,r)=>row.forEach((v,c)=>ws[r+','+c]={v}));return ws;},encode_cell:({r,c})=>r+','+c,encode_range:()=>'',book_append_sheet:(wb,ws,name)=>{wb.SheetNames.push(name);wb.Sheets[name]=ws;}}};
+ const row=(id,date,status,reconciliation='sem_vinculo_identificado')=>({callId:id,startedAt:date+'T10:00:00-03:00',status,reconciliation,recordingState:'informada',phoneMasked:'****1234'});
+ const wb=ctx.build({from:'2026-01-01',to:'2026-02-28',records:[row('1','2026-02-05','atendida'),row('2','2026-01-05','atendida'),row('3','2026-02-06','nao_atendida'),row('4','2026-01-06','abandonada_ou_cancelada'),row('5','2026-01-06','atendida','possivel_vinculo')]},X);
+ assert.equal(wb.SheetNames.length,3);assert.equal(wb.SheetNames[0],'Resumo mensal');assert.equal(wb.SheetNames[1],'Atendidas');
+ const yes=wb.Sheets[wb.SheetNames[1]],no=wb.Sheets[wb.SheetNames[2]];
+ assert.equal(yes.matrix.length,9);assert.equal(no.matrix.length,9);
+ assert.equal(yes.matrix[7][0],'01/2026');assert.equal(yes.matrix[8][0],'02/2026');
+ assert.equal(no.matrix[7][0],'01/2026');assert.equal(no.matrix[8][0],'02/2026');
+ assert.equal(yes['7,12'].l.Target,'https://central-auditoria-iota.vercel.app/?uraRecording=2');
+ assert.ok(!JSON.stringify(wb).includes('uraRecording=5'));
+ assert.equal(wb.Sheets[wb.SheetNames[0]].matrix[7][1],2);assert.equal(wb.Sheets[wb.SheetNames[0]].matrix[8][1],2);
+});
