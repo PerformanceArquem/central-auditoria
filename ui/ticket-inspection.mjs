@@ -1,9 +1,21 @@
 import {inspectTickets,filterInspections,recordOccurrences} from '/lib/ticket-inspection.mjs';
 const panel=document.getElementById('ticketInspection');
-let history=[], report=[];
+let history=[], report=[],clientCriticality={};
 const date=n=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(n);
 function cell(row,text){const td=document.createElement('td');td.textContent=text;row.append(td);return td;}
 function paragraph(parent,text){const p=document.createElement('p');p.textContent=text;parent.append(p);}
+function riskDetails(parent,risk){
+  if(!risk)return;
+  paragraph(parent,risk.state+' · Índice: '+(risk.score===null?'indeterminado':risk.score+'/100')+' · Cobertura dos fatores: '+risk.coverage+'% ('+risk.coverageLabel+')');
+  for(const c of risk.components){
+    let value=c.value;
+    if(c.key==='similar')value=value.samples+' semelhantes, '+value.late+' concluídos após o prazo';
+    else if(typeof value==='number')value=['deadline','appointment','queue'].includes(c.key)?value.toFixed(1)+' dias':String(value);
+    paragraph(parent,c.label+': '+(c.available?Math.round(c.points)+'/'+c.max+' pontos · '+value:'indisponível')+'. '+c.basis+'.');
+  }
+  if(risk.lastAppointmentAt)paragraph(parent,'Último apontamento: '+date(Date.parse(risk.lastAppointmentAt)));
+  paragraph(parent,risk.notice);
+}
 function remoteDetails(details,id){
   const button=document.createElement('button'),output=document.createElement('div');
   button.type='button';button.className='s';button.textContent='Conferir base sincronizada';
@@ -23,6 +35,7 @@ function remoteDetails(details,id){
     const item=data.item;
     paragraph(output,item.closed?'Chamado encerrado na origem.':'Risco sincronizado: '+item.criticality+' ('+item.score+'/100) · '+item.owner+' · '+item.sector);
     if(!item.closed&&!item.forecastKnown)paragraph(output,'Sem previsão válida: não é possível estimar o vencimento. A pontuação reflete os demais fatores observados.');
+    riskDetails(output,item.risk);
     for(const f of item.findings)paragraph(output,f.label);
     for(const gap of item.gaps||[])paragraph(output,gap);
     for(const h of item.timeline||[])paragraph(output,date(h.at)+' → '+date(h.until)+' · '+(h.sector||'Setor não informado')+' · '+(h.owner||'Responsável não informado')+' · '+h.hours.toFixed(1)+' h');
@@ -51,8 +64,9 @@ function render(){
   const body=panel.querySelector('tbody');body.replaceChildren();
   for(const r of rows.slice(0,200)){
     const tr=document.createElement('tr');
-    for(const text of [r.id,r.subject,r.client,r.sector,r.owner,r.criticality+' ('+r.score+'/100)'+(!r.forecastKnown?' · prazo indeterminado':''),r.findings.map(f=>f.label).join('; ')||'Sem ocorrências',r.reasons.join('; ')||'Sem agravantes identificados'])cell(tr,text);
+    for(const text of [r.id,r.subject,r.client,r.sector,r.owner,r.criticality+' ('+(r.risk?.score===null?'sem índice':r.score+'/100')+') · cobertura '+(r.risk?.coverage??0)+'%',r.findings.map(f=>f.label).join('; ')||'Sem ocorrências',r.reasons.join('; ')||'Sem agravantes identificados'])cell(tr,text);
     const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Histórico e transferências';details.append(summary);
+    riskDetails(details,r.risk);
     for(const h of r.timeline){const p=document.createElement('p');p.textContent=date(h.at)+' → '+date(h.until)+' · '+(h.sector||'Setor não informado')+' · '+(h.owner||'Responsável não informado')+' · '+h.hours.toFixed(1)+' h';details.append(p);}
     for(const e of history.filter(e=>e.id===r.id)){const p=document.createElement('p');p.textContent=e.label+' · detectado '+date(e.openedAt)+(e.resolvedAt?' · encerrado '+date(e.resolvedAt):' · ativo');details.append(p);}
     for(const gap of r.gaps){const p=document.createElement('p');p.textContent=gap;details.append(p);}
@@ -65,14 +79,26 @@ panel.addEventListener('input',render);
 function run(){
   const tickets=window.ticketInspectionSource?.();
   if(!tickets?.length){panel.querySelector('[role=status]').textContent='Carregue os chamados na Central antes de executar a fiscalização.';return;}
-  report=inspectTickets(tickets);
+  report=inspectTickets(tickets,{clientCriticality});
   history=recordOccurrences(history,report,Date.now());
   const select=panel.querySelector('[name=sector]'),selected=select.value;
   select.replaceChildren(new Option('Todos os setores',''));
   for(const sector of [...new Set(report.map(r=>r.sector))].sort())select.add(new Option(sector,sector));
   select.value=selected;render();
 }
-panel.querySelector('button').addEventListener('click',run);
+panel.querySelector('button').addEventListener('click',async()=>{
+  const button=panel.querySelector('button');button.disabled=true;
+  try{
+    clientCriticality={};
+    const client=window.tmEmailAdminClient;
+    if(client){
+      const {data,error}=await client.functions.invoke('audit-email-dispatch',{body:{action:'vip_config',mode:'list'}});
+      clientCriticality=!error&&data?.ok&&Array.isArray(data.names)?Object.fromEntries(data.names.filter(n=>typeof n==='string'&&n.trim()).map(n=>[n,'Alta'])):{};
+    }
+    run();
+  }catch{clientCriticality={};run();}
+  finally{button.disabled=false;}
+});
 let scheduled=false;
 window.addEventListener('audit:tickets-updated',()=>{
   if(scheduled)return;

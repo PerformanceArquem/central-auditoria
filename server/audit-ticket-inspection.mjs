@@ -1,5 +1,5 @@
 import {inspectTickets,recordOccurrences} from '../lib/ticket-inspection.mjs';
-const codes=['overdue','no_forecast','invalid_forecast','no_owner','no_appointments','idle','queue'];
+const codes=['overdue','no_forecast','invalid_forecast','no_owner','no_appointments','idle','queue','delay_risk'];
 const validBase=value=>/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(value);
 export default async function handler(req,res){
   res.setHeader('Cache-Control','private, no-store');res.setHeader('Allow','GET, POST');
@@ -43,10 +43,30 @@ export default async function handler(req,res){
     const records=await request(url,headers);
     if(!Array.isArray(records))throw Error('Dados inválidos');
     if(!records.length)return fail(404,'Chamado não encontrado na base sincronizada.');
-    const source=records[0],now=Date.now(),items=inspectTickets([source],{now});
+    const source=records[0],now=Date.now();
+    const contextWarnings=[];
+    let historicalTickets=[],clientCriticality={};
+    if(inspectTickets([source],{now}).length){
+      const cohort=new URL(base+'/rest/v1/audit_direct_tickets');
+      cohort.search=new URLSearchParams({
+        select:'ticket_id,closed_at_source,ownerTeam:payload->ownerTeam,category:payload->category,serviceFirstLevel:payload->serviceFirstLevel,baseStatus:payload->baseStatus,status:payload->status,slaSolutionDate:payload->slaSolutionDate,resolvedIn:payload->resolvedIn,closedIn:payload->closedIn,createdDate:payload->createdDate,isDeleted:payload->isDeleted',
+        'payload->>baseStatus':'in.(Resolved,Closed)',order:'source_synced_at.desc,ticket_id.desc',limit:'500'
+      }).toString();
+      const contexts=await Promise.allSettled([
+        request(cohort,headers),
+        request(base+'/functions/v1/audit-email-dispatch',{apikey:key,Authorization:'Bearer '+bearer[1],'Content-Type':'application/json'},{method:'POST',body:JSON.stringify({action:'vip_config',mode:'list'})})
+      ]);
+      const historical=contexts[0],vips=contexts[1];
+      if(historical.status==='fulfilled'&&Array.isArray(historical.value))historicalTickets=historical.value;
+      else contextWarnings.push('Histórico semelhante indisponível; este fator não foi presumido como risco zero.');
+      if(vips.status==='fulfilled'&&vips.value?.ok&&Array.isArray(vips.value.names))clientCriticality=Object.fromEntries(vips.value.names.filter(n=>typeof n==='string'&&n.trim()).map(n=>[n,'Alta']));
+      else contextWarnings.push('Cadastro corporativo de clientes indisponível; criticidade não inferida.');
+      contextWarnings.push('Histórico semelhante limitado a até 500 resolvidos sincronizados; exige cinco comparáveis por setor, categoria e serviço.');
+    }
+    const items=inspectTickets([source],{now,historicalTickets,clientCriticality});
     const item=items[0]||{id,findings:[],evaluatedCodes:codes,closed:true};
     const sourceAt=source.source_synced_at||null;
-    const warnings=['Os resultados refletem somente os dados sincronizados; ausência de histórico não comprova ausência de transferências.'];
+    const warnings=['Os resultados refletem somente os dados sincronizados; ausência de histórico não comprova ausência de transferências.',...contextWarnings];
     if(!sourceAt||!Number.isFinite(Date.parse(sourceAt)))warnings.push('Data da sincronização indisponível: confira a atualização na origem.');
     else if(now-Date.parse(sourceAt)>86400000)warnings.push('Dados sincronizados há mais de 24 horas: confira a situação atual antes de cobrar o responsável.');
     let history=[],historyPartial=false,saved=false;
