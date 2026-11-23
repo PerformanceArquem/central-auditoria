@@ -52,12 +52,15 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
   records.push({callId:id||null,startedAt:originDate(call)||null,phoneMasked:mask(number),
    status:callKind(call),providerStatus:String(call.status||call.destino?.status||'').slice(0,60),
    ticketId:match?.ticket.ticket_id||null,matchMethod:match?.method||null,
-   reconciliation:match?'vinculado':choices.length>1?'ambiguo':number?'sem_vinculo_identificado':'dados_insuficientes'});
+   reconciliation:match?'vinculado':choices.length>1?'ambiguo':choices.length===1?'ticket_ja_utilizado':number?'sem_vinculo_identificado':'dados_insuficientes'});
  }
- const stats={total:records.length,vinculado:0,sem_vinculo_identificado:0,ambiguo:0,dados_insuficientes:0,
+ const stats={total:records.length,vinculado:0,sem_vinculo_identificado:0,ambiguo:0,dados_insuficientes:0,ticket_ja_utilizado:0,
   atendida:0,nao_atendida:0,abandonada_ou_cancelada:0,em_andamento:0,indeterminada:0};
  for(const x of records){stats[x.reconciliation]++;stats[x.status]++;}
- return {stats,records};
+ const withPhone=records.filter(r=>r.phoneMasked!=='Indisponível').length;
+ const ticketWithPhone=prepared.filter(t=>t.phones.length>0).length;
+ const ticketWithCallId=prepared.filter(t=>t.callId.length>0).length;
+ return {stats,records,coverage:{callsWithPhone:withPhone,callsWithoutPhone:records.length-withPhone,ticketsWithPhone:ticketWithPhone,ticketsWithCallId:ticketWithCallId,ticketsWithoutPhone:prepared.length-ticketWithPhone}};
 }
 async function auth(req,base,key,signal){
  const bearer=/^Bearer\s+(.+)$/i.exec(req.headers.authorization||'');
