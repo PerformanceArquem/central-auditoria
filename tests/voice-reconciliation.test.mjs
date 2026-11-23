@@ -176,3 +176,21 @@ test('other hosts cannot inject recording references',()=>{
  const c={...call(503,'2026-11-20T10:00:00-03:00',null),url_gravacao:'https://voice-api.zenvia.com/rec/123456789'};
  assert.equal(run([c],[t]).stats.vinculado_gravacao,0);
 });
+
+test('documented Zenvia /rec/?id= URL can be matched to Movidesk recording reference',()=>{
+ const t=ticket(990,'2026-11-20T08:00:00-03:00','41988887777');
+ t.payload.actions[0].htmlDescription='<a href="https://voice-app.zenvia.com/rec?x=secret&id=123456789&cid=765432">Recado</a>';
+ const c={...call(991,'2026-11-20T10:00:00-03:00',null),
+  url_gravacao:'https://api.evoline.com.br/rec/?id=123456789'};
+ const r=run([c],[t]);
+ assert.equal(r.stats.vinculado_gravacao,1);
+ assert.equal(r.records[0].matchMethod,'gravacao');
+ assert.ok(!JSON.stringify(r).includes('secret'));
+});
+test('recording URL must be on an approved provider host',()=>{
+ const t=ticket(992,'2026-11-20T08:00:00-03:00','41988887777');
+ t.payload.actions[0].htmlDescription='https://voice-app.zenvia.com/rec?id=123456789&x=secret';
+ const c={...call(993,'2026-11-20T10:00:00-03:00',null),
+  url_gravacao:'https://untrusted.example/rec/?id=123456789'};
+ assert.equal(run([c],[t]).stats.vinculado_gravacao,0);
+});
