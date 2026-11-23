@@ -32,7 +32,7 @@ test('owner changes stay within a sector; return visits add to cumulative queue 
  assert.equal(r.transfers,2);assert.equal(r.queueDays,17);assert.equal(component(r,'queue').points,10);
 });
 test('partial or inconsistent histories do not fabricate transfers or current queue time',()=>{
- for(const ownerHistories of [[],[{changedDate:'invalid',ownerTeam:'Suporte'}],[...base.ownerHistories,{changedDate:'2026-12-01T12:00:00Z',ownerTeam:'Suporte'}]]){
+ for(const ownerHistories of [[],[{changedDate:'invalid',ownerTeam:'Suporte'}],[{changedDate:'2026-11-01T12:00:00Z',ownerTeam:null},...base.ownerHistories],[...base.ownerHistories,{changedDate:'2026-12-01T12:00:00Z',ownerTeam:'Suporte'}]]){
   const r=risk({...base,ownerHistories});assert.equal(r.transfers,null);assert.equal(r.queueDays,null);
  }
  assert.equal(risk({...base,ownerTeam:'Produção'}).queueDays,null);

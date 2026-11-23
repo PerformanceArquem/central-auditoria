@@ -47,21 +47,25 @@ export default async function handler(req,res){
     const contextWarnings=[];
     let historicalTickets=[],clientCriticality={};
     if(inspectTickets([source],{now}).length){
+      const p=source.payload||source,dimensions={ownerTeam:p.ownerTeam,category:p.category,serviceFirstLevel:p.serviceFirstLevel};
+      const classified=Object.values(dimensions).every(value=>typeof value==='string'&&value.trim());
       const cohort=new URL(base+'/rest/v1/audit_direct_tickets');
       cohort.search=new URLSearchParams({
         select:'ticket_id,closed_at_source,ownerTeam:payload->ownerTeam,category:payload->category,serviceFirstLevel:payload->serviceFirstLevel,baseStatus:payload->baseStatus,status:payload->status,slaSolutionDate:payload->slaSolutionDate,resolvedIn:payload->resolvedIn,closedIn:payload->closedIn,createdDate:payload->createdDate,isDeleted:payload->isDeleted',
-        'payload->>baseStatus':'in.(Resolved,Closed)',order:'source_synced_at.desc,ticket_id.desc',limit:'500'
+        'payload->>baseStatus':'in.(Resolved,Closed)','payload->>slaSolutionDate':'not.is.null',order:'source_synced_at.desc,ticket_id.desc',limit:'500'
       }).toString();
+      // Quote the exact source value before URL encoding, including reserved filter characters.
+      if(classified)for(const [key,value] of Object.entries(dimensions))cohort.searchParams.set('payload->>'+key,'eq.'+JSON.stringify(value));
       const contexts=await Promise.allSettled([
-        request(cohort,headers),
+        classified?request(cohort,headers):Promise.resolve(null),
         request(base+'/functions/v1/audit-email-dispatch',{apikey:key,Authorization:'Bearer '+bearer[1],'Content-Type':'application/json'},{method:'POST',body:JSON.stringify({action:'vip_config',mode:'list'})})
       ]);
       const historical=contexts[0],vips=contexts[1];
       if(historical.status==='fulfilled'&&Array.isArray(historical.value))historicalTickets=historical.value;
-      else contextWarnings.push('Histórico semelhante indisponível; este fator não foi presumido como risco zero.');
+      else contextWarnings.push(classified?'Histórico semelhante indisponível; este fator não foi presumido como risco zero.':'Histórico semelhante sem classificação completa de setor, categoria e serviço.');
       if(vips.status==='fulfilled'&&vips.value?.ok&&Array.isArray(vips.value.names))clientCriticality=Object.fromEntries(vips.value.names.filter(n=>typeof n==='string'&&n.trim()).map(n=>[n,'Alta']));
       else contextWarnings.push('Cadastro corporativo de clientes indisponível; criticidade não inferida.');
-      contextWarnings.push('Histórico semelhante limitado a até 500 resolvidos sincronizados; exige cinco comparáveis por setor, categoria e serviço.');
+      contextWarnings.push('Histórico semelhante limitado a até 500 resolvidos sincronizados do mesmo setor, categoria e serviço, com prazo; exige cinco comparáveis válidos.');
     }
     const items=inspectTickets([source],{now,historicalTickets,clientCriticality});
     const item=items[0]||{id,findings:[],evaluatedCodes:codes,closed:true};

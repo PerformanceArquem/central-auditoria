@@ -18,7 +18,7 @@ function configure({valid=true,active=true,role='admin',persist=false,stale=fals
   if(u.pathname==='/functions/v1/audit-email-dispatch'){if(contextFailure)throw Error('fixture');data={ok:true,names:vipNames};}
   else if(u.pathname.endsWith('/audit_users'))data=[{role,is_active:active}];
   else if(u.pathname.endsWith('/audit_direct_tickets')&&u.searchParams.has('payload->>baseStatus')){if(contextFailure)throw Error('fixture');data=historicalRecords;}
-  else if(u.pathname.endsWith('/audit_direct_tickets'))data=records??[{ticket_id:'1',source_synced_at:'2026-11-23T12:00:00Z',payload:{id:1,status:'Em atendimento',subject:'Assunto',owner:'Alan',ownerTeam:'Produção',actions:[{description:'PRIVATE DESCRIPTION',createdDate:'2026-11-20T10:00:00Z',timeAppointments:[]}],ownerHistories:[{changedDate:'2026-11-20T10:00:00Z',ownerTeam:'Produção',owner:'Alan'}]}}];
+  else if(u.pathname.endsWith('/audit_direct_tickets'))data=records??[{ticket_id:'1',source_synced_at:'2026-11-23T12:00:00Z',payload:{id:1,status:'Em atendimento',subject:'Assunto',owner:'Alan',ownerTeam:'Produção',category:'Incidente',serviceFirstLevel:'Sistema',actions:[{description:'PRIVATE DESCRIPTION',createdDate:'2026-11-20T10:00:00Z',timeAppointments:[]}],ownerHistories:[{changedDate:'2026-11-20T10:00:00Z',ownerTeam:'Produção',owner:'Alan'}]}}];
   else if(u.pathname.endsWith('/rpc/audit_record_ticket_inspection'))data=stale?{stale:true}:{saved:true};
   else if(u.pathname.endsWith('/audit_ticket_inspection_snapshots'))data=snapshots;
   else throw Error('Unexpected URL');
@@ -86,10 +86,17 @@ test('server calculates peer history and priority from authenticated read-only c
  const calls=configure({records:[{ticket_id:'1',payload:source}],historicalRecords:peers,vipNames:['Ótica Teste']}),r=await invoke();
  assert.equal(r.code,200);assert.equal(r.data.item.risk.similarity.samples,5);assert.equal(r.data.item.risk.similarity.lateRate,1);assert.equal(r.data.item.risk.components.find(c=>c.key==='client').points,7);
  const query=calls.find(c=>c.url.searchParams.has('payload->>baseStatus')).url;assert.equal(query.searchParams.get('limit'),'500');assert.doesNotMatch(query.searchParams.get('select'),/actions|description|clients|subject/);
+ assert.equal(query.searchParams.get('payload->>ownerTeam'),'eq."Suporte"');assert.equal(query.searchParams.get('payload->>category'),'eq."Incidente"');assert.equal(query.searchParams.get('payload->>serviceFirstLevel'),'eq."Sistema"');assert.equal(query.searchParams.get('payload->>slaSolutionDate'),'not.is.null');
  const vipCall=calls.find(c=>c.url.pathname==='/functions/v1/audit-email-dispatch');assert.equal(vipCall.options.headers.Authorization,'Bearer fixture');assert.deepEqual(JSON.parse(vipCall.options.body),{action:'vip_config',mode:'list'});
 });
 test('unavailable history and VIP configuration yield explicit missing factors, without assuming low risk',async()=>{
  configure({contextFailure:true});const r=await invoke();assert.equal(r.code,200);assert.ok(r.data.warnings.some(w=>w.includes('Histórico semelhante indisponível')));assert.ok(r.data.warnings.some(w=>w.includes('criticidade não inferida')));assert.ok(r.data.item.risk.missing.includes('Criticidade do cliente'));
+});
+test('history filters preserve reserved characters and skip requests without classification',async()=>{
+ const value='Categoria, (A) "B" \\C',source={id:1,ownerTeam:'Suporte',category:value,serviceFirstLevel:'Sistema'};
+ let calls=configure({records:[{ticket_id:'1',payload:source}]});await invoke();
+ assert.equal(calls.find(c=>c.url.searchParams.has('payload->>baseStatus')).url.searchParams.get('payload->>category'),'eq.'+JSON.stringify(value));
+ calls=configure({records:[{ticket_id:'1',payload:{id:1}}]});const r=await invoke();assert.equal(r.code,200);assert.ok(!calls.some(c=>c.url.searchParams.has('payload->>baseStatus')));assert.ok(r.data.warnings.some(w=>w.includes('classificação completa')));
 });
 test('migration restricts access, serializes per ticket and enforces request uniqueness',()=>{
  const sql=readFileSync(new URL('../supabase/migrations/20261123143000_ticket_inspection_staging.sql',import.meta.url),'utf8');
