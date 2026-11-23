@@ -6,6 +6,7 @@ const phone=value=>{let n=digits(value);if(n.startsWith('55')&&n.length>11)n=n.s
 const mask=n=>n?'••••'+n.slice(-4):'Indisponível';
 const parsedAt=value=>{const t=Date.parse(String(value||''));return Number.isFinite(t)?t:null;};
 const originDate=x=>x.data_inicio||x.data_criacao||x.destino?.data_inicio;
+// Call identifiers from different scopes can coincide; only IDs with independent origin are authoritative.
 const callPhone=x=>phone(x.numero_origem||x.origem_numero||x.telefone_origem||x.origem?.numero||x.caller_id||x.numero||x.telefone);
 const callStatus=x=>normalized(x.status||x.destino?.status);
 const callKind=x=>{
@@ -84,12 +85,12 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
   const at=parsedAt(originDate(call)),number=callPhone(call);
   let choices=prepared.filter(t=>id&&t.callId===id).map(t=>({ticket:t,method:'id',delta:0}));
   const recordingId=recordingIdFromCall(call);
-  if(!choices.length&&recordingId)choices=prepared.filter(t=>t.recordingId===recordingId)
+  if(!choices.length&&recordingId)choices=prepared.filter(t=>t.recordingId===recordingId&&(!t.callId||t.callId===id))
     .map(t=>({ticket:t,method:'gravacao',delta:0}));
   if(!choices.length&&number&&at!==null){
    // Movidesk pode criar o ticket muito antes/depois do evento de telefonia.
    // O instante da ação de telefonia é a única referência para aproximação.
-   choices=prepared.filter(t=>t.actions.length&&t.phones.includes(number)&&
+   choices=prepared.filter(t=>t.actions.length&&t.phones.includes(number)&&(!recordingId||!t.recordingId||t.recordingId===recordingId)&&
      // Não considerar como possível vínculo um chamado já identificado por
      // ID explícito diferente desta ligação.
      (!t.callId||t.callId===id))
