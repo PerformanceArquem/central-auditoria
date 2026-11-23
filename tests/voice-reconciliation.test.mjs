@@ -91,5 +91,5 @@ test('URA audit requires explicit DID allowlist instead of counting all company 
 });
 test('the response never claims proof that calls reached the URA menu from DID alone',()=>{
  assert.match(source,/uraEntryVerified:false/);
- assert.match(source,/não uma confirmação de que o menu foi executado/);
+ assert.match(source,/não confirma que o menu da URA foi executado/);
 });
