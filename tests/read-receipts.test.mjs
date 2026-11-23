@@ -67,10 +67,12 @@ test('new emails disclose opening detection without including a reading confirma
   }
 });
 
-test('scheduled email batches cannot dispatch before 09h in Sao Paulo',()=>{
-  const source=readFileSync(new URL('../supabase/functions/audit-email-dispatch/index.ts',import.meta.url),'utf8');
-  assert.match(source,/if\(batchGroup && localHour < 9\)/);
-  assert.doesNotMatch(source,/localHour < \(batchGroup==='management'\?8:9\)/);
+test('scheduled email batches obey 08h57 inclusive and 10h exclusive in Sao Paulo',async()=>{
+  const code=stripTypeScriptTypes(readFileSync(new URL('../supabase/functions/audit-email-dispatch/morning-policy.ts',import.meta.url),'utf8'));
+  const {morningWindow}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+  assert.equal(morningWindow(new Date('2026-11-23T08:56:59-03:00')),false);
+  assert.equal(morningWindow(new Date('2026-11-23T08:57:00-03:00')),true);
+  assert.equal(morningWindow(new Date('2026-11-23T10:00:00-03:00')),false);
 });
 
 test('triage keeps its dispatch record without adding a confirmation or tracking image',async()=>{
