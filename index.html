@@ -1311,7 +1311,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    <p class="subtle">Chamadas recebidas nos números DID confirmados como entrada da URA, inclusive encerradas antes do atendimento, e vínculo com chamados. Apenas administradores; consulta somente leitura.</p>
    <div class="row noprint" style="gap:10px;flex-wrap:wrap">
     <button type="button" id="zvReconcile" class="b">Cruzar dados das duas APIs</button>
-    <select id="zvReconcileFilter"><option value="all">Todas</option><option value="sem_vinculo_identificado">Sem vínculo identificado</option><option value="vinculado">Vínculos por ID</option><option value="possivel_vinculo">Possíveis vínculos (telefone + horário do evento)</option><option value="ambiguo">Ambíguas</option><option value="dados_insuficientes">Dados insuficientes</option></select>
+    <select id="zvReconcileFilter"><option value="all">Todas</option><option value="sem_vinculo_identificado">Sem vínculo identificado</option><option value="vinculado">Vínculos por ID</option><option value="vinculado_gravacao">Vínculos por gravação</option><option value="possivel_vinculo">Possíveis vínculos (telefone + horário do evento)</option><option value="ambiguo">Ambíguas</option><option value="dados_insuficientes">Dados insuficientes</option></select>
     <button type="button" id="zvReconcileCsv" class="b" disabled>Exportar CSV</button>
    </div>
    <p id="zvReconcileStatus" class="subtle" role="status">Para verificar as ligações que chegaram à URA, os números DID devem estar homologados no servidor. Selecione até 7 dias e execute a comparação.</p>
@@ -6812,7 +6812,7 @@ window.clientImpactInit=()=>{
  function showReconciliation(){
   const root=el('zvReconcileRows');root.replaceChildren();
   const data=reconcileDataset;if(!data)return;
-  const names={vinculado:'Confirmado por ID',possivel_vinculo:'Possível vínculo (telefone e horário)',sem_vinculo_identificado:'Sem vínculo identificado',ambiguo:'Ambíguo',ticket_ja_utilizado:'Chamado já vinculado a outra ligação',dados_insuficientes:'Dados insuficientes',atendida:'Atendida',nao_atendida:'Não atendida',abandonada_ou_cancelada:'Abandonada/cancelada',em_andamento:'Em andamento',indeterminada:'Indeterminada',id:'ID explícito',telefone_horario_evento:'Telefone + horário da ação'};
+  const names={vinculado:'Confirmado por ID',vinculado_gravacao:'Vínculo por gravação Zenvia',possivel_vinculo:'Possível vínculo (telefone e horário)',sem_vinculo_identificado:'Sem vínculo identificado',ambiguo:'Ambíguo',ticket_ja_utilizado:'Chamado já vinculado a outra ligação',dados_insuficientes:'Dados insuficientes',atendida:'Atendida',nao_atendida:'Não atendida',abandonada_ou_cancelada:'Abandonada/cancelada',em_andamento:'Em andamento',indeterminada:'Indeterminada',id:'ID explícito',gravacao:'Referência da gravação',telefone_horario_evento:'Telefone + horário da ação'};
   const filter=el('zvReconcileFilter').value;
   const rows=(data.records||[]).filter(r=>filter==='all'||r.reconciliation===filter);
   for(const r of rows){
@@ -6820,7 +6820,7 @@ window.clientImpactInit=()=>{
    for(const v of [r.startedAt,r.callId,r.phoneMasked,names[r.status]||r.status,names[r.reconciliation]||r.reconciliation,r.ticketId,(r.movideskTelephonyOrigins||[]).join(', ')||'—',r.deltaSeconds,names[r.matchMethod]||r.matchMethod])addCell(tr,v??'—');
    root.appendChild(tr);
   }
-  el('zvReconcileStatus').textContent=rows.length+' ligação(ões) exibidas de '+data.records.length+'. '+data.metadata.ticketsExamined+' chamados examinados. Sem ID de chamada nas ações de telefonia: '+data.coverage.telephonyActionsWithoutCallId+'. Cobertura: '+data.coverage.callsWithPhone+' ligações com telefone e '+data.coverage.ticketsWithPhone+' chamados com telefone. Nenhuma alteração realizada.';
+  el('zvReconcileStatus').textContent=rows.length+' ligação(ões) exibidas de '+data.records.length+'. '+data.metadata.ticketsExamined+' chamados examinados. Referências de gravação: '+data.coverage.ticketsWithRecordingReference+'. Sem ID de chamada nas ações de telefonia: '+data.coverage.telephonyActionsWithoutCallId+'. Cobertura: '+data.coverage.callsWithPhone+' ligações com telefone e '+data.coverage.ticketsWithPhone+' chamados com telefone. Nenhuma alteração realizada.';
  }
  async function runReconciliation(){
   const btn=el('zvReconcile');btn.disabled=true;reconcileDataset=null;
@@ -6836,7 +6836,7 @@ window.clientImpactInit=()=>{
    if(!resp.ok||!data.ok)throw Error(data.error||'As APIs não retornaram dados válidos.');
    if(start!==el('zvStart').value||end!==el('zvEnd').value)throw Error('Período alterado durante a consulta.');
    reconcileDataset=data;
-   const metrics=[['Entradas nos DIDs da URA',data.stats.total],['Confirmadas por ID',data.stats.vinculado],['Possíveis (não comprovadas)',data.stats.possivel_vinculo],['Sem vínculo',data.stats.sem_vinculo_identificado],['Ambíguas',data.stats.ambiguo],['Reutilização de chamado',data.stats.ticket_ja_utilizado],['Insuficientes',data.stats.dados_insuficientes],['Abandonadas/canceladas',data.stats.abandonada_ou_cancelada]];
+   const metrics=[['Entradas nos DIDs da URA',data.stats.total],['Confirmadas por ID',data.stats.vinculado],['Por gravação',data.stats.vinculado_gravacao],['Possíveis (não comprovadas)',data.stats.possivel_vinculo],['Sem vínculo',data.stats.sem_vinculo_identificado],['Ambíguas',data.stats.ambiguo],['Reutilização de chamado',data.stats.ticket_ja_utilizado],['Insuficientes',data.stats.dados_insuficientes],['Abandonadas/canceladas',data.stats.abandonada_ou_cancelada]];
    for(const [label,value] of metrics){const box=document.createElement('div');box.className='kpi';const title=document.createElement('div');title.textContent=label;const strong=document.createElement('strong');strong.textContent=String(value||0);box.append(title,strong);el('zvReconcileKpis').appendChild(box);}
    el('zvReconcileCsv').disabled=!data.records?.length;showReconciliation();
   }catch(e){el('zvReconcileStatus').textContent='Conciliação indisponível: '+e.message;}
