@@ -41,43 +41,68 @@ const linkedCallId=t=>{
  return '';
 };
 export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
- const records=[],matchedTickets=new Set();
  const prepared=tickets.map(t=>({...t,phones:ticketPhone(t),callId:linkedCallId(t),
   actions:telephonyActions(t),time:parsedAt(t.created_at_source||t.payload?.createdDate)}));
- const unique=new Set();
+ const unique=new Set(),entries=[];
  for(const call of calls){
   const id=String(call.id??'').trim();
   const key=id?'id:'+id:JSON.stringify([originDate(call),callPhone(call),callStatus(call)]);
-  if(unique.has(key))continue;
-  unique.add(key);
+  if(unique.has(key))continue;unique.add(key);
   const at=parsedAt(originDate(call)),number=callPhone(call);
   let choices=prepared.filter(t=>id&&t.callId===id).map(t=>({ticket:t,method:'id',delta:0}));
   if(!choices.length&&number&&at!==null){
-   choices=prepared.filter(t=>t.actions.length>0&&t.phones.includes(number)&&
-     (t.time!==null&&Math.abs(t.time-at)<=maxGapMinutes*60000||
-      t.actions.some(a=>{const time=parsedAt(a.createdDate);return time!==null&&Math.abs(time-at)<=maxGapMinutes*60000;})))
-     .map(t=>({ticket:t,method:'telefone_horario',delta:Math.abs(t.time-at)}))
-     .sort((a,b)=>a.delta-b.delta);
+   // Movidesk pode criar o ticket muito antes/depois do evento de telefonia.
+   // O instante da ação de telefonia é a única referência para aproximação.
+   choices=prepared.filter(t=>t.actions.length&&t.phones.includes(number))
+    .map(t=>{
+      const deltas=t.actions.map(a=>parsedAt(a.createdDate)).filter(time=>time!==null)
+       .map(time=>Math.abs(time-at));
+      return deltas.length?{ticket:t,method:'telefone_horario_evento',
+        delta:Math.min(...deltas)}:null;
+    }).filter(c=>c&&c.delta<=maxGapMinutes*60000)
+    .sort((x,y)=>x.delta-y.delta);
   }
-  const available=choices.filter(c=>!matchedTickets.has(c.ticket.ticket_id));
-  // Nunca converter múltiplos candidatos em vínculo único só porque algum já foi usado.
-  const match=choices.length===1&&available.length===1?available[0]:null;
-  if(match)matchedTickets.add(match.ticket.ticket_id);
-  records.push({callId:id||null,startedAt:originDate(call)||null,phoneMasked:mask(number),
-   status:callKind(call),providerStatus:String(call.status||call.destino?.status||'').slice(0,60),
-   ticketId:match?.ticket.ticket_id||null,matchMethod:match?.method||null,
-   movideskTelephonyOrigins:match?[...new Set(match.ticket.actions.map(a=>String(a.origin)))]:[],
-   reconciliation:match?(match.method==='id'?'vinculado':'possivel_vinculo'):choices.length>1?'ambiguo':choices.length===1?'ticket_ja_utilizado':number?'sem_vinculo_identificado':'dados_insuficientes'});
+  entries.push({call,id,number,choices});
  }
- const stats={total:records.length,vinculado:0,possivel_vinculo:0,sem_vinculo_identificado:0,ambiguo:0,dados_insuficientes:0,ticket_ja_utilizado:0,
-  atendida:0,nao_atendida:0,abandonada_ou_cancelada:0,em_andamento:0,indeterminada:0};
- for(const x of records){stats[x.reconciliation]++;stats[x.status]++;}
- const withPhone=records.filter(r=>r.phoneMasked!=='Indisponível').length;
- const ticketWithPhone=prepared.filter(t=>t.phones.length>0).length;
- const ticketWithCallId=prepared.filter(t=>t.callId.length>0).length;
+ // Não decidir pelo primeiro registro quando duas chamadas concorrem
+ // pelo mesmo ticket. Ambas permanecem ambíguas para revisão.
+ const contenders=new Map();
+ for(const entry of entries){
+  for(const choice of entry.choices){
+   const key=String(choice.ticket.ticket_id);
+   contenders.set(key,(contenders.get(key)||0)+1);
+  }
+ }
+ const records=[];
+ for(const entry of entries){
+  const {call,id,number,choices}=entry;
+  const single=choices.length===1&&contenders.get(String(choices[0].ticket.ticket_id))===1;
+  const match=single?choices[0]:null;
+  const collision=choices.length>1||(choices.length===1&&!single);
+  records.push({callId:id||null,startedAt:originDate(call)||null,
+   phoneMasked:mask(number),status:callKind(call),
+   providerStatus:String(call.status||call.destino?.status||'').slice(0,60),
+   ticketId:match?.ticket.ticket_id||null,matchMethod:match?.method||null,
+   deltaSeconds:match?Math.round(match.delta/1000):null,
+   movideskTelephonyOrigins:match?[...new Set(match.ticket.actions.map(a=>String(a.origin)))]:[],
+   reconciliation:match?(match.method==='id'?'vinculado':'possivel_vinculo'):
+      collision?'ambiguo':number?'sem_vinculo_identificado':'dados_insuficientes'});
+ }
+ const stats={total:records.length,vinculado:0,possivel_vinculo:0,sem_vinculo_identificado:0,
+  ambiguo:0,dados_insuficientes:0,ticket_ja_utilizado:0,atendida:0,
+  nao_atendida:0,abandonada_ou_cancelada:0,em_andamento:0,indeterminada:0};
+ for(const r of records){stats[r.reconciliation]++;stats[r.status]++;}
+ const ticketsWithPhone=prepared.filter(t=>t.phones.length>0).length;
+ const ticketsWithCallId=prepared.filter(t=>t.callId.length>0).length;
  const ticketsWithTelephonyAction=prepared.filter(t=>t.actions.length>0).length;
- const telephonyActionsWithoutCallId=prepared.reduce((n,t)=>n+t.actions.filter(a=>![a.zenviaCallId,a.voiceCallId,a.callId,a.telephonyCallId].some(v=>v!==undefined&&v!==null&&String(v).trim())).length,0);
- return {stats,records,coverage:{callsWithPhone:withPhone,callsWithoutPhone:records.length-withPhone,ticketsWithPhone:ticketWithPhone,ticketsWithCallId:ticketWithCallId,ticketsWithTelephonyAction,telephonyActionsWithoutCallId,ticketsWithoutPhone:prepared.length-ticketWithPhone}};
+ const telephonyActionsWithoutCallId=prepared.reduce((n,t)=>n+t.actions.filter(a=>
+  ![a.zenviaCallId,a.voiceCallId,a.callId,a.telephonyCallId].some(v=>
+   v!==undefined&&v!==null&&String(v).trim())).length,0);
+ const withPhone=records.filter(r=>r.phoneMasked!=='Indisponível').length;
+ return {stats,records,coverage:{callsWithPhone:withPhone,
+  callsWithoutPhone:records.length-withPhone,ticketsWithPhone,ticketsWithCallId,
+  ticketsWithTelephonyAction,telephonyActionsWithoutCallId,
+  ticketsWithoutPhone:prepared.length-ticketsWithPhone}};
 }
 async function auth(req,base,key,signal){
  const bearer=/^Bearer\s+(.+)$/i.exec(req.headers.authorization||'');
