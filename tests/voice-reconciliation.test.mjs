@@ -249,3 +249,12 @@ test('sector and employee dropdowns filter reconciliation and its export',()=>{
   'fillReconciliationPeople()', "r.sector===sector", "r.employee===employee",
   "'sector','employee'"])assert.ok(html.includes(item),item);
 });
+
+test('URA reconciliation uses its own seven-day date selectors, preserving monthly voice metrics',()=>{
+ const html=readFileSync('index.html','utf8');
+ assert.match(html,/id="zvReconcileStart"/);
+ assert.match(html,/id="zvReconcileEnd"/);
+ assert.match(html,/const start=el\('zvReconcileStart'\)\.value,end=el\('zvReconcileEnd'\)\.value/);
+ assert.match(html,/el\('zvStart'\)\.value=today\.slice\(0,7\)\+'-01'/);
+ assert.match(html,/Date\.parse\(today\+'T12:00:00Z'\)-6\*86400000/);
+});
