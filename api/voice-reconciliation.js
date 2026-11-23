@@ -45,7 +45,7 @@ const linkedCallId=t=>{
 const recordingIdFromTicket=t=>{
  for(const action of telephonyActions(t)){
   const html=String(action.htmlDescription||'').replace(/&amp;/g,'&');
-  const matches=html.match(/https:\/\/voice-app\.zenvia\.com\/rec\?[^"'<>\\s]+/g)||[];
+  const matches=html.match(/https:\/\/voice-app\.zenvia\.com\/rec\?[^"'<>\s]+/g)||[];
   for(const link of matches){
    try{
     const url=new URL(link);
