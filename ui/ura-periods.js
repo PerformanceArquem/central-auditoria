@@ -44,5 +44,12 @@
   for(const r of records){if(r.reconciliation in stats)stats[r.reconciliation]++;if(r.status in stats)stats[r.status]++;}
   return {ok:true,from,to,records,stats,coverage,months:windows(from,to).map(x=>x.month),metadata:{ticketsExamined,batches:parts.length,ticketCountsAreMonthlyReads:true}};
  }
- root.UraPeriods=Object.freeze({windows,month,label,monthly,combine});
+ async function retryMonth(operation,onRetry,pause=ms=>new Promise(r=>setTimeout(r,ms))){
+  for(let attempt=1;attempt<=3;attempt++){
+   try{return await operation();}catch(error){if(!error?.retryable||attempt===3)throw error;
+    onRetry?.(attempt+1);await pause(attempt*1000);
+   }
+  }
+ }
+ root.UraPeriods=Object.freeze({windows,month,label,monthly,combine,retryMonth});
 })(typeof window==='undefined'?globalThis:window);
