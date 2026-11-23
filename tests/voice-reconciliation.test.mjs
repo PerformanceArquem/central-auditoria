@@ -118,3 +118,12 @@ test('abandoned call may be associated with a Movidesk origin 16 action without 
  assert.equal(r.stats.abandonada_ou_cancelada,1);
  assert.equal(r.coverage.ticketsWithTelephonyAction,1);
 });
+
+test('telephony evidence is returned as action origin codes, not private text',()=>{
+ const t=ticket(702,'2026-11-20T10:01:00-03:00','41988887777');
+ t.payload.actions[0].description='private call details';
+ const r=run([call(70,'2026-11-20T10:00:00-03:00','41988887777')],[t]);
+ assert.deepEqual(r.records[0].movideskTelephonyOrigins,['13']);
+ assert.equal(r.coverage.telephonyActionsWithoutCallId,1);
+ assert.ok(!JSON.stringify(r).includes('private call details'));
+});
