@@ -46,7 +46,8 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
      .sort((a,b)=>a.delta-b.delta);
   }
   const available=choices.filter(c=>!matchedTickets.has(c.ticket.ticket_id));
-  const match=available.length===1?available[0]:null;
+  // Nunca converter múltiplos candidatos em vínculo único só porque algum já foi usado.
+  const match=choices.length===1&&available.length===1?available[0]:null;
   if(match)matchedTickets.add(match.ticket.ticket_id);
   records.push({callId:id||null,startedAt:originDate(call)||null,phoneMasked:mask(number),
    status:callKind(call),providerStatus:String(call.status||call.destino?.status||'').slice(0,60),
