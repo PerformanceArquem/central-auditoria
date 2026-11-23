@@ -1311,13 +1311,13 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    <p class="subtle">Chamadas recebidas nos números DID confirmados como entrada da URA, inclusive encerradas antes do atendimento, e vínculo com chamados. Apenas administradores; consulta somente leitura.</p>
    <div class="row noprint" style="gap:10px;flex-wrap:wrap">
     <button type="button" id="zvReconcile" class="b">Cruzar dados das duas APIs</button>
-    <select id="zvReconcileFilter"><option value="all">Todas</option><option value="sem_vinculo_identificado">Sem vínculo identificado</option><option value="vinculado">Vinculadas</option><option value="ambiguo">Ambíguas</option><option value="ticket_ja_utilizado">Mesmo chamado já vinculado</option><option value="dados_insuficientes">Dados insuficientes</option></select>
+    <select id="zvReconcileFilter"><option value="all">Todas</option><option value="sem_vinculo_identificado">Sem vínculo identificado</option><option value="vinculado">Vínculos por ID</option><option value="possivel_vinculo">Possíveis vínculos (telefone/horário)</option><option value="ambiguo">Ambíguas</option><option value="ticket_ja_utilizado">Mesmo chamado já vinculado</option><option value="dados_insuficientes">Dados insuficientes</option></select>
     <button type="button" id="zvReconcileCsv" class="b" disabled>Exportar CSV</button>
    </div>
    <p id="zvReconcileStatus" class="subtle" role="status">Para verificar as ligações que chegaram à URA, os números DID devem estar homologados no servidor. Selecione até 7 dias e execute a comparação.</p>
    <div id="zvReconcileKpis" class="kpis"></div>
    <div class="tablewrap"><table><thead><tr><th>Data</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação</th><th>Conciliação</th><th>Chamado</th><th>Critério</th></tr></thead><tbody id="zvReconcileRows"></tbody></table></div>
-   <p class="subtle">A chamada no DID não confirma que o cliente ouviu o menu da URA. A ausência de vínculo não prova falha de abertura: depende da regra de criação, do histórico da URA e dos identificadores disponíveis em ambas as APIs.</p>
+   <p class="subtle">O telefone e o horário sugerem vínculo, mas somente um identificador compartilhado comprova a ligação ao chamado. A chamada no DID não confirma que o cliente ouviu o menu da URA. A ausência de vínculo não prova falha de abertura: depende da regra de criação, do histórico da URA e dos identificadores disponíveis em ambas as APIs.</p>
   </div>
   <p class="subtle">TMA = tempo médio falado nas ligações atendidas. TME é calculado apenas com os tempos de espera reais da fila configurada, quando houver cobertura integral; registros sem tempo de espera suspendem o indicador.</p>
   <div class="grid2">
@@ -6812,7 +6812,7 @@ window.clientImpactInit=()=>{
  function showReconciliation(){
   const root=el('zvReconcileRows');root.replaceChildren();
   const data=reconcileDataset;if(!data)return;
-  const names={vinculado:'Vinculado',sem_vinculo_identificado:'Sem vínculo identificado',ambiguo:'Ambíguo',ticket_ja_utilizado:'Chamado já vinculado a outra ligação',dados_insuficientes:'Dados insuficientes',atendida:'Atendida',nao_atendida:'Não atendida',abandonada_ou_cancelada:'Abandonada/cancelada',em_andamento:'Em andamento',indeterminada:'Indeterminada',id:'ID explícito',telefone_horario:'Telefone e horário'};
+  const names={vinculado:'Confirmado por ID',possivel_vinculo:'Possível vínculo (telefone e horário)',sem_vinculo_identificado:'Sem vínculo identificado',ambiguo:'Ambíguo',ticket_ja_utilizado:'Chamado já vinculado a outra ligação',dados_insuficientes:'Dados insuficientes',atendida:'Atendida',nao_atendida:'Não atendida',abandonada_ou_cancelada:'Abandonada/cancelada',em_andamento:'Em andamento',indeterminada:'Indeterminada',id:'ID explícito',telefone_horario:'Telefone e horário'};
   const filter=el('zvReconcileFilter').value;
   const rows=(data.records||[]).filter(r=>filter==='all'||r.reconciliation===filter);
   for(const r of rows){
@@ -6836,7 +6836,7 @@ window.clientImpactInit=()=>{
    if(!resp.ok||!data.ok)throw Error(data.error||'As APIs não retornaram dados válidos.');
    if(start!==el('zvStart').value||end!==el('zvEnd').value)throw Error('Período alterado durante a consulta.');
    reconcileDataset=data;
-   const metrics=[['Entradas nos DIDs da URA',data.stats.total],['Vinculadas',data.stats.vinculado],['Sem vínculo',data.stats.sem_vinculo_identificado],['Ambíguas',data.stats.ambiguo],['Reutilização de chamado',data.stats.ticket_ja_utilizado],['Insuficientes',data.stats.dados_insuficientes],['Abandonadas/canceladas',data.stats.abandonada_ou_cancelada]];
+   const metrics=[['Entradas nos DIDs da URA',data.stats.total],['Confirmadas por ID',data.stats.vinculado],['Possíveis (não comprovadas)',data.stats.possivel_vinculo],['Sem vínculo',data.stats.sem_vinculo_identificado],['Ambíguas',data.stats.ambiguo],['Reutilização de chamado',data.stats.ticket_ja_utilizado],['Insuficientes',data.stats.dados_insuficientes],['Abandonadas/canceladas',data.stats.abandonada_ou_cancelada]];
    for(const [label,value] of metrics){const box=document.createElement('div');box.className='kpi';const title=document.createElement('div');title.textContent=label;const strong=document.createElement('strong');strong.textContent=String(value||0);box.append(title,strong);el('zvReconcileKpis').appendChild(box);}
    el('zvReconcileCsv').disabled=!data.records?.length;showReconciliation();
   }catch(e){el('zvReconcileStatus').textContent='Conciliação indisponível: '+e.message;}
