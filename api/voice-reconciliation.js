@@ -1,9 +1,9 @@
-// Reconcilia��o de voz somente leitura. Nenhuma grava��o/telefone completo � enviado ao navegador.
+// Reconciliação de voz somente leitura. Nenhuma gravação/telefone completo é enviado ao navegador.
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const normalized = value => String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const digits=value=>String(value||'').replace(/\D/g,'');
 const phone=value=>{let n=digits(value);if(n.startsWith('55')&&n.length>11)n=n.slice(2);return n.length>=10&&n.length<=11?n:'';};
-const mask=n=>n?''+n.slice(-4):'Indispon�vel';
+const mask=n=>n?'••••'+n.slice(-4):'Indisponível';
 const parsedAt=value=>{const t=Date.parse(String(value||''));return Number.isFinite(t)?t:null;};
 const originDate=x=>x.data_inicio||x.data_criacao||x.destino?.data_inicio;
 // Call identifiers from different scopes can coincide; only IDs with independent origin are authoritative.
@@ -42,16 +42,16 @@ const linkedCallId=t=>{
  const p=t.payload||{};
  const direct=p.zenviaCallId||p.zenvia_call_id||p.voiceCallId||p.callId||p.telephonyCallId;
  if(direct!==undefined&&direct!==null&&String(direct).trim())return String(direct).trim();
- // Nunca extrair IDs a partir de texto livre ou n�meros semelhantes a protocolos.
- // Um ID s� � confi�vel quando est� em um campo explicitamente identificado.
+ // Nunca extrair IDs a partir de texto livre ou números semelhantes a protocolos.
+ // Um ID só é confiável quando está em um campo explicitamente identificado.
  for(const action of telephonyActions(t)){
   const value=action.zenviaCallId||action.voiceCallId||action.callId||action.telephonyCallId;
   if(value!==undefined&&value!==null&&String(value).trim())return String(value).trim();
  }
  return '';
 };
-// A refer�ncia de grava��o � uma pista independente: s� comparar IDs contra
-// url_gravacao da pr�pria Zenvia; nunca expor URLs ou tokens de acesso.
+// A referência de gravação é uma pista independente: só comparar IDs contra
+// url_gravacao da própria Zenvia; nunca expor URLs ou tokens de acesso.
 const recordingIdFromTicket=t=>{
  for(const action of telephonyActions(t)){
   const html=String(action.htmlDescription||'').replace(/&amp;/g,'&');
@@ -63,7 +63,7 @@ const recordingIdFromTicket=t=>{
      const id=url.searchParams.get('id');
      if(/^\d{6,15}$/.test(id||''))return id;
     }
-   }catch(_){/* ignorar URLs inv�lidas */}
+   }catch(_){/* ignorar URLs inválidas */}
   }
  }
  return '';
@@ -73,7 +73,7 @@ const recordingIdFromCall=c=>{
  try{
   const url=new URL(raw);
   // Formatos documentados: /rec/?id=... e /rec/{id}.
-  // S� hosts oficiais conhecidos; sem seguir links nem revelar seus par�metros.
+  // Só hosts oficiais conhecidos; sem seguir links nem revelar seus parâmetros.
   const hosts=new Set(['voice-api.zenvia.com','voice-app.zenvia.com','api.evoline.com.br']);
   if(url.protocol!=='https:'||!hosts.has(url.hostname))return '';
   const path=/^\/rec\/(\d{6,15})\/?$/.exec(url.pathname);
@@ -98,10 +98,10 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
     .map(t=>({ticket:t,method:'gravacao',delta:0}));
   if(!choices.length&&number&&at!==null){
    // Movidesk pode criar o ticket muito antes/depois do evento de telefonia.
-   // O instante da a��o de telefonia � a �nica refer�ncia para aproxima��o.
+   // O instante da ação de telefonia é a única referência para aproximação.
    choices=prepared.filter(t=>t.actions.length&&t.phones.includes(number)&&(!recordingId||!t.recordingId||t.recordingId===recordingId)&&
-     // N�o considerar como poss�vel v�nculo um chamado j� identificado por
-     // ID expl�cito diferente desta liga��o.
+     // Não considerar como possível vínculo um chamado já identificado por
+     // ID explícito diferente desta ligação.
      (!t.callId||t.callId===id))
     .map(t=>{
       const deltas=t.actions.map(a=>parsedAt(a.createdDate)).filter(time=>time!==null)
@@ -113,8 +113,8 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
   }
   entries.push({call,id,number,choices});
  }
- // N�o decidir pelo primeiro registro quando duas chamadas concorrem
- // pelo mesmo ticket. Ambas permanecem amb�guas para revis�o.
+ // Não decidir pelo primeiro registro quando duas chamadas concorrem
+ // pelo mesmo ticket. Ambas permanecem ambíguas para revisão.
  const contenders=new Map();
  for(const entry of entries){
   for(const choice of entry.choices){
@@ -149,7 +149,7 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
  const telephonyActionsWithoutCallId=prepared.reduce((n,t)=>n+t.actions.filter(a=>
   ![a.zenviaCallId,a.voiceCallId,a.callId,a.telephonyCallId].some(v=>
    v!==undefined&&v!==null&&String(v).trim())).length,0);
- const withPhone=records.filter(r=>r.phoneMasked!=='Indispon�vel').length;
+ const withPhone=records.filter(r=>r.phoneMasked!=='Indisponível').length;
  return {stats,records,coverage:{callsWithPhone:withPhone,
   callsWithoutPhone:records.length-withPhone,ticketsWithPhone,ticketsWithCallId,
   ticketsWithTelephonyAction,ticketsWithRecordingReference,telephonyActionsWithoutCallId,
@@ -157,55 +157,55 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
 }
 async function auth(req,base,key,signal){
  const bearer=/^Bearer\s+(.+)$/i.exec(req.headers.authorization||'');
- if(!bearer)return {code:401,error:'Fa�a login na Central'};
+ if(!bearer)return {code:401,error:'Faça login na Central'};
  const u=await fetch(base+'/auth/v1/user',{headers:{apikey:key,Authorization:'Bearer '+bearer[1]},signal});
- if(!u.ok)return {code:401,error:'Sess�o inv�lida'};
+ if(!u.ok)return {code:401,error:'Sessão inválida'};
  const user=await u.json();
  const url=new URL(base+'/rest/v1/audit_users');url.searchParams.set('select','role,is_active');
  url.searchParams.set('user_id','eq.'+user.id);url.searchParams.set('limit','1');
  const p=await fetch(url,{headers:{apikey:key,Authorization:'Bearer '+key},signal});
- if(!p.ok)return {code:503,error:'Permiss�es indispon�veis'};
+ if(!p.ok)return {code:503,error:'Permissões indisponíveis'};
  const rows=await p.json();
  return Array.isArray(rows)&&rows.some(x=>String(x.role).toLowerCase()==='admin'&&x.is_active!==false)
   ?{code:200}:{code:403,error:'Apenas administradores podem conciliar chamadas'};
 }
-// Retorna apenas entradas em DIDs explicitamente confirmados como encaminhados � URA.
-// A API DID demonstra chegada ao n�mero; a passagem efetiva pelo menu depende do fluxo/ webhook.
+// Retorna apenas entradas em DIDs explicitamente confirmados como encaminhados à URA.
+// A API DID demonstra chegada ao número; a passagem efetiva pelo menu depende do fluxo/ webhook.
 const didNumber=value=>digits(value).replace(/^55(?=\d{10,11}$)/,'');
 const uraDidFilter=()=>{
  const raw=String(process.env.ZENVIA_URA_DID_NUMBERS||'').trim();
  const numbers=raw.split(',').map(didNumber).filter(Boolean);
  if(!raw||!numbers.length||numbers.length>30||numbers.some(x=>x.length<10||x.length>11)||new Set(numbers).size!==numbers.length)
-  throw new Error('Informe os n�meros DID ligados � URA no servidor');
+  throw new Error('Informe os números DID ligados à URA no servidor');
  return new Set(numbers);
 };
 async function zenviaCalls(start,end,token,signal){
  const approvedDids=uraDidFilter();
- // IDs consultados a partir do cadastro da pr�pria conta, apenas para DIDs
- // previamente homologados como ligados � URA. Outros DIDs ficam fora.
+ // IDs consultados a partir do cadastro da própria conta, apenas para DIDs
+ // previamente homologados como ligados à URA. Outros DIDs ficam fora.
  const catalogResponse=await fetch('https://voice-api.zenvia.com/did',{
   method:'GET',headers:{'Access-Token':token,Accept:'application/json'},signal
  });
- if(!catalogResponse.ok)throw new Error('Cadastro DID indispon�vel');
+ if(!catalogResponse.ok)throw new Error('Cadastro DID indisponível');
  const catalog=await catalogResponse.json();
  const rows=catalog?.dados?.dids;
  if(catalog?.sucesso===false||!Array.isArray(rows)||rows.length>1000)
-  throw new Error('Cadastro DID inv�lido');
+  throw new Error('Cadastro DID inválido');
  const matched=rows.filter(row=>approvedDids.has(didNumber(row.numero)));
  if(matched.length!==approvedDids.size||
   matched.some(row=>!/^\d+$/.test(String(row.id||'')))||
   new Set(matched.map(row=>didNumber(row.numero))).size!==approvedDids.size)
-  throw new Error('DID da URA n�o encontrado de forma �nica no cadastro');
- // GET /did documenta apenas id, cidade, estado e n�mero, sem ura_id.
- // � obrigat�rio o operador confirmar a lista de n�meros exclusivos da URA
- // e registrar essa confirma��o no ambiente de homologa��o.
- // N�o tratar aus�ncia de ura_id na API como falha do DID, nem inferir URA.
+  throw new Error('DID da URA não encontrado de forma única no cadastro');
+ // GET /did documenta apenas id, cidade, estado e número, sem ura_id.
+ // É obrigatório o operador confirmar a lista de números exclusivos da URA
+ // e registrar essa confirmação no ambiente de homologação.
+ // Não tratar ausência de ura_id na API como falha do DID, nem inferir URA.
  if(process.env.ZENVIA_URA_SCOPE_CONFIRMED!=='true')
-  throw new Error('Escopo dos n�meros DID da URA ainda n�o homologado');
- // Se a API vier a informar roteamento, respeit�-lo e falhar fechado.
+  throw new Error('Escopo dos números DID da URA ainda não homologado');
+ // Se a API vier a informar roteamento, respeitá-lo e falhar fechado.
  if(matched.some(row=>row.ura_id!==undefined&&row.ura_id!==null&&row.ura_id!==''&&
     (row.ramal_id!==undefined&&row.ramal_id!==null&&row.ramal_id!=='')))
-  throw new Error('DID com roteamento incompat�vel');
+  throw new Error('DID com roteamento incompatível');
  const all=[];
  for(const did of matched){
   let offset=0,done=false;
@@ -214,18 +214,18 @@ async function zenviaCalls(start,end,token,signal){
    Object.entries({data_inicio:start,data_fim:end,posicao:String(offset),limite:'200'})
     .forEach(([k,v])=>url.searchParams.set(k,v));
    const response=await fetch(url,{method:'GET',headers:{'Access-Token':token,Accept:'application/json'},signal});
-   if(!response.ok)throw new Error('Relat�rio de DID da URA indispon�vel');
+   if(!response.ok)throw new Error('Relatório de DID da URA indisponível');
    const body=await response.json(),calls=body?.dados?.relatorio,total=Number(body?.dados?.total);
    if(body?.sucesso===false||!Array.isArray(calls)||!Number.isInteger(total)||total<0||total>4000)
-    throw new Error('Relat�rio DID incompleto');
-   // Falha fechada caso o relat�rio do DID inclua chamadas de outro n�mero.
+    throw new Error('Relatório DID incompleto');
+   // Falha fechada caso o relatório do DID inclua chamadas de outro número.
    if(calls.some(call=>didNumber(call.numero_destino)!==didNumber(did.numero)))
-    throw new Error('O relat�rio do DID cont�m chamadas fora do escopo');
+    throw new Error('O relatório do DID contém chamadas fora do escopo');
    all.push(...calls);offset+=calls.length;
    if(offset>=total){done=true;break;}
-   if(!calls.length)throw new Error('Pagina��o Zenvia incompleta');
+   if(!calls.length)throw new Error('Paginação Zenvia incompleta');
   }
-  if(!done)throw new Error('Relat�rio DID excedeu pagina��o; reduza o per�odo');
+  if(!done)throw new Error('Relatório DID excedeu paginação; reduza o período');
  }
  return all;
 }
@@ -240,36 +240,36 @@ async function movideskTickets(start,end,base,key,signal){
   url.searchParams.set('order','created_at_source.asc');url.searchParams.set('limit','500');
   url.searchParams.set('offset',String(offset));
   const response=await fetch(url,{headers:{apikey:key,Authorization:'Bearer '+key},signal});
-  if(!response.ok)throw new Error('N�o foi poss�vel ler os chamados sincronizados');
-  const page=await response.json();if(!Array.isArray(page))throw new Error('Resposta Movidesk inv�lida');
+  if(!response.ok)throw new Error('Não foi possível ler os chamados sincronizados');
+  const page=await response.json();if(!Array.isArray(page))throw new Error('Resposta Movidesk inválida');
   all.push(...page);if(page.length<500)return all;
  }
  throw new Error('Muitos chamados; reduza o intervalo');
 }
 export default async function handler(req,res){
  res.setHeader('Cache-Control','private, no-store');
- if(req.method!=='GET')return res.status(405).json({ok:false,error:'M�todo n�o permitido'});
+ if(req.method!=='GET')return res.status(405).json({ok:false,error:'Método não permitido'});
  const start=String(req.query?.start||''),end=String(req.query?.end||'');
  const valid=x=>DATE.test(x)&&!Number.isNaN(Date.parse(x+'T12:00:00Z'))&&new Date(x+'T12:00:00Z').toISOString().slice(0,10)===x;
  if(!valid(start)||!valid(end)||end<start||(Date.parse(end)-Date.parse(start))/86400000>30)
-  return res.status(400).json({ok:false,error:'Selecione at� 31 dias corridos v�lidos'});
+  return res.status(400).json({ok:false,error:'Selecione até 31 dias corridos válidos'});
  const base=(process.env.SUPABASE_URL||'').replace(/\/$/,'');
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY,token=process.env.ZENVIA_VOICE_ACCESS_TOKEN;
- if(!/^https:\/\//.test(base)||!key||!token)return res.status(503).json({ok:false,error:'Integra��es n�o configuradas no servidor'});
+ if(!/^https:\/\//.test(base)||!key||!token)return res.status(503).json({ok:false,error:'Integrações não configuradas no servidor'});
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),45000);
  try{
   const access=await auth(req,base,key,controller.signal);
   if(access.code!==200)return res.status(access.code).json({ok:false,error:access.error});
-  try{uraDidFilter();}catch(_){return res.status(503).json({ok:false,error:'Configure os n�meros DID da URA antes da concilia��o.'});}
+  try{uraDidFilter();}catch(_){return res.status(503).json({ok:false,error:'Configure os números DID da URA antes da conciliação.'});}
   if(process.env.ZENVIA_URA_SCOPE_CONFIRMED!=='true')
-   return res.status(503).json({ok:false,error:'Aguardando homologa��o dos n�meros DID que encaminham exclusivamente para a URA.'});
+   return res.status(503).json({ok:false,error:'Aguardando homologação dos números DID que encaminham exclusivamente para a URA.'});
   const [calls,tickets]=await Promise.all([zenviaCalls(start,end,token,controller.signal),movideskTickets(start,end,base,key,controller.signal)]);
   const result=reconcile(calls,tickets);
-  return res.status(200).json({ok:true,from:start,to:end,source:'Zenvia Voice � Movidesk sincronizado',
+  return res.status(200).json({ok:true,from:start,to:end,source:'Zenvia Voice × Movidesk sincronizado',
    ...result,metadata:{ticketsExamined:tickets.length,scope:'Chamadas recebidas nos DIDs confirmados como entrada da URA',
     uraEntryVerified:false,
-    caveat:'A chegada ao DID n�o confirma que o menu da URA foi executado. Apenas ID compartilhado confirma um v�nculo; telefone e hor�rio indicam hip�tese. Sem v�nculo n�o comprova falha de cria��o. Para afirmar 100% das entradas efetivas, validar evento de URA e regra de abertura do Movidesk.'}});
+    caveat:'A chegada ao DID não confirma que o menu da URA foi executado. Apenas ID compartilhado confirma um vínculo; telefone e horário indicam hipótese. Sem vínculo não comprova falha de criação. Para afirmar 100% das entradas efetivas, validar evento de URA e regra de abertura do Movidesk.'}});
  }catch(error){
-  return res.status(error?.name==='AbortError'?504:502).json({ok:false,error:'Falha ao conciliar as fontes. Confira integra��o e registros.'});
+  return res.status(error?.name==='AbortError'?504:502).json({ok:false,error:'Falha ao conciliar as fontes. Confira integração e registros.'});
  }finally{clearTimeout(timer);}
 }

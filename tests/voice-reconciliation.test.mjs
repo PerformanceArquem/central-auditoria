@@ -17,7 +17,7 @@ test('matches a single incoming call to a nearby ticket with the same normalized
  assert.equal(r.stats.possivel_vinculo,1);
  assert.equal(r.stats.vinculado,0);
  assert.equal(r.records[0].ticketId,'101');
- assert.equal(r.records[0].phoneMasked,'0000');
+ assert.equal(r.records[0].phoneMasked,'••••0000');
  assert.equal(r.records[0].matchMethod,'telefone_horario_evento');
  assert.ok(!JSON.stringify(r).includes('41999990000'));
 });
@@ -91,7 +91,7 @@ test('URA audit requires explicit DID allowlist instead of counting all company 
 });
 test('the response never claims proof that calls reached the URA menu from DID alone',()=>{
  assert.match(source,/uraEntryVerified:false/);
- assert.match(source,/n�o confirma que o menu da URA foi executado/);
+ assert.match(source,/não confirma que o menu da URA foi executado/);
 });
 
 test('URA scope never queries account-wide inbound call reports',()=>{
