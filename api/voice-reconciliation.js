@@ -172,6 +172,14 @@ async function auth(req,base,key,signal){
 // Retorna apenas entradas em DIDs explicitamente confirmados como encaminhados à URA.
 // A API DID demonstra chegada ao número; a passagem efetiva pelo menu depende do fluxo/ webhook.
 const didNumber=value=>digits(value).replace(/^55(?=\d{10,11}$)/,'');
+const upstreamError=(response,label)=>{
+ const error=new Error(label);
+ error.publicMessage=response.status===401||response.status===403
+  ?'A Zenvia recusou o acesso ao '+label+'. Verifique o token e as permissões da conta.'
+  :response.status===429?'A Zenvia atingiu o limite de consultas. Aguarde antes de tentar novamente.'
+  :'A Zenvia não disponibilizou o '+label+' (HTTP '+response.status+').';
+ return error;
+};
 const uraDidFilter=()=>{
  const raw=String(process.env.ZENVIA_URA_DID_NUMBERS||'').trim();
  const numbers=raw.split(',').map(didNumber).filter(Boolean);
@@ -186,7 +194,7 @@ async function zenviaCalls(start,end,token,signal){
  const catalogResponse=await fetch('https://voice-api.zenvia.com/did',{
   method:'GET',headers:{'Access-Token':token,Accept:'application/json'},signal
  });
- if(!catalogResponse.ok)throw new Error('Cadastro DID indisponível');
+ if(!catalogResponse.ok)throw upstreamError(catalogResponse,'cadastro de números DID');
  const catalog=await catalogResponse.json();
  const rows=catalog?.dados?.dids;
  if(catalog?.sucesso===false||!Array.isArray(rows)||rows.length>1000)
@@ -214,7 +222,7 @@ async function zenviaCalls(start,end,token,signal){
    Object.entries({data_inicio:start,data_fim:end,posicao:String(offset),limite:'200'})
     .forEach(([k,v])=>url.searchParams.set(k,v));
    const response=await fetch(url,{method:'GET',headers:{'Access-Token':token,Accept:'application/json'},signal});
-   if(!response.ok)throw new Error('Relatório de DID da URA indisponível');
+   if(!response.ok)throw upstreamError(response,'relatório de chamadas da URA');
    const body=await response.json(),calls=body?.dados?.relatorio,total=Number(body?.dados?.total);
    if(body?.sucesso===false||!Array.isArray(calls)||!Number.isInteger(total)||total<0||total>4000)
     throw new Error('Relatório DID incompleto');
@@ -236,7 +244,7 @@ async function movideskTickets(start,end,base,key,signal){
   const url=new URL(base+'/rest/v1/audit_direct_tickets');
   url.searchParams.set('select','ticket_id,payload,created_at_source');
   url.searchParams.set('created_at_source','gte.'+begin);
-  url.searchParams.set('created_at_source','lt.'+until);
+  url.searchParams.append('created_at_source','lt.'+until);
   url.searchParams.set('order','created_at_source.asc');url.searchParams.set('limit','500');
   url.searchParams.set('offset',String(offset));
   const response=await fetch(url,{headers:{apikey:key,Authorization:'Bearer '+key},signal});
@@ -304,6 +312,23 @@ export default async function handler(req,res){
     uraEntryVerified:false,
     caveat:'A chegada ao DID não confirma que o menu da URA foi executado. Apenas ID compartilhado confirma um vínculo; telefone e horário indicam hipótese. Sem vínculo não comprova falha de criação. Para afirmar 100% das entradas efetivas, validar evento de URA e regra de abertura do Movidesk.'}});
  }catch(error){
-  return res.status(error?.name==='AbortError'?504:502).json({ok:false,error:directory?'Não foi possível carregar os setores e funcionários do Movidesk. Tente atualizar o cadastro.':'Falha ao conciliar as fontes. Confira integração e registros.'});
+  // Only controlled messages reach the browser/logs; never upstream bodies, URLs or tokens.
+  const messages={
+   'Cadastro DID inválido':'A Zenvia retornou um cadastro DID em formato não reconhecido.',
+   'DID da URA não encontrado de forma única no cadastro':'O número da URA configurado não foi encontrado de forma única na conta Zenvia. Confira se o telefone pertence à conta integrada.',
+   'DID com roteamento incompatível':'O número informado apresenta roteamento incompatível com o escopo da URA.',
+   'Relatório DID incompleto':'O relatório da Zenvia está incompleto ou excede 4.000 chamadas. Reduza o período.',
+   'O relatório do DID contém chamadas fora do escopo':'A Zenvia retornou chamadas de outro número. O cruzamento foi interrompido.',
+   'Paginação Zenvia incompleta':'A Zenvia não retornou todas as páginas do relatório. Tente um período menor.',
+   'Relatório DID excedeu paginação; reduza o período':'O relatório da Zenvia excedeu a paginação. Reduza o período.',
+   'Muitos chamados; reduza o intervalo':'O período excedeu 10.000 chamados. Reduza o intervalo.',
+   'Não foi possível ler os chamados sincronizados':'Não foi possível consultar os chamados sincronizados do Movidesk.',
+   'Resposta Movidesk inválida':'Os chamados sincronizados retornaram um formato não reconhecido.'
+  };
+  const message=error?.name==='AbortError'?'A consulta excedeu o tempo disponível. Tente um período menor.'
+   :directory?'Não foi possível carregar os setores e funcionários do Movidesk. Tente atualizar o cadastro.'
+   :error.publicMessage||messages[error?.message]||'Falha ao conciliar as fontes. Confira integração e registros.';
+  console.error('voice-reconciliation',message);
+  return res.status(error?.name==='AbortError'?504:502).json({ok:false,error:message});
  }finally{clearTimeout(timer);}
 }
