@@ -76,8 +76,18 @@ async function auth(req,base,key,signal){
  return Array.isArray(rows)&&rows.some(x=>String(x.role).toLowerCase()==='admin'&&x.is_active!==false)
   ?{code:200}:{code:403,error:'Apenas administradores podem conciliar chamadas'};
 }
+// Retorna apenas entradas em DIDs explicitamente confirmados como encaminhados à URA.
+// A API DID demonstra chegada ao número; a passagem efetiva pelo menu depende do fluxo/ webhook.
+const didNumber=value=>digits(value).replace(/^55(?=\d{10,11}$)/,'');
+const uraDidFilter=()=>{
+ const raw=String(process.env.ZENVIA_URA_DID_NUMBERS||'').trim();
+ const numbers=raw.split(',').map(didNumber).filter(Boolean);
+ if(!raw||!numbers.length||numbers.length>30||numbers.some(x=>x.length<10||x.length>11)||new Set(numbers).size!==numbers.length)
+  throw new Error('Informe os números DID ligados à URA no servidor');
+ return new Set(numbers);
+};
 async function zenviaCalls(start,end,token,signal){
- const calls=[];
+ const calls=[],approvedDids=uraDidFilter();
  for(let offset=0;offset<4000;){
   const url=new URL('https://voice-api.zenvia.com/did/relatorio');
   Object.entries({data_inicio:start,data_fim:end,posicao:String(offset),limite:'200'})
@@ -87,7 +97,8 @@ async function zenviaCalls(start,end,token,signal){
   const data=await response.json(),rows=data?.dados?.relatorio,total=Number(data?.dados?.total);
   if(data?.sucesso===false||!Array.isArray(rows)||!Number.isInteger(total)||total<0||total>4000)
    throw new Error('Relatório Zenvia incompleto');
-  calls.push(...rows);
+  // O DID receptor, não o número do cliente, identifica o fluxo auditado.
+  calls.push(...rows.filter(row=>approvedDids.has(didNumber(row.numero_destino))));
   offset+=rows.length;
   if(offset>=total)return calls;
   if(!rows.length)throw new Error('Paginação Zenvia incompleta');
@@ -95,8 +106,8 @@ async function zenviaCalls(start,end,token,signal){
  throw new Error('Reduza o intervalo de datas');
 }
 async function movideskTickets(start,end,base,key,signal){
- const all=[],begin=new Date(start+'T00:00:00-03:00').toISOString(),
- until=new Date(new Date(end+'T00:00:00-03:00').getTime()+86400000).toISOString();
+ const all=[],begin=new Date(new Date(start+'T00:00:00-03:00').getTime()-20*60000).toISOString(),
+ until=new Date(new Date(end+'T00:00:00-03:00').getTime()+86400000+20*60000).toISOString();
  for(let offset=0;offset<10000;offset+=500){
   const url=new URL(base+'/rest/v1/audit_direct_tickets');
   url.searchParams.set('select','ticket_id,payload,created_at_source');
@@ -128,8 +139,9 @@ export default async function handler(req,res){
   const [calls,tickets]=await Promise.all([zenviaCalls(start,end,token,controller.signal),movideskTickets(start,end,base,key,controller.signal)]);
   const result=reconcile(calls,tickets);
   return res.status(200).json({ok:true,from:start,to:end,source:'Zenvia Voice × Movidesk sincronizado',
-   ...result,metadata:{ticketsExamined:tickets.length,scope:'Ligações recebidas (DID)',
-    caveat:'Sem vínculo identificado NÃO prova que a criação de chamado falhou. Valide integração, campos e regras; registros sem telefone não são vinculados por suposição.'}});
+   ...result,metadata:{ticketsExamined:tickets.length,scope:'Chamadas recebidas nos DIDs confirmados como entrada da URA',
+    uraEntryVerified:false,
+    caveat:'DID é a porta de entrada da URA, não uma confirmação de que o menu foi executado. Sem vínculo não prova falha na geração de chamado. Para afirmar 100% das entradas efetivas, é necessário webhook/histórico de eventos da URA e regra de criação do Movidesk.'}});
  }catch(error){
   return res.status(error?.name==='AbortError'?504:502).json({ok:false,error:'Falha ao conciliar as fontes. Confira integração e registros.'});
  }finally{clearTimeout(timer);}
