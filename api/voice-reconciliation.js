@@ -23,14 +23,27 @@ const ticketPhone=t=>{
    ...(Array.isArray(c.contacts)?c.contacts.map(z=>z.value||z.contact):[])])];
  return [...new Set(possibilities.map(phone).filter(Boolean))];
 };
+const telephonyActionCodes=new Set(['13','14','15','16','21']);
+const telephonyActions=t=>{
+ const raw=t.payload?.actions;
+ return Array.isArray(raw)?raw.filter(a=>telephonyActionCodes.has(String(a?.origin??''))):[];
+};
 const linkedCallId=t=>{
  const p=t.payload||{};
- return String(p.zenviaCallId||p.zenvia_call_id||p.voiceCallId||p.callId||p.telephonyCallId||'').trim();
+ const direct=p.zenviaCallId||p.zenvia_call_id||p.voiceCallId||p.callId||p.telephonyCallId;
+ if(direct!==undefined&&direct!==null&&String(direct).trim())return String(direct).trim();
+ // Nunca extrair IDs a partir de texto livre ou números semelhantes a protocolos.
+ // Um ID só é confiável quando está em um campo explicitamente identificado.
+ for(const action of telephonyActions(t)){
+  const value=action.zenviaCallId||action.voiceCallId||action.callId||action.telephonyCallId;
+  if(value!==undefined&&value!==null&&String(value).trim())return String(value).trim();
+ }
+ return '';
 };
 export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
  const records=[],matchedTickets=new Set();
  const prepared=tickets.map(t=>({...t,phones:ticketPhone(t),callId:linkedCallId(t),
-  time:parsedAt(t.created_at_source||t.payload?.createdDate)}));
+  actions:telephonyActions(t),time:parsedAt(t.created_at_source||t.payload?.createdDate)}));
  const unique=new Set();
  for(const call of calls){
   const id=String(call.id??'').trim();
@@ -40,8 +53,9 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
   const at=parsedAt(originDate(call)),number=callPhone(call);
   let choices=prepared.filter(t=>id&&t.callId===id).map(t=>({ticket:t,method:'id',delta:0}));
   if(!choices.length&&number&&at!==null){
-   choices=prepared.filter(t=>t.time!==null&&t.phones.includes(number)&&
-     Math.abs(t.time-at)<=maxGapMinutes*60000)
+   choices=prepared.filter(t=>t.actions.length>0&&t.phones.includes(number)&&
+     (t.time!==null&&Math.abs(t.time-at)<=maxGapMinutes*60000||
+      t.actions.some(a=>{const time=parsedAt(a.createdDate);return time!==null&&Math.abs(time-at)<=maxGapMinutes*60000;})))
      .map(t=>({ticket:t,method:'telefone_horario',delta:Math.abs(t.time-at)}))
      .sort((a,b)=>a.delta-b.delta);
   }
@@ -60,7 +74,8 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
  const withPhone=records.filter(r=>r.phoneMasked!=='Indisponível').length;
  const ticketWithPhone=prepared.filter(t=>t.phones.length>0).length;
  const ticketWithCallId=prepared.filter(t=>t.callId.length>0).length;
- return {stats,records,coverage:{callsWithPhone:withPhone,callsWithoutPhone:records.length-withPhone,ticketsWithPhone:ticketWithPhone,ticketsWithCallId:ticketWithCallId,ticketsWithoutPhone:prepared.length-ticketWithPhone}};
+ const ticketsWithTelephonyAction=prepared.filter(t=>t.actions.length>0).length;
+ return {stats,records,coverage:{callsWithPhone:withPhone,callsWithoutPhone:records.length-withPhone,ticketsWithPhone:ticketWithPhone,ticketsWithCallId:ticketWithCallId,ticketsWithTelephonyAction,ticketsWithoutPhone:prepared.length-ticketWithPhone}};
 }
 async function auth(req,base,key,signal){
  const bearer=/^Bearer\s+(.+)$/i.exec(req.headers.authorization||'');
