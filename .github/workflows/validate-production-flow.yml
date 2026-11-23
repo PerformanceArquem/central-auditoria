@@ -2,7 +2,7 @@ name: Validate production ticket traceability
 on:
   pull_request:
     paths:
-      - 'api/audit-production-flow.js'
+      - 'server/audit-production-flow.mjs'
       - 'lib/production-flow.cjs'
       - 'production-flow.js'
       - 'index.html'
@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --input-type=module --check < api/audit-production-flow.js
+      - run: node --input-type=module --check < server/audit-production-flow.mjs
       - run: node --check production-flow.js
       - run: node --test tests/production-flow.test.mjs tests/production-flow-api.test.mjs tests/keila-business-day-holiday.test.mjs
 

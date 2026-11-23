@@ -1,5 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "routes": [
+    { "src": "/server(?:/.*)?", "dest": "/api/audit?route=not-found" },
+    { "src": "/api/audit-ticket-inspection", "dest": "/api/audit?route=inspection" },
+    { "src": "/api/audit-ticket-lookup", "dest": "/api/audit?route=lookup" },
+    { "src": "/api/audit-forecast-variances", "dest": "/api/audit?route=forecast" },
+    { "src": "/api/audit-production-flow", "dest": "/api/audit?route=production-flow" },
+    { "handle": "filesystem" }
+  ],
   "git": {
     "deploymentEnabled": false
   }
