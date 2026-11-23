@@ -208,3 +208,23 @@ test('a conflicting explicit call ID blocks weaker phone-time association',()=>{
  assert.equal(result.stats.possivel_vinculo,0);
  assert.equal(result.stats.sem_vinculo_identificado,1);
 });
+
+test('recording reference cannot override a different explicit call ID',()=>{
+ const t=ticket(1300,'2026-11-20T08:00:00-03:00','41999990000');
+ t.payload.zenviaCallId='another-call';
+ t.payload.actions[0].htmlDescription='https://voice-app.zenvia.com/rec?id=123456789';
+ const c={...call(1301,'2026-11-20T10:00:00-03:00',null),
+  url_gravacao:'https://api.evoline.com.br/rec/?id=123456789'};
+ const r=run([c],[t]);
+ assert.equal(r.stats.vinculado_gravacao,0);
+ assert.equal(r.stats.dados_insuficientes,1);
+});
+test('phone and event time cannot override a contradictory recording reference',()=>{
+ const t=ticket(1400,'2026-11-20T10:01:00-03:00','41999990000');
+ t.payload.actions[0].htmlDescription='https://voice-app.zenvia.com/rec?id=123456789';
+ const c={...call(1401,'2026-11-20T10:00:00-03:00','41999990000'),
+  url_gravacao:'https://api.evoline.com.br/rec/?id=987654321'};
+ const r=run([c],[t]);
+ assert.equal(r.stats.possivel_vinculo,0);
+ assert.equal(r.stats.sem_vinculo_identificado,1);
+});
