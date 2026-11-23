@@ -6886,8 +6886,9 @@ function buildUnlinkedReport(data){
   const records=data?.records||[];
   const missing=records.filter(r=>r.reconciliation==='sem_vinculo_identificado').sort((a,b)=>String(a.startedAt).localeCompare(String(b.startedAt)));
   const day=value=>/^\d{4}-\d{2}-\d{2}$/.test(value||'')?value.split('-').reverse().join('/'):'Não informado';
+  const timeFormatter=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'medium'});
   const at=value=>{const t=Date.parse(value||'');return Number.isFinite(t)
-   ?new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'medium'}).format(t):'Não informado';};
+   ?timeFormatter.format(t):'Não informado';};
   const labels={atendida:'Atendida',nao_atendida:'Não atendida',abandonada_ou_cancelada:'Abandonada/cancelada',em_andamento:'Em andamento',indeterminada:'Indeterminada'};
   const recordingLabels={informada:'Gravação informada',nao_informada:'Sem referência de gravação',desconhecida:'Não informado pela API'};
   const duration=v=>v===null||v===undefined||!Number.isFinite(v)?'Não informado':Math.floor(v/3600).toString().padStart(2,'0')+':'+Math.floor(v%3600/60).toString().padStart(2,'0')+':'+(v%60).toString().padStart(2,'0');
