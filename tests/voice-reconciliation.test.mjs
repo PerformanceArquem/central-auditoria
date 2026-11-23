@@ -194,3 +194,9 @@ test('recording URL must be on an approved provider host',()=>{
   url_gravacao:'https://untrusted.example/rec/?id=123456789'};
  assert.equal(run([c],[t]).stats.vinculado_gravacao,0);
 });
+
+test('DID scope approval is mandatory even when its number exists in Zenvia catalogue',()=>{
+ assert.match(source,/ZENVIA_URA_SCOPE_CONFIRMED/);
+ assert.match(source,/ZENVIA_URA_SCOPE_CONFIRMED!=='true'/);
+ assert.doesNotMatch(source,/matched\.some\(row=>!row\.ura_id/);
+});
