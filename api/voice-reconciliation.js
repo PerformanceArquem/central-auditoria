@@ -246,7 +246,9 @@ export default async function handler(req,res){
  try{
   const access=await auth(req,base,key,controller.signal);
   if(access.code!==200)return res.status(access.code).json({ok:false,error:access.error});
-  try{uraDidFilter();}catch(_){return res.status(503).json({ok:false,error:'Configure e valide os números DID de entrada da URA no servidor para habilitar a conciliação.'});}
+  try{uraDidFilter();}catch(_){return res.status(503).json({ok:false,error:'Configure os números DID da URA antes da conciliação.'});}
+  if(process.env.ZENVIA_URA_SCOPE_CONFIRMED!=='true')
+   return res.status(503).json({ok:false,error:'Aguardando homologação dos números DID que encaminham exclusivamente para a URA.'});
   const [calls,tickets]=await Promise.all([zenviaCalls(start,end,token,controller.signal),movideskTickets(start,end,base,key,controller.signal)]);
   const result=reconcile(calls,tickets);
   return res.status(200).json({ok:true,from:start,to:end,source:'Zenvia Voice × Movidesk sincronizado',
