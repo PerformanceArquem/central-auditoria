@@ -13,7 +13,8 @@
   }
   return parts;
  }
- const month=r=>{const time=Date.parse(r.startedAt||'');return Number.isFinite(time)?new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'}).format(time):'Não informado';};
+ const monthFormatter=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'});
+ const month=r=>{const time=Date.parse(r.startedAt||'');return Number.isFinite(time)?monthFormatter.format(time):'Não informado';};
  const label=key=>/^\d{4}-\d{2}$/.test(key)?key.slice(5)+'/'+key.slice(0,4):key;
  function monthly(data){
   const groups=new Map((data.months||windows(data.from,data.to).map(x=>x.month)).map(key=>[key,{month:key,total:0,confirmed:0,possible:0,ambiguous:0,unlinked:0,recorded:0,canceled:0}]));
