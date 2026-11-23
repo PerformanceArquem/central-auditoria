@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {inspectTickets,filterInspections,recordOccurrences} from '../lib/ticket-inspection.mjs';
+import {inspectTickets,filterInspections,recordOccurrences,summarizeInspectionQuality} from '../lib/ticket-inspection.mjs';
 const now=Date.parse('2026-11-23T12:00:00Z');
 const ticket={id:1,status:'Em atendimento',ownerTeam:'Produção',subject:'Teste',clients:[{businessName:'Ótica'}],actions:[],slaSolutionDate:'2026-11-22T12:00:00Z'};
 test('detects overdue, missing owner and appointments with explicit score',()=>{
@@ -45,4 +45,10 @@ test('unknown appointment coverage cannot close a previously observed occurrence
 test('missing deadline without other risk factors is indeterminate rather than low risk',()=>{
  const [r]=inspectTickets([{id:3,owner:'Alan',actions:[{createdDate:'2026-11-23T11:00:00Z',timeAppointments:[{workTime:'00:01:00'}]}]}],{now});
  assert.equal(r.score,null);assert.equal(r.criticality,'Indeterminada');assert.equal(r.forecastKnown,false);assert.equal(filterInspections([r],{criticality:'Indeterminada'}).length,1);
+});
+
+test('quality summary excludes resolved calls and distinguishes missing data from zero risk',()=>{
+ const rows=inspectTickets([{id:10,status:'Fila',ownerTeam:'',actions:[]},{id:11,status:'Em Análise',ownerTeam:'Produção',owner:'Equipe',slaSolutionDate:'2026-11-25T12:00:00Z',actions:[]},{id:12,status:'Resolvido',actions:[]}],{now});
+ const summary=summarizeInspectionQuality(rows);
+ assert.deepEqual(summary,{total:2,noForecast:1,noOwner:1,noSector:1,unknownRisk:1,overdue:0});
 });
