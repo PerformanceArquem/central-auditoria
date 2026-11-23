@@ -9,6 +9,17 @@ const originDate=x=>x.data_inicio||x.data_criacao||x.destino?.data_inicio;
 // Call identifiers from different scopes can coincide; only IDs with independent origin are authoritative.
 const callPhone=x=>phone(x.numero_origem||x.origem_numero||x.telefone_origem||x.origem?.numero||x.caller_id||x.numero||x.telefone);
 const callStatus=x=>normalized(x.status||x.destino?.status);
+const evidenceSeconds=value=>value===null||value===undefined||value===''||
+ typeof value==='boolean'||!Number.isFinite(Number(value))||Number(value)<0?null:Math.round(Number(value));
+const recordingEvidence=call=>{
+ const references=[call.url_gravacao,...(Array.isArray(call.gravacoes_parciais)?call.gravacoes_parciais:[])
+  .map(x=>typeof x==='string'?x:x?.url_gravacao)];
+ const present=references.some(value=>{
+  try{const u=new URL(value);return u.protocol==='https:'&&
+   ['voice-api.zenvia.com','voice-app.zenvia.com','api.evoline.com.br'].includes(u.hostname);}catch{return false;}
+ });
+ return present?'informada':Object.hasOwn(call,'url_gravacao')||Object.hasOwn(call,'gravacoes_parciais')?'nao_informada':'desconhecida';
+};
 const callKind=x=>{
  const s=callStatus(x);
  if(x.ativa===true||x.ativa===1||['em andamento','chamando','ringing'].includes(s))return 'em_andamento';
@@ -131,6 +142,13 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
   records.push({callId:id||null,startedAt:originDate(call)||null,
    phoneMasked:mask(number),status:callKind(call),
    providerStatus:String(call.status||call.destino?.status||'').slice(0,60),
+   recordingState:recordingEvidence(call),
+   durationSeconds:evidenceSeconds(call.duracao_segundos),
+   talkSeconds:evidenceSeconds(call.duracao_falada_segundos),
+   extensionReported:/^[1-9]\d*$/.test(String(call.ramal_id||'')),
+   // The DID report has no event proving the caller completed the URA menu.
+   // Answered status, duration, an extension and a recording are not that event.
+   uraCompletion:'nao_comprovada',
    ticketId:match?.ticket.ticket_id||null,matchMethod:match?.method||null,
    deltaSeconds:match?Math.round(match.delta/1000):null,
    movideskTelephonyOrigins:match?[...new Set(match.ticket.actions.map(a=>String(a.origin)))]:[],

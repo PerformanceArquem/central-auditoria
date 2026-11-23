@@ -371,7 +371,7 @@ test('provider rejection reports the failing stage without returning upstream se
 test('unlinked detail lists all 72 of 101 calls independently of department filters',()=>{
  const html=readFileSync('index.html','utf8');
  const fn=html.slice(html.indexOf('function buildUnlinkedReport(data){'),html.indexOf('function showUnlinkedReport(){'));
- const ctx=vm.createContext({Date,Intl,Number});vm.runInContext(fn+';this.build=buildUnlinkedReport;',ctx);
+ const ctx=vm.createContext({Date,Intl,Number,Math});vm.runInContext(fn+';this.build=buildUnlinkedReport;',ctx);
  const records=Array.from({length:101},(_,i)=>({callId:String(i+1),startedAt:'2026-11-19T16:25:01-03:00',phoneMasked:'****3280',status:'atendida',reconciliation:i<72?'sem_vinculo_identificado':i<96?'ambiguo':'possivel_vinculo',sector:i<72?'':'Suporte'}));
  const data={from:'2026-11-01',to:'2026-11-23',records};
  const r=ctx.build(data);
@@ -385,4 +385,38 @@ test('unlinked detail lists all 72 of 101 calls independently of department filt
  const exportFn=html.slice(html.indexOf('function downloadUnlinkedReport(){'),html.indexOf('function showReconciliation(){'));
  assert.ok(exportFn.includes('buildUnlinkedReport(reconcileDataset)'));
  assert.ok(!exportFn.includes('zvReconcileSector'));assert.ok(!exportFn.includes('zvReconcileEmployee'));
+});
+
+
+test('call evidence separates recording from cancellation without exposing URLs or claiming URA completion',()=>{
+ const base=call(2000,'2026-11-19T10:00:00-03:00','41999990000','cancelada');
+ const r=run([{...base,url_gravacao:'https://voice-api.zenvia.com/rec/123456789?token=private',duracao_segundos:125,duracao_falada_segundos:0,ramal_id:45},
+ {...base,id:2001,status:'atendida',url_gravacao:'',duracao_segundos:900,duracao_falada_segundos:850,ramal_id:46},
+ {...base,id:2002,status:'sem resposta'},
+ {...base,id:2003,status:'atendida',url_gravacao:'https://untrusted.example/rec/private',duracao_segundos:null,duracao_falada_segundos:''}],[]);
+ assert.equal(r.records[0].recordingState,'informada');
+ assert.equal(r.records[0].status,'abandonada_ou_cancelada');
+ assert.equal(r.records[0].durationSeconds,125);assert.equal(r.records[0].talkSeconds,0);
+ assert.equal(r.records[1].recordingState,'nao_informada');
+ assert.equal(r.records[2].recordingState,'desconhecida');
+ assert.equal(r.records[3].recordingState,'nao_informada');
+ assert.equal(r.records[3].durationSeconds,null);assert.equal(r.records[3].talkSeconds,null);
+ for(const row of r.records)assert.equal(row.uraCompletion,'nao_comprovada');
+ assert.ok(!JSON.stringify(r).includes('private'));assert.ok(!JSON.stringify(r).includes('https://'));
+});
+
+test('unlinked report exports evidence counts and preserves unknown durations',()=>{
+ const html=readFileSync('index.html','utf8');
+ const fn=html.slice(html.indexOf('function buildUnlinkedReport(data){'),html.indexOf('function showUnlinkedReport(){'));
+ const ctx=vm.createContext({Date,Intl,Number,Math});vm.runInContext(fn+';this.build=buildUnlinkedReport;',ctx);
+ const r=ctx.build({from:'2026-11-01',to:'2026-11-23',records:[
+ {reconciliation:'sem_vinculo_identificado',status:'abandonada_ou_cancelada',recordingState:'informada',durationSeconds:125,talkSeconds:0,extensionReported:false},
+ {reconciliation:'sem_vinculo_identificado',status:'atendida',recordingState:'nao_informada',durationSeconds:null,talkSeconds:null,extensionReported:true},
+ {reconciliation:'sem_vinculo_identificado',status:'nao_atendida'},
+ {reconciliation:'possivel_vinculo',recordingState:'informada'}]});
+ assert.equal(r.count,3);assert.equal(r.evidence[0][1],1);assert.equal(r.evidence[1][1],1);assert.equal(r.evidence[2][1],1);
+ assert.equal(r.evidence[3][1],1);assert.equal(r.evidence[6][1],3);
+ assert.equal(r.rows[0][6],'00:02:05');assert.equal(r.rows[0][7],'00:00:00');
+ assert.notEqual(r.rows[1][6],'00:00:00');
+ assert.equal(r.headers.length,11);assert.equal(r.rows[0].length,11);
 });
