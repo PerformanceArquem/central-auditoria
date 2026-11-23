@@ -103,6 +103,13 @@ async function zenviaCalls(start,end,token,signal){
   matched.some(row=>!/^\d+$/.test(String(row.id||'')))||
   new Set(matched.map(row=>didNumber(row.numero))).size!==approvedDids.size)
   throw new Error('DID da URA não encontrado de forma única no cadastro');
+ // Não basta o número estar na lista: confirmar o vínculo atual à URA.
+ // Em contas onde /did omite ura_id, exigir validação fora da API antes de liberar o relatório.
+ const expectedUraIds=String(process.env.ZENVIA_URA_IDS||'').split(',').map(x=>x.trim()).filter(Boolean);
+ if(!expectedUraIds.length||expectedUraIds.some(x=>!/^\d+$/.test(x))||
+    matched.some(row=>!row.ura_id||!expectedUraIds.includes(String(row.ura_id))||
+      (row.ramal_id!==null&&row.ramal_id!==undefined&&row.ramal_id!=='')))
+  throw new Error('O cadastro não comprovou que todos os DIDs atendem exclusivamente pela URA');
  const all=[];
  for(const did of matched){
   let offset=0,done=false;
