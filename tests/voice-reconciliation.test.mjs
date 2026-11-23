@@ -9,7 +9,7 @@ const source=readFileSync('api/voice-reconciliation.js','utf8')
 const scope=vm.createContext({Date,Math,Number,String,Array,Object,Set,URL,JSON,parseInt});
 vm.runInContext(source+'\nthis.reconcile=reconcile;',scope);
 const call=(id,time,number,status='atendida')=>({id,data_inicio:time,numero_origem:number,status});
-const ticket=(id,time,number)=>({ticket_id:String(id),created_at_source:time,payload:{clients:[{phone:number}]}});
+const ticket=(id,time,number)=>({ticket_id:String(id),created_at_source:time,payload:{clients:[{phone:number}],actions:[{origin:13,createdDate:time,description:'Chamada recebida'}]}});
 const run=(calls,tickets)=>JSON.parse(JSON.stringify(scope.reconcile(calls,tickets)));
 test('matches a single incoming call to a nearby ticket with the same normalized number',()=>{
  const r=run([call(42,'2026-11-20T10:00:00-03:00','+55 (41) 99999-0000')],
@@ -100,4 +100,21 @@ test('URA scope never queries account-wide inbound call reports',()=>{
  assert.doesNotMatch(source,/voice-api\.zenvia\.com\/did\/relatorio/);
  assert.match(source,/approvedDids\.has\(didNumber\(row\.numero\)\)/);
  assert.match(source,/calls\.some\(call=>didNumber\(call\.numero_destino\)!==didNumber\(did\.numero\)\)/);
+});
+
+test('an ordinary ticket with matching phone cannot be mistaken for a voice integration ticket',()=>{
+ const regular={ticket_id:'501',created_at_source:'2026-11-20T10:01:00-03:00',
+  payload:{clients:[{phone:'41988887777'}],actions:[{origin:2}]}};
+ const r=run([call(50,'2026-11-20T10:00:00-03:00','41988887777')],[regular]);
+ assert.equal(r.stats.possivel_vinculo,0);
+ assert.equal(r.stats.sem_vinculo_identificado,1);
+ assert.equal(r.coverage.ticketsWithTelephonyAction,0);
+});
+test('abandoned call may be associated with a Movidesk origin 16 action without claiming ID proof',()=>{
+ const t={ticket_id:'502',created_at_source:'2026-11-20T10:01:00-03:00',
+  payload:{clients:[{phone:'41988887777'}],actions:[{origin:16,createdDate:'2026-11-20T10:02:00-03:00'}]}};
+ const r=run([call(51,'2026-11-20T10:00:00-03:00','41988887777','cancelada')],[t]);
+ assert.equal(r.stats.possivel_vinculo,1);
+ assert.equal(r.stats.abandonada_ou_cancelada,1);
+ assert.equal(r.coverage.ticketsWithTelephonyAction,1);
 });
