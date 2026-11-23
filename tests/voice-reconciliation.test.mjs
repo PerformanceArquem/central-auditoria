@@ -333,3 +333,36 @@ test('employee selector uses Movidesk membership even with no reconciled calls',
  employee.value='Ana';sector.value='Producao';vm.runInContext('fillReconciliationPeople();',ctx);
  assert.deepEqual(employee.options.map(x=>x.value),['','Bia','Caio']);assert.equal(employee.value,'');
 });
+
+
+test('Movidesk queries keep both date boundaries on every page',async()=>{
+ const urls=[];
+ const ctx=vm.createContext({Date,Math,Number,String,Array,Object,Set,URL,JSON,parseInt,
+ fetch:async url=>{urls.push(new URL(url));return {ok:true,json:async()=>urls.length===1?Array.from({length:500},(_,i)=>({ticket_id:i})):[]};}});
+ vm.runInContext(source+'\nthis.readTickets=movideskTickets;',ctx);
+ const result=await ctx.readTickets('2026-11-01','2026-11-23','https://test.invalid','not-real');
+ assert.equal(result.length,500);assert.equal(urls.length,2);
+ for(const u of urls){assert.deepEqual(u.searchParams.getAll('created_at_source'),[
+  'gte.2026-11-01T02:40:00.000Z','lt.2026-11-24T03:20:00.000Z']);}
+ assert.equal(urls[1].searchParams.get('offset'),'500');
+});
+
+test('provider rejection reports the failing stage without returning upstream secrets',async()=>{
+ const logs=[];
+ const ctx=vm.createContext({Date,Math,Number,String,Array,Object,Set,Map,URL,JSON,parseInt,AbortController,setTimeout,clearTimeout,
+ console:{error:(...args)=>logs.push(args)},
+ process:{env:{SUPABASE_URL:'https://test.invalid',SUPABASE_SERVICE_ROLE_KEY:'service-secret',ZENVIA_VOICE_ACCESS_TOKEN:'voice-secret',ZENVIA_URA_DID_NUMBERS:'4130135878',ZENVIA_URA_SCOPE_CONFIRMED:'true'}},
+ fetch:async url=>{const u=new URL(url);
+  if(u.pathname==='/auth/v1/user')return {ok:true,json:async()=>({id:'admin'})};
+  if(u.pathname==='/rest/v1/audit_users')return {ok:true,json:async()=>[{role:'admin',is_active:true}]};
+  if(u.hostname==='voice-api.zenvia.com')return {ok:false,status:403,json:async()=>({message:'voice-secret'})};
+  return {ok:true,json:async()=>[]};
+ }});
+ vm.runInContext(source+'\nthis.handler=handler;',ctx);
+ const res={setHeader(){},status(code){this.code=code;return this;},json(body){this.body=body;return this;}};
+ await ctx.handler({method:'GET',headers:{authorization:'Bearer admin-session'},query:{start:'2026-11-01',end:'2026-11-23'}},res);
+ assert.equal(res.code,502);assert.ok(res.body.error.includes('cadastro de n'));
+ assert.ok(res.body.error.includes('token'));assert.equal(logs.length,1);
+ assert.ok(!JSON.stringify({body:res.body,logs}).includes('voice-secret'));
+ assert.ok(!JSON.stringify({body:res.body,logs}).includes('service-secret'));
+});
