@@ -480,3 +480,12 @@ test('Excel separates answered and missed/canceled calls, only unmatched, sorted
  assert.ok(!JSON.stringify(wb).includes('uraRecording=5'));
  assert.equal(wb.Sheets[wb.SheetNames[0]].matrix[7][1],2);assert.equal(wb.Sheets[wb.SheetNames[0]].matrix[8][1],2);
 });
+
+
+test('transient monthly failures retry only the failed month and stop after three attempts',async()=>{
+ let calls=0;const attempts=[];
+ const success=await UraPeriods.retryMonth(async()=>{calls++;if(calls<3)throw Object.assign(Error('temporary'),{retryable:true});return {month:'2026-08'};},n=>attempts.push(n),async()=>{});
+ assert.equal(success.month,'2026-08');assert.equal(calls,3);assert.deepEqual(attempts,[2,3]);
+ calls=0;await assert.rejects(()=>UraPeriods.retryMonth(async()=>{calls++;throw Error('permission');},null,async()=>{}));assert.equal(calls,1);
+ calls=0;await assert.rejects(()=>UraPeriods.retryMonth(async()=>{calls++;throw Object.assign(Error('temporary'),{retryable:true});},null,async()=>{}));assert.equal(calls,3);
+});

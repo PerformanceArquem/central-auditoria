@@ -6985,11 +6985,15 @@ function showReconciliation(){
    for(const [index,period] of periods.entries()){
     if(start!==el('zvReconcileStart').value||end!==el('zvReconcileEnd').value)throw Error('Período alterado durante a consulta.');
     el('zvReconcileStatus').textContent='Consultando '+UraPeriods.label(period.month)+' — mês '+(index+1)+' de '+periods.length+'...';
-    const currentSession=await window.tmAuth?.getSession?.();
-    if(!currentSession?.access_token)throw Error('É necessário entrar na Central.');
-    const resp=await fetch('/api/voice-reconciliation?'+new URLSearchParams({start:period.start,end:period.end}),{headers:{Authorization:'Bearer '+currentSession.access_token},cache:'no-store'});
-    const part=await resp.json().catch(()=>({}));
-    if(!resp.ok||!part.ok)throw Error(UraPeriods.label(period.month)+': '+(part.error||'As APIs não retornaram dados válidos.')+' Nenhum relatório parcial foi apresentado como completo.');
+    const part=await UraPeriods.retryMonth(async()=>{
+     const currentSession=await window.tmAuth?.getSession?.();
+     if(!currentSession?.access_token)throw Error('É necessário entrar na Central.');
+     const resp=await fetch('/api/voice-reconciliation?'+new URLSearchParams({start:period.start,end:period.end}),{headers:{Authorization:'Bearer '+currentSession.access_token},cache:'no-store'});
+     const result=await resp.json().catch(()=>({}));
+     if(!resp.ok||!result.ok){const error=Error(UraPeriods.label(period.month)+': '+(result.error||'As APIs não retornaram dados válidos.')+' Nenhum relatório parcial foi apresentado como completo.');
+      error.retryable=resp.status===504||resp.status===429||(resp.status===502&&/chamados sincronizados/.test(result.error||''));throw error;}
+     return result;
+    },attempt=>{el('zvReconcileStatus').textContent='Repetindo '+UraPeriods.label(period.month)+' — tentativa '+attempt+' de 3; meses anteriores preservados.';});
     parts.push(part);
    }
    const data=UraPeriods.combine(parts,start,end);
