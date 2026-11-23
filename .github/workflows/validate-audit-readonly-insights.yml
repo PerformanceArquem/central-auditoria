@@ -1,0 +1,25 @@
+name: Validate intelligent audit read-only stage 1
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'audit-readonly-insights-ui.js'
+      - 'api/audit-readonly-insights.js'
+      - 'lib/audit-readonly-insights.cjs'
+      - 'tests/audit-readonly-insights.test.mjs'
+      - '.github/workflows/validate-audit-readonly-insights.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check lib/audit-readonly-insights.cjs
+      - run: node --check api/audit-readonly-insights.js
+      - run: node --check audit-readonly-insights-ui.js
+      - run: node --test tests/audit-readonly-insights.test.mjs
