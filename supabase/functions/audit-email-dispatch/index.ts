@@ -1,3 +1,5 @@
+import {AsyncLocalStorage} from "node:async_hooks";
+import {morningWindow,planMorning} from "./morning-policy.ts";
 import {sectorEntries,validEntriesPeriod} from "./sector-entries.ts";
 import {assertFailedRetry,RETRY_POLICY} from "./failed-delivery-policy.ts";
 import {buildComparisons,renderComparisons,comparisonWindow,COMPARISON_POLICY} from "./report-comparisons.ts";
@@ -22,6 +24,7 @@ import {prepareReadReceipt,markReceiptDelivered,appendReceiptHtml,type ReceiptCo
 type R = Record<string, unknown>;
 const E = (k: string) => Deno.env.get(k)?.trim() || '';
 const TZ = 'America/Sao_Paulo';
+const automaticDelivery=new AsyncLocalStorage<boolean>();
 const RELEASE_ID = 'report-calendar-20261110';
 const DIRECTION_RECIPIENT_ID = '1b8168c6-bec0-4f6d-a3f9-feaec63ed147';
 const DIRECTION_EMAIL = 'canestraro@arquem.com.br';
@@ -1035,7 +1038,10 @@ async function sendMail(email: string, subject: string, text: string, html?: str
     if(!current)throw Error('Destinatário atual indisponível para os comparativos.');
     const comparisonRecipient=reportData.productionFlow&&Array.isArray(current.production_flow_collaborators)&&current.production_flow_collaborators.length
       ?{...current,collaborator_name:null,collaborator_names:current.production_flow_collaborators}:current;
-    const comparisons=await comparisonData(comparisonRecipient,String(reportData.from),String(reportData.to));
+    const comparisonStamp=Date.parse(String(reportData.comparisonPreparedAt||''));
+    const cachedComparison=reportData.comparisons as Awaited<ReturnType<typeof comparisonData>>|undefined;
+    const preparedComparison=cachedComparison?.version===COMPARISON_POLICY && cachedComparison.from===reportData.from && cachedComparison.to===reportData.to && Number.isFinite(comparisonStamp) && Date.now()-comparisonStamp>=0 && Date.now()-comparisonStamp<15*60000 && reportData.recipientConfigUpdatedAt===String(current.updated_at||'');
+    const comparisons=preparedComparison?cachedComparison!:await comparisonData(comparisonRecipient,String(reportData.from),String(reportData.to));
     const section=renderComparisons(comparisons);text+=section.text;
     html=appendReportSection(html,section.html);
     reportData={...reportData,comparisons};
@@ -1107,10 +1113,11 @@ async function sendMail(email: string, subject: string, text: string, html?: str
     cleanText+=acknowledgement.text;
     cleanHtml=appendReceiptHtml(cleanHtml,acknowledgement.html);
   }
+  if(automaticDelivery.getStore()&&!morningWindow())throw Error('Janela de envio encerrada; nenhuma mensagem enviada');
   const res = await fetch(endpoint, {
     method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ token: E('GMAIL_MAIL_SECRET'), email, assunto: cleanSubject,
-      texto: cleanText, html: cleanHtml, ...(cc.length?{cc}:{}),
+      texto: cleanText, html: cleanHtml, automaticDelivery:automaticDelivery.getStore()===true, ...(cc.length?{cc}:{}),
       ...(withAttachments?{reportData:cleanReportData}:{}) }),
     signal: AbortSignal.timeout(60000)
   });
@@ -1739,6 +1746,10 @@ async function prepareReports() {
   const tasks=scheduledReports(today,hol,recipients).filter(t=>t.kind==='daily'||t.kind==='weekly');
   const getQuality=supportRatingCache(),getOverview=directionOverviewCache();
   const periodData=new Map<string,Promise<R[]>>();
+  const coverageCache=new Map<string,ReturnType<typeof recentCoverage>>();
+  const checkpointPromise=state();
+  const started=Date.now();
+  let attempted=0;
   let reference:Promise<[R[],R[]]>|undefined;
   const results:R[]=[];
   for(const t of tasks){
@@ -1758,10 +1769,12 @@ async function prepareReports() {
       '&select=dispatch_key,reconciliation_success_at,expires_at,report_data&limit=1');
     if(t.r.report_sections==null && existing.length && Date.parse(String(existing[0].reconciliation_success_at))===Date.parse(String(coverage.lastSuccess)) &&
       Date.parse(String(existing[0].expires_at))>Date.now()+5*60000 &&
+      Date.now()-Date.parse(String(existing[0].report_data?.comparisonPreparedAt||''))<15*60000 &&
       Array.isArray(existing[0].report_data?.forecastVariances)&&existing[0].report_data?.visualVersion==='arquem-visual-v1'&&existing[0].report_data?.forecastPolicy===FORECAST_POLICY&&existing[0].report_data?.recipientConfigUpdatedAt===String(t.r.updated_at||'')){
       results.push({key,skipped:'Conteudo ja preparado'});continue;
     }
-    if(results.filter(x=>x.status==='prepared').length>=2)break;
+    if(attempted>=2||Date.now()-started>=45000)break;
+    attempted++;
     let appts=periodData.get(t.from+':'+t.to);
     if(!appts){appts=source(t.from,t.to);periodData.set(t.from+':'+t.to,appts);}
     reference ??= Promise.all([ticketSource(),clientSource()]);
@@ -1774,7 +1787,7 @@ async function prepareReports() {
     const quality=await getQuality(t.r,t.from,t.to);
     const overview=await getOverview(t.r,t.from,t.to,tickets.activeTickets,t.kind);
     const forecast=await optionalForecast(t.r);
-    const packet=reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows,quality);
+    const packet={...reportPacket(t.r,report,tickets,t.from,t.to,t.kind,false,false,clients,forecast.rows,quality),comparisons:await comparisonData(t.r,t.from,t.to),comparisonPreparedAt:new Date().toISOString()};
     const subject=reportSubject(t.r,t.kind,t.from,t.to);
     const bodyText=report.text+overview.text+quality.text+'\n\n'+tickets.text+forecast.text;
     const bodyHtml=reportEmailHtml(t.r,report,t.from,t.to,t.kind,false,false,
@@ -1820,8 +1833,7 @@ async function dispatch(payload:R = {}) {
   const batchGroup=String(payload.batchGroup||'');
   if(batchGroup&&!['management','individual'].includes(batchGroup))
     return json({ok:false,error:'Lote inválido'},400);
-  const localHour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:TZ,hour:'2-digit',hourCycle:'h23'}).format(new Date()));
-  if(batchGroup && localHour < 9)
+  if(!morningWindow())
     return json({ok:true,skipped:'Aguardando horário do lote',batchGroup});
   const tasks = scheduledReports(today,hol,recipients).filter(t=>
     (!selectedIds.length||selectedIds.includes(String(t.r.id)))&&(!batchGroup||deliveryGroup(t.r)===batchGroup));
@@ -2624,7 +2636,8 @@ async function handleRequest(req: Request): Promise<Response> {
       // deliveries. Keep browser access under the existing active-admin session.
       const scheduler=!!E('REPORT_CRON_SECRET')&&req.headers.get('x-report-secret')===E('REPORT_CRON_SECRET');
       if(!scheduler&&!await isAdmin(req))return json({ok:false,error:'Acesso reservado ao administrador autenticado'},403);
-      return action==='comparison_preview'?await comparisonPreview(payload):await failedReportAction(payload);
+      if(scheduler&&action==='failed_report_send'&&!morningWindow())return json({ok:true,sent:false,skipped:'Fora da janela de envio'});
+      return action==='comparison_preview'?await comparisonPreview(payload):await automaticDelivery.run(scheduler,()=>failedReportAction(payload));
     }
     if(action==='ticket_charge_notes_dispatch'){
       const expected=E('REPORT_CRON_SECRET');
@@ -2634,6 +2647,18 @@ async function handleRequest(req: Request): Promise<Response> {
         return json({ok:true,processed:0,skipped:'Dia não útil — processamento retomado no próximo dia útil'});
       const status=await processChargeInternalNote(db,E('MOVIDESK_TOKEN'));
       return json(status,status.ok?200:503);
+    }
+    if(action==='morning_simulation'){
+      if(!await isAdmin(req))return json({ok:false,error:'Acesso reservado ao administrador autenticado'},403);
+      const [hol,recipients]=await Promise.all([holidays(),recipientList()]);
+      const tasks=scheduledReports(dateBR(),hol,recipients);
+      const keys=tasks.map(t=>String(t.r.id)+':'+t.kind+':'+t.from+':'+t.to);
+      const records=new Set<string>();
+      for(let i=0;i<keys.length;i+=20){
+        const rows=await db('audit_email_sector_dispatches?select=dispatch_key&dispatch_key=in.('+keys.slice(i,i+20).map(k=>'"'+k+'"').join(',')+')');
+        rows.forEach((r:R)=>records.add(String(r.dispatch_key)));
+      }
+      return json({ok:true,windowOpen:morningWindow(),...planMorning(tasks,records)});
     }
     if(action==='email_delivery_control'){
       if(!await isAdmin(req))return json({ok:false,error:'Acesso reservado ao administrador autenticado'},403);
@@ -2658,6 +2683,8 @@ async function handleRequest(req: Request): Promise<Response> {
     if (action !== 'dispatch' && action !== 'dispatch_noon_partial' && action !== 'dispatch_weekly_preliminary' && action !== 'prepare' && action !== 'attachment_probe' && action !== 'timing_probe') return json({ error: 'Acao desconhecida' }, 400);
     const expected = E('REPORT_CRON_SECRET');
     if (!expected || req.headers.get('x-report-secret') !== expected) return json({ error: 'Cron nao autorizado' }, 401);
+    if(['dispatch','dispatch_noon_partial','dispatch_weekly_preliminary'].includes(action)&&!morningWindow())
+      return json({ok:true,sent:false,skipped:'Fora da janela de envio das 08h57 às 09h59'});
     if(action==='timing_probe'){
       const id=String(payload.recipientId||'');
       if(!/^[-a-f0-9]{36}$/i.test(id))return json({ok:false,error:'Destinatário inválido'},400);
@@ -2666,7 +2693,7 @@ async function handleRequest(req: Request): Promise<Response> {
       const timing=await reportTiming({recipientId:id,reportKind:'daily',from:shift(dateBR(),-1),to:shift(dateBR(),-1),reportSections:reportSectionFlags(rec)},db,list);
       return json({ok:true,sent:false,recipientId:id,status:timing?.status,adjustmentCount:timing?.adjustmentCount||0,noticePresent:!!timing?.notice,presentation:{version:'arquem-visual-v1',subject:reportSubject(rec,'daily',shift(dateBR(),-1),shift(dateBR(),-1)),heading:reportIdentity(rec).title,hierarchy:reportIdentity(rec).hierarchy,csatAllowed:canReceiveCsat(rec)}});
     }
-    return action === 'dispatch_noon_partial' ? await dispatchNoonPartial() : action === 'attachment_probe' ? await adminAction({action:'attachment_health'}) : action === 'prepare' ? await prepareReports() : action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch(payload);
+    return automaticDelivery.run(true,async()=> action === 'dispatch_noon_partial' ? await dispatchNoonPartial() : action === 'attachment_probe' ? await adminAction({action:'attachment_health'}) : action === 'prepare' ? await prepareReports() : action === 'dispatch_weekly_preliminary' ? await dispatchWeeklyPreliminary() : await dispatch(payload));
   } catch (ex) { console.error('audit-email-dispatch:', err(ex)); return json({ ok: false, error: err(ex), release: RELEASE_ID }, 500); }
 }
 

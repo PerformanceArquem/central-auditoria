@@ -1,0 +1,22 @@
+name: Validate morning dispatch without delivery
+on:
+  pull_request:
+    paths: ['supabase/functions/audit-email-dispatch/**', 'tests/morning-dispatch.test.mjs', '.github/workflows/validate-morning-dispatch.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: node --test tests/morning-dispatch.test.mjs tests/failed-delivery-retry.test.mjs
+      - run: deno check supabase/functions/audit-email-dispatch/index.ts
+      - run: deno test tests/forecast-email.test.ts tests/report-comparisons.test.ts tests/corporate-email-policy.test.ts

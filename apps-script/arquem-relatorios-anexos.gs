@@ -465,7 +465,8 @@ function arquemXlsx_(p, keep) {
   if((p.customers||[]).length>1){
     // Chart values use numeric hours to preserve comparability; displayed HHhMM remains in the table.
     cust.getRange(1,5).setValue('Horas (numérico)');
-    (p.customers||[]).forEach((x,i)=>cust.getRange(i+2,5).setValue(Number(x.minutes||0)/60));
+    const customerHours=(p.customers||[]).map(x=>[Number(x.minutes||0)/60]);
+    if(customerHours.length)cust.getRange(2,5,customerHours.length,1).setValues(customerHours);
     const count=Math.min((p.customers||[]).length,12);
     const chart=cust.newChart().setChartType(Charts.ChartType.BAR)
       .addRange(cust.getRange(1,1,count+1,1))
