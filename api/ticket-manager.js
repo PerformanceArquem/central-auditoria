@@ -38,7 +38,7 @@ async function authenticate(req) {
   return user && user.id ? user : null;
 }
 
-async function db(path, { method = 'GET', body, prefer, maxBytes = MAX_TICKET_BYTES } = {}) {
+async function db(path, { method = 'GET', body, prefer, maxBytes = MAX_TICKET_BYTES, diagnostics } = {}) {
   const headers = {
     apikey: adminKey,
     Authorization: `Bearer ${adminKey}`,
@@ -51,7 +51,19 @@ async function db(path, { method = 'GET', body, prefer, maxBytes = MAX_TICKET_BY
 
   if (prefer) headers.Prefer = prefer;
 
-  const serialized = body === undefined ? undefined : JSON.stringify(body);
+  // JSON.stringify escapes isolated UTF-16 surrogates, but PostgREST rejects
+  // those escapes with PGRST102. Normalize only outgoing string values.
+  // Do not rewrite keys: replacing a key could collide with another field.
+  let normalizedUnicodeStrings = 0;
+  const serialized = body === undefined ? undefined : JSON.stringify(body, (key, value) => {
+    if (!key.isWellFormed()) {
+      throw Object.assign(new Error('Nome de campo contém caractere incompleto; dados locais preservados'), { status: 400 });
+    }
+    if (typeof value !== 'string') return value;
+    const normalized = value.toWellFormed();
+    if (normalized !== value) normalizedUnicodeStrings++;
+    return normalized;
+  });
   if (body !== undefined && (!serialized || !serialized.trim())) {
     throw Object.assign(new Error('JSON de sincronização não serializável'), { status: 400 });
   }
@@ -62,6 +74,11 @@ async function db(path, { method = 'GET', body, prefer, maxBytes = MAX_TICKET_BY
       : 'Lote de sincronização excede o limite do servidor; tente lotes menores';
     throw Object.assign(new Error(message), { status: 413 });
   }
+  if (diagnostics) diagnostics.normalizedUnicodeStrings = normalizedUnicodeStrings;
+  if (normalizedUnicodeStrings) console.warn('ticket-manager Unicode normalized', {
+    operation: path.split('?')[0],
+    normalizedUnicodeStrings
+  });
   const r = await fetch(`${urlBase}/rest/v1/${path}`, {
     method,
     headers,
@@ -84,6 +101,7 @@ async function db(path, { method = 'GET', body, prefer, maxBytes = MAX_TICKET_BY
       operation: path.split('?')[0],
       method,
       upstreamStatus: r.status,
+      upstreamCode: /^[A-Z0-9_]{1,16}$/.test(result?.code || '') ? result.code : null,
       requestBytes: bodyBytes,
       contentType: r.headers.get('content-type')?.split(';')[0] || 'unknown',
       responseIsJson: raw ? (() => { try { JSON.parse(raw); return true; } catch { return false; } })() : false
@@ -234,6 +252,7 @@ export default async function handler(req, res) {
         if (
           !id ||
           id.length > 100 ||
+          !id.isWellFormed() ||
           !t ||
           typeof t !== 'object' ||
           Array.isArray(t)
@@ -251,15 +270,18 @@ export default async function handler(req, res) {
         };
       });
 
+      const diagnostics = {};
       await db('tm_tickets?on_conflict=id', {
         method: 'POST',
         body: tickets,
-        prefer: 'resolution=merge-duplicates,return=minimal'
+        prefer: 'resolution=merge-duplicates,return=minimal',
+        diagnostics
       });
 
       return reply(res, 200, {
         ok: true,
-        count: tickets.length
+        count: tickets.length,
+        normalizedUnicodeStrings: diagnostics.normalizedUnicodeStrings
       });
     }
 
@@ -289,6 +311,7 @@ export default async function handler(req, res) {
         }
       }
 
+      const diagnostics = {};
       await db('tm_state?on_conflict=id', {
         method: 'POST',
         maxBytes: MAX_STATE_BYTES,
@@ -297,10 +320,11 @@ export default async function handler(req, res) {
           state: safe,
           updated_at: new Date().toISOString()
         }],
-        prefer: 'resolution=merge-duplicates,return=minimal'
+        prefer: 'resolution=merge-duplicates,return=minimal',
+        diagnostics
       });
 
-      return reply(res, 200, { ok: true });
+      return reply(res, 200, { ok: true, normalizedUnicodeStrings: diagnostics.normalizedUnicodeStrings });
     }
 
     return reply(res, 400, {
