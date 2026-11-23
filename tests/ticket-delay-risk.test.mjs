@@ -11,6 +11,7 @@ test('six bounded components total 100, with coverage separate from score',()=>{
  const r=risk(base,{history:buildDelayHistory(peers(),{now}),clientCriticality:{'Ótica Teste':'Alta'}});
  assert.equal(r.components.length,6);assert.equal(r.components.reduce((s,c)=>s+c.max,0),100);assert.equal(r.coverage,100);assert.equal(r.coverageLabel,'Alta');assert.ok(r.score>=0&&r.score<=100);
  assert.match(r.notice,/não é precisão estatística/);
+ const missing=risk();assert.equal(missing.similarity.samples,0);assert.equal(missing.similarity.late,0);assert.equal(missing.similarity.lateRate,null);
 });
 test('approaching the deadline raises the deadline component; overdue is actual delay',()=>{
  const far=risk({...base,slaSolutionDate:'2026-12-10T12:00:00Z'}),near=risk({...base,slaSolutionDate:'2026-11-24T12:00:00Z'}),late=risk({...base,slaSolutionDate:'2026-11-22T12:00:00Z'});
