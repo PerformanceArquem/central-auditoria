@@ -77,3 +77,17 @@ test('coverage separates missing phone data from actual unmatched calls',()=>{
  assert.equal(r.coverage.ticketsWithPhone,1);
  assert.equal(r.coverage.ticketsWithoutPhone,1);
 });
+
+test('URA audit requires explicit DID allowlist instead of counting all company DIDs',()=>{
+ const configured=vm.createContext({process:{env:{ZENVIA_URA_DID_NUMBERS:'+55 (41) 3333-2222,554133334444'}},Set,String});
+ vm.runInContext(source+'\nthis.uraDidFilter=uraDidFilter;',configured);
+ const ids=[...configured.uraDidFilter()];
+ assert.deepEqual(ids,['4133332222','4133334444']);
+ const absent=vm.createContext({process:{env:{}},Set,String});
+ vm.runInContext(source+'\nthis.uraDidFilter=uraDidFilter;',absent);
+ assert.throws(()=>absent.uraDidFilter(),/DID/);
+});
+test('the response never claims proof that calls reached the URA menu from DID alone',()=>{
+ assert.match(source,/uraEntryVerified:false/);
+ assert.match(source,/não uma confirmação de que o menu foi executado/);
+});
