@@ -17,7 +17,7 @@ test('matches a single incoming call to a nearby ticket with the same normalized
  assert.equal(r.stats.possivel_vinculo,1);
  assert.equal(r.stats.vinculado,0);
  assert.equal(r.records[0].ticketId,'101');
- assert.equal(r.records[0].phoneMasked,'••••0000');
+ assert.equal(r.records[0].phoneMasked,'0000');
  assert.equal(r.records[0].matchMethod,'telefone_horario_evento');
  assert.ok(!JSON.stringify(r).includes('41999990000'));
 });
@@ -91,7 +91,7 @@ test('URA audit requires explicit DID allowlist instead of counting all company 
 });
 test('the response never claims proof that calls reached the URA menu from DID alone',()=>{
  assert.match(source,/uraEntryVerified:false/);
- assert.match(source,/não confirma que o menu da URA foi executado/);
+ assert.match(source,/n�o confirma que o menu da URA foi executado/);
 });
 
 test('URA scope never queries account-wide inbound call reports',()=>{
@@ -250,11 +250,32 @@ test('sector and employee dropdowns filter reconciliation and its export',()=>{
   "'sector','employee'"])assert.ok(html.includes(item),item);
 });
 
-test('URA reconciliation uses its own seven-day date selectors, preserving monthly voice metrics',()=>{
+test('URA reconciliation uses independent date selectors defaulting to seven days, preserving monthly voice metrics',()=>{
  const html=readFileSync('index.html','utf8');
  assert.match(html,/id="zvReconcileStart"/);
  assert.match(html,/id="zvReconcileEnd"/);
  assert.match(html,/const start=el\('zvReconcileStart'\)\.value,end=el\('zvReconcileEnd'\)\.value/);
  assert.match(html,/el\('zvStart'\)\.value=today\.slice\(0,7\)\+'-01'/);
  assert.match(html,/Date\.parse\(today\+'T12:00:00Z'\)-6\*86400000/);
+});
+
+
+test('date validation accepts 8 and 31 inclusive days and rejects longer or invalid ranges',async()=>{
+ const context=vm.createContext({Date,Math,Number,String,Array,Object,Set,URL,JSON,parseInt,process:{env:{}}});
+ vm.runInContext(source+'\nthis.handler=handler;',context);
+ const request=async(start,end)=>{
+  const res={setHeader(){},status(code){this.code=code;return this;},json(body){this.body=body;return this;}};
+  await context.handler({method:'GET',query:{start,end}},res);
+  return res;
+ };
+ for(const [start,end] of [['2026-11-01','2026-11-08'],['2026-10-01','2026-10-31'],['2026-11-23','2026-11-23']]){
+  const res=await request(start,end);
+  assert.equal(res.code,503); // Passed date validation; integrations deliberately unconfigured.
+ }
+ for(const [start,end] of [['2026-10-01','2026-11-01'],['2026-11-23','2026-11-01'],['2026-02-30','2026-03-01'],['','2026-11-23']]){
+  assert.equal((await request(start,end)).code,400);
+ }
+ const html=readFileSync('index.html','utf8');
+ assert.ok(html.includes('/86400000>30)throw Error'));
+ assert.ok(html.includes('at� 31 dias corridos'));
 });

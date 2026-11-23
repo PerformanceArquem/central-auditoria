@@ -1322,7 +1322,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
     <select id="zvReconcileFilter"><option value="all">Todas</option><option value="sem_vinculo_identificado">Sem vínculo identificado</option><option value="vinculado">Vínculos por ID</option><option value="vinculado_gravacao">Vínculos por gravação</option><option value="possivel_vinculo">Possíveis vínculos (telefone + horário do evento)</option><option value="ambiguo">Ambíguas</option><option value="dados_insuficientes">Dados insuficientes</option></select>
     <button type="button" id="zvReconcileCsv" class="b" disabled>Exportar CSV</button>
    </div>
-   <p id="zvReconcileStatus" class="subtle" role="status">A consulta usa até sete dias independentes do período das métricas. Os filtros de setor e funcionário são preenchidos após a conciliação. Para consultar a URA, confirme os números DID no servidor.</p>
+   <p id="zvReconcileStatus" class="subtle" role="status">A consulta permite até 31 dias corridos, independentes do período das métricas. Os filtros de setor e funcionário são preenchidos após a conciliação. Para consultar a URA, confirme os números DID no servidor.</p>
    <div id="zvReconcileKpis" class="kpis"></div>
    <div class="tablewrap"><table><thead><tr><th>Data</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação</th><th>Conciliação</th><th>Chamado</th><th>Setor</th><th>Funcionário</th><th>Evento Movidesk</th><th>Diferença (seg.)</th><th>Critério</th></tr></thead><tbody id="zvReconcileRows"></tbody></table></div>
    <p class="subtle">O telefone e o horário sugerem vínculo, mas somente um identificador compartilhado comprova a ligação ao chamado. A chamada no DID não confirma que o cliente ouviu o menu da URA. A ausência de vínculo não prova falha de abertura: depende da regra de criação, do histórico da URA e dos identificadores disponíveis em ambas as APIs.</p>
@@ -6851,7 +6851,7 @@ function showReconciliation(){
   el('zvReconcileStatus').textContent='Consultando as APIs...';
   try{
    const start=el('zvReconcileStart').value,end=el('zvReconcileEnd').value;
-   if(!valid(start)||!valid(end)||start>end||(Date.parse(end)-Date.parse(start))/86400000>6)throw Error('Selecione um intervalo de até 7 dias corridos.');
+   if(!valid(start)||!valid(end)||start>end||(Date.parse(end)-Date.parse(start))/86400000>30)throw Error('Selecione um intervalo de até 31 dias corridos.');
    const session=await window.tmAuth?.getSession?.();
    if(!session?.access_token)throw Error('É necessário entrar na Central.');
    const resp=await fetch('/api/voice-reconciliation?'+new URLSearchParams({start,end}),{headers:{Authorization:'Bearer '+session.access_token},cache:'no-store'});
@@ -6880,7 +6880,7 @@ function showReconciliation(){
  window.zenviaVoiceInit=()=>{
   if(initialized)return;initialized=true;
   const today=dateToday();el('zvEnd').value=today;el('zvStart').value=today.slice(0,7)+'-01';
-  // Métricas mantêm o período mensal; a conciliação possui janela independente de 7 dias.
+  // Métricas mantêm o período mensal; a conciliação permite até 31 dias e inicia com os últimos 7 dias.
   el('zvReconcileEnd').value=today;
   el('zvReconcileStart').value=new Date(Date.parse(today+'T12:00:00Z')-6*86400000).toISOString().slice(0,10);
   el('zvRefresh').addEventListener('click',load);
