@@ -5,6 +5,8 @@ on:
       - 'api/voice-reconciliation.js'
       - 'tests/voice-reconciliation.test.mjs'
       - 'index.html'
+      - 'ui/ura-periods.js'
+      - 'ui/ura-recording.js'
       - '.github/workflows/validate-voice-reconciliation.yml'
   workflow_dispatch:
 jobs:

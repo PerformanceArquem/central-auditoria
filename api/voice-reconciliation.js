@@ -301,13 +301,28 @@ async function movideskDirectory(signal){
  }
  throw Error('Cadastro Movidesk excedeu paginação');
 }
+async function recordingLink(callId,token,signal){
+ const approved=uraDidFilter();
+ if(process.env.ZENVIA_URA_SCOPE_CONFIRMED!=='true')throw Error('Escopo da URA não confirmado');
+ const response=await fetch('https://voice-api.zenvia.com/did/chamada/'+encodeURIComponent(callId),{
+  headers:{'Access-Token':token,Accept:'application/json'},signal});
+ if(!response.ok)throw upstreamError(response,'gravação da ligação');
+ const body=await response.json(),call=body?.dados;
+ if(body.sucesso===false||!call||String(call.id)!==callId||!approved.has(didNumber(call.numero_destino)))
+  return {code:404,error:'Ligação não encontrada no número da URA autorizado.'};
+ const refs=[call.url_gravacao,...(Array.isArray(call.gravacoes_parciais)?call.gravacoes_parciais:[]).map(x=>typeof x==='string'?x:x?.url_gravacao)];
+ for(const ref of refs){try{const url=new URL(ref);if(url.protocol==='https:'&&!url.username&&!url.password&&['voice-api.zenvia.com','voice-app.zenvia.com','api.evoline.com.br'].includes(url.hostname))return {code:200,url:url.href};}catch{}}
+ return {code:404,error:'A Zenvia não informou um link de gravação para esta ligação.'};
+}
 export default async function handler(req,res){
  res.setHeader('Cache-Control','private, no-store');
  if(req.method!=='GET')return res.status(405).json({ok:false,error:'Método não permitido'});
  const directory=req.query?.action==='directory';
+ const recording=req.query?.action==='recording',callId=String(req.query?.callId||'');
+ if(recording&&!/^[1-9]\d{0,14}$/.test(callId))return res.status(400).json({ok:false,error:'Identificador de ligação inválido.'});
  const start=String(req.query?.start||''),end=String(req.query?.end||'');
  const valid=x=>DATE.test(x)&&!Number.isNaN(Date.parse(x+'T12:00:00Z'))&&new Date(x+'T12:00:00Z').toISOString().slice(0,10)===x;
- if(!directory&&(!valid(start)||!valid(end)||end<start||(Date.parse(end)-Date.parse(start))/86400000>30))
+ if(!directory&&!recording&&(!valid(start)||!valid(end)||end<start||(Date.parse(end)-Date.parse(start))/86400000>30))
   return res.status(400).json({ok:false,error:'Selecione até 31 dias corridos válidos'});
  const base=(process.env.SUPABASE_URL||'').replace(/\/$/,'');
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY,token=process.env.ZENVIA_VOICE_ACCESS_TOKEN;
@@ -316,6 +331,7 @@ export default async function handler(req,res){
  try{
   const access=await auth(req,base,key,controller.signal);
   if(access.code!==200)return res.status(access.code).json({ok:false,error:access.error});
+  if(recording){const result=await recordingLink(callId,token,controller.signal);return res.status(result.code).json(result.code===200?{ok:true,url:result.url}:{ok:false,error:result.error});}
   if(directory){
    if(!process.env.MOVIDESK_TOKEN)return res.status(503).json({ok:false,error:'Cadastro Movidesk não configurado no servidor.'});
    return res.status(200).json({ok:true,...await movideskDirectory(controller.signal)});
