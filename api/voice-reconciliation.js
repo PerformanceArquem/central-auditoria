@@ -87,23 +87,44 @@ const uraDidFilter=()=>{
  return new Set(numbers);
 };
 async function zenviaCalls(start,end,token,signal){
- const calls=[],approvedDids=uraDidFilter();
- for(let offset=0;offset<4000;){
-  const url=new URL('https://voice-api.zenvia.com/did/relatorio');
-  Object.entries({data_inicio:start,data_fim:end,posicao:String(offset),limite:'200'})
-   .forEach(([k,v])=>url.searchParams.set(k,v));
-  const response=await fetch(url,{headers:{'Access-Token':token,Accept:'application/json'},signal});
-  if(!response.ok)throw new Error('Falha na API Zenvia');
-  const data=await response.json(),rows=data?.dados?.relatorio,total=Number(data?.dados?.total);
-  if(data?.sucesso===false||!Array.isArray(rows)||!Number.isInteger(total)||total<0||total>4000)
-   throw new Error('Relatório Zenvia incompleto');
-  // O DID receptor, não o número do cliente, identifica o fluxo auditado.
-  calls.push(...rows.filter(row=>approvedDids.has(didNumber(row.numero_destino))));
-  offset+=rows.length;
-  if(offset>=total)return calls;
-  if(!rows.length)throw new Error('Paginação Zenvia incompleta');
+ const approvedDids=uraDidFilter();
+ // IDs consultados a partir do cadastro da própria conta, apenas para DIDs
+ // previamente homologados como ligados à URA. Outros DIDs ficam fora.
+ const catalogResponse=await fetch('https://voice-api.zenvia.com/did',{
+  method:'GET',headers:{'Access-Token':token,Accept:'application/json'},signal
+ });
+ if(!catalogResponse.ok)throw new Error('Cadastro DID indisponível');
+ const catalog=await catalogResponse.json();
+ const rows=catalog?.dados?.dids;
+ if(catalog?.sucesso===false||!Array.isArray(rows)||rows.length>1000)
+  throw new Error('Cadastro DID inválido');
+ const matched=rows.filter(row=>approvedDids.has(didNumber(row.numero)));
+ if(matched.length!==approvedDids.size||
+  matched.some(row=>!/^\\d+$/.test(String(row.id||'')))||
+  new Set(matched.map(row=>didNumber(row.numero))).size!==approvedDids.size)
+  throw new Error('DID da URA não encontrado de forma única no cadastro');
+ const all=[];
+ for(const did of matched){
+  let offset=0,done=false;
+  for(let page=0;page<20;page++){
+   const url=new URL('https://voice-api.zenvia.com/did/'+encodeURIComponent(String(did.id))+'/relatorio');
+   Object.entries({data_inicio:start,data_fim:end,posicao:String(offset),limite:'200'})
+    .forEach(([k,v])=>url.searchParams.set(k,v));
+   const response=await fetch(url,{method:'GET',headers:{'Access-Token':token,Accept:'application/json'},signal});
+   if(!response.ok)throw new Error('Relatório de DID da URA indisponível');
+   const body=await response.json(),calls=body?.dados?.relatorio,total=Number(body?.dados?.total);
+   if(body?.sucesso===false||!Array.isArray(calls)||!Number.isInteger(total)||total<0||total>4000)
+    throw new Error('Relatório DID incompleto');
+   // Falha fechada caso o relatório do DID inclua chamadas de outro número.
+   if(calls.some(call=>didNumber(call.numero_destino)!==didNumber(did.numero)))
+    throw new Error('O relatório do DID contém chamadas fora do escopo');
+   all.push(...calls);offset+=calls.length;
+   if(offset>=total){done=true;break;}
+   if(!calls.length)throw new Error('Paginação Zenvia incompleta');
+  }
+  if(!done)throw new Error('Relatório DID excedeu paginação; reduza o período');
  }
- throw new Error('Reduza o intervalo de datas');
+ return all;
 }
 async function movideskTickets(start,end,base,key,signal){
  const all=[],begin=new Date(new Date(start+'T00:00:00-03:00').getTime()-20*60000).toISOString(),
