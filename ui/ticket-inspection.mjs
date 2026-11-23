@@ -3,6 +3,47 @@ const panel=document.getElementById('ticketInspection');
 let history=[], report=[];
 const date=n=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(n);
 function cell(row,text){const td=document.createElement('td');td.textContent=text;row.append(td);return td;}
+function paragraph(parent,text){const p=document.createElement('p');p.textContent=text;parent.append(p);}
+function remoteDetails(details,id){
+  const button=document.createElement('button'),output=document.createElement('div');
+  button.type='button';button.className='s';button.textContent='Conferir base sincronizada';
+  output.setAttribute('role','status');details.append(button,output);
+  async function load(method='GET',requestId){
+    if(typeof window.tmFetch!=='function')throw Error('Entre no sistema antes de consultar o histórico.');
+    const response=await window.tmFetch('/api/audit-ticket-inspection?id='+encodeURIComponent(id),{
+      method,...(method==='POST'?{headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId})}:{})
+    });
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw Error(data.error||'Consulta indisponível.');
+    return data;
+  }
+  function show(data){
+    output.replaceChildren();
+    paragraph(output,'Origem sincronizada em '+(data.sourceSyncedAt?date(Date.parse(data.sourceSyncedAt)):'data não informada'));
+    const item=data.item;
+    paragraph(output,item.closed?'Chamado encerrado na origem.':'Risco sincronizado: '+item.criticality+' ('+item.score+'/100) · '+item.owner+' · '+item.sector);
+    for(const f of item.findings)paragraph(output,f.label);
+    for(const gap of item.gaps||[])paragraph(output,gap);
+    for(const h of item.timeline||[])paragraph(output,date(h.at)+' → '+date(h.until)+' · '+(h.sector||'Setor não informado')+' · '+(h.owner||'Responsável não informado')+' · '+h.hours.toFixed(1)+' h');
+    for(const e of data.history)paragraph(output,e.label+' · detectado '+date(e.openedAt)+(e.resolvedAt?' · encerrado '+date(e.resolvedAt):' · ativo'));
+    for(const warning of data.warnings)paragraph(output,warning);
+    if(data.saved)paragraph(output,'Fiscalização registrada no ambiente de homologação.');
+    else if(data.storageEnabled){
+      const save=document.createElement('button');save.type='button';save.className='s';save.textContent='Registrar em homologação';
+      const requestId=crypto.randomUUID();
+      save.addEventListener('click',async()=>{
+        save.disabled=true;
+        try{show(await load('POST',requestId));}
+        catch(error){paragraph(output,error.message);save.disabled=false;}
+      });output.append(save);
+    }else paragraph(output,'Registro persistente desativado.');
+  }
+  button.addEventListener('click',async()=>{
+    button.disabled=true;output.textContent='Consultando histórico sincronizado…';
+    try{show(await load());}catch(error){output.textContent=error.message;}
+    finally{button.disabled=false;}
+  });
+}
 function render(){
   const rows=filterInspections(report,{sector:panel.querySelector('[name=sector]').value,client:panel.querySelector('[name=client]').value,criticality:panel.querySelector('[name=criticality]').value});
   panel.querySelector('[role=status]').textContent=rows.length+' chamados nos dados carregados. Risco por regras; pontuação não representa probabilidade estatística.';
@@ -14,6 +55,7 @@ function render(){
     for(const h of r.timeline){const p=document.createElement('p');p.textContent=date(h.at)+' → '+date(h.until)+' · '+(h.sector||'Setor não informado')+' · '+(h.owner||'Responsável não informado')+' · '+h.hours.toFixed(1)+' h';details.append(p);}
     for(const e of history.filter(e=>e.id===r.id)){const p=document.createElement('p');p.textContent=e.label+' · detectado '+date(e.openedAt)+(e.resolvedAt?' · encerrado '+date(e.resolvedAt):' · ativo');details.append(p);}
     for(const gap of r.gaps){const p=document.createElement('p');p.textContent=gap;details.append(p);}
+    remoteDetails(details,r.id);
     cell(tr,'').append(details);body.append(tr);
   }
   if(rows.length>200)panel.querySelector('[role=status]').textContent+=' Exibindo os primeiros 200; refine os filtros.';

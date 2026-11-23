@@ -33,3 +33,12 @@ test('history deduplicates active findings and records recurrence',()=>{
 test('time appointment is distinct from a plain action',()=>{
  const [r]=inspectTickets([{...ticket,actions:[{timeAppointments:[{workTime:'01:00:00'}],createdDate:'2026-11-23T11:00:00Z'}]}],{now});assert.ok(!r.findings.some(f=>['idle','no_appointments'].includes(f.code)));
 });
+test('changing owner within a sector does not reset queue permanence',()=>{
+ const [r]=inspectTickets([{...ticket,ownerHistories:[{changedDate:'2026-11-01T12:00:00Z',ownerTeam:'Produção',owner:'A'},{changedDate:'2026-11-22T12:00:00Z',ownerTeam:'Produção',owner:'B'}]}],{now});
+ assert.equal(r.queueDays,22);assert.ok(r.findings.some(f=>f.code==='queue'));assert.equal(r.timeline.length,2);
+});
+test('unknown appointment coverage cannot close a previously observed occurrence',()=>{
+ const first=recordOccurrences([],inspectTickets([ticket],{now}),now);
+ const next=recordOccurrences(first,inspectTickets([{...ticket,actions:undefined}],{now}),now+1);
+ assert.equal(next.find(e=>e.key==='1:no_appointments').resolvedAt,null);
+});
