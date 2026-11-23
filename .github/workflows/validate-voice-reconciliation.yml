@@ -1,0 +1,20 @@
+name: Validar conciliação Zenvia Movidesk
+on:
+  pull_request:
+    paths:
+      - 'api/voice-reconciliation.js'
+      - 'tests/voice-reconciliation.test.mjs'
+      - 'index.html'
+      - '.github/workflows/validate-voice-reconciliation.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/voice-reconciliation.test.mjs
