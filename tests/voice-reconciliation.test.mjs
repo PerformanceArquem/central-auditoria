@@ -149,3 +149,30 @@ test('tickets without telephone action timestamp are not matched by creation tim
  const r=run([call(901,'2026-11-20T10:00:00-03:00','41999990000')],[t]);
  assert.equal(r.stats.sem_vinculo_identificado,1);
 });
+
+test('matches a Zenvia recording reference from Movidesk without exposing signed rec link',()=>{
+ const t=ticket(981,'2026-11-20T08:00:00-03:00','41988887777');
+ t.payload.actions[0].htmlDescription='<a href="https://voice-app.zenvia.com/rec?x=private-token&amp;id=123456789&amp;cid=765432">Ouvir recado</a>';
+ const c={...call(501,'2026-11-20T10:00:00-03:00',null),url_gravacao:'https://voice-api.zenvia.com/rec/123456789'};
+ const r=run([c],[t]);
+ assert.equal(r.stats.vinculado_gravacao,1);
+ assert.equal(r.records[0].ticketId,'981');
+ assert.equal(r.records[0].matchMethod,'gravacao');
+ assert.equal(r.coverage.ticketsWithRecordingReference,1);
+ assert.ok(!JSON.stringify(r).includes('private-token'));
+ assert.ok(!JSON.stringify(r).includes('123456789'));
+});
+test('recording reference only counts when both provider URLs share the exact recording ID',()=>{
+ const t=ticket(982,'2026-11-20T08:00:00-03:00','41988887777');
+ t.payload.actions[0].htmlDescription='<a href="https://voice-app.zenvia.com/rec?x=secret&id=123456789&cid=765432">recado</a>';
+ const c={...call(502,'2026-11-20T10:00:00-03:00',null),url_gravacao:'https://voice-api.zenvia.com/rec/123456780'};
+ const r=run([c],[t]);
+ assert.equal(r.stats.vinculado_gravacao,0);
+ assert.equal(r.stats.dados_insuficientes,1);
+});
+test('other hosts cannot inject recording references',()=>{
+ const t=ticket(983,'2026-11-20T08:00:00-03:00','41988887777');
+ t.payload.actions[0].htmlDescription='<a href="https://evil.example/rec?x=secret&id=123456789">recado</a>';
+ const c={...call(503,'2026-11-20T10:00:00-03:00',null),url_gravacao:'https://voice-api.zenvia.com/rec/123456789'};
+ assert.equal(run([c],[t]).stats.vinculado_gravacao,0);
+});
