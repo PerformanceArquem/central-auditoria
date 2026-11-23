@@ -100,7 +100,7 @@ async function zenviaCalls(start,end,token,signal){
   throw new Error('Cadastro DID inválido');
  const matched=rows.filter(row=>approvedDids.has(didNumber(row.numero)));
  if(matched.length!==approvedDids.size||
-  matched.some(row=>!/^\\d+$/.test(String(row.id||'')))||
+  matched.some(row=>!/^\d+$/.test(String(row.id||'')))||
   new Set(matched.map(row=>didNumber(row.numero))).size!==approvedDids.size)
   throw new Error('DID da URA não encontrado de forma única no cadastro');
  const all=[];
