@@ -228,3 +228,24 @@ test('phone and event time cannot override a contradictory recording reference',
  assert.equal(r.stats.possivel_vinculo,0);
  assert.equal(r.stats.sem_vinculo_identificado,1);
 });
+
+test('linked tickets expose Movidesk sector and employee, without contact or private details',()=>{
+ const t=ticket(1510,'2026-11-20T10:02:00-03:00','41999990000');
+ t.payload.ownerTeam='Suporte';
+ t.payload.owner={businessName:'Operador Teste',phone:'41999990000',email:'private@example.com'};
+ const result=run([call(1511,'2026-11-20T10:00:00-03:00','41999990000')],[t]);
+ assert.equal(result.records[0].sector,'Suporte');
+ assert.equal(result.records[0].employee,'Operador Teste');
+ assert.ok(!JSON.stringify(result).includes('private@example.com'));
+});
+test('calls without matched tickets do not invent sector or employee',()=>{
+ const result=run([call(1520,'2026-11-20T10:00:00-03:00','41999990000')],[]);
+ assert.equal(result.records[0].sector,'');
+ assert.equal(result.records[0].employee,'');
+});
+test('sector and employee dropdowns filter reconciliation and its export',()=>{
+ const html=readFileSync('index.html','utf8');
+ for(const item of ['id="zvReconcileSector"','id="zvReconcileEmployee"',
+  'fillReconciliationPeople()', "r.sector===sector", "r.employee===employee",
+  "'sector','employee'"])assert.ok(html.includes(item),item);
+});
