@@ -14,7 +14,8 @@ const run=(calls,tickets)=>JSON.parse(JSON.stringify(scope.reconcile(calls,ticke
 test('matches a single incoming call to a nearby ticket with the same normalized number',()=>{
  const r=run([call(42,'2026-11-20T10:00:00-03:00','+55 (41) 99999-0000')],
   [ticket(101,'2026-11-20T10:08:00-03:00','41999990000')]);
- assert.equal(r.stats.vinculado,1);
+ assert.equal(r.stats.possivel_vinculo,1);
+ assert.equal(r.stats.vinculado,0);
  assert.equal(r.records[0].ticketId,'101');
  assert.equal(r.records[0].phoneMasked,'••••0000');
  assert.equal(r.records[0].matchMethod,'telefone_horario');
@@ -49,6 +50,7 @@ test('explicit call IDs take precedence over phone/time matching',()=>{
  const t={ticket_id:'55',payload:{zenviaCallId:'33'},created_at_source:'2026-11-20T13:00:00-03:00'};
  const r=run([call(33,'2026-11-20T10:00:00-03:00',null)],[t]);
  assert.equal(r.stats.vinculado,1);
+ assert.equal(r.stats.possivel_vinculo,0);
  assert.equal(r.records[0].matchMethod,'id');
 });
 test('index screen keeps reconciliation embedded in the existing voice tab',()=>{
@@ -63,7 +65,7 @@ test('two calls pointing to one ticket are not incorrectly labeled missing',()=>
   call(22,'2026-11-20T10:05:00-03:00','41988887777')
  ];
  const r=run(calls,[ticket(99,'2026-11-20T10:02:00-03:00','41988887777')]);
- assert.equal(r.stats.vinculado,1);
+ assert.equal(r.stats.possivel_vinculo,1);
  assert.equal(r.stats.ticket_ja_utilizado,1);
  assert.equal(r.stats.sem_vinculo_identificado,0);
 });
