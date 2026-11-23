@@ -52,9 +52,9 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
   records.push({callId:id||null,startedAt:originDate(call)||null,phoneMasked:mask(number),
    status:callKind(call),providerStatus:String(call.status||call.destino?.status||'').slice(0,60),
    ticketId:match?.ticket.ticket_id||null,matchMethod:match?.method||null,
-   reconciliation:match?'vinculado':choices.length>1?'ambiguo':choices.length===1?'ticket_ja_utilizado':number?'sem_vinculo_identificado':'dados_insuficientes'});
+   reconciliation:match?(match.method==='id'?'vinculado':'possivel_vinculo'):choices.length>1?'ambiguo':choices.length===1?'ticket_ja_utilizado':number?'sem_vinculo_identificado':'dados_insuficientes'});
  }
- const stats={total:records.length,vinculado:0,sem_vinculo_identificado:0,ambiguo:0,dados_insuficientes:0,ticket_ja_utilizado:0,
+ const stats={total:records.length,vinculado:0,possivel_vinculo:0,sem_vinculo_identificado:0,ambiguo:0,dados_insuficientes:0,ticket_ja_utilizado:0,
   atendida:0,nao_atendida:0,abandonada_ou_cancelada:0,em_andamento:0,indeterminada:0};
  for(const x of records){stats[x.reconciliation]++;stats[x.status]++;}
  const withPhone=records.filter(r=>r.phoneMasked!=='Indisponível').length;
@@ -142,7 +142,7 @@ export default async function handler(req,res){
   return res.status(200).json({ok:true,from:start,to:end,source:'Zenvia Voice × Movidesk sincronizado',
    ...result,metadata:{ticketsExamined:tickets.length,scope:'Chamadas recebidas nos DIDs confirmados como entrada da URA',
     uraEntryVerified:false,
-    caveat:'DID é a porta de entrada da URA, não uma confirmação de que o menu foi executado. Sem vínculo não prova falha na geração de chamado. Para afirmar 100% das entradas efetivas, é necessário webhook/histórico de eventos da URA e regra de criação do Movidesk.'}});
+    caveat:'A chegada ao DID não confirma que o menu da URA foi executado. Apenas ID compartilhado confirma um vínculo; telefone e horário indicam hipótese. Sem vínculo não comprova falha de criação. Para afirmar 100% das entradas efetivas, validar evento de URA e regra de abertura do Movidesk.'}});
  }catch(error){
   return res.status(error?.name==='AbortError'?504:502).json({ok:false,error:'Falha ao conciliar as fontes. Confira integração e registros.'});
  }finally{clearTimeout(timer);}
