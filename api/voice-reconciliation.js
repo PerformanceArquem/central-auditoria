@@ -246,20 +246,54 @@ async function movideskTickets(start,end,base,key,signal){
  }
  throw new Error('Muitos chamados; reduza o intervalo');
 }
+async function movideskDirectory(signal){
+ const token=process.env.MOVIDESK_TOKEN;
+ if(!token)throw Error('Cadastro Movidesk não configurado');
+ const people=new Map();
+ for(let skip=0;skip<5000;skip+=100){
+  const url=new URL('https://api.movidesk.com/public/v1/persons');
+  Object.entries({token,'$select':'id,businessName,teams,profileType,isActive',
+   '$filter':'profileType ne 2','$orderby':'id','$top':'100','$skip':String(skip)})
+   .forEach(([k,v])=>url.searchParams.set(k,v));
+  const response=await fetch(url,{signal});
+  if(!response.ok)throw Error('Cadastro Movidesk indisponível');
+  const batch=await response.json();
+  if(!Array.isArray(batch))throw Error('Cadastro Movidesk inválido');
+  for(const p of batch){
+   if(p.isActive===false||![1,3].includes(Number(p.profileType)))continue;
+   const id=String(p.id||'').trim(),name=String(p.businessName||'').trim();
+   if(!id||!name)continue;
+   const teams=[...new Set((Array.isArray(p.teams)?p.teams:[])
+    .filter(x=>typeof x==='string').map(x=>x.trim()).filter(Boolean))];
+   people.set(id,{id,name,teams});
+  }
+  if(batch.length<100){
+   const employees=[...people.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+   const sectors=[...new Set(employees.flatMap(p=>p.teams))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+   return {sectors,employees};
+  }
+ }
+ throw Error('Cadastro Movidesk excedeu paginação');
+}
 export default async function handler(req,res){
  res.setHeader('Cache-Control','private, no-store');
  if(req.method!=='GET')return res.status(405).json({ok:false,error:'Método não permitido'});
+ const directory=req.query?.action==='directory';
  const start=String(req.query?.start||''),end=String(req.query?.end||'');
  const valid=x=>DATE.test(x)&&!Number.isNaN(Date.parse(x+'T12:00:00Z'))&&new Date(x+'T12:00:00Z').toISOString().slice(0,10)===x;
- if(!valid(start)||!valid(end)||end<start||(Date.parse(end)-Date.parse(start))/86400000>30)
+ if(!directory&&(!valid(start)||!valid(end)||end<start||(Date.parse(end)-Date.parse(start))/86400000>30))
   return res.status(400).json({ok:false,error:'Selecione até 31 dias corridos válidos'});
  const base=(process.env.SUPABASE_URL||'').replace(/\/$/,'');
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY,token=process.env.ZENVIA_VOICE_ACCESS_TOKEN;
- if(!/^https:\/\//.test(base)||!key||!token)return res.status(503).json({ok:false,error:'Integrações não configuradas no servidor'});
+ if(!/^https:\/\//.test(base)||!key||(!directory&&!token))return res.status(503).json({ok:false,error:'Integrações não configuradas no servidor'});
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),45000);
  try{
   const access=await auth(req,base,key,controller.signal);
   if(access.code!==200)return res.status(access.code).json({ok:false,error:access.error});
+  if(directory){
+   if(!process.env.MOVIDESK_TOKEN)return res.status(503).json({ok:false,error:'Cadastro Movidesk não configurado no servidor.'});
+   return res.status(200).json({ok:true,...await movideskDirectory(controller.signal)});
+  }
   try{uraDidFilter();}catch(_){return res.status(503).json({ok:false,error:'Configure os números DID da URA antes da conciliação.'});}
   if(process.env.ZENVIA_URA_SCOPE_CONFIRMED!=='true')
    return res.status(503).json({ok:false,error:'Aguardando homologação dos números DID que encaminham exclusivamente para a URA.'});
@@ -270,6 +304,6 @@ export default async function handler(req,res){
     uraEntryVerified:false,
     caveat:'A chegada ao DID não confirma que o menu da URA foi executado. Apenas ID compartilhado confirma um vínculo; telefone e horário indicam hipótese. Sem vínculo não comprova falha de criação. Para afirmar 100% das entradas efetivas, validar evento de URA e regra de abertura do Movidesk.'}});
  }catch(error){
-  return res.status(error?.name==='AbortError'?504:502).json({ok:false,error:'Falha ao conciliar as fontes. Confira integração e registros.'});
+  return res.status(error?.name==='AbortError'?504:502).json({ok:false,error:directory?'Não foi possível carregar os setores e funcionários do Movidesk. Tente atualizar o cadastro.':'Falha ao conciliar as fontes. Confira integração e registros.'});
  }finally{clearTimeout(timer);}
 }

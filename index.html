@@ -1319,10 +1319,12 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
     <select id="zvReconcileSector"><option value="">Todos os setores</option></select>
     <label for="zvReconcileEmployee">Funcionário</label>
     <select id="zvReconcileEmployee"><option value="">Todos os funcionários</option></select>
+    <button type="button" id="zvReconcilePeopleRefresh" class="b">Atualizar setores e funcionários</button>
     <select id="zvReconcileFilter"><option value="all">Todas</option><option value="sem_vinculo_identificado">Sem vínculo identificado</option><option value="vinculado">Vínculos por ID</option><option value="vinculado_gravacao">Vínculos por gravação</option><option value="possivel_vinculo">Possíveis vínculos (telefone + horário do evento)</option><option value="ambiguo">Ambíguas</option><option value="dados_insuficientes">Dados insuficientes</option></select>
     <button type="button" id="zvReconcileCsv" class="b" disabled>Exportar CSV</button>
    </div>
-   <p id="zvReconcileStatus" class="subtle" role="status">A consulta permite até 31 dias corridos, independentes do período das métricas. Os filtros de setor e funcionário são preenchidos após a conciliação. Para consultar a URA, confirme os números DID no servidor.</p>
+   <p id="zvReconcileStatus" class="subtle" role="status">A consulta permite até 31 dias corridos, independentes do período das métricas. Os filtros usam o cadastro de agentes e equipes do Movidesk. Para consultar a URA, confirme os números DID no servidor.</p>
+   <p id="zvReconcilePeopleStatus" class="subtle" role="status"></p>
    <div id="zvReconcileKpis" class="kpis"></div>
    <div class="tablewrap"><table><thead><tr><th>Data</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação</th><th>Conciliação</th><th>Chamado</th><th>Setor</th><th>Funcionário</th><th>Evento Movidesk</th><th>Diferença (seg.)</th><th>Critério</th></tr></thead><tbody id="zvReconcileRows"></tbody></table></div>
    <p class="subtle">O telefone e o horário sugerem vínculo, mas somente um identificador compartilhado comprova a ligação ao chamado. A chamada no DID não confirma que o cliente ouviu o menu da URA. A ausência de vínculo não prova falha de abertura: depende da regra de criação, do histórico da URA e dos identificadores disponíveis em ambas as APIs.</p>
@@ -6817,20 +6819,37 @@ window.clientImpactInit=()=>{
  }
 
  let reconcileDataset=null;
+ let reconcileDirectory={sectors:[],employees:[]};
  function fillReconciliationPeople(){
-  const rows=reconcileDataset?.records||[];
+  const rows=reconcileDirectory.employees;
   const sector=el('zvReconcileSector'),employee=el('zvReconcileEmployee');
   const oldSector=sector.value,oldEmployee=employee.value;
-  const sectors=[...new Set(rows.map(r=>r.sector).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const sectors=reconcileDirectory.sectors;
   sector.replaceChildren(new Option('Todos os setores',''));
   for(const name of sectors)sector.add(new Option(name,name));
   sector.value=sectors.includes(oldSector)?oldSector:'';
-  const employees=[...new Set(rows.filter(r=>!sector.value||r.sector===sector.value)
-   .map(r=>r.employee).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const employees=[...new Set(rows.filter(r=>!sector.value||r.teams.includes(sector.value))
+   .map(r=>r.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   employee.replaceChildren(new Option('Todos os funcionários',''));
   for(const name of employees)employee.add(new Option(name,name));
   employee.value=employees.includes(oldEmployee)?oldEmployee:'';
 }
+async function loadReconciliationPeople(){
+  const button=el('zvReconcilePeopleRefresh'),status=el('zvReconcilePeopleStatus');
+  button.disabled=true;status.textContent='Carregando setores e funcionários do Movidesk...';
+  try{
+   const session=await window.tmAuth?.getSession?.();
+   if(!session?.access_token)throw Error('Faça login novamente');
+   const response=await fetch('/api/voice-reconciliation?action=directory',{
+    headers:{Authorization:'Bearer '+session.access_token},cache:'no-store'});
+   const data=await response.json();if(!response.ok||!data.ok)throw Error(data.error||'Cadastro indisponível');
+   if(!Array.isArray(data.sectors)||!Array.isArray(data.employees))throw Error('Cadastro inválido');
+   reconcileDirectory=data;fillReconciliationPeople();showReconciliation();
+   status.textContent=data.sectors.length+' setores e '+data.employees.length+' funcionários ativos carregados do Movidesk.';
+   if(!data.employees.length)status.textContent='Nenhum agente ativo encontrado no cadastro do Movidesk.';
+  }catch(e){status.textContent='Cadastro indisponível: '+e.message;}
+  finally{button.disabled=false;}
+ }
 function showReconciliation(){
   const root=el('zvReconcileRows');root.replaceChildren();
   const data=reconcileDataset;if(!data)return;
@@ -6885,6 +6904,8 @@ function showReconciliation(){
   el('zvReconcileStart').value=new Date(Date.parse(today+'T12:00:00Z')-6*86400000).toISOString().slice(0,10);
   el('zvRefresh').addEventListener('click',load);
   el('zvReconcile').addEventListener('click',runReconciliation);
+  el('zvReconcilePeopleRefresh').addEventListener('click',loadReconciliationPeople);
+  loadReconciliationPeople();
   el('zvReconcileFilter').addEventListener('change',showReconciliation);
   el('zvReconcileSector').addEventListener('change',()=>{fillReconciliationPeople();showReconciliation();});
   el('zvReconcileEmployee').addEventListener('change',showReconciliation);
