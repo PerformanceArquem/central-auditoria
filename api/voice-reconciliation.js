@@ -62,9 +62,15 @@ const recordingIdFromCall=c=>{
  const raw=String(c.url_gravacao||'');
  try{
   const url=new URL(raw);
-  if(url.protocol!=='https:'||url.hostname!=='voice-api.zenvia.com')return '';
-  const match=/^\/rec\/(\d{6,15})$/.exec(url.pathname);
-  return match?.[1]||'';
+  // Formatos documentados: /rec/?id=... e /rec/{id}.
+  // Só hosts oficiais conhecidos; sem seguir links nem revelar seus parâmetros.
+  const hosts=new Set(['voice-api.zenvia.com','voice-app.zenvia.com','api.evoline.com.br']);
+  if(url.protocol!=='https:'||!hosts.has(url.hostname))return '';
+  const path=/^\/rec\/(\d{6,15})\/?$/.exec(url.pathname);
+  if(path)return path[1];
+  if(url.pathname!=='/rec/'&&url.pathname!=='/rec')return '';
+  const id=url.searchParams.get('id');
+  return /^\d{6,15}$/.test(id||'')?id:'';
  }catch(_){return '';}
 };
 export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
