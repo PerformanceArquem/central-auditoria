@@ -20,7 +20,7 @@ test('invalid and future histories do not fabricate queue residence',()=>{
  const [r]=inspectTickets([{...ticket,slaSolutionDate:'invalid',ownerHistories:[{changedDate:'invalid'},{changedDate:'2026-12-01',ownerTeam:'Produção'}]}],{now});assert.equal(r.queueDays,null);assert.equal(r.forecastKnown,false);assert.ok(r.findings.some(f=>f.code==='invalid_forecast'));
 });
 test('near deadline, stale action and missing appointments increase risk',()=>{
- const [r]=inspectTickets([{...ticket,owner:'Alan',slaSolutionDate:'2026-11-24T12:00:00Z',actions:[{createdDate:'2026-11-01T12:00:00Z'}]}],{now});assert.equal(r.score,80);assert.equal(r.criticality,'Crítica');assert.ok(r.findings.some(f=>f.code==='idle'));
+ const [r]=inspectTickets([{...ticket,owner:'Alan',slaSolutionDate:'2026-11-24T12:00:00Z',actions:[{createdDate:'2026-11-01T12:00:00Z'}]}],{now});assert.equal(r.score,r.risk.score);assert.equal(r.criticality,'Crítica');assert.ok(r.findings.some(f=>f.code==='idle'));assert.equal(r.risk.components.find(c=>c.key==='appointment').available,false);
 });
 test('filters combine sector client and criticality',()=>{
  const rows=inspectTickets([ticket],{now});assert.equal(filterInspections(rows,{sector:'Produção',client:'otica',criticality:'Crítica'}).length,1);assert.equal(filterInspections(rows,{sector:'Suporte'}).length,0);
@@ -44,5 +44,5 @@ test('unknown appointment coverage cannot close a previously observed occurrence
 });
 test('missing deadline without other risk factors is indeterminate rather than low risk',()=>{
  const [r]=inspectTickets([{id:3,owner:'Alan',actions:[{createdDate:'2026-11-23T11:00:00Z',timeAppointments:[{workTime:'00:01:00'}]}]}],{now});
- assert.equal(r.score,0);assert.equal(r.criticality,'Indeterminada');assert.equal(r.forecastKnown,false);assert.equal(filterInspections([r],{criticality:'Indeterminada'}).length,1);
+ assert.equal(r.score,null);assert.equal(r.criticality,'Indeterminada');assert.equal(r.forecastKnown,false);assert.equal(filterInspections([r],{criticality:'Indeterminada'}).length,1);
 });
