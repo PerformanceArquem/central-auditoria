@@ -200,3 +200,11 @@ test('DID scope approval is mandatory even when its number exists in Zenvia cata
  assert.match(source,/ZENVIA_URA_SCOPE_CONFIRMED!=='true'/);
  assert.doesNotMatch(source,/matched\.some\(row=>!row\.ura_id/);
 });
+
+test('a conflicting explicit call ID blocks weaker phone-time association',()=>{
+ const t=ticket(1100,'2026-11-20T10:01:00-03:00','41999990000');
+ t.payload.zenviaCallId='other-call';
+ const result=run([call(1101,'2026-11-20T10:00:00-03:00','41999990000')],[t]);
+ assert.equal(result.stats.possivel_vinculo,0);
+ assert.equal(result.stats.sem_vinculo_identificado,1);
+});
