@@ -1,0 +1,21 @@
+name: Validate ticket inspection
+on:
+  pull_request:
+    paths: ['lib/ticket-inspection.mjs', 'ui/ticket-inspection.mjs', 'api/audit-ticket-inspection.js', 'supabase/migrations/*ticket_inspection*', 'tests/ticket-inspection*.mjs', 'index.html', '.github/workflows/validate-ticket-inspection.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check ui/ticket-inspection.mjs
+      - run: node --test tests/ticket-inspection.test.mjs tests/ticket-inspection-api.test.mjs
+      - name: Prepare disposable PostgreSQL runtime
+        run: npm install --prefix "$RUNNER_TEMP/ticket-inspection-db" --no-save --ignore-scripts @electric-sql/pglite@0.6.0
+      - name: Validate migration and database permissions locally
+        run: TICKET_INSPECTION_PGLITE_MODULE="file://$RUNNER_TEMP/ticket-inspection-db/node_modules/@electric-sql/pglite/dist/index.js" node --test tests/ticket-inspection-db.test.mjs
