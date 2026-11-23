@@ -22,6 +22,7 @@ function remoteDetails(details,id){
     paragraph(output,'Origem sincronizada em '+(data.sourceSyncedAt?date(Date.parse(data.sourceSyncedAt)):'data não informada'));
     const item=data.item;
     paragraph(output,item.closed?'Chamado encerrado na origem.':'Risco sincronizado: '+item.criticality+' ('+item.score+'/100) · '+item.owner+' · '+item.sector);
+    if(!item.closed&&!item.forecastKnown)paragraph(output,'Sem previsão válida: não é possível estimar o vencimento. A pontuação reflete os demais fatores observados.');
     for(const f of item.findings)paragraph(output,f.label);
     for(const gap of item.gaps||[])paragraph(output,gap);
     for(const h of item.timeline||[])paragraph(output,date(h.at)+' → '+date(h.until)+' · '+(h.sector||'Setor não informado')+' · '+(h.owner||'Responsável não informado')+' · '+h.hours.toFixed(1)+' h');
@@ -50,7 +51,7 @@ function render(){
   const body=panel.querySelector('tbody');body.replaceChildren();
   for(const r of rows.slice(0,200)){
     const tr=document.createElement('tr');
-    for(const text of [r.id,r.subject,r.client,r.sector,r.owner,r.criticality+' ('+r.score+'/100)',r.findings.map(f=>f.label).join('; ')||'Sem ocorrências',r.reasons.join('; ')||'Sem agravantes identificados'])cell(tr,text);
+    for(const text of [r.id,r.subject,r.client,r.sector,r.owner,r.criticality+' ('+r.score+'/100)'+(!r.forecastKnown?' · prazo indeterminado':''),r.findings.map(f=>f.label).join('; ')||'Sem ocorrências',r.reasons.join('; ')||'Sem agravantes identificados'])cell(tr,text);
     const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Histórico e transferências';details.append(summary);
     for(const h of r.timeline){const p=document.createElement('p');p.textContent=date(h.at)+' → '+date(h.until)+' · '+(h.sector||'Setor não informado')+' · '+(h.owner||'Responsável não informado')+' · '+h.hours.toFixed(1)+' h';details.append(p);}
     for(const e of history.filter(e=>e.id===r.id)){const p=document.createElement('p');p.textContent=e.label+' · detectado '+date(e.openedAt)+(e.resolvedAt?' · encerrado '+date(e.resolvedAt):' · ativo');details.append(p);}

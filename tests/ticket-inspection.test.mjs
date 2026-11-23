@@ -42,3 +42,7 @@ test('unknown appointment coverage cannot close a previously observed occurrence
  const next=recordOccurrences(first,inspectTickets([{...ticket,actions:undefined}],{now}),now+1);
  assert.equal(next.find(e=>e.key==='1:no_appointments').resolvedAt,null);
 });
+test('missing deadline without other risk factors is indeterminate rather than low risk',()=>{
+ const [r]=inspectTickets([{id:3,owner:'Alan',actions:[{createdDate:'2026-11-23T11:00:00Z',timeAppointments:[{workTime:'00:01:00'}]}]}],{now});
+ assert.equal(r.score,0);assert.equal(r.criticality,'Indeterminada');assert.equal(r.forecastKnown,false);assert.equal(filterInspections([r],{criticality:'Indeterminada'}).length,1);
+});

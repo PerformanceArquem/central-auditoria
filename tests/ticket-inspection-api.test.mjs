@@ -73,6 +73,10 @@ test('closed source explicitly resolves tracked checks without fabricating an op
 test('upstream failures return a safe error without tokens or raw provider messages',async()=>{
  configure();globalThis.fetch=async()=>{throw Error('secret-source PRIVATE DESCRIPTION');};const r=await invoke();assert.equal(r.code,502);assert.doesNotMatch(JSON.stringify(r.data),/secret-source|PRIVATE DESCRIPTION/);
 });
+test('old synchronization is clearly warned without claiming current coverage',async()=>{
+ configure({records:[{ticket_id:'1',source_synced_at:'2020-01-01T00:00:00Z',payload:{id:1,owner:'Alan'}}]});
+ const r=await invoke();assert.equal(r.code,200);assert.ok(r.data.warnings.some(w=>w.includes('mais de 24 horas')));
+});
 test('migration restricts access, serializes per ticket and enforces request uniqueness',()=>{
  const sql=readFileSync(new URL('../supabase/migrations/20261123143000_ticket_inspection_staging.sql',import.meta.url),'utf8');
  assert.match(sql,/enable row level security/i);assert.match(sql,/revoke all.*from public,anon,authenticated/i);assert.match(sql,/request_id uuid not null unique/i);assert.match(sql,/pg_advisory_xact_lock/);assert.match(sql,/source_synced_at>p_source_synced_at/);

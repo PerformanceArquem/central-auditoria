@@ -5,7 +5,7 @@ export default async function handler(req,res){
   res.setHeader('Cache-Control','private, no-store');res.setHeader('Allow','GET, POST');
   const fail=(status,error)=>res.status(status).json({ok:false,error});
   if(!['GET','POST'].includes(req.method))return fail(405,'Método não permitido');
-  if(process.env.TICKET_INSPECTION_ENABLED!=='true')return fail(503,'Fiscalização sincronizada ainda não habilitada para testes.');
+  if(process.env.TICKET_INSPECTION_ENABLED!=='true')return fail(503,'Consulta sincronizada de fiscalização ainda não habilitada.');
   const id=String(req.query?.id||'');
   if(!/^\d{1,12}$/.test(id))return fail(400,'Número de chamado inválido');
   const bearer=/^Bearer ([A-Za-z0-9._-]{1,16000})$/.exec(req.headers.authorization||'');
@@ -47,6 +47,8 @@ export default async function handler(req,res){
     const item=items[0]||{id,findings:[],evaluatedCodes:codes,closed:true};
     const sourceAt=source.source_synced_at||null;
     const warnings=['Os resultados refletem somente os dados sincronizados; ausência de histórico não comprova ausência de transferências.'];
+    if(!sourceAt||!Number.isFinite(Date.parse(sourceAt)))warnings.push('Data da sincronização indisponível: confira a atualização na origem.');
+    else if(now-Date.parse(sourceAt)>86400000)warnings.push('Dados sincronizados há mais de 24 horas: confira a situação atual antes de cobrar o responsável.');
     let history=[],historyPartial=false,saved=false;
     if(storage){
       if(req.method==='POST'){
