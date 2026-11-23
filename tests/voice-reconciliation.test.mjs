@@ -18,7 +18,7 @@ test('matches a single incoming call to a nearby ticket with the same normalized
  assert.equal(r.stats.vinculado,0);
  assert.equal(r.records[0].ticketId,'101');
  assert.equal(r.records[0].phoneMasked,'••••0000');
- assert.equal(r.records[0].matchMethod,'telefone_horario');
+ assert.equal(r.records[0].matchMethod,'telefone_horario_evento');
  assert.ok(!JSON.stringify(r).includes('41999990000'));
 });
 test('abandoned calls without tickets remain explicit, not assumed to be integration errors',()=>{
@@ -65,8 +65,8 @@ test('two calls pointing to one ticket are not incorrectly labeled missing',()=>
   call(22,'2026-11-20T10:05:00-03:00','41988887777')
  ];
  const r=run(calls,[ticket(99,'2026-11-20T10:02:00-03:00','41988887777')]);
- assert.equal(r.stats.possivel_vinculo,1);
- assert.equal(r.stats.ticket_ja_utilizado,1);
+ assert.equal(r.stats.possivel_vinculo,0);
+ assert.equal(r.stats.ambiguo,2);
  assert.equal(r.stats.sem_vinculo_identificado,0);
 });
 test('coverage separates missing phone data from actual unmatched calls',()=>{
@@ -126,4 +126,26 @@ test('telephony evidence is returned as action origin codes, not private text',(
  assert.deepEqual(r.records[0].movideskTelephonyOrigins,['13']);
  assert.equal(r.coverage.telephonyActionsWithoutCallId,1);
  assert.ok(!JSON.stringify(r).includes('private call details'));
+});
+
+test('ticket created hours before the telephone action can still match a call by action timestamp',()=>{
+ const t={ticket_id:'800',created_at_source:'2026-11-20T02:00:00-03:00',
+  payload:{clients:[{phone:'41999990000'}],actions:[{origin:16,createdDate:'2026-11-20T10:01:00-03:00'}]}};
+ const r=run([call(801,'2026-11-20T10:00:00-03:00','41999990000','cancelada')],[t]);
+ assert.equal(r.stats.possivel_vinculo,1);
+ assert.equal(r.records[0].deltaSeconds,60);
+});
+test('the same phone with events on different times matches each call to its own ticket',()=>{
+ const calls=[call(810,'2026-11-20T08:00:00-03:00','41999990000'),
+  call(811,'2026-11-20T15:00:00-03:00','41999990000')];
+ const r=run(calls,[ticket(812,'2026-11-20T08:02:00-03:00','41999990000'),
+  ticket(813,'2026-11-20T15:01:00-03:00','41999990000')]);
+ assert.equal(r.stats.possivel_vinculo,2);
+ assert.deepEqual(r.records.map(x=>x.ticketId),['812','813']);
+});
+test('tickets without telephone action timestamp are not matched by creation time alone',()=>{
+ const t={ticket_id:'900',created_at_source:'2026-11-20T10:01:00-03:00',
+  payload:{clients:[{phone:'41999990000'}],actions:[{origin:16}]}};
+ const r=run([call(901,'2026-11-20T10:00:00-03:00','41999990000')],[t]);
+ assert.equal(r.stats.sem_vinculo_identificado,1);
 });
