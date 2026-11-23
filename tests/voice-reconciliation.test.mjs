@@ -250,11 +250,86 @@ test('sector and employee dropdowns filter reconciliation and its export',()=>{
   "'sector','employee'"])assert.ok(html.includes(item),item);
 });
 
-test('URA reconciliation uses its own seven-day date selectors, preserving monthly voice metrics',()=>{
+test('URA reconciliation uses independent date selectors defaulting to seven days, preserving monthly voice metrics',()=>{
  const html=readFileSync('index.html','utf8');
  assert.match(html,/id="zvReconcileStart"/);
  assert.match(html,/id="zvReconcileEnd"/);
  assert.match(html,/const start=el\('zvReconcileStart'\)\.value,end=el\('zvReconcileEnd'\)\.value/);
  assert.match(html,/el\('zvStart'\)\.value=today\.slice\(0,7\)\+'-01'/);
  assert.match(html,/Date\.parse\(today\+'T12:00:00Z'\)-6\*86400000/);
+});
+
+
+test('date validation accepts 8 and 31 inclusive days and rejects longer or invalid ranges',async()=>{
+ const context=vm.createContext({Date,Math,Number,String,Array,Object,Set,URL,JSON,parseInt,process:{env:{}}});
+ vm.runInContext(source+'\nthis.handler=handler;',context);
+ const request=async(start,end)=>{
+  const res={setHeader(){},status(code){this.code=code;return this;},json(body){this.body=body;return this;}};
+  await context.handler({method:'GET',query:{start,end}},res);
+  return res;
+ };
+ for(const [start,end] of [['2026-11-01','2026-11-08'],['2026-10-01','2026-10-31'],['2026-11-23','2026-11-23']]){
+  const res=await request(start,end);
+  assert.equal(res.code,503); // Passed date validation; integrations deliberately unconfigured.
+ }
+ for(const [start,end] of [['2026-10-01','2026-11-01'],['2026-11-23','2026-11-01'],['2026-02-30','2026-03-01'],['','2026-11-23']]){
+  assert.equal((await request(start,end)).code,400);
+ }
+ const html=readFileSync('index.html','utf8');
+ assert.ok(html.includes('/86400000>30)throw Error'));
+ assert.ok(html.includes('31 dias corridos'));
+});
+
+
+test('directory loads independently of dates, URA and Zenvia, paginates and omits private fields',async()=>{
+ const requests=[];
+ const ctx=vm.createContext({Date,Math,Number,String,Array,Object,Set,Map,URL,JSON,parseInt,AbortController,setTimeout,clearTimeout,
+ process:{env:{SUPABASE_URL:'https://test.invalid',SUPABASE_SERVICE_ROLE_KEY:'service',MOVIDESK_TOKEN:'secret'}},
+ fetch:async(url)=>{
+  const u=new URL(url);requests.push(u);
+  if(u.pathname==='/auth/v1/user')return {ok:true,json:async()=>({id:'admin'})};
+  if(u.pathname==='/rest/v1/audit_users')return {ok:true,json:async()=>[{role:'admin',is_active:true}]};
+  assert.equal(u.pathname,'/public/v1/persons');
+  const rows=u.searchParams.get('$skip')==='0'
+   ?Array.from({length:100},(_,i)=>({id:String(i+1),businessName:'Agent '+i,teams:['Suporte'],profileType:1,isActive:true,email:'private@example.com'}))
+   :[{id:'101',businessName:'Other',teams:['Inteligencia','Suporte'],profileType:3,isActive:true},
+    {id:'102',businessName:'Inactive',teams:['Hidden'],profileType:1,isActive:false},
+    {id:'103',businessName:'Client',teams:['Hidden'],profileType:2,isActive:true}];
+  return {ok:true,json:async()=>rows};
+ }});
+ vm.runInContext(source+'\nthis.handler=handler;',ctx);
+ const res={setHeader(){},status(code){this.code=code;return this;},json(body){this.body=body;return this;}};
+ await ctx.handler({method:'GET',headers:{authorization:'Bearer user'},query:{action:'directory'}},res);
+ assert.equal(res.code,200);assert.equal(res.body.employees.length,101);
+ assert.deepEqual(Array.from(res.body.sectors),['Inteligencia','Suporte']);
+ assert.ok(!JSON.stringify(res.body).includes('private@example.com'));
+ assert.ok(!JSON.stringify(res.body).includes('secret'));
+ assert.equal(requests.filter(u=>u.pathname==='/public/v1/persons').length,2);
+});
+
+test('directory rejects non-admin access before consulting Movidesk',async()=>{
+ let calls=0;
+ const ctx=vm.createContext({Date,Math,Number,String,Array,Object,Set,Map,URL,JSON,parseInt,AbortController,setTimeout,clearTimeout,
+ process:{env:{SUPABASE_URL:'https://test.invalid',SUPABASE_SERVICE_ROLE_KEY:'service',MOVIDESK_TOKEN:'secret'}},
+ fetch:async()=>{calls++;return {ok:true,json:async()=>calls===1?{id:'user'}:[{role:'viewer',is_active:true}]};}});
+ vm.runInContext(source+'\nthis.handler=handler;',ctx);
+ const res={setHeader(){},status(code){this.code=code;return this;},json(body){return this;}};
+ await ctx.handler({method:'GET',headers:{authorization:'Bearer user'},query:{action:'directory'}},res);
+ assert.equal(res.code,403);assert.equal(calls,2);
+});
+
+test('employee selector uses Movidesk membership even with no reconciled calls',()=>{
+ const html=readFileSync('index.html','utf8');
+ const fn=html.slice(html.indexOf('function fillReconciliationPeople(){'),html.indexOf('async function loadReconciliationPeople(){'));
+ const select=()=>({value:'',options:[],replaceChildren(option){this.options=[option];},add(option){this.options.push(option);}});
+ const sector=select(),employee=select();
+ const ctx=vm.createContext({Set,Option:function(text,value){this.text=text;this.value=value;},
+ el:id=>id==='zvReconcileSector'?sector:employee,
+ reconcileDirectory:{sectors:['Suporte','Producao'],employees:[{name:'Ana',teams:['Suporte']},{name:'Bia',teams:['Producao','Suporte']},{name:'Caio',teams:['Producao']}]}});
+ vm.runInContext(fn+';fillReconciliationPeople();',ctx);
+ assert.equal(sector.options.length,3);assert.equal(employee.options.length,4);
+ sector.value='Suporte';vm.runInContext('fillReconciliationPeople();',ctx);
+ assert.deepEqual(employee.options.map(x=>x.value),['','Ana','Bia']);
+ employee.value='Ana';sector.value='Producao';vm.runInContext('fillReconciliationPeople();',ctx);
+ assert.deepEqual(employee.options.map(x=>x.value),['','Bia','Caio']);assert.equal(employee.value,'');
 });
