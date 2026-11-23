@@ -908,6 +908,8 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 <script src="/ai-reports.js" defer></script>
 <script type="module" src="/ui/ticket-inspection.mjs"></script>
 <style id="ai-reports-style">#aiReportPanel .ai-report-message{padding:12px 14px;max-width:90%;border-radius:12px;background:#eff5fd;border:1px solid #d7e4f3;color:#243c55;overflow-wrap:anywhere}#aiReportPanel .ai-report-user{align-self:flex-end;background:#e4f0ff}#aiReportPanel .ai-report-assistant{align-self:flex-start}#aiReportPanel .ai-report-message strong{display:block;margin-bottom:6px;font-size:12px}#aiReportPanel .ai-report-message div{font-size:14px;line-height:1.5}#aiReportRanking ol{padding-left:25px}#aiReportRanking li{margin:5px 0}@media(max-width:700px){#aiReportPanel .fg{min-width:140px;flex:1 1 45%}#aiReportPanel .ai-report-message{max-width:100%}}</style>
+<script src="/ui/ura-periods.js"></script>
+<script src="/ui/ura-recording.js" defer></script>
 </head>
     <body class="tm-locked">
         <form id="tm-login" class="card" hidden>
@@ -1323,10 +1325,13 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
     <select id="zvReconcileFilter"><option value="all">Todas</option><option value="sem_vinculo_identificado">Sem vínculo identificado</option><option value="vinculado">Vínculos por ID</option><option value="vinculado_gravacao">Vínculos por gravação</option><option value="possivel_vinculo">Possíveis vínculos (telefone + horário do evento)</option><option value="ambiguo">Ambíguas</option><option value="dados_insuficientes">Dados insuficientes</option></select>
     <button type="button" id="zvReconcileCsv" class="b" disabled>Exportar CSV</button>
    </div>
-   <p id="zvReconcileStatus" class="subtle" role="status">A consulta permite até 31 dias corridos, independentes do período das métricas. Os filtros usam o cadastro de agentes e equipes do Movidesk. Para consultar a URA, confirme os números DID no servidor.</p>
+   <p id="zvReconcileStatus" class="subtle" role="status">Selecione até 365 dias corridos. A consulta é processada mês a mês, com resumo mensal e detalhamento. Os filtros usam o cadastro de agentes e equipes do Movidesk.</p>
    <p id="zvReconcilePeopleStatus" class="subtle" role="status"></p>
    <div id="zvReconcileKpis" class="kpis"></div>
-   <div class="tablewrap"><table><thead><tr><th>Data</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação</th><th>Conciliação</th><th>Chamado</th><th>Setor</th><th>Funcionário</th><th>Evento Movidesk</th><th>Diferença (seg.)</th><th>Critério</th></tr></thead><tbody id="zvReconcileRows"></tbody></table></div>
+   <h4>Resumo mensal — todas as ligações do período</h4>
+   <button type="button" id="zvMonthlyCsv" class="b noprint" disabled>Exportar resumo mensal (CSV)</button>
+   <div class="tablewrap"><table><thead><tr><th>Mês</th><th>Ligações</th><th>Vínculos confirmados</th><th>Possíveis</th><th>Ambíguas</th><th>Sem vínculo</th><th>Com gravação</th><th>Canceladas/abandonadas</th></tr></thead><tbody id="zvMonthlyRows"></tbody></table></div>
+   <div class="tablewrap"><table><thead><tr><th>Data</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação</th><th>Conciliação</th><th>Chamado</th><th>Setor</th><th>Funcionário</th><th>Evento Movidesk</th><th>Diferença (seg.)</th><th>Critério</th><th>Mês</th><th>Gravação</th></tr></thead><tbody id="zvReconcileRows"></tbody></table></div>
    <p class="subtle">O telefone e o horário sugerem vínculo, mas somente um identificador compartilhado comprova a ligação ao chamado. A chamada no DID não confirma que o cliente ouviu o menu da URA. A ausência de vínculo não prova falha de abertura: depende da regra de criação, do histórico da URA e dos identificadores disponíveis em ambas as APIs.</p>
   </div>
   <div class="card" id="zvUnlinkedReport" style="display:none">
@@ -1337,7 +1342,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
    <div id="zvUnlinkedEvidence" class="kpis"></div>
    <p class="subtle">Lista completa do período, independente dos filtros de setor e funcionário. Sem chamado associado, não é possível atribuir um setor ou responsável a essas ligações.</p>
    <button type="button" id="zvUnlinkedCsv" class="b noprint" disabled>Exportar detalhamento sem vínculo (CSV)</button>
-   <div class="tablewrap"><table><thead><tr><th>Nº</th><th>Data e horário</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação da ligação</th><th>Gravação</th><th>Duração total</th><th>Tempo falado</th><th>Ramal informado</th><th>Conclusão da URA</th><th>Resultado do cruzamento</th></tr></thead><tbody id="zvUnlinkedRows"></tbody></table></div>
+   <div class="tablewrap"><table><thead><tr><th>Nº</th><th>Data e horário</th><th>ID Zenvia</th><th>Telefone mascarado</th><th>Situação da ligação</th><th>Gravação</th><th>Duração total</th><th>Tempo falado</th><th>Ramal informado</th><th>Conclusão da URA</th><th>Resultado do cruzamento</th><th>Mês</th><th>Link da gravação</th></tr></thead><tbody id="zvUnlinkedRows"></tbody></table></div>
    <p class="subtle">Gravação e situação são informações independentes: uma ligação cancelada também pode ter gravação. Gravação informada indica uma referência retornada pela Zenvia; não verifica o áudio. Atendimento, duração ou ramal não comprovam que o cliente percorreu a URA até o final. O relatório de chamadas não fornece essa confirmação.</p>
    <p class="subtle">Sem vínculo identificado não comprova ausência de chamado nem falha de abertura. O cruzamento não encontrou correspondência nos dados disponíveis. Horários de Brasília.</p>
   </div>
@@ -6862,9 +6867,23 @@ async function loadReconciliationPeople(){
   }catch(e){status.textContent='Cadastro indisponível: '+e.message;}
   finally{button.disabled=false;}
  }
+function recordingPage(r){return r.recordingState==='informada'&&/^[1-9]\d{0,14}$/.test(String(r.callId||''))?'https://central-auditoria-iota.vercel.app/?uraRecording='+encodeURIComponent(r.callId):'';}
+ function appendRecordingCell(tr,r){const td=document.createElement('td'),href=recordingPage(r);if(href){const a=document.createElement('a');a.href=href;a.target='_blank';a.rel='noopener noreferrer';a.textContent='Ouvir gravação';td.appendChild(a);}else td.textContent='Não informada';tr.appendChild(td);}
+ function showMonthlyReconciliation(){
+  const root=el('zvMonthlyRows');root.replaceChildren();el('zvMonthlyCsv').disabled=!reconcileDataset;
+  if(!reconcileDataset)return;
+  for(const g of UraPeriods.monthly(reconcileDataset)){const tr=document.createElement('tr');for(const v of [UraPeriods.label(g.month),g.total,g.confirmed,g.possible,g.ambiguous,g.unlinked,g.recorded,g.canceled])addCell(tr,v);root.appendChild(tr);}
+ }
+ function downloadMonthlyReconciliation(){
+  if(!reconcileDataset)return;
+  const lines=[['ARQUEM SISTEMAS / Central de Auditoria'],['Conciliação URA por mês',reconcileDataset.from,reconcileDataset.to],['Mês','Ligações','Vínculos confirmados','Possíveis','Ambíguas','Sem vínculo','Com gravação','Canceladas/abandonadas'],
+   ...UraPeriods.monthly(reconcileDataset).map(g=>[UraPeriods.label(g.month),g.total,g.confirmed,g.possible,g.ambiguous,g.unlinked,g.recorded,g.canceled])];
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.map(row=>row.map(q).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a');a.href=url;a.download='ura-resumo-mensal-'+reconcileDataset.from+'-'+reconcileDataset.to+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
 function buildUnlinkedReport(data){
   const records=data?.records||[];
-  const missing=records.filter(r=>r.reconciliation==='sem_vinculo_identificado');
+  const missing=records.filter(r=>r.reconciliation==='sem_vinculo_identificado').sort((a,b)=>String(a.startedAt).localeCompare(String(b.startedAt)));
   const day=value=>/^\d{4}-\d{2}-\d{2}$/.test(value||'')?value.split('-').reverse().join('/'):'Não informado';
   const at=value=>{const t=Date.parse(value||'');return Number.isFinite(t)
    ?new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'medium'}).format(t):'Não informado';};
@@ -6881,10 +6900,10 @@ function buildUnlinkedReport(data){
     ['Conclusão da URA não comprovada',missing.length]],
    summary:'Das '+records.length+' ligações consultadas, '+missing.length+' ficaram sem vínculo identificado com chamado do Movidesk.',
    period:'Período: '+day(data?.from)+' a '+day(data?.to),
-   headers:['Nº','Data e horário (Brasília)','ID Zenvia','Telefone mascarado','Situação da ligação','Gravação','Duração total','Tempo falado','Ramal informado','Conclusão da URA','Resultado do cruzamento'],
+   headers:['Nº','Data e horário (Brasília)','ID Zenvia','Telefone mascarado','Situação da ligação','Gravação','Duração total','Tempo falado','Ramal informado','Conclusão da URA','Resultado do cruzamento','Mês','Link da gravação (acesso autenticado)'],
    rows:missing.map((r,i)=>[i+1,at(r.startedAt),r.callId||'Não informado',r.phoneMasked||'Indisponível',labels[r.status]||'Indeterminada',
     recordingLabels[r.recordingState]||recordingLabels.desconhecida,duration(r.durationSeconds),duration(r.talkSeconds),
-    r.extensionReported===true?'Sim':r.extensionReported===false?'Não':'Não informado','Não comprovada pela API','Sem vínculo identificado'])};
+    r.extensionReported===true?'Sim':r.extensionReported===false?'Não':'Não informado','Não comprovada pela API','Sem vínculo identificado',UraPeriods.label(UraPeriods.month(r)),recordingPage(r)])};
  }
  function showUnlinkedReport(){
   const card=el('zvUnlinkedReport'),root=el('zvUnlinkedRows');root.replaceChildren();el('zvUnlinkedEvidence').replaceChildren();
@@ -6894,7 +6913,7 @@ function buildUnlinkedReport(data){
   el('zvUnlinkedSummary').textContent=report.summary;
   el('zvUnlinkedPeriod').textContent=report.period;
   for(const [label,value] of report.evidence){const box=document.createElement('div');box.className='kpi';const title=document.createElement('div');title.textContent=label;const strong=document.createElement('strong');strong.textContent=String(value);box.append(title,strong);el('zvUnlinkedEvidence').appendChild(box);}
-  for(const row of report.rows){const tr=document.createElement('tr');for(const v of row)addCell(tr,v);root.appendChild(tr);}
+  for(const row of report.rows){const tr=document.createElement('tr');for(const v of row.slice(0,-1))addCell(tr,v);const td=document.createElement('td');if(row.at(-1)){const a=document.createElement('a');a.href=row.at(-1);a.target='_blank';a.rel='noopener noreferrer';a.textContent='Ouvir gravação';td.appendChild(a);}else td.textContent='Não informada';tr.appendChild(td);root.appendChild(tr);}
   if(!report.count){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=report.headers.length;td.textContent='Nenhuma ligação sem vínculo identificado neste período.';tr.appendChild(td);root.appendChild(tr);}
  }
  function downloadUnlinkedReport(){
@@ -6916,40 +6935,50 @@ function showReconciliation(){
   for(const r of rows){
    const tr=document.createElement('tr');
    for(const v of [r.startedAt,r.callId,r.phoneMasked,names[r.status]||r.status,names[r.reconciliation]||r.reconciliation,r.ticketId,r.sector||'Não identificado',r.employee||'Não identificado',(r.movideskTelephonyOrigins||[]).join(', ')||'—',r.deltaSeconds,names[r.matchMethod]||r.matchMethod])addCell(tr,v??'—');
-   root.appendChild(tr);
+   addCell(tr,UraPeriods.label(UraPeriods.month(r)));appendRecordingCell(tr,r);root.appendChild(tr);
   }
-  el('zvReconcileStatus').textContent=rows.length+' ligação(ões) exibidas de '+data.records.length+' no período '+data.from+' a '+data.to+'. '+data.metadata.ticketsExamined+' chamados examinados. Referências de gravação: '+data.coverage.ticketsWithRecordingReference+'. Sem ID de chamada nas ações de telefonia: '+data.coverage.telephonyActionsWithoutCallId+'. Cobertura: '+data.coverage.callsWithPhone+' ligações com telefone e '+data.coverage.ticketsWithPhone+' chamados com telefone. Nenhuma alteração realizada.';
+  el('zvReconcileStatus').textContent=rows.length+' ligação(ões) exibidas de '+data.records.length+' no período '+data.from.split('-').reverse().join('/')+' a '+data.to.split('-').reverse().join('/')+'. '+data.metadata.ticketsExamined+' leituras de chamados em '+data.metadata.batches+' consulta(s) mensais; um chamado pode ser examinado em mais de um mês. Nenhuma alteração realizada.';
  }
  async function runReconciliation(){
   const btn=el('zvReconcile');btn.disabled=true;reconcileDataset=null;
   showUnlinkedReport();
+  showMonthlyReconciliation();
   el('zvReconcileCsv').disabled=true;el('zvReconcileRows').replaceChildren();el('zvReconcileKpis').replaceChildren();
   el('zvReconcileStatus').textContent='Consultando as APIs...';
   try{
    const start=el('zvReconcileStart').value,end=el('zvReconcileEnd').value;
-   if(!valid(start)||!valid(end)||start>end||(Date.parse(end)-Date.parse(start))/86400000>30)throw Error('Selecione um intervalo de até 31 dias corridos.');
+   const periods=UraPeriods.windows(start,end);
    const session=await window.tmAuth?.getSession?.();
    if(!session?.access_token)throw Error('É necessário entrar na Central.');
-   const resp=await fetch('/api/voice-reconciliation?'+new URLSearchParams({start,end}),{headers:{Authorization:'Bearer '+session.access_token},cache:'no-store'});
-   const data=await resp.json().catch(()=>({}));
-   if(!resp.ok||!data.ok)throw Error(data.error||'As APIs não retornaram dados válidos.');
+   const parts=[];
+   for(const [index,period] of periods.entries()){
+    if(start!==el('zvReconcileStart').value||end!==el('zvReconcileEnd').value)throw Error('Período alterado durante a consulta.');
+    el('zvReconcileStatus').textContent='Consultando '+UraPeriods.label(period.month)+' — mês '+(index+1)+' de '+periods.length+'...';
+    const currentSession=await window.tmAuth?.getSession?.();
+    if(!currentSession?.access_token)throw Error('É necessário entrar na Central.');
+    const resp=await fetch('/api/voice-reconciliation?'+new URLSearchParams({start:period.start,end:period.end}),{headers:{Authorization:'Bearer '+currentSession.access_token},cache:'no-store'});
+    const part=await resp.json().catch(()=>({}));
+    if(!resp.ok||!part.ok)throw Error(UraPeriods.label(period.month)+': '+(part.error||'As APIs não retornaram dados válidos.')+' Nenhum relatório parcial foi apresentado como completo.');
+    parts.push(part);
+   }
+   const data=UraPeriods.combine(parts,start,end);
    if(start!==el('zvReconcileStart').value||end!==el('zvReconcileEnd').value)throw Error('Período alterado durante a consulta.');
    reconcileDataset=data;
    fillReconciliationPeople();
    const metrics=[['Entradas nos DIDs da URA',data.stats.total],['Confirmadas por ID',data.stats.vinculado],['Por gravação',data.stats.vinculado_gravacao],['Possíveis (não comprovadas)',data.stats.possivel_vinculo],['Sem vínculo',data.stats.sem_vinculo_identificado],['Ambíguas',data.stats.ambiguo],['Reutilização de chamado',data.stats.ticket_ja_utilizado],['Insuficientes',data.stats.dados_insuficientes],['Abandonadas/canceladas',data.stats.abandonada_ou_cancelada]];
    for(const [label,value] of metrics){const box=document.createElement('div');box.className='kpi';const title=document.createElement('div');title.textContent=label;const strong=document.createElement('strong');strong.textContent=String(value||0);box.append(title,strong);el('zvReconcileKpis').appendChild(box);}
-   el('zvReconcileCsv').disabled=!data.records?.length;showReconciliation();showUnlinkedReport();
+   el('zvReconcileCsv').disabled=!data.records?.length;showReconciliation();showUnlinkedReport();showMonthlyReconciliation();
   }catch(e){el('zvReconcileStatus').textContent='Conciliação indisponível: '+e.message;}
   finally{btn.disabled=false;}
  }
  function downloadReconciliation(){
   if(!reconcileDataset)return;
-  const columns=['startedAt','callId','phoneMasked','status','reconciliation','ticketId','sector','employee','movideskTelephonyOrigins','deltaSeconds','matchMethod'];
+  const columns=['startedAt','callId','phoneMasked','status','reconciliation','ticketId','sector','employee','movideskTelephonyOrigins','deltaSeconds','matchMethod','month','recordingLink'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   const filter=el('zvReconcileFilter').value;
   const sector=el('zvReconcileSector').value,employee=el('zvReconcileEmployee').value;
   const data=reconcileDataset.records.filter(r=>(filter==='all'||r.reconciliation===filter)&&(!sector||r.sector===sector)&&(!employee||r.employee===employee));
-  const lines=[columns.join(';'),...data.map(r=>columns.map(k=>q(r[k])).join(';'))];
+  const lines=[columns.join(';'),...data.map(r=>columns.map(k=>q(k==='month'?UraPeriods.label(UraPeriods.month(r)):k==='recordingLink'?recordingPage(r):r[k])).join(';'))];
   const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a');a.href=url;a.download='conciliacao-voz-'+reconcileDataset.from+'-'+reconcileDataset.to+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
@@ -6968,6 +6997,7 @@ function showReconciliation(){
   el('zvReconcileEmployee').addEventListener('change',showReconciliation);
   el('zvReconcileCsv').addEventListener('click',downloadReconciliation);
   el('zvUnlinkedCsv').addEventListener('click',downloadUnlinkedReport);
+  el('zvMonthlyCsv').addEventListener('click',downloadMonthlyReconciliation);
   el('zvCheck').addEventListener('click',diagnose);
   el('zvReportPreview').addEventListener('click',async()=>{
    const button=el('zvReportPreview');button.disabled=true;el('zvReportStatus').textContent='Preparando prévia sem envio...';

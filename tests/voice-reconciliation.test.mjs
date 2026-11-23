@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
+const periodScope=vm.createContext({Date,Intl,Number,String,Array,Object,Set,Map,Math});
+vm.runInContext(readFileSync('ui/ura-periods.js','utf8'),periodScope);
+const UraPeriods=periodScope.UraPeriods;
+
 const source=readFileSync('api/voice-reconciliation.js','utf8')
   .replace('export function reconcile(', 'function reconcile(')
   .replace('export default async function handler(', 'async function handler(');
@@ -276,8 +280,8 @@ test('date validation accepts 8 and 31 inclusive days and rejects longer or inva
   assert.equal((await request(start,end)).code,400);
  }
  const html=readFileSync('index.html','utf8');
- assert.ok(html.includes('/86400000>30)throw Error'));
- assert.ok(html.includes('31 dias corridos'));
+ assert.ok(html.includes('UraPeriods.windows(start,end)'));
+ assert.ok(html.includes('365 dias corridos'));
 });
 
 
@@ -371,7 +375,7 @@ test('provider rejection reports the failing stage without returning upstream se
 test('unlinked detail lists all 72 of 101 calls independently of department filters',()=>{
  const html=readFileSync('index.html','utf8');
  const fn=html.slice(html.indexOf('function buildUnlinkedReport(data){'),html.indexOf('function showUnlinkedReport(){'));
- const ctx=vm.createContext({Date,Intl,Number,Math});vm.runInContext(fn+';this.build=buildUnlinkedReport;',ctx);
+ const ctx=vm.createContext({Date,Intl,Number,Math,UraPeriods});vm.runInContext(html.slice(html.indexOf('function recordingPage('),html.indexOf('function appendRecordingCell('))+fn+';this.build=buildUnlinkedReport;',ctx);
  const records=Array.from({length:101},(_,i)=>({callId:String(i+1),startedAt:'2026-11-19T16:25:01-03:00',phoneMasked:'****3280',status:'atendida',reconciliation:i<72?'sem_vinculo_identificado':i<96?'ambiguo':'possivel_vinculo',sector:i<72?'':'Suporte'}));
  const data={from:'2026-11-01',to:'2026-11-23',records};
  const r=ctx.build(data);
@@ -408,7 +412,7 @@ test('call evidence separates recording from cancellation without exposing URLs 
 test('unlinked report exports evidence counts and preserves unknown durations',()=>{
  const html=readFileSync('index.html','utf8');
  const fn=html.slice(html.indexOf('function buildUnlinkedReport(data){'),html.indexOf('function showUnlinkedReport(){'));
- const ctx=vm.createContext({Date,Intl,Number,Math});vm.runInContext(fn+';this.build=buildUnlinkedReport;',ctx);
+ const ctx=vm.createContext({Date,Intl,Number,Math,UraPeriods});vm.runInContext(html.slice(html.indexOf('function recordingPage('),html.indexOf('function appendRecordingCell('))+fn+';this.build=buildUnlinkedReport;',ctx);
  const r=ctx.build({from:'2026-11-01',to:'2026-11-23',records:[
  {reconciliation:'sem_vinculo_identificado',status:'abandonada_ou_cancelada',recordingState:'informada',durationSeconds:125,talkSeconds:0,extensionReported:false},
  {reconciliation:'sem_vinculo_identificado',status:'atendida',recordingState:'nao_informada',durationSeconds:null,talkSeconds:null,extensionReported:true},
@@ -418,5 +422,41 @@ test('unlinked report exports evidence counts and preserves unknown durations',(
  assert.equal(r.evidence[3][1],1);assert.equal(r.evidence[6][1],3);
  assert.equal(r.rows[0][6],'00:02:05');assert.equal(r.rows[0][7],'00:00:00');
  assert.notEqual(r.rows[1][6],'00:00:00');
- assert.equal(r.headers.length,11);assert.equal(r.rows[0].length,11);
+ assert.equal(r.headers.length,13);assert.equal(r.rows[0].length,13);
+});
+
+
+test('annual ranges split at month boundaries with 365 inclusive days maximum',()=>{
+ const parts=UraPeriods.windows('2026-01-01','2026-12-31');assert.equal(parts.length,12);
+ assert.equal(parts[0].start,'2026-01-01');assert.equal(parts[0].end,'2026-01-31');
+ assert.equal(parts[1].end,'2026-02-28');assert.equal(parts[11].end,'2026-12-31');
+ for(let i=0;i<parts.length;i++){assert.ok((Date.parse(parts[i].end)-Date.parse(parts[i].start))/86400000<=30);if(i)assert.equal(Date.parse(parts[i].start)-Date.parse(parts[i-1].end),86400000);}
+ assert.throws(()=>UraPeriods.windows('2024-01-01','2024-12-31'));
+ assert.equal(UraPeriods.windows('2024-02-01','2024-03-01')[0].end,'2024-02-29');
+ assert.throws(()=>UraPeriods.windows('2026-02-30','2026-03-01'));
+ assert.throws(()=>UraPeriods.windows('2026-03-01','2026-02-01'));
+});
+
+test('monthly results include empty months, deduplicate calls and mark shared tickets ambiguous',()=>{
+ const part=(records)=>({records,metadata:{ticketsExamined:5},coverage:{callsWithPhone:records.length}});
+ const first={callId:'1',ticketId:'100',startedAt:'2026-01-31T23:55:00-03:00',status:'atendida',reconciliation:'possivel_vinculo',sector:'Suporte'};
+ const second={callId:'2',ticketId:'100',startedAt:'2026-02-01T00:05:00-03:00',status:'atendida',reconciliation:'possivel_vinculo',sector:'Suporte'};
+ const data=UraPeriods.combine([part([first]),part([first,second])],'2026-01-01','2026-03-01');
+ assert.equal(data.records.length,2);assert.equal(data.stats.ambiguo,2);assert.equal(data.stats.possivel_vinculo,0);
+ assert.equal(data.records[0].ticketId,null);assert.equal(data.metadata.ticketsExamined,10);
+ const months=UraPeriods.monthly(data);assert.equal(months.length,3);assert.equal(months[0].total,1);assert.equal(months[1].total,1);assert.equal(months[2].total,0);
+ assert.equal(UraPeriods.month({startedAt:'2026-03-01T01:00:00Z'}),'2026-02');
+});
+
+test('recording link only returns approved-host audio from the authorized DID',async()=>{
+ let callData;
+ const ctx=vm.createContext({Date,Math,Number,String,Array,Object,Set,Map,URL,JSON,parseInt,
+ process:{env:{ZENVIA_URA_DID_NUMBERS:'4130135878',ZENVIA_URA_SCOPE_CONFIRMED:'true'}},
+ fetch:async()=>({ok:true,json:async()=>({sucesso:true,dados:callData})})});
+ vm.runInContext(source+';this.link=recordingLink;',ctx);
+ callData={id:'12',numero_destino:'+554130135878',url_gravacao:'https://voice-api.zenvia.com/rec/123456789'};
+ assert.equal((await ctx.link('12','secret')).code,200);
+ callData.numero_destino='+5541999999999';assert.equal((await ctx.link('12','secret')).code,404);
+ callData.numero_destino='+554130135878';callData.url_gravacao='https://evil.example/audio';assert.equal((await ctx.link('12','secret')).code,404);
+ callData.url_gravacao='https://user:secret@voice-api.zenvia.com/rec/1';assert.equal((await ctx.link('12','secret')).code,404);
 });
