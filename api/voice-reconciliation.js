@@ -29,6 +29,15 @@ const telephonyActions=t=>{
  const raw=t.payload?.actions;
  return Array.isArray(raw)?raw.filter(a=>telephonyActionCodes.has(String(a?.origin??''))):[];
 };
+const ticketSector=t=>{
+ const v=t.payload?.ownerTeam;
+ return typeof v==='string'?v.trim().slice(0,120):'';
+};
+const ticketEmployee=t=>{
+ const v=t.payload?.owner;
+ if(!v||typeof v!=='object'||Array.isArray(v))return '';
+ return String(v.businessName||'').trim().slice(0,140);
+};
 const linkedCallId=t=>{
  const p=t.payload||{};
  const direct=p.zenviaCallId||p.zenvia_call_id||p.voiceCallId||p.callId||p.telephonyCallId;
@@ -125,6 +134,7 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
    ticketId:match?.ticket.ticket_id||null,matchMethod:match?.method||null,
    deltaSeconds:match?Math.round(match.delta/1000):null,
    movideskTelephonyOrigins:match?[...new Set(match.ticket.actions.map(a=>String(a.origin)))]:[],
+   sector:match?ticketSector(match.ticket):'',employee:match?ticketEmployee(match.ticket):'',
    reconciliation:match?(match.method==='id'?'vinculado':match.method==='gravacao'?'vinculado_gravacao':'possivel_vinculo'):
       collision?'ambiguo':number?'sem_vinculo_identificado':'dados_insuficientes'});
  }
