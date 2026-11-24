@@ -19,3 +19,9 @@ Prévia HTTP local isolada, com o menu e barra extraídos do index.html e os arq
 Esta validação cobre apresentação e controles compartilhados em uma prévia com dados fictícios. Não substitui homologação de todos os painéis com sessão autenticada, dados reais, exportações e impressão. A tabela demonstrativa não tem volume suficiente para validar rolagem vertical longa.
 
 A PR permanece em rascunho. Sem merge, publicação, alteração de cron, destinatários ou envio real.
+
+## Correção de foco — continuação
+
+Abertura do menu no celular agora foca a busca. Seleção de módulo no celular fecha o menu e foca o primeiro título h2/h3 do painel, com fallback para o botão do menu. Mudança de breakpoint devolve o foco ao botão se o elemento ativo estava no menu que foi ocultado.
+
+Verificado no navegador na prévia isolada: abertura foca workspaceNavSearch; seleção de Visão geral foca H2 e fecha o menu; desktop para 390×844 com foco na busca passa foco a workspaceMenuToggle com aria-expanded=false. Sintaxe e as sete verificações locais anteriores continuam aprovadas. A prévia só representa o painel demonstrativo; integração com todos os módulos reais segue pendente.
