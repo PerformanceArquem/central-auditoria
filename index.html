@@ -906,6 +906,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 </style>
 <link rel="stylesheet" href="/ui/workspace.css">
 <link rel="stylesheet" href="/ui/theme.css">
+<link rel="stylesheet" href="/ui/dashboard.css">
 <script src="/ui/workspace.js" defer></script>
 <script src="/ai-reports.js" defer></script>
 <script type="module" src="/ui/ticket-inspection.mjs"></script>
@@ -2280,7 +2281,8 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                     </div>
                 </div>
                 <div id="t-charts" class="hide">
-                    <div class="card">
+<nav class="chart-jump noprint" aria-label="Análises disponíveis"><a href="#chartComparisons">Comparar períodos</a><a href="#chartEvolution">Evolução e equipes</a><a href="#chartClients">Clientes</a><a href="#chartCapacity">Capacidade</a><a href="#chartActivities">Atividades</a></nav>
+                    <div class="card chart-controls" id="chartComparisons">
                         <div class="alert-heading"><div><div class="eyebrow">EVOLUÇÃO HISTÓRICA</div><h3>Comparativos mensais e anuais</h3><p class="subtle">Acompanhe a evolução de horas apontadas, chamados trabalhados ou lançamentos, comparando períodos equivalentes.</p></div></div>
                         <div class="row noprint">
                             <div class="fg"><label for="cmpSource">Fonte dos gráficos</label><select id="cmpSource" onchange="comparisonSourceChanged()"><option value="direct" selected>Supabase · sincronização direta</option><option value="local">Painel anterior / cache</option></select></div>
@@ -2292,24 +2294,24 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                         </div>
                         <p id="cmpCoverage" class="coverage-note">Os indicadores utilizam as datas dos apontamentos que constam na base, não a data de atualização do chamado.</p>
                     </div>
-                    <div class="compare-grid">
+                    <div class="compare-grid chart-comparisons">
                         <div class="card"><h3 id="cmpMonthlyTitle">Comparativo mensal · ano atual × anterior</h3><div class="chart-frame tall"><canvas id="chMonthly"></canvas></div></div>
                         <div class="card"><h3 id="cmpAnnualTitle">Comparativo anual · evolução do histórico</h3><div class="chart-frame tall"><canvas id="chAnnual"></canvas></div></div>
                     </div>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px">
-                        <div class="card" style="grid-column:1/-1">
+                    <div class="analysis-grid">
+                        <div class="card analysis-wide" id="chartEvolution">
                             <h3>Progresso acumulado: horas apontadas × capacidade</h3>
-                            <canvas id="chDay" height="80"></canvas>
+                            <div class="chart-frame analysis-line"><canvas id="chDay" role="img" aria-label="Horas acumuladas e capacidade no período"></canvas></div>
                         </div>
-                        <div class="card">
+                        <div class="card" id="chartTeams">
                             <h3>Horas por semana e equipe</h3>
-                            <canvas id="chWeek"></canvas>
+                            <div class="chart-frame analysis-bars"><canvas id="chWeek" role="img" aria-label="Horas por semana e equipe"></canvas></div>
                         </div>
-                        <div class="card">
+                        <div class="card" id="chartClients">
                             <h3>Empresas que mais consomem (laranja = VIP)</h3>
-                            <canvas id="chCli"></canvas>
+                            <div class="chart-frame analysis-ranking"><canvas id="chCli" role="img" aria-label="Clientes com mais horas apontadas"></canvas></div>
                         </div>
-                        <div class="card">
+                        <div class="card analysis-wide" id="chartCapacity">
                             <h3>Horas apontadas × capacidade prevista</h3>
                             <p style="color:var(--muted);margin:0 0 10px">Compare o total de horas efetivamente apontadas com a capacidade prevista para o período, por colaborador e para a equipe.</p>
                             <div class="prog-legend">
@@ -2329,9 +2331,9 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                             </div>
                             <div id="agProg"></div>
                         </div>
-                        <div class="card">
+                        <div class="card analysis-wide" id="chartActivities">
                             <h3>Distribuição por atividade</h3>
-                            <canvas id="chAct"></canvas>
+                            <div class="chart-frame analysis-donut"><canvas id="chAct" role="img" aria-label="Distribuição de horas por atividade"></canvas></div>
                         </div>
                     </div>
                 </div>
@@ -4453,6 +4455,16 @@ const HOUR_CHARTS=new Set(['chDay','chWeek','chCli','chAct']);
 const mkc=(id,cfg)=>{
   if(!window.Chart)return;
   cfg.options=cfg.options||{};
+  if(HOUR_CHARTS.has(id)){cfg.options.responsive=true;cfg.options.maintainAspectRatio=false;}
+  if(id==='chCli'){
+    cfg.options.scales=cfg.options.scales||{};
+    cfg.options.scales.y=cfg.options.scales.y||{};
+    cfg.options.scales.y.ticks={...(cfg.options.scales.y.ticks||{}),callback:value=>{
+      const label=String(cfg.data.labels[value]||''),limit=($(id)?.clientWidth||0)<520?22:38;
+      return label.length>limit?label.slice(0,limit-1)+'…':label;
+    }};
+  }
+  if(id==="chAct"){cfg.options.plugins=cfg.options.plugins||{};cfg.options.plugins.legend={...(cfg.options.plugins.legend||{}),position:"bottom",labels:{boxWidth:12,padding:14}};}
   if(cfg.options.animation===undefined)cfg.options.animation=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?false:{duration:350,easing:'easeOutQuart'};
   const hourChart=HOUR_CHARTS.has(id)||(['chMonthly','chAnnual'].includes(id)&&$('cmpMetric')?.value==='hours');
   if(hourChart){
@@ -4461,10 +4473,12 @@ const mkc=(id,cfg)=>{
     const callbacks=cfg.options.plugins.tooltip.callbacks||{};
     callbacks.label=ctx=>`${ctx.dataset?.label?ctx.dataset.label+': ':''}${H(Number(typeof ctx.parsed==='number'?ctx.parsed:(ctx.parsed?.[cfg.options.indexAxis==='y'?'x':'y']??ctx.raw))||0)}`;
     cfg.options.plugins.tooltip.callbacks=callbacks;
+    if(cfg.type!=='doughnut'){
     cfg.options.scales=cfg.options.scales||{};
     const axis=cfg.options.indexAxis==='y'?'x':'y';
     cfg.options.scales[axis]=cfg.options.scales[axis]||{};
     cfg.options.scales[axis].ticks={...(cfg.options.scales[axis].ticks||{}),callback:value=>H(Number(value))};
+    }
   }
   const previous=CH[id];
   if(previous&&previous.canvas===$(id)&&previous.config.type===cfg.type){
