@@ -4,6 +4,29 @@
   const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   const nav=el('tabs'),search=el('workspaceNavSearch'),density=el('workspaceDensity'),toggle=el('workspaceMenuToggle');
   if(!nav||!search||!density||!toggle)return;
+  const focusButton=document.createElement('button');
+  focusButton.type='button';focusButton.id='workspaceFocus';
+  focusButton.setAttribute('aria-controls','tabs');
+  focusButton.title='Recolher o menu para ampliar os relatórios';
+  density.closest('.workspace-tools').prepend(focusButton);
+  function setFocus(enabled){
+    document.body.classList.toggle('workspace-focus',enabled);
+    focusButton.textContent=enabled?'Mostrar menu':'Ampliar área';
+    focusButton.setAttribute('aria-pressed',String(enabled));
+    try{localStorage.setItem('audit_workspace_focus',String(enabled));}catch{}
+  }
+  let savedFocus=false;try{savedFocus=localStorage.getItem('audit_workspace_focus')==='true';}catch{}
+  setFocus(savedFocus);
+  focusButton.addEventListener('click',()=>setFocus(!document.body.classList.contains('workspace-focus')));
+  const backTop=document.createElement('button');
+  backTop.type='button';backTop.id='workspaceBackTop';backTop.textContent='↑ Voltar ao início';
+  backTop.hidden=true;backTop.addEventListener('click',()=>window.scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'}));
+  document.body.append(backTop);
+  let scrollPending=false;
+  window.addEventListener('scroll',()=>{
+    if(scrollPending)return;scrollPending=true;
+    requestAnimationFrame(()=>{backTop.hidden=window.scrollY<600;scrollPending=false;});
+  },{passive:true});
   const folders=[...nav.querySelectorAll('.nav-folder')];
   let beforeSearch=null;
   function filterModules(){
@@ -34,7 +57,7 @@
   nav.addEventListener('click',event=>{if(event.target.closest('button[data-t]'))setMenu(false);});
   document.addEventListener('keydown',event=>{
     if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'&&!document.body.classList.contains('tm-locked')){
-      event.preventDefault();if(matchMedia('(max-width:900px)').matches)setMenu(true);search.focus();search.select();
+      event.preventDefault();if(matchMedia('(max-width:900px)').matches)setMenu(true);else setFocus(false);search.focus();search.select();
     }
     if(event.key==='Escape')setMenu(false);
   });
