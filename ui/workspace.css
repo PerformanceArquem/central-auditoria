@@ -81,3 +81,29 @@ body[data-density=compact] main .card{padding:14px 16px}body[data-density=compac
 @media(max-width:900px){body>header{position:static}.workspace-section-links{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}.workspace-section-links a{white-space:nowrap;flex:none}.workspace-section-target{scroll-margin-top:16px}main .executive-action{min-width:0}main .executive-action strong{white-space:normal;overflow-wrap:anywhere}main .executive-action>span{min-width:0;flex-basis:100%}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 @media print{.workspace-bar,.workspace-section-links,.filter-advanced,.filter-footer{display:none!important}body{display:block!important}body>header{position:static}main{max-width:none;padding:0}main .card{box-shadow:none!important}#filters{display:flex}.kpis .aud-print-toolbar{display:none!important}}
+
+/* Central 2.0: desktop navigation and resilient report layouts. */
+@media screen and (min-width:901px){
+  #workspaceMenuToggle{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:7px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;cursor:pointer}
+  body.workspace-nav-collapsed{grid-template-columns:minmax(0,1fr)}
+  body.workspace-nav-collapsed #tabs{display:none!important}
+  body.workspace-nav-collapsed main{max-width:1800px}
+}
+@media screen{
+  main .kpis .card{min-width:0}
+  main .kpis .card b,main .kpis .card strong{overflow-wrap:anywhere}
+  main .tw{overscroll-behavior-x:contain}
+  main .tw th{box-shadow:0 1px 0 var(--line)}
+  main .tw:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+  main button:disabled{opacity:.55;cursor:not-allowed}
+  .workspace-location strong{overflow-wrap:anywhere}
+}
+@media screen and (max-width:560px){
+  #filters,#filtersAdvanced{grid-template-columns:minmax(0,1fr)}
+  #filters .dyn[data-field]{grid-column:auto;grid-row:auto}
+  .workspace-tools{width:100%;justify-content:space-between}
+  .workspace-tools select{flex:1;max-width:180px}
+  main .card{padding:16px}
+  main .kpis .card b{font-size:23px}
+  .filter-periods,.filter-exports{gap:8px}
+}
