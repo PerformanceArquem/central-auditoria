@@ -489,3 +489,14 @@ test('transient monthly failures retry only the failed month and stop after thre
  calls=0;await assert.rejects(()=>UraPeriods.retryMonth(async()=>{calls++;throw Error('permission');},null,async()=>{}));assert.equal(calls,1);
  calls=0;await assert.rejects(()=>UraPeriods.retryMonth(async()=>{calls++;throw Object.assign(Error('temporary'),{retryable:true});},null,async()=>{}));assert.equal(calls,3);
 });
+
+
+test('recording page waits for Supabase client before requesting a session',async()=>{
+ let redirected;let sessionCalls=0;let finish;const done=new Promise(r=>finish=r);
+ const win={tmAuth:{getSession:async()=>{assert.ok(win.tmEmailAdminClient?.auth);sessionCalls++;return {access_token:'test'};}}};
+ const ctx=vm.createContext({URL,URLSearchParams,Error,Promise,location:{search:'?uraRecording=123',replace:url=>{redirected=url;finish();}},window:win,
+ document:{readyState:'complete',createElement:()=>({style:{},append(){}}),body:{appendChild(){}}},
+ setTimeout:cb=>{win.tmEmailAdminClient={auth:{}};cb();},fetch:async()=>({ok:true,json:async()=>({ok:true,url:'https://voice-api.zenvia.com/rec/123456789'})})});
+ vm.runInContext(readFileSync('ui/ura-recording.js','utf8'),ctx);await done;
+ assert.equal(sessionCalls,1);assert.equal(redirected,'https://voice-api.zenvia.com/rec/123456789');
+});
