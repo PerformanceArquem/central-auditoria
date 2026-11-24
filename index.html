@@ -4473,10 +4473,12 @@ const mkc=(id,cfg)=>{
     const callbacks=cfg.options.plugins.tooltip.callbacks||{};
     callbacks.label=ctx=>`${ctx.dataset?.label?ctx.dataset.label+': ':''}${H(Number(typeof ctx.parsed==='number'?ctx.parsed:(ctx.parsed?.[cfg.options.indexAxis==='y'?'x':'y']??ctx.raw))||0)}`;
     cfg.options.plugins.tooltip.callbacks=callbacks;
+    if(cfg.type!=='doughnut'){
     cfg.options.scales=cfg.options.scales||{};
     const axis=cfg.options.indexAxis==='y'?'x':'y';
     cfg.options.scales[axis]=cfg.options.scales[axis]||{};
     cfg.options.scales[axis].ticks={...(cfg.options.scales[axis].ticks||{}),callback:value=>H(Number(value))};
+    }
   }
   const previous=CH[id];
   if(previous&&previous.canvas===$(id)&&previous.config.type===cfg.type){
