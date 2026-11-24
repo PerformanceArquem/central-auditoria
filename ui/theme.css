@@ -1,0 +1,29 @@
+#workspaceThemeToggle{font:inherit;font-size:12px;font-weight:600;padding:8px 12px;min-height:36px;border-radius:8px;border:1px solid #ffffff70;background:transparent;color:#fff;cursor:pointer}
+#workspaceThemeToggle:focus-visible{outline:3px solid #93c5fd;outline-offset:3px}
+/* Screen-only: printed reports and export canvases retain corporate colors. */
+@media screen{
+html[data-theme=dark]{color-scheme:dark;--navy:#101d30;--blue:#93baff;--bg:#0e1726;--line:#344358;--ink:#e3ebf5;--muted:#b0bed0;--ok:#6ee7a0;--bad:#fda4a4;--warn:#facc80;--surface:#182437;--raised:#223149}
+html[data-theme=dark] :is(#tabs,.card,main .card,main .kpis .card,main .tw,dialog,#tm-login){background:var(--surface);color:var(--ink);border-color:var(--line)}
+html[data-theme=dark] main .filters{background:var(--surface)!important}
+html[data-theme=dark] :is(input,select,textarea,.workspace-tools select,.workspace-nav-search input,#workspaceMenuToggle){background:var(--bg);color:var(--ink);border-color:var(--line)}
+html[data-theme=dark] :is(main th,main tbody tr:nth-child(even),main button.s,.filter-footer button.s,.workspace-section-links a){background:var(--raised);color:var(--ink);border-color:var(--line)}
+html[data-theme=dark] main tbody tr:hover td{background:#293e59}
+html[data-theme=dark] main td{border-color:var(--line)}
+html[data-theme=dark] :is(#tabs .nav-head,#tabs .nav-folder>summary,#tabs .nav-folder-items>button,main .fg label,main .colbtn>summary){color:var(--muted)}
+html[data-theme=dark] :is(#tabs .nav-folder-items>button.on,#tabs .nav-folder-items>button:hover,.workspace-section-links a:hover){background:var(--raised);color:var(--blue)}
+html[data-theme=dark] :is(#tabs .nav-folder:has(button.on)>summary,.filter-advanced>summary,main a){color:var(--blue)}
+html[data-theme=dark] main #cloudCard{background:var(--surface)!important;border-color:var(--line)!important}
+html[data-theme=dark] :is(.coverage-note,.nav-count){background:var(--raised);color:var(--muted)}
+html[data-theme=dark] main .pill{background:var(--raised);color:var(--ink)}
+html[data-theme=dark] main .pill.ok{background:#163c2e;color:#a7f3c4}
+html[data-theme=dark] main .pill.bad{background:#4b2430;color:#fecaca}
+html[data-theme=dark] main .pill.warn{background:#47361e;color:#fde68a}
+html[data-theme=dark] .filter-footer{border-color:var(--line)}
+html[data-theme=dark] #tabs .nav-folder{background:transparent;border-color:var(--line)}
+html[data-theme=dark] #tabs .nav-folder>summary:hover{background:var(--raised)}
+html[data-theme=dark] main button.b{background:#285eaa;color:white}
+/* Charts keep their original labels and export appearance on a light surface. */
+html[data-theme=dark] main canvas{background:#fff;border-radius:8px}
+html[data-theme=dark] dialog::backdrop{background:#0009}
+}
+@media print{#workspaceThemeToggle{display:none!important}}

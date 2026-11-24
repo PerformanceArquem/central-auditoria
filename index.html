@@ -3,6 +3,7 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
+        <script src="/ui/theme.js"></script>
         <title>Auditoria de Chamados · Ticket Manager</title>
         <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -904,6 +905,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 @media print{main .card{box-shadow:none!important;border:1px solid #d1d5db!important;background:#fff!important}}
 </style>
 <link rel="stylesheet" href="/ui/workspace.css">
+<link rel="stylesheet" href="/ui/theme.css">
 <script src="/ui/workspace.js" defer></script>
 <script src="/ai-reports.js" defer></script>
 <script type="module" src="/ui/ticket-inspection.mjs"></script>
@@ -925,6 +927,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                 <b>Auditoria de Chamados</b>
                 <small>Ticket Manager · Movidesk</small>
             </div>
+            <button type="button" id="workspaceThemeToggle" aria-label="Tema escuro" aria-pressed="false">Tema: Claro</button>
         </header>
         <nav id="tabs" aria-label="Menu principal">
           <div class="nav-head"><strong>MENU PRINCIPAL</strong><button type="button" id="navCollapseAll" aria-label="Recolher todas as pastas" title="Recolher todas as pastas">−</button></div>
