@@ -2331,7 +2331,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
                             </div>
                             <div id="agProg"></div>
                         </div>
-                        <div class="card" id="chartActivities">
+                        <div class="card analysis-wide" id="chartActivities">
                             <h3>Distribuição por atividade</h3>
                             <div class="chart-frame analysis-donut"><canvas id="chAct" role="img" aria-label="Distribuição de horas por atividade"></canvas></div>
                         </div>
@@ -4460,7 +4460,7 @@ const mkc=(id,cfg)=>{
     cfg.options.scales=cfg.options.scales||{};
     cfg.options.scales.y=cfg.options.scales.y||{};
     cfg.options.scales.y.ticks={...(cfg.options.scales.y.ticks||{}),callback:value=>{
-      const label=String(cfg.data.labels[value]||''),limit=window.matchMedia?.('(max-width:480px)').matches?24:38;
+      const label=String(cfg.data.labels[value]||''),limit=($(id)?.clientWidth||0)<520?22:38;
       return label.length>limit?label.slice(0,limit-1)+'…':label;
     }};
   }

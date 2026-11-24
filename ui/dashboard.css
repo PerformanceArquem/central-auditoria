@@ -19,6 +19,7 @@
   #t-charts .analysis-line{height:330px}
   #t-charts .analysis-bars,#t-charts .analysis-donut{height:400px}
   #t-charts .analysis-ranking{height:440px}
+  #t-charts #chartActivities .chart-frame{max-width:720px;margin:0 auto}
   #t-charts #agProg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px}
   #t-charts #agProg .tot{grid-column:1/-1;padding-bottom:14px;margin-bottom:6px;border-bottom:1px solid var(--line)}
   #t-charts .prog{min-width:0}
