@@ -1,4 +1,4 @@
-import {inspectTickets,filterInspections,recordOccurrences} from '/lib/ticket-inspection.mjs';
+import {inspectTickets,filterInspections,recordOccurrences} from '../lib/ticket-inspection.mjs';
 const panel=document.getElementById('ticketInspection');
 let history=[], report=[],clientCriticality={};
 const date=n=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(n);

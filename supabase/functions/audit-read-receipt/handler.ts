@@ -1,6 +1,6 @@
 import {hashReceiptToken} from '../_shared/read-receipts.ts';
 type Db = (path: string, init?: RequestInit) => Promise<any>;
-const origins = new Set(['https://central-auditoria-iota.vercel.app','https://centralauditoria.ddns.net','https://www.centralauditoria.ddns.net']);
+const origins = new Set(['https://performancearquem.github.io','https://central-auditoria-iota.vercel.app','https://centralauditoria.ddns.net','https://www.centralauditoria.ddns.net']);
 export async function handleReadReceipt(req: Request, db: Db, now = new Date()): Promise<Response> {
   const origin = req.headers.get('origin');
   const headers = new Headers({'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',

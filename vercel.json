@@ -1,6 +1,45 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "routes": [
+    {
+      "src": "/api/(?:auth|movidesk|ticket-manager|public-config|audit-ticket-lookup|audit-ticket-inspection|audit-forecast-variances|audit-direct-comparisons|audit-production-metrics|audit-production-flow|voice-reconciliation)$",
+      "has": [
+        {
+          "type": "header",
+          "key": "origin",
+          "value": "https://performancearquem[.]github[.]io"
+        }
+      ],
+      "methods": [
+        "OPTIONS"
+      ],
+      "headers": {
+        "Access-Control-Allow-Origin": "https://performancearquem.github.io",
+        "Vary": "Origin",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Authorization, Content-Type"
+      },
+      "status": 204
+    },
+    {
+      "src": "/api/(?:auth|movidesk|ticket-manager|public-config|audit-ticket-lookup|audit-ticket-inspection|audit-forecast-variances|audit-direct-comparisons|audit-production-metrics|audit-production-flow|voice-reconciliation)$",
+      "has": [
+        {
+          "type": "header",
+          "key": "origin",
+          "value": "https://performancearquem[.]github[.]io"
+        }
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "headers": {
+        "Access-Control-Allow-Origin": "https://performancearquem.github.io",
+        "Vary": "Origin"
+      },
+      "continue": true
+    },
     { "src": "/server(?:/.*)?", "dest": "/api/audit?route=not-found" },
     { "src": "/api/audit-ticket-inspection", "dest": "/api/audit?route=inspection" },
     { "src": "/api/audit-ticket-lookup", "dest": "/api/audit?route=lookup" },

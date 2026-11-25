@@ -3,7 +3,8 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
-        <script src="/ui/theme.js"></script>
+        <script src="./ui/api-client.js"></script>
+        <script src="./ui/theme.js"></script>
         <title>Auditoria de Chamados · Ticket Manager</title>
         <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
         <script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -904,15 +905,15 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 @media(prefers-reduced-motion:reduce){main .card,main .row.noprint button,main .card button{transition:none}}
 @media print{main .card{box-shadow:none!important;border:1px solid #d1d5db!important;background:#fff!important}}
 </style>
-<link rel="stylesheet" href="/ui/workspace.css">
-<link rel="stylesheet" href="/ui/theme.css">
-<link rel="stylesheet" href="/ui/dashboard.css">
-<script src="/ui/workspace.js" defer></script>
-<script src="/ai-reports.js" defer></script>
-<script type="module" src="/ui/ticket-inspection.mjs"></script>
+<link rel="stylesheet" href="./ui/workspace.css">
+<link rel="stylesheet" href="./ui/theme.css">
+<link rel="stylesheet" href="./ui/dashboard.css">
+<script src="./ui/workspace.js" defer></script>
+<script src="./ai-reports.js" defer></script>
+<script type="module" src="./ui/ticket-inspection.mjs"></script>
 <style id="ai-reports-style">#aiReportPanel .ai-report-message{padding:12px 14px;max-width:90%;border-radius:12px;background:#eff5fd;border:1px solid #d7e4f3;color:#243c55;overflow-wrap:anywhere}#aiReportPanel .ai-report-user{align-self:flex-end;background:#e4f0ff}#aiReportPanel .ai-report-assistant{align-self:flex-start}#aiReportPanel .ai-report-message strong{display:block;margin-bottom:6px;font-size:12px}#aiReportPanel .ai-report-message div{font-size:14px;line-height:1.5}#aiReportRanking ol{padding-left:25px}#aiReportRanking li{margin:5px 0}@media(max-width:700px){#aiReportPanel .fg{min-width:140px;flex:1 1 45%}#aiReportPanel .ai-report-message{max-width:100%}}</style>
-<script src="/ui/ura-periods.js"></script>
-<script src="/ui/ura-recording.js" defer></script>
+<script src="./ui/ura-periods.js"></script>
+<script src="./ui/ura-recording.js" defer></script>
 </head>
     <body class="tm-locked">
         <form id="tm-login" class="card" hidden>
@@ -4103,7 +4104,7 @@ async function findProjectTicket() {
   try {
     const session=await window.tmAuth?.getSession?.();
     if(!session?.access_token)return;
-    const response=await fetch('/api/audit-ticket-lookup?id='+encodeURIComponent(id),{
+    const response=await window.centralApiFetch('/api/audit-ticket-lookup?id='+encodeURIComponent(id),{
       method:'GET',cache:'no-store',credentials:'same-origin',
       headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'}
     });
@@ -4207,7 +4208,7 @@ async function loadForecastSnapshots(){
  try{
   const session=await window.tmAuth?.getSession?.();
   if(!session?.access_token)throw Error('Sessão não disponível');
-  const response=await fetch('/api/audit-forecast-variances',{
+  const response=await window.centralApiFetch('/api/audit-forecast-variances',{
    cache:'no-store',headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'}
   });
   const result=await response.json().catch(()=>({}));
@@ -4533,7 +4534,7 @@ async function refreshDirectComparisons(force=false){
   try{
     const session=await window.tmAuth.getSession();
     if(!session?.access_token)throw new Error('Sua sessão expirou; entre novamente.');
-    const response=await fetch('/api/audit-direct-comparisons',{
+    const response=await window.centralApiFetch('/api/audit-direct-comparisons',{
       method:'GET',cache:'no-store',credentials:'same-origin',
       headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'}
     });
@@ -5069,7 +5070,7 @@ async function cloudApi(action,method='GET',body=null,params={}){
     opt.headers['Content-Type']='application/json;charset=utf-8';
     opt.body=payload;
   }
-  const r=await fetch(u.toString(),opt);const j=await r.json().catch(()=>({}));
+  const r=await window.centralApiFetch(u.pathname+u.search,opt);const j=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(j.error||('Erro HTTP '+r.status+' ao acessar o Supabase'));
   return j;
 }
@@ -5281,13 +5282,13 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
           window.tmFetch = async (url, options = {}) => {
             const target = new URL(url, location.origin);
             if (target.origin !== location.origin ||
-                !['/api/auth', '/api/movidesk'].includes(target.pathname)) {
+                !['/api/auth', '/api/movidesk', '/api/audit-ticket-inspection'].includes(target.pathname)) {
               throw new Error('Destino inválido.');
             }
             const session = await requireSession();
             const headers = new Headers(options.headers || {});
             headers.set('Authorization', `Bearer ${session.access_token}`);
-            const response = await fetch(target, {
+            const response = await window.centralApiFetch(target.pathname + target.search, {
               ...options, headers, cache: 'no-store', credentials: 'same-origin'
             });
             // Um 401 do Movidesk pode ser uma falha da própria integração,
@@ -5315,7 +5316,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
           });
           (async () => {
             try {
-              const response = await fetch('/api/public-config', {cache:'no-store'});
+              const response = await window.centralApiFetch('/api/public-config', {cache:'no-store'});
               const config = await response.json();
               if (!response.ok) throw new Error(config.error || 'Configuração indisponível');
               if (!window.supabase?.createClient) throw new Error('Biblioteca Supabase indisponível');
@@ -6301,7 +6302,7 @@ if(window.Chart){Chart.defaults.font.family='"Segoe UI",system-ui,sans-serif';Ch
    if(!Number.isFinite(days)||days<1||days>31)throw Error('Para voz, selecione um período de até 31 dias.');
    const session=await window.tmAuth?.getSession?.();
    if(!session?.access_token)throw Error('Faça login na Central de Auditoria');
-   const response=await fetch('/api/audit-production-metrics?mode=zenvia&'+new URLSearchParams({start:from,end:to}),{headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
+   const response=await window.centralApiFetch('/api/audit-production-metrics?mode=zenvia&'+new URLSearchParams({start:from,end:to}),{headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
    const d=await response.json().catch(()=>({}));
    if(!response.ok||d.ok!==true)throw Error(d.error||'Falha na consulta da telefonia');
    return d;
@@ -6445,7 +6446,7 @@ function say(t){el('pdStatus').textContent=t}
 async function api(){
   const session=await window.tmAuth?.getSession?.();
   if(!session?.access_token)throw new Error('Faça login novamente para consultar os dados.');
-  const response=await fetch('/api/audit-production-metrics',{
+  const response=await window.centralApiFetch('/api/audit-production-metrics',{
     method:'GET',cache:'no-store',credentials:'same-origin',
     headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'}
   });
@@ -6720,7 +6721,7 @@ window.clientImpactInit=()=>{
 })();
 </script>
 
-<script src="/intelligence-triage.js"></script>
+<script src="./intelligence-triage.js"></script>
 <script id="zenviaVoiceScript">
 (()=>{'use strict';
  const el=id=>document.getElementById(id);
@@ -6748,7 +6749,7 @@ window.clientImpactInit=()=>{
    const session=await window.tmAuth?.getSession?.();
    if(!session?.access_token)throw Error('Faça login na Central de Auditoria');
    const q=new URLSearchParams({start,end});
-   const response=await fetch('/api/audit-production-metrics?mode=zenvia&'+q,{headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
+   const response=await window.centralApiFetch('/api/audit-production-metrics?mode=zenvia&'+q,{headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
    const d=await response.json().catch(()=>({}));
    if(!response.ok||d.ok!==true)throw Error(d.error||'Falha ao consultar Zenvia');
    // Não renderizar resposta de período que foi alterado durante a requisição.
@@ -6784,7 +6785,7 @@ window.clientImpactInit=()=>{
    const session=await window.tmAuth?.getSession?.();
    if(!session?.access_token)throw Error('Faça login na Central de Auditoria');
    const q=new URLSearchParams({mode:'zenvia',check:'1',start,end});
-   const response=await fetch('/api/audit-production-metrics?'+q,{
+   const response=await window.centralApiFetch('/api/audit-production-metrics?'+q,{
      headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
    const d=await response.json().catch(()=>({}));
    if(!response.ok||!d.ok)throw Error(d.error||'Falha ao consultar o diagnóstico');
@@ -6808,7 +6809,7 @@ window.clientImpactInit=()=>{
    if(!session?.access_token)throw Error('Faça login na Central de Auditoria');
    const q=new URLSearchParams({mode:'zenvia',check:'queues',
      start:el('zvStart').value,end:el('zvEnd').value});
-   const response=await fetch('/api/audit-production-metrics?'+q,{
+   const response=await window.centralApiFetch('/api/audit-production-metrics?'+q,{
     headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store'});
    const data=await response.json().catch(()=>({}));
    if(!response.ok||data.ok!==true||!Array.isArray(data.queues))
@@ -6875,7 +6876,7 @@ async function loadReconciliationPeople(){
   try{
    const session=await window.tmAuth?.getSession?.();
    if(!session?.access_token)throw Error('Faça login novamente');
-   const response=await fetch('/api/voice-reconciliation?action=directory',{
+   const response=await window.centralApiFetch('/api/voice-reconciliation?action=directory',{
     headers:{Authorization:'Bearer '+session.access_token},cache:'no-store'});
    const data=await response.json();if(!response.ok||!data.ok)throw Error(data.error||'Cadastro indisponível');
    if(!Array.isArray(data.sectors)||!Array.isArray(data.employees))throw Error('Cadastro inválido');
@@ -7006,7 +7007,7 @@ function showReconciliation(){
     const part=await UraPeriods.retryMonth(async()=>{
      const currentSession=await window.tmAuth?.getSession?.();
      if(!currentSession?.access_token)throw Error('É necessário entrar na Central.');
-     const resp=await fetch('/api/voice-reconciliation?'+new URLSearchParams({start:period.start,end:period.end}),{headers:{Authorization:'Bearer '+currentSession.access_token},cache:'no-store'});
+     const resp=await window.centralApiFetch('/api/voice-reconciliation?'+new URLSearchParams({start:period.start,end:period.end}),{headers:{Authorization:'Bearer '+currentSession.access_token},cache:'no-store'});
      const result=await resp.json().catch(()=>({}));
      if(!resp.ok||!result.ok){const error=Error(UraPeriods.label(period.month)+': '+(result.error||'As APIs não retornaram dados válidos.')+' Nenhum relatório parcial foi apresentado como completo.');
       error.retryable=resp.status===504||resp.status===429||(resp.status===502&&/chamados sincronizados/.test(result.error||''));throw error;}
@@ -7079,8 +7080,8 @@ function showReconciliation(){
 })();
 </script>
 
-<script src="/production-flow.js"></script>
-<script src="/email-delivery-control.js"></script>
-<script src="/email-report-catalog.js"></script>
+<script src="./production-flow.js"></script>
+<script src="./email-delivery-control.js"></script>
+<script src="./email-report-catalog.js"></script>
 </body>
 </html>

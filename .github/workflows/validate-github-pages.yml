@@ -1,0 +1,32 @@
+name: Validar Central no GitHub Pages
+on:
+  push:
+    branches: [migration/github-pages]
+  pull_request:
+    paths:
+      - index.html
+      - 'confirmar-leitura.*'
+      - 'ui/**'
+      - 'supabase/functions/audit-ai-reports/**'
+      - 'supabase/functions/audit-read-receipt/**'
+      - 'lib/**'
+      - '*.js'
+      - 'api/public-config.js'
+      - 'vercel.json'
+      - 'scripts/build-pages.mjs'
+      - 'tests/github-pages.test.mjs'
+      - '.github/workflows/validate-github-pages.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5ba1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - run: node scripts/build-pages.mjs "${{ runner.temp }}/central-pages"
+      - run: node --test tests/github-pages.test.mjs tests/ai-reports.test.mjs tests/zenvia-voice-metrics.test.mjs tests/audit-router.test.mjs tests/email-admin-ui.test.mjs tests/read-receipts.test.mjs

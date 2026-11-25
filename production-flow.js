@@ -34,7 +34,7 @@
   say('Consultando o histórico dos chamados e conferindo autores e equipes...');
   try{const session=await window.tmAuth?.getSession?.();if(!session?.access_token)throw Error('Entre novamente no sistema.');
    const query=new URLSearchParams({from:$('pfFrom').value,to:$('pfTo').value});
-   const response=await fetch('/api/audit-production-flow?'+query,{cache:'no-store',headers:{Authorization:'Bearer '+session.access_token}}),data=await response.json();
+   const response=await window.centralApiFetch('/api/audit-production-flow?'+query,{cache:'no-store',headers:{Authorization:'Bearer '+session.access_token}}),data=await response.json();
    if(!response.ok||!data.ok)throw Error(data.error||'Consulta indisponível.');report=data;render();
    say((data.partial?'Cobertura parcial. ':'Consulta concluída. ')+data.from+' a '+data.to+' · '+data.tickets.length+' chamados no relatório. Atualizado às '+date(data.generatedAt)+'.');
   }catch(e){say('Não foi possível atualizar: '+e.message);}finally{busy=false;$('pfLoad').disabled=false;}

@@ -8,7 +8,7 @@ const edge=readFileSync(new URL('../supabase/functions/audit-ai-reports/index.ts
 test('chat de relatórios fica acessível no painel com período, filtros e exportação',()=>{
  for(const id of ['aiReportOpen','aiReportPanel','aiReportFrom','aiReportTo','aiReportSector','aiReportCollaborator','aiReportClient','aiReportPrompt','aiReportConsent','aiReportExport','aiReportPrint'])
    assert.match(html,new RegExp('id="'+id+'"'));
- assert.match(html,/<script src="\/ai-reports.js" defer>/);
+ assert.match(html,/<script src="\.\/ai-reports.js" defer>/);
  assert.doesNotThrow(()=>new Function(ui));
 });
 test('consulta exige sessão de administrador e usa dados somente leitura',()=>{

@@ -52,7 +52,7 @@
   try{
    const session=await window.tmAuth?.getSession?.();
    if(!session?.access_token)throw Error('Faça login novamente para consultar a triagem.');
-   const r=await fetch('/api/audit-production-metrics?mode=triage',{
+   const r=await window.centralApiFetch('/api/audit-production-metrics?mode=triage',{
     cache:'no-store',headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'}});
    const d=await r.json().catch(()=>({}));
    if(!r.ok||!d.ok||!Array.isArray(d.items))throw Error(d.error||'Não foi possível consultar a triagem.');

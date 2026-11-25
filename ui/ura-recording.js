@@ -11,7 +11,7 @@
    for(let i=0;(!window.tmAuth?.getSession||!window.tmEmailAdminClient?.auth)&&i<60;i++)await new Promise(r=>setTimeout(r,500));
    if(!window.tmEmailAdminClient?.auth)throw Error('A autenticação ainda não carregou. Atualize esta página para tentar novamente.');
    const session=await window.tmAuth?.getSession?.();if(!session?.access_token)throw Error('Entre na Central e abra novamente o link da gravação.');
-   const response=await fetch('/api/voice-reconciliation?'+new URLSearchParams({action:'recording',callId:id}),{headers:{Authorization:'Bearer '+session.access_token},cache:'no-store'});
+   const response=await window.centralApiFetch('/api/voice-reconciliation?'+new URLSearchParams({action:'recording',callId:id}),{headers:{Authorization:'Bearer '+session.access_token},cache:'no-store'});
    const data=await response.json();if(!response.ok||!data.ok)throw Error(data.error||'Gravação indisponível.');
    const url=new URL(data.url);if(url.protocol!=='https:'||url.username||url.password||!['voice-api.zenvia.com','voice-app.zenvia.com','api.evoline.com.br'].includes(url.hostname))throw Error('Link de gravação não autorizado.');
    location.replace(url.href);

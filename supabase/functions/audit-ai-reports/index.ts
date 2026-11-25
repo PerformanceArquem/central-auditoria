@@ -1,6 +1,6 @@
 // Report Assistant: read-only, bounded, administrator-only. No arbitrary SQL, e-mail or data mutations.
 const env=(k:string)=>Deno.env.get(k)?.trim()||'';
-const origins=new Set(['https://central-auditoria-iota.vercel.app','https://central-auditoria-arquem.vercel.app','https://centralauditoria.ddns.net','https://www.centralauditoria.ddns.net']);
+const origins=new Set(['https://performancearquem.github.io','https://central-auditoria-iota.vercel.app','https://central-auditoria-arquem.vercel.app','https://centralauditoria.ddns.net','https://www.centralauditoria.ddns.net']);
 const maxRecords=4000;
 const clean=(v:unknown,max=120)=>String(v??'').replace(/[\x00-\x1f\x7f]/g,' ').trim().slice(0,max);
 const fold=(v:unknown)=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
