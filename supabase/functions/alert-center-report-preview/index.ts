@@ -2646,7 +2646,7 @@ async function handleRequest(req: Request): Promise<Response> {
  try{
  const payload=await req.json();
  const action=String(payload.action||'');
-     if(action==='movidesk_report_preview'){
+     if(action==='movidesk_report_preview'||action==='movidesk_report_reserve'){
       if(!await isAdmin(req))return json({ok:false,error:'Acesso restrito'},403);
       const auth=req.headers.get('authorization')||'';
       const u=await fetch(E('SUPABASE_URL').replace(/\/$/,'')+'/auth/v1/user',{headers:{apikey:E('SUPABASE_ANON_KEY'),Authorization:auth},signal:AbortSignal.timeout(10000)});
@@ -2656,7 +2656,17 @@ async function handleRequest(req: Request): Promise<Response> {
       const links=await db('audit_movidesk_report_test_links?profile_user_id=eq.'+encodeURIComponent(actor.id)+'&movidesk_person_id=eq.'+encodeURIComponent(E('ALERT_CENTER_TEST_RECIPIENT_ID'))+'&delivery_enabled=eq.false&select=report_recipient_id,movidesk_person_id&limit=2');
       const profiles=await db('audit_movidesk_note_profiles?user_id=eq.'+encodeURIComponent(actor.id)+'&movidesk_person_id=eq.'+encodeURIComponent(E('ALERT_CENTER_TEST_RECIPIENT_ID'))+'&active=eq.true&team_name=eq.Qualidade&select=user_id&limit=2');
       if(links.length!==1||profiles.length!==1)return json({ok:false,error:'Vínculo de homologação não autorizado'},403);
-      return await manualOfficial({recipientId:links[0].report_recipient_id,kind:'daily',previewOnly:true},true);
+      const preview=await manualOfficial({recipientId:links[0].report_recipient_id,kind:'daily',previewOnly:true},true);
+      if(action==='movidesk_report_preview')return preview;
+      if(payload.confirm!==true||!preview.ok)return json({ok:false,error:'Confirmação ou prévia inválida'},409);
+      const report=await preview.json();
+      if(report.ok!==true||report.preview!==true||report.deliveryEnabled!==false||report.from!==report.to||report.from!==payload.period||!/^\d{4}-\d{2}-\d{2}$/.test(report.from))return json({ok:false,error:'Período alterado; gere nova prévia'},409);
+      const key=E('SUPABASE_SERVICE_ROLE_KEY');
+      const reservation=await fetch(E('SUPABASE_URL').replace(/\/$/,'')+'/rest/v1/rpc/audit_reserve_movidesk_simulation',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({p_actor_id:actor.id,p_person_id:links[0].movidesk_person_id,p_period:report.from}),signal:AbortSignal.timeout(10000)});
+      if(!reservation.ok)return json({ok:false,error:'Reserva não confirmada'},502);
+      const result=await reservation.json();
+      if(result.deliveryEnabled!==false||result.status!=='simulation_reserved'||typeof result.id!=='string')return json({ok:false,error:'Resposta inválida'},502);
+      return json({ok:true,deliveryEnabled:false,reservation:result,period:report.from});
     }
 
  return json({ok:false,error:'Somente prévia autorizada'},403);
