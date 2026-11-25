@@ -27,6 +27,13 @@ Deno.serve(async(req)=>{
  const pr=await fetch(p,{headers,signal:AbortSignal.timeout(10000)});
  if(!pr.ok)return reply({error:"Cadastro indisponível"},503);
  const profiles=await pr.json();if(!Array.isArray(profiles)||profiles.length!==1||profiles[0].movidesk_person_id!==authorizedId||profiles[0].active!==true)return reply({error:"Cadastro de homologação inválido"},403);
- return reply({mode:"dry-run",authorized:true,deliveryEnabled:false,subject:"TM-HOMOLOG-001",requiresDuplicateCheck:true,requiresMetricsExclusion:true,ticketCreated:false});
+ // Preserve compatibility with the previously homologated preview.
+ if(body.requestKey===undefined)return reply({mode:"dry-run",authorized:true,deliveryEnabled:false,subject:"TM-HOMOLOG-001",requiresDuplicateCheck:true,requiresMetricsExclusion:true,ticketCreated:false,historyRecorded:false});
+ if(typeof body.requestKey!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.requestKey))return reply({error:"Identificador da solicitação inválido"},400);
+ const saved=await fetch(base+"/rest/v1/rpc/alert_center_record_simulation",{method:"POST",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify({p_request_key:body.requestKey,p_recipient_id:authorizedId,p_actor_id:user.id}),signal:AbortSignal.timeout(10000)});
+ if(!saved.ok)return reply({error:"Não foi possível registrar a simulação"},saved.status===409?409:503);
+ const record=await saved.json();
+ if(!record||typeof record.id!=="string"||typeof record.duplicate!=="boolean"||record.status!=="simulated"||record.deliveryEnabled!==false||record.ticketCreated!==false)return reply({error:"Registro não confirmado"},502);
+ return reply({mode:"dry-run",authorized:true,deliveryEnabled:false,subject:"TM-HOMOLOG-001",requiresDuplicateCheck:true,requiresMetricsExclusion:true,ticketCreated:false,historyRecorded:true,history:{id:record.id,createdAt:record.createdAt,duplicate:record.duplicate,status:"simulated"}});
  }catch{return reply({error:"Falha na validação"},502);}
 });
