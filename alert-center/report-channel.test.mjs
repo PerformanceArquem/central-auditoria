@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {prepareMovideskReport} from './report-channel.mjs';
+const original={subject:'Relatório diário',body_text:'Horas: 7h20\nChamados: 12\nDicas do Manager: conferir pendências.',body_html:'<h1>Relatório diário</h1><p>Horas: 7h20</p>',report_data:{schema:'arquem-mail-v1',recipientId:'fixture-report-recipient',reportKind:'daily',from:'2026-11-24',to:'2026-11-24',historicalIncomplete:false}};
+const run=(overrides={})=>prepareMovideskReport({prepared:original,authorizedRecipientId:'fixture-report-recipient',enabled:true,...overrides});
+test('preserves original report text and HTML',()=>{const result=run();assert.ok(result.text.endsWith(original.body_text));assert.equal(result.originalHtml,original.body_html);assert.equal(result.subject,original.subject);});
+test('preserves report period and type',()=>{const result=run();assert.equal(result.from,original.report_data.from);assert.equal(result.to,original.report_data.to);assert.equal(result.reportKind,'daily');});
+test('no attachments or delivery',()=>{const result=run();assert.deepEqual(result.attachments,[]);assert.equal(result.deliveryEnabled,false);assert.equal(result.mode,'dry-run');});
+test('disabled channel rejected',()=>assert.throws(()=>run({enabled:false})));
+test('recipient mismatch rejected',()=>assert.throws(()=>run({authorizedRecipientId:'different-fixture'})));
+test('incomplete report rejected',()=>assert.throws(()=>run({prepared:{...original,report_data:{...original.report_data,historicalIncomplete:true}}})));
+test('missing source content rejected',()=>assert.throws(()=>run({prepared:{...original,body_text:''}})));
