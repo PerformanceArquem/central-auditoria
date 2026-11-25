@@ -82,6 +82,15 @@ const validUrl = () => {
 };
 async function db(path: string, init: RequestInit = {}): Promise<any> {
   if(init.method && init.method.toUpperCase()!=='GET')throw Error('Prévia somente leitura');
+  const filteredSources:Record<string,string> = {
+    audit_direct_tickets:'audit_reporting_tickets',
+    audit_direct_appointments:'audit_reporting_appointments',
+    audit_email_open_ticket_snapshot:'audit_reporting_open_ticket_snapshot',
+    audit_ticket_client_summary:'audit_reporting_client_summary'
+  };
+  const table=path.split('?')[0];
+  if(filteredSources[table]) path=filteredSources[table]+path.slice(table.length);
+
   const url = E('SUPABASE_URL').replace(/\/$/, '');
   const key = E('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) throw new Error('Secrets Supabase incompletos');
