@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {prepareMovideskReport} from './report-channel.mjs';
+import {prepareMovideskReport,prepareFreshMovideskReport} from './report-channel.mjs';
 const original={subject:'Relatório diário',body_text:'Horas: 7h20\nChamados: 12\nDicas do Manager: conferir pendências.',body_html:'<h1>Relatório diário</h1><p>Horas: 7h20</p>',report_data:{schema:'arquem-mail-v1',recipientId:'fixture-report-recipient',reportKind:'daily',from:'2026-11-24',to:'2026-11-24',historicalIncomplete:false}};
 const run=(overrides={})=>prepareMovideskReport({prepared:original,authorizedRecipientId:'fixture-report-recipient',enabled:true,...overrides});
 test('preserves original report text and HTML',()=>{const result=run();assert.ok(result.text.endsWith(original.body_text));assert.equal(result.originalHtml,original.body_html);assert.equal(result.subject,original.subject);});
@@ -10,3 +10,14 @@ test('disabled channel rejected',()=>assert.throws(()=>run({enabled:false})));
 test('recipient mismatch rejected',()=>assert.throws(()=>run({authorizedRecipientId:'different-fixture'})));
 test('incomplete report rejected',()=>assert.throws(()=>run({prepared:{...original,report_data:{...original.report_data,historicalIncomplete:true}}})));
 test('missing source content rejected',()=>assert.throws(()=>run({prepared:{...original,body_text:''}})));
+
+const now=Date.parse('2026-11-25T12:00:00Z');
+const fresh={...original,status:'ready',expires_at:'2026-11-25T13:00:00Z'};
+const freshRun=(overrides={})=>prepareFreshMovideskReport({prepared:fresh,authorizedRecipientId:'fixture-report-recipient',enabled:true,now,verifiedSource:true,...overrides});
+test('fresh verified report preserves original content',()=>{const result=freshRun();assert.ok(result.text.endsWith(original.body_text));assert.equal(result.deliveryEnabled,false);assert.deepEqual(result.attachments,[]);});
+test('expired or exactly expired report rejected',()=>{for(const expires_at of ['2026-11-25T11:59:00Z','2026-11-25T12:00:00Z'])assert.throws(()=>freshRun({prepared:{...fresh,expires_at}}));});
+test('invalid expiry rejected',()=>assert.throws(()=>freshRun({prepared:{...fresh,expires_at:'invalid'}})));
+test('unverified source rejected',()=>assert.throws(()=>freshRun({verifiedSource:false})));
+test('non-ready status rejected',()=>assert.throws(()=>freshRun({prepared:{...fresh,status:'failed'}})));
+test('unknown completeness rejected',()=>assert.throws(()=>freshRun({prepared:{...fresh,report_data:{...fresh.report_data,historicalIncomplete:undefined}}})));
+test('fresh report still requires authorized recipient',()=>assert.throws(()=>freshRun({authorizedRecipientId:'unauthorized'})));
