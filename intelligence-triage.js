@@ -40,12 +40,69 @@
   catch(e){el('itEmailStatus').textContent=e.message}
   finally{emailBusy=false;el('itEmailPreview').disabled=false;el('itEmailSend').disabled=!emailSnapshot}
  }
+ let copyContacts=[];
+ const copySelected=new Set();
+ const copyEmails=()=>[...copySelected].sort();
+ function renderCopies(){
+  const list=el('itEmailCcChoices'),recipient=el('itEmailTo').value.toLowerCase();
+  copySelected.delete(recipient);
+  el('itEmailCcSummary').textContent=copySelected.size
+   ?copySelected.size+' selecionado(s) em cópia':'Selecionar e-mails cadastrados';
+  list.replaceChildren();
+  for(const {name,email} of copyContacts){
+   if(email===recipient)continue;
+   const label=document.createElement('label'),box=document.createElement('input');
+   label.style.cssText='display:flex;align-items:center;gap:8px;padding:5px 2px;overflow-wrap:anywhere';
+   box.type='checkbox';box.value=email;box.checked=copySelected.has(email);
+   box.addEventListener('change',()=>{
+    if(box.checked&&copySelected.size>=10){
+     box.checked=false;el('itEmailCcHint').textContent='Selecione até 10 endereços em cópia.';return;
+    }
+    if(box.checked)copySelected.add(email);else copySelected.delete(email);
+    el('itEmailCcSummary').textContent=copySelected.size
+     ?copySelected.size+' selecionado(s) em cópia':'Selecionar e-mails cadastrados';
+    el('itEmailCcHint').textContent='';
+    invalidateEmail();
+   });
+   label.append(box,document.createTextNode(name+' · '+email));
+   list.append(label);
+  }
+  if(!list.childElementCount)list.textContent='Nenhum outro e-mail corporativo ativo.';
+ }
+ async function loadCopies(){
+  const {data,error}=await window.tmEmailAdminClient.from('audit_email_recipients')
+   .select('name,email').eq('active',true).order('name',{ascending:true}).limit(250);
+  const byEmail=new Map();
+  if(!error)for(const item of data||[]){
+   const email=String(item.email||'').trim().toLowerCase();
+   if(/^[a-z0-9._%+-]+@arquem\.com\.br$/.test(email)&&!byEmail.has(email))
+    byEmail.set(email,{email,name:String(item.name||email).trim()});
+  }
+  copyContacts=[...byEmail.values()];
+  for(const selected of copySelected)if(!byEmail.has(selected))copySelected.delete(selected);
+  renderCopies();
+  if(error)el('itEmailCcChoices').textContent='Lista indisponível. Feche e reabra o painel para tentar novamente.';
+ }
+ function initCopies(){
+  const input=el('itEmailCc'),details=document.createElement('details');
+  details.id=input.id;
+  details.style.cssText='min-width:220px;max-width:100%;padding:8px 10px;border:1px solid #61758c;border-radius:8px';
+  details.innerHTML='<summary id="itEmailCcSummary" style="cursor:pointer">Selecionar e-mails cadastrados</summary>'+
+   '<div id="itEmailCcChoices" style="max-height:180px;overflow:auto"></div><small id="itEmailCcHint" role="status"></small>';
+  input.replaceWith(details);
+  const label=details.parentElement.querySelector('label');
+  const caption=document.createElement('span');
+  caption.textContent=label.textContent;
+  caption.style.cssText='display:block;margin-bottom:5px';
+  label.replaceWith(caption);
+ }
  async function openEmail(){
   const panel=el('itEmailPanel');
   if(!panel.classList.contains('hide')){panel.classList.add('hide');invalidateEmail();return;}
   await runEmail(async()=>{
    const result=await emailAction('triage_manual_recipients');
    el('itEmailTo').replaceChildren(...result.recipients.map(({name,email})=>new Option(name+' · '+email,email)));
+   await loadCopies().catch(()=>{copyContacts=[];copySelected.clear();renderCopies();el('itEmailCcChoices').textContent='Lista indisponível. Feche e reabra o painel para tentar novamente.';});
    panel.classList.remove('hide');
    el('itEmailStatus').textContent='A prévia usa os chamados da exportação atual.';
   });
@@ -57,9 +114,8 @@
    const version=emailVersion;
    const ids=exportItems().map(x=>String(x.id));
    if(!ids.length)throw Error('Nenhum chamado nesta seleção de exportação.');
-   if(!el('itEmailCc').reportValidity())return;
    el('itEmailStatus').textContent='Gerando prévia e validando PDF e Excel...';
-   const preview=await emailAction('triage_manual_preview',{ids,to:el('itEmailTo').value,cc:el('itEmailCc').value.split(',').map(x=>x.trim()).filter(Boolean)});
+   const preview=await emailAction('triage_manual_preview',{ids,to:el('itEmailTo').value,cc:copyEmails()});
    if(version!==emailVersion)return;
    emailSnapshot=preview.snapshotId;
    el('itEmailFrame').srcdoc=preview.html;
@@ -166,8 +222,8 @@
    el('itEmailOpen').addEventListener('click',openEmail);
    el('itEmailPreview').addEventListener('click',previewEmail);
    el('itEmailSend').addEventListener('click',sendEmail);
-   el('itEmailTo').addEventListener('change',invalidateEmail);
-   el('itEmailCc').addEventListener('input',invalidateEmail);
+   initCopies();
+   el('itEmailTo').addEventListener('change',()=>{renderCopies();invalidateEmail()});
    el('itExportSelected').addEventListener('change',invalidateEmail);
    el('itXlsx').addEventListener('click',excel);
    el('itPdf').addEventListener('click',pdf);
