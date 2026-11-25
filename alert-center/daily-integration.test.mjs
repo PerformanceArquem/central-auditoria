@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {simulateDailySnapshot} from './daily-integration.mjs';
+const fixture={date:'2026-11-24',complete:true,enabledSectors:['Inteligência','Suporte'],roster:[{id:'a',name:'Pessoa A',sector:'Inteligência'},{id:'b',name:'Pessoa B',sector:'Inteligência'},{id:'c',name:'Pessoa C',sector:'Suporte'},{id:'d',name:'Pessoa D',sector:'Produção'}],approvedTargets:[{personId:'a',expectedMinutes:480}],appointments:[{appointment_key:'x',appointment_date:'2026-11-24',sector:'inteligencia',collaborator_name:'Pessoa A',duration_minutes:120,ticket_id:'1'},{appointment_key:'y',appointment_date:'2026-11-24',sector:'Inteligência',collaborator_name:'Pessoa A',duration_minutes:180,ticket_id:'1'},{appointment_key:'z',appointment_date:'2026-11-24',sector:'Suporte',collaborator_name:'Pessoa C',duration_minutes:60,ticket_id:'2'}]};
+const run=(extra={})=>simulateDailySnapshot({...fixture,...extra}).alerts;
+test('sector aliases and exact appointment totals',()=>{const s=run().find(a=>a.recipientId==='a').summary;assert.equal(s.pointedMinutes,300);assert.equal(s.ticketCount,1);assert.equal(s.missingMinutes,180);});
+test('individual notifications respect enabled sectors',()=>assert.deepEqual(run().filter(a=>a.recipientRole==='individual').map(a=>a.recipientId),['a','b','c']));
+test('team includes zero-hour members and excludes other sectors',()=>{const s=run().find(a=>a.recipientRole==='intelligence-team-manager').summary;assert.equal(s.pointedMinutes,300);assert.equal(s.teamCount,2);assert.equal(s.comparableCount,1);assert.equal(s.expectedMinutes,null);});
+test('unknown target does not imply deficit',()=>assert.equal(run().find(a=>a.recipientId==='b').summary.missingMinutes,null));
+test('daily duplicate prevention',()=>assert.equal(run({existingKeys:run().map(a=>a.key)}).length,0));
+test('incomplete snapshot rejected',()=>assert.throws(()=>run({complete:false})));
+test('duplicate appointment rejected',()=>assert.throws(()=>run({appointments:[...fixture.appointments,fixture.appointments[0]]})));
+test('unknown employee rejected',()=>assert.throws(()=>run({appointments:[{...fixture.appointments[0],collaborator_name:'Unmatched'}]})));
+test('all notifications remain simulations',()=>assert.ok(run().every(a=>a.simulated)));
