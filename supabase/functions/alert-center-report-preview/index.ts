@@ -81,6 +81,7 @@ const validUrl = () => {
   return u.toString();
 };
 async function db(path: string, init: RequestInit = {}): Promise<any> {
+  if(init.method && init.method.toUpperCase()!=='GET')throw Error('Prévia somente leitura');
   const url = E('SUPABASE_URL').replace(/\/$/, '');
   const key = E('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) throw new Error('Secrets Supabase incompletos');
@@ -2639,7 +2640,7 @@ async function handleRequest(req: Request): Promise<Response> {
      if(action==='movidesk_report_preview'){
       if(!await isAdmin(req))return json({ok:false,error:'Acesso restrito'},403);
       const auth=req.headers.get('authorization')||'';
-      const u=await fetch(E('SUPABASE_URL').replace(/\\/$/,'')+'/auth/v1/user',{headers:{apikey:E('SUPABASE_ANON_KEY'),Authorization:auth},signal:AbortSignal.timeout(10000)});
+      const u=await fetch(E('SUPABASE_URL').replace(/\/$/,'')+'/auth/v1/user',{headers:{apikey:E('SUPABASE_ANON_KEY'),Authorization:auth},signal:AbortSignal.timeout(10000)});
       if(!u.ok)return json({ok:false,error:'Sessão inválida'},401);
       const actor=await u.json();
       if(typeof actor.id!=='string'||!E('ALERT_CENTER_TEST_RECIPIENT_ID'))return json({ok:false,error:'Homologação indisponível'},403);
