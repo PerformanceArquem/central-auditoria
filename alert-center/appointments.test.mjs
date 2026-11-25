@@ -16,3 +16,9 @@ test('all alerts simulated',()=>assert.ok(run().every(a=>a.simulated===true)));
 test('explicit unknown target displays hours without deficit',()=>{const roster=fixture.roster.map(p=>p.id==='a'?{...p,expectedMinutes:null}:p);const s=run({roster}).find(a=>a.recipientId==='a').summary;assert.equal(s.pointedMinutes,450);assert.equal(s.missingMinutes,null);assert.equal(s.comparisonEnabled,false);});
 test('mixed team targets never imply complete team coverage',()=>{const roster=fixture.roster.map(p=>p.id==='a'?{...p,expectedMinutes:null}:p);const s=run({roster}).find(a=>a.recipientRole==='intelligence-team-manager').summary;assert.equal(s.pointedMinutes,450);assert.equal(s.expectedMinutes,null);assert.equal(s.coveragePercent,null);assert.equal(s.comparableCount,1);assert.equal(s.comparableCoveragePercent,0);});
 test('all unknown targets disable comparison',()=>{const roster=fixture.roster.map(p=>({...p,expectedMinutes:null}));const s=run({roster}).find(a=>a.recipientRole==='intelligence-team-manager').summary;assert.equal(s.comparableCount,0);assert.equal(s.comparableCoveragePercent,null);});
+
+test('partial excludes homologation by subject and known ID',()=>{
+ const appointments=[...fixture.appointments,{personId:'a',minutes:120,ticketId:'fixture-test'},{personId:'b',minutes:90,ticketId:'fixture-known'}];
+ const alerts=run({kind:'partial',periodKey:'2026-11-25:09h-11h50',appointments,tickets:[{id:'fixture-test',subject:'TM-HOMOLOG-001'}],homologationTicketIds:['fixture-known']});
+ assert.equal(alerts.length,1);assert.equal(alerts[0].summary.pointedMinutes,450);assert.equal(alerts[0].summary.team.find(p=>p.personId==='b').pointedMinutes,0);assert.equal(alerts[0].simulated,true);
+});
