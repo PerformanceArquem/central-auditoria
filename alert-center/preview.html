@@ -70,10 +70,18 @@ const profile=profiles.find(p=>p.movideskPersonId===recipientPerson.value);
 if(!official||!client||!profile)throw Error('Carregue e selecione o cadastro oficial.');
 const selectedId=profile.movideskPersonId;
 const preview=prepareTriggerPreview({profile,authorizedRecipientId:selectedId,confirmed:triggerConfirm.checked});
-const {error:userError}=await client.auth.getUser();if(userError)throw Error('Sessão inválida.');
-const {data,error}=await client.functions.invoke('alert-center-trigger-preview',{body:{mode:'dry-run',recipientId:selectedId,confirmed:true}});
+const {data:userData,error:userError}=await client.auth.getUser();if(userError||!userData?.user?.id)throw Error('Sessão inválida.');
+// Keep one stable request key per actor, recipient and homologation protocol, even after refresh.
+const storageKey='alert-center:dry-run:v1:'+userData.user.id+':'+selectedId;
+let requestKey=localStorage.getItem(storageKey);
+if(!requestKey){requestKey=crypto.randomUUID();localStorage.setItem(storageKey,requestKey);}
+if(!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestKey))throw Error('Chave de homologação inválida.');
+const {data,error}=await client.functions.invoke('alert-center-trigger-preview',{body:{mode:'dry-run',recipientId:selectedId,confirmed:true,requestKey}});
 if(!official||recipientPerson.value!==selectedId||!triggerConfirm.checked)throw Error('Seleção alterada durante a validação.');
 if(error||data?.authorized!==true||data?.mode!=='dry-run'||data?.deliveryEnabled!==false||data?.ticketCreated!==false||data?.subject!==preview.subject)throw Error('Autorização não confirmada pelo servidor. Verifique a sessão e a configuração de homologação.');
-triggerResult.textContent='SIMULAÇÃO AUTORIZADA PELO SERVIDOR — '+profile.displayName+'\nAssunto: '+preview.subject+'\nDescrição: '+preview.description+'\nNenhum chamado criado; nenhum envio. Controle de duplicidade e exclusão das métricas ainda pendentes.';
+if(data.historyRecorded!==true||typeof data.history?.id!=='string'||typeof data.history?.duplicate!=='boolean'||data.history?.status!=='simulated')throw Error('Histórico não confirmado pelo servidor.');
+const created=new Date(data.history.createdAt);if(Number.isNaN(created.getTime()))throw Error('Data do histórico inválida.');
+triggerResult.textContent='SIMULAÇÃO AUTORIZADA PELO SERVIDOR — '+profile.displayName+'\nAssunto: '+preview.subject+'\nDescrição: '+preview.description+'\nRegistro: '+data.history.id+'\nData e horário: '+created.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})+'\nSituação: '+(data.history.duplicate?'Duplicidade bloqueada — registro original recuperado':'Simulação registrada')+'\nNenhum chamado criado; nenhum envio. Exclusão das métricas e proteção de futuros envios reais ainda pendentes.';
+
 }catch(e){triggerResult.textContent='Preparação bloqueada: '+e.message;}finally{triggerButton.disabled=false;}});
 </script></body></html>
