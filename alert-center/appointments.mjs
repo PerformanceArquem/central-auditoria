@@ -1,15 +1,17 @@
+import {excludeHomologation} from './report-exclusions.mjs';
 // Simulation only. Inputs must come from the existing authorized report pipeline.
 // Expected minutes must reflect the actual roster, holidays and absences.
-export function simulateAppointments({periodKey,kind,roster,appointments,enabledSectors,existingKeys=[],complete=false}) {
+export function simulateAppointments({periodKey,kind,roster,appointments,enabledSectors,existingKeys=[],complete=false,tickets=[],homologationTicketIds=[]}) {
   if (!complete) throw new Error('Report snapshot must be verified complete');
   if (!['daily','partial'].includes(kind) || !periodKey) throw new Error('Invalid reporting period');
+  const filtered=excludeHomologation(tickets,appointments,homologationTicketIds);
   const rows=[], seen=new Set();
   for (const person of roster) {
     if (!person.id || seen.has(person.id)) throw new Error('Invalid or duplicate roster ID');
     seen.add(person.id);
     if (person.expectedMinutes !== null && (!Number.isFinite(person.expectedMinutes) || person.expectedMinutes<0)) throw new Error('Missing adjusted working schedule');
     if (!enabledSectors.includes(person.sector) && person.sector!=='intelligence') continue;
-    const entries=appointments.filter(a=>a.personId===person.id);
+    const entries=filtered.appointments.filter(a=>a.personId===person.id);
     if (entries.some(a=>!Number.isFinite(a.minutes)||a.minutes<0)) throw new Error('Invalid appointment minutes');
     const minutes=entries.reduce((s,a)=>s+a.minutes,0);
     const row={personId:person.id,sector:person.sector,expectedMinutes:person.expectedMinutes,pointedMinutes:minutes,missingMinutes:person.expectedMinutes===null?null:Math.max(0,person.expectedMinutes-minutes),comparisonEnabled:person.expectedMinutes!==null,ticketCount:new Set(entries.map(a=>a.ticketId).filter(Boolean)).size};
