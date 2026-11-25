@@ -12,3 +12,12 @@ test('incomplete snapshot rejected',()=>assert.throws(()=>run({complete:false}))
 test('duplicate appointment rejected',()=>assert.throws(()=>run({appointments:[...fixture.appointments,fixture.appointments[0]]})));
 test('unknown employee rejected',()=>assert.throws(()=>run({appointments:[{...fixture.appointments[0],collaborator_name:'Unmatched'}]})));
 test('all notifications remain simulations',()=>assert.ok(run().every(a=>a.simulated)));
+
+test('homologation subject and verified IDs excluded before aggregation',()=>{
+ const extra={...fixture.appointments[0],appointment_key:'homologation-a',ticket_id:'fixture-test',duration_minutes:480};
+ const known={...extra,appointment_key:'homologation-b',ticket_id:'fixture-known'};
+ const alerts=run({appointments:[...fixture.appointments,extra,known],tickets:[{id:'fixture-test',subject:'TM-HOMOLOG-001'}],homologationTicketIds:['fixture-known']});
+ assert.equal(alerts.find(a=>a.recipientId==='a').summary.pointedMinutes,300);
+ assert.equal(alerts.find(a=>a.recipientId==='a').summary.ticketCount,1);
+ assert.equal(alerts.find(a=>a.recipientRole==='intelligence-team-manager').summary.pointedMinutes,300);
+});
