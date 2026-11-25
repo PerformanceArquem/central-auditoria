@@ -3,7 +3,7 @@
 export function simulateAppointments({periodKey,kind,roster,appointments,enabledSectors,existingKeys=[],complete=false}) {
   if (!complete) throw new Error('Report snapshot must be verified complete');
   if (!['daily','partial'].includes(kind) || !periodKey) throw new Error('Invalid reporting period');
-  const keys=new Set(existingKeys), alerts=[], rows=[], seen=new Set();
+  const rows=[], seen=new Set();
   for (const person of roster) {
     if (!person.id || seen.has(person.id)) throw new Error('Invalid or duplicate roster ID');
     seen.add(person.id);
@@ -14,9 +14,21 @@ export function simulateAppointments({periodKey,kind,roster,appointments,enabled
     const minutes=entries.reduce((s,a)=>s+a.minutes,0);
     const row={personId:person.id,sector:person.sector,expectedMinutes:person.expectedMinutes,pointedMinutes:minutes,missingMinutes:person.expectedMinutes===null?null:Math.max(0,person.expectedMinutes-minutes),comparisonEnabled:person.expectedMinutes!==null,ticketCount:new Set(entries.map(a=>a.ticketId).filter(Boolean)).size};
     rows.push(row);
-    const key='appointments:individual:'+person.id+':'+periodKey;
-    if(kind==='daily' && enabledSectors.includes(person.sector) && (person.expectedMinutes===null||person.expectedMinutes>0||minutes>0) && !keys.has(key)) {
-      keys.add(key); alerts.push({key,recipientRole:'individual',recipientId:person.id,summary:row,simulated:true});
+  }
+  return simulateAppointmentRows({periodKey,kind,rows,enabledSectors,existingKeys,complete});
+}
+
+// Dispatch already aggregated rows without reconstructing or duplicating appointments.
+export function simulateAppointmentRows({periodKey,kind,rows,enabledSectors,existingKeys=[],complete=false}) {
+  if (!complete || !['daily','partial'].includes(kind) || !periodKey) throw new Error('Verified reporting period required');
+  const keys=new Set(existingKeys), alerts=[], seen=new Set();
+  for (const row of rows) {
+    if (!row.personId || seen.has(row.personId)) throw new Error('Duplicate or invalid person');
+    seen.add(row.personId);
+    if (!Number.isSafeInteger(row.pointedMinutes) || row.pointedMinutes<0 || !Number.isSafeInteger(row.ticketCount) || row.ticketCount<0 || (row.expectedMinutes!==null && (!Number.isSafeInteger(row.expectedMinutes)||row.expectedMinutes<0))) throw new Error('Invalid summary');
+    const key='appointments:individual:'+row.personId+':'+periodKey;
+    if(kind==='daily' && enabledSectors.includes(row.sector) && (row.expectedMinutes===null||row.expectedMinutes>0||row.pointedMinutes>0) && !keys.has(key)) {
+      keys.add(key); alerts.push({key,recipientRole:'individual',recipientId:row.personId,summary:row,simulated:true});
     }
   }
   const team=rows.filter(r=>r.sector==='intelligence');
