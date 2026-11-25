@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {prepareTriggerPreview} from './trigger-preview.mjs';
+const profile={active:true,movideskPersonId:'fixture-authorized'};
+const valid={profile,authorizedRecipientId:'fixture-authorized',confirmed:true};
+test('authorized confirmed preview cannot deliver',()=>{const result=prepareTriggerPreview(valid);assert.equal(result.mode,'dry-run');assert.equal(result.deliveryEnabled,false);assert.equal(result.subject,'TM-HOMOLOG-001');assert.equal(result.recipientId,'fixture-authorized');});
+test('reject different recipient',()=>assert.throws(()=>prepareTriggerPreview({...valid,profile:{...profile,movideskPersonId:'fixture-other'}})));
+test('reject inactive recipient',()=>assert.throws(()=>prepareTriggerPreview({...valid,profile:{...profile,active:false}})));
+test('reject absent recipient or authorization',()=>{assert.throws(()=>prepareTriggerPreview({...valid,profile:null}));for(const id of ['',null,undefined])assert.throws(()=>prepareTriggerPreview({...valid,authorizedRecipientId:id}));});
+test('require explicit confirmation',()=>{for(const confirmed of [false,undefined,'true',1])assert.throws(()=>prepareTriggerPreview({...valid,confirmed}));});
+test('server authorization, deduplication and metrics exclusion remain mandatory',()=>{const result=prepareTriggerPreview(valid);for(const k of ['requiresServerAuthorization','requiresDuplicateCheck','requiresMetricsExclusion'])assert.equal(result[k],true);});
