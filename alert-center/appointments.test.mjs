@@ -12,3 +12,7 @@ test('deduplication',()=>assert.equal(run({existingKeys:run().map(a=>a.key)}).le
 test('incomplete report blocked',()=>assert.throws(()=>run({complete:false})));
 test('adjusted schedule required',()=>assert.throws(()=>run({roster:[{id:'a',sector:'intelligence'}]})));
 test('all alerts simulated',()=>assert.ok(run().every(a=>a.simulated===true)));
+
+test('explicit unknown target displays hours without deficit',()=>{const roster=fixture.roster.map(p=>p.id==='a'?{...p,expectedMinutes:null}:p);const s=run({roster}).find(a=>a.recipientId==='a').summary;assert.equal(s.pointedMinutes,450);assert.equal(s.missingMinutes,null);assert.equal(s.comparisonEnabled,false);});
+test('mixed team targets never imply complete team coverage',()=>{const roster=fixture.roster.map(p=>p.id==='a'?{...p,expectedMinutes:null}:p);const s=run({roster}).find(a=>a.recipientRole==='intelligence-team-manager').summary;assert.equal(s.pointedMinutes,450);assert.equal(s.expectedMinutes,null);assert.equal(s.coveragePercent,null);assert.equal(s.comparableCount,1);assert.equal(s.comparableCoveragePercent,0);});
+test('all unknown targets disable comparison',()=>{const roster=fixture.roster.map(p=>({...p,expectedMinutes:null}));const s=run({roster}).find(a=>a.recipientRole==='intelligence-team-manager').summary;assert.equal(s.comparableCount,0);assert.equal(s.comparableCoveragePercent,null);});
