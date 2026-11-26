@@ -23,7 +23,9 @@ export function composeTriageDraft({rows,threshold,referenceTime,now}){
  'Olá! Por gentileza, avalie o encaminhamento dos chamados abaixo, considerando as prioridades e as informações disponíveis. Se necessário, atualize o responsável e a previsão de tratamento.',''];
  if(eligible.length)for(const row of eligible){
  const subject=String(row.subject||'Assunto não informado').replace(/[\r\n\t]+/g,' ').slice(0,240);
- lines.push('#'+row.ticketId+' | '+subject+' | Desde '+br(row.enteredDate)+' | '+row.businessDays+' dias úteis');
+ const owner=String(row.ownerName||(row.ownerId?'ID '+row.ownerId:'Não identificado')).replace(/[\r\n\t]+/g,' ').slice(0,160);
+ const sector=String(row.sector||'Inteligência').replace(/[\r\n\t]+/g,' ').slice(0,160);
+ lines.push('#'+row.ticketId+' | '+subject+' | Setor: '+sector+' | Responsável: '+owner+' | Desde '+br(row.enteredDate)+' | '+row.businessDays+' dias úteis');
  }else lines.push('Nenhum chamado com histórico validado atingiu o limite nesta consulta.');
  lines.push('','Total para avaliação: '+eligible.length+'.');
  if(review.length)lines.push('Revisão de dados, fora da relação para encaminhamento: '+review.map(id=>'#'+id).join(', ')+'.');
