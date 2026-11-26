@@ -3,7 +3,8 @@ import {evaluateImportedTriage} from '../../../alert-center/triage-adapter.mjs';
 const env=(key:string)=>Deno.env.get(key)?.trim()||'';
 Deno.serve(async(req:Request)=>{
  const origin=req.headers.get('origin')||'';
- const allowed=/^https:\/\/central-auditoria-[a-z0-9-]+-arquem\.vercel\.app$/.test(origin);
+ const officialOrigins=new Set(['https://central-auditoria-iota.vercel.app','https://central-auditoria-arquem.vercel.app','https://centralauditoria.ddns.net','https://www.centralauditoria.ddns.net']);
+ const allowed=officialOrigins.has(origin)||/^https:\/\/central-auditoria-[a-z0-9-]+-arquem\.vercel\.app$/.test(origin);
  const cors={'Vary':'Origin','Cache-Control':'no-store','Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'authorization,apikey,content-type,x-client-info',...(allowed?{'Access-Control-Allow-Origin':origin}:{})};
  const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json'}});
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
