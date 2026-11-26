@@ -1384,17 +1384,21 @@ async function manualOfficial(payload: R, movideskPreview = false) {
   }
   // Teste manual autorizado: nao depende da conclusao da conciliacao historica/recente.
   // Chave exclusiva por tentativa para permitir repetir testes no mesmo periodo.
-  const checkpoint = await state();
-  const coverage = await recentCoverage(from,to);
+  const [checkpoint,coverage,appts,clients] = await Promise.all([
+    state(),recentCoverage(from,to),source(from,to),clientSource()
+  ]);
   const key = `manual-test:${id}:${kind}:${from}:${to}:${crypto.randomUUID()}`;
-  const [appts,clients] = await Promise.all([source(from,to),clientSource()]);
   // Piloto manual autorizado: admin JWT + endereco fixo + confirmacao de UI.
   // A permissao coletiva global permanece exigida pelo Cron automatico.
   const report = buildReport(rec, appts, from, to, kind, hol, true, clients);
-  const tickets = ticketAlerts(rec, await ticketSource());
-  const quality = await supportRatingCache()(rec, from, to);
-  const overview = await directionOverviewCache()(rec, from, to, tickets.activeTickets,kind);
-  const forecast=await optionalForecast(rec);
+  // An empty read-only snapshot needs no ticket or comparison queries.
+  if (movideskPreview && !report.metrics.appointments)
+    return json({ok:false,error:'Não há apontamentos da Qualidade importados para o período consultado. Selecione outra referência; a ausência de registros não comprova ausência de trabalho.',from,to},409);
+  const [ticketRows,quality,forecast] = await Promise.all([
+    ticketSource(),supportRatingCache()(rec,from,to),optionalForecast(rec)
+  ]);
+  const tickets = ticketAlerts(rec,ticketRows);
+  const overview = await directionOverviewCache()(rec,from,to,tickets.activeTickets,kind);
   // Mesmo com zero apontamentos, o teste manual verifica o envio e informa a ausencia no corpo.
   const partial = !checkpoint.completed || !coverage.ready;
   const empty = !report.metrics.appointments;
