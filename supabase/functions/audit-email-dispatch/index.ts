@@ -81,6 +81,15 @@ const validUrl = () => {
   return u.toString();
 };
 async function db(path: string, init: RequestInit = {}): Promise<any> {
+  const reportingViews:Record<string,string> = {
+    audit_direct_tickets:'audit_reporting_tickets',
+    audit_direct_appointments:'audit_reporting_appointments',
+    audit_email_open_ticket_snapshot:'audit_reporting_open_ticket_snapshot',
+    audit_ticket_client_summary:'audit_reporting_client_summary'
+  };
+  const table=path.split('?')[0];
+  if((!init.method||init.method.toUpperCase()==='GET')&&reportingViews[table])path=reportingViews[table]+path.slice(table.length);
+
   const url = E('SUPABASE_URL').replace(/\/$/, '');
   const key = E('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) throw new Error('Secrets Supabase incompletos');
@@ -2450,6 +2459,10 @@ async function dispatchNoonPartial() {
    method:'POST',body:JSON.stringify({p_day:today})
  });
  if(!Array.isArray(sourceRows))throw new Error('Janela 09h-11h50 indisponível');
+ const exclusions=await list('audit_reporting_excluded_ticket_ids','?select=ticket_id&order=ticket_id.asc');
+ const excludedIds=new Set(exclusions.map(row=>String(row.ticket_id)));
+ const filteredSourceRows=sourceRows.filter((row:R)=>!excludedIds.has(String(row.ticket_id)));
+
  const recipients=await recipientList();
  const specifications=[
   {code:'inteligencia',id:'ba07a7f7-6b33-4788-8a05-a5fd6e899387',
@@ -2474,7 +2487,7 @@ async function dispatchNoonPartial() {
   const key='partial-noon:'+spec.code+':'+today+':09:00-11:50';
   const prev=await db('audit_email_sector_dispatches?dispatch_key=eq.'+encodeURIComponent(key)+'&select=status&limit=1');
   if(prev.length){results.push({report:spec.code,status:'skipped',reason:'Já registrado, evitar duplicidade'});continue;}
-  const picked=sourceRows.filter((row:R)=>spec.sectors.some(sector=>norm(sector)===norm(row.sector)));
+  const picked=filteredSourceRows.filter((row:R)=>spec.sectors.some(sector=>norm(sector)===norm(row.sector)));
   const persons=new Map<string,{name:string;sector:string;minutes:number;appointments:number;tickets:Set<string>}>();
   const tickets=new Set<string>();
   let minutes=0;
