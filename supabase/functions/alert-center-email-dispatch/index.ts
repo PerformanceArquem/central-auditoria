@@ -1,4 +1,4 @@
-import {EMAIL_SECTORS,localClock,idleCoverageStart,inEmailWindow,sectorRecipient,evaluateEmailAlerts,alertBody,formatEmailDates} from '../../../alert-center/email-policy.mjs';
+import {EMAIL_SECTORS,localClock,idleCoverageStart,inEmailWindow,sectorRecipient,evaluateEmailAlerts,alertBody,formatEmailDates,formatAlertHtml} from '../../../alert-center/email-policy.mjs';
 import {readTriageHistories} from '../../../alert-center/triage-live-reader.mjs';
 import {composeTicketCharge} from '../audit-email-dispatch/ticket-charge.ts';
 import {assertEmailDeliveryEnabled} from '../_shared/email-delivery-control.ts';
@@ -84,13 +84,21 @@ export function createAlertEmailHandler(fetcher:typeof fetch=fetch,getEnv=env,cl
  const chunk=rows.slice(offset,offset+20);
  const subject='ARQUEM | Ticket Manager | '+target.sector+' | Alertas | '+local.date.split('-').reverse().join('/')+(rows.length>20?' | Parte '+(parts.length+1):'');
  const draft=composeTicketCharge(chunk,recipient.email,alertBody(chunk,target.sector,clock().toISOString()),{subject,customBody:true});
- parts.push({subject:draft.subject,text:formatEmailDates(draft.text),html:formatEmailDates(draft.html)});
+ parts.push({subject:draft.subject,text:formatEmailDates(draft.text),html:formatAlertHtml(draft.html)});
  }
  bundles.push({sector:target.sector,recipientId:recipient.id,recipient:recipient.email,name:recipient.name,enabled:setting.enabled===true,ticketCount:rows.length,ticketIds:rows.map((r:Row)=>r.ticket_id),reviewCount:evaluation.review.filter((r:Row)=>r.sector===target.sector).length,parts});
  }
  if(body.action==='preview'){
+ let providerReady=false;
+ try{
+ const provider=new URL(getEnv('GMAIL_WEBAPP_URL'));
+ if(provider.protocol==='https:'&&provider.hostname==='script.google.com'&&provider.pathname.startsWith('/macros/s/')&&provider.pathname.endsWith('/exec')&&getEnv('GMAIL_MAIL_SECRET')){
+ const response=await fetcher(provider.toString(),{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({token:getEnv('GMAIL_MAIL_SECRET'),action:'capabilities'}),signal:AbortSignal.timeout(15000)});
+ const capabilities=response.ok?await response.json().catch(()=>null):null;providerReady=capabilities?.sucesso===true;
+ }
+ }catch{}
  const history=await db('audit_alert_email_history?local_date=eq.'+local.date+'&select=sector,status,parts,accepted_parts,sent_at,error_summary&limit=7');
- return reply({ok:true,preview:true,sent:false,reference:clock().toISOString(),directReads,directUnavailable,schedule:'Dias úteis, das 08h30 às 08h35 (Brasília)',appointmentCoverage,bundles,history});
+ return reply({ok:true,preview:true,sent:false,providerReady,reference:clock().toISOString(),directReads,directUnavailable,schedule:'Dias úteis, das 08h30 às 08h35 (Brasília)',appointmentCoverage,bundles,history});
  }
  const bundle=bundles[0];
  if(!bundle.enabled)return reply({ok:true,sent:false,skipped:'Setor desabilitado.'});
