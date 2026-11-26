@@ -109,3 +109,19 @@ test('raw limit overflow remains incomplete even if lifecycle filtering could re
  const response=await handler(request());assert.equal(response.status,409);
  assert.ok(requests.every(r=>new URL(r.url).hostname!=='api.movidesk.com'));
 });
+
+test('official origins can complete preflight without skipping authorization',async()=>{
+ for(const origin of ['https://central-auditoria-iota.vercel.app','https://central-auditoria-arquem.vercel.app','https://centralauditoria.ddns.net','https://www.centralauditoria.ddns.net']){
+ const {handler,requests}=createHandler();
+ const preflight=await handler(new Request('https://fixture.functions.supabase.co/',{method:'OPTIONS',headers:{origin}}));
+ assert.equal(preflight.status,204);assert.equal(preflight.headers.get('access-control-allow-origin'),origin);
+ const response=await handler(new Request('https://fixture.functions.supabase.co/',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({mode:'read-only'})}));
+ assert.equal(response.status,401);assert.equal(requests.length,0);
+ }
+});
+test('unknown origins never receive CORS access',async()=>{
+ for(const origin of ['https://example.test','https://central-auditoria-iota.vercel.app.example.test','null']){
+ const {handler}=createHandler();const response=await handler(new Request('https://fixture.functions.supabase.co/',{method:'OPTIONS',headers:{origin}}));
+ assert.equal(response.headers.get('access-control-allow-origin'),null);
+ }
+});
