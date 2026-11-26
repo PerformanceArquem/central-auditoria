@@ -1,0 +1,18 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {businessMinutes,normalizeRobotTicket,simulateVerifiedTicket} from './robot-source.mjs';
+const ms=s=>Date.parse(s);
+const context={now:'2026-11-26T21:05:00Z',today:'2026-11-26',clock:'18:05',sector:'Suporte',historyComplete:true,sourceVerified:true,forecastVerified:true,verifiedHumanActionIds:['1'],holidays:[]};
+const action={id:1,createdDate:'2026-11-23T15:00:00Z',description:'Tratamento realizado',timeAppointments:[{date:'2026-11-23'}]};
+const row={ticket_id:'123',payload:{id:'123',status:'Em Análise',createdDate:'2026-11-20T12:00:00Z',slaSolutionDate:'2026-11-25T21:00:00Z',slaSolutionDateIsPaused:false,actions:[action]}};
+test('working day exactly nine hours',()=>assert.equal(businessMinutes(ms('2026-11-26T00:00:00Z'),ms('2026-11-27T00:00:00Z')),540));
+test('weekend and holiday excluded',()=>assert.equal(businessMinutes(ms('2026-11-20T12:00:00Z'),ms('2026-11-23T21:00:00Z'),['2026-11-20']),540));
+test('overnight does not add support working minutes',()=>assert.equal(businessMinutes(ms('2026-11-25T21:00:00Z'),ms('2026-11-26T12:00:00Z')),0));
+test('verified appointment and overdue normalized',()=>{const a=normalizeRobotTicket(row,context);assert.equal(a.lastAppointmentDate,'2026-11-23');assert.equal(a.forecastState,'overdue');assert.equal(a.historyVerified,true);});
+test('robot messages do not reset human activity',()=>{const extra={id:2,description:'Ticket Manager | Gestão da Qualidade',createdDate:'2026-11-26T20:00:00Z',timeAppointments:[]};const a=normalizeRobotTicket({...row,payload:{...row.payload,actions:[action,extra]}},context);assert.equal(a.idleBusinessMinutes,normalizeRobotTicket(row,context).idleBusinessMinutes);});
+test('unverified appointment blocks evaluation',()=>assert.equal(simulateVerifiedTicket(row,{...context,verifiedHumanActionIds:[]}).review,true));
+test('missing or incomplete history blocks evaluation',()=>assert.equal(simulateVerifiedTicket(row,{...context,historyComplete:false}).review,true));
+test('paused forecast held for review',()=>assert.equal(simulateVerifiedTicket({...row,payload:{...row.payload,slaSolutionDateIsPaused:true}},context).review,true));
+test('ambiguous timestamps held for review',()=>assert.equal(simulateVerifiedTicket({...row,payload:{...row.payload,slaSolutionDate:'2026-11-25T18:00:00'}},context).review,true));
+test('verified absent forecast in production',()=>{const c={...context,sector:'Produção',clock:'05:30',now:'2026-11-26T08:30:00Z'};const a=simulateVerifiedTicket({...row,payload:{...row.payload,slaSolutionDate:null}},c);assert.ok(a.actions.some(x=>x.key==='missing_forecast'));assert.equal(a.deliveryEnabled,false);});
+test('production retains verified overnight appointment',()=>{const c={...context,sector:'Produção',clock:'05:30',now:'2026-11-26T08:30:00Z'};const a={...action,createdDate:'2026-11-26T08:00:00Z',timeAppointments:[{date:'2026-11-26'}]};assert.equal(normalizeRobotTicket({...row,payload:{...row.payload,actions:[a]}},c).lastAppointmentDate,'2026-11-26');});
