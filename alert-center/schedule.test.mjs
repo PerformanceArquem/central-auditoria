@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {calculateSchedule} from './schedule.mjs';
+test('forecast and triage prepare at 08:20',()=>{for(const id of ['forecast','idle','triage'])assert.equal(calculateSchedule(id,'08:30',10).prepare,'08:20');});
+test('daily reports use previous day',()=>{for(const id of ['individual','team'])assert.deepEqual(calculateSchedule(id,'09:00',10),{time:'09:00',prepare:'08:50',reference:'Dia anterior'});});
+test('partial preserves existing cutoff',()=>assert.deepEqual(calculateSchedule('partial','12:00',10),{time:'12:00',prepare:'11:50',reference:'Hoje, 09h–11h50'}));
+test('partial cannot prepare before cutoff',()=>assert.throws(()=>calculateSchedule('partial','12:00',15)));
+test('later partial can use longer lead',()=>assert.equal(calculateSchedule('partial','12:05',15).prepare,'11:50'));
+test('invalid schedules rejected',()=>{for(const time of ['24:00','09:60','9:00',''])assert.throws(()=>calculateSchedule('team',time,10));for(const lead of [0,121,1.5,NaN])assert.throws(()=>calculateSchedule('team','09:00',lead));});
+test('crossing midnight rejected',()=>assert.throws(()=>calculateSchedule('team','00:05',10)));
+test('unknown rule rejected',()=>assert.throws(()=>calculateSchedule('unknown','09:00',10)));

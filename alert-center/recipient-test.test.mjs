@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {simulateRecipient} from './recipient-test.mjs';
+const profile={active:true,movideskPersonId:'fixture-1'};
+test('six notifications are simulated for exactly one recipient',()=>{const rows=simulateRecipient({profile});assert.equal(rows.length,6);assert.ok(rows.every(x=>x.recipientId==='fixture-1'&&x.deliveryEnabled===false&&x.fixtureOnly===true&&x.status==='simulated'));});
+test('inactive or missing identifier rejected',()=>{for(const p of [null,{...profile,active:false},{active:true,movideskPersonId:''}])assert.throws(()=>simulateRecipient({profile:p}));});
+test('only selected rules, without duplicates',()=>assert.deepEqual(simulateRecipient({profile,selectedRules:['team','team']}).map(x=>x.rule),['team']));
+test('unknown or empty selection rejected',()=>{for(const selectedRules of [[],['unknown']])assert.throws(()=>simulateRecipient({profile,selectedRules}));});
+test('partial cutoff remains enforced',()=>assert.throws(()=>simulateRecipient({profile,selectedRules:['partial'],lead:15})));
+test('individual report retains previous-day reference',()=>assert.equal(simulateRecipient({profile,selectedRules:['individual']})[0].schedule.reference,'Dia anterior'));
