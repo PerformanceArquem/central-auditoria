@@ -7,16 +7,15 @@ import {readTriageHistories} from './triage-live-reader.mjs';
 import {evaluateImportedTriage} from './triage-adapter.mjs';
 const source=stripTypeScriptTypes(readFileSync(new URL('../supabase/functions/alert-center-triage-preview/index.ts',import.meta.url),'utf8')).replace(/^import .*;\r?\n/gm,'');
 const payload=id=>({id,subject:'Fixture',ownerTeam:'Inteligência',status:'Em Análise',ownerHistories:[{changedDate:'2026-11-01T12:00:00',ownerTeam:'Inteligência'}],statusHistories:[{changedDate:'2026-11-01T12:00:00',status:'Em Análise'}]});
-function createHandler({admin=true,individualStatus=200,liveOwner=null}={}){
+function createHandler({admin=true,individualStatus=200,liveOwner=null,importedRows=null}={}){
  let handler;const requests=[];
  const mockFetch=async(url,opts={})=>{
  requests.push({url:String(url),method:opts.method||'GET'});
  const parsed=new URL(url),name=parsed.pathname.split('/').pop();
  if(parsed.pathname.endsWith('/auth/v1/user'))return Response.json({id:'fixture'});
  if(name==='audit_users')return Response.json(admin?[{user_id:'fixture'}]:[]);
- if(name==='audit_reporting_open_ticket_snapshot')return Response.json([1,2].map(id=>({ticket_id:String(id),payload:payload(id),closed_at_source:null})));
  if(name==='audit_email_holidays')return Response.json([]);
- if(name==='audit_reporting_tickets')return Response.json([1,2].map(id=>({ticket_id:String(id),payload:payload(id),source_synced_at:new Date(Date.now()-48*3600000).toISOString()})));
+ if(name==='audit_reporting_tickets')return Response.json(importedRows??[1,2].map(id=>({ticket_id:String(id),payload:payload(id),source_synced_at:new Date(Date.now()-48*3600000).toISOString()})));
  if(parsed.hostname==='api.movidesk.com'){
  if(!parsed.searchParams.has('id'))return Response.json([]);
  return individualStatus===200?Response.json({...payload(Number(parsed.searchParams.get('id'))),owner:liveOwner}):new Response('',{status:individualStatus});
@@ -77,4 +76,36 @@ test('missing live owner remains explicit without inventing a recipient',async()
 test('invalid threshold is rejected before reading ticket data or Movidesk',async()=>{
  const {handler,requests}=createHandler();assert.equal((await handler(request(true,{threshold:0}))).status,400);
  assert.ok(requests.every(r=>!new URL(r.url).pathname.includes('audit_reporting')&&new URL(r.url).hostname!=='api.movidesk.com'));
+});
+
+test('triage selection and histories use one scoped reporting read',async()=>{
+ const {handler,requests}=createHandler();const response=await handler(request(true,{refresh:false}));
+ assert.equal(response.status,200);
+ const reads=requests.filter(r=>new URL(r.url).pathname.endsWith('/audit_reporting_tickets'));
+ assert.equal(reads.length,1);
+ const params=new URL(reads[0].url).searchParams;
+ assert.equal(params.get('payload->>ownerTeam'),'eq.Inteligência');
+ assert.equal(params.get('payload->>status'),'eq.Em Análise');
+ assert.equal(params.get('closed_at_source'),'is.null');
+ assert.equal(params.get('limit'),'501');
+ assert.ok(params.get('select').includes('source_synced_at'));
+ assert.ok(requests.every(r=>!r.url.includes('audit_reporting_open_ticket_snapshot')));
+});
+test('closed cancelled and deleted source records never reach direct Movidesk reads',async()=>{
+ const importedRows=[
+ {ticket_id:'1',payload:{...payload(1),closedIn:'2026-11-01T12:00:00'}},
+ {ticket_id:'2',payload:{...payload(2),canceledIn:'2026-11-01T12:00:00'}},
+ {ticket_id:'3',payload:{...payload(3),isDeleted:true}},
+ {ticket_id:'4',payload:payload(4),closed_at_source:'2026-11-01T12:00:00Z'}
+ ];
+ const {handler,requests}=createHandler({importedRows});
+ const response=await handler(request(true,{refresh:false}));const result=await response.json();
+ assert.equal(response.status,200);assert.equal(result.rows.length,0);
+ assert.ok(requests.every(r=>new URL(r.url).hostname!=='api.movidesk.com'));
+});
+test('raw limit overflow remains incomplete even if lifecycle filtering could remove rows',async()=>{
+ const importedRows=Array.from({length:501},(_,i)=>({ticket_id:String(i+1),payload:{...payload(i+1),isDeleted:true}}));
+ const {handler,requests}=createHandler({importedRows});
+ const response=await handler(request());assert.equal(response.status,409);
+ assert.ok(requests.every(r=>new URL(r.url).hostname!=='api.movidesk.com'));
 });
