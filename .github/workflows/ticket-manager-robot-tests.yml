@@ -1,0 +1,21 @@
+name: Ticket Manager robot simulation tests
+on:
+  push:
+    branches: [feat-ticket-manager-internal-note-pilot]
+    paths:
+      - 'alert-center/robot-rules*.mjs'
+      - '.github/workflows/ticket-manager-robot-tests.yml'
+permissions:
+  contents: read
+jobs:
+  simulation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test alert-center/robot-rules.test.mjs
