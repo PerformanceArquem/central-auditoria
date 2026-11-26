@@ -82,3 +82,5 @@ export function alertBody(rows,sector,now){
 }
 
 export function formatEmailDates(content){return String(content).replace(/\b(20\d{2})-(\d{2})-(\d{2})\b/g,'$3/$2/$1');}
+
+export function formatAlertHtml(content){return formatEmailDates(content).replace(/min-width:\d+px/g,'min-width:0').replace(/white-space:nowrap/g,'white-space:normal;overflow-wrap:anywhere').replace('border-collapse:collapse;min-width:0','border-collapse:collapse;min-width:0;table-layout:fixed');}
