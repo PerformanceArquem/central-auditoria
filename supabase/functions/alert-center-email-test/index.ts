@@ -29,7 +29,7 @@ export function testHandler(fetcher:typeof fetch=fetch,getEnv=env,clock=()=>new 
  stage='historical-snapshot';
  const snapshots=await db('audit_triage_snapshots?id=eq.'+TEST.snapshot+'&reference_date=eq.'+TEST.reference+'&select=id,reference_date,created_at,sha256,report&limit=2');
  if(snapshots.length!==1||snapshots[0].report?.date!==TEST.reference||!Array.isArray(snapshots[0].report?.items)||!snapshots[0].report.items.length)throw Error('Registro histórico de ontem não confirmado.');
- const saved=snapshots[0],report={...saved.report,snapshotId:saved.id,sha256:saved.sha256};
+ const saved=snapshots[0],report={...saved.report,manual:undefined,snapshotId:saved.id,sha256:saved.sha256};
  stage='presentation';
  const draft=triagePresentation(report,recipients[0]);
  const subject='[TESTE REAL] Ticket Manager | Triagem da Inteligência | 25/11/2026';
@@ -42,7 +42,7 @@ export function testHandler(fetcher:typeof fetch=fetch,getEnv=env,clock=()=>new 
  const call=async(action:string,payload:Row)=>{
  const response=await fetcher(provider.toString(),{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({token:getEnv('GMAIL_MAIL_SECRET'),action,...payload}),signal:AbortSignal.timeout(60000)});
  const result=response.ok?await response.json().catch(()=>null):null;
- if(result?.sucesso!==true){const detail=String(result?.erro||'');throw Error(/destinat|recipient|chave|key/i.test(detail)?'provider-recipient-policy':/cota|quota/i.test(detail)?'provider-quota':'provider-validation-rejected');}
+ if(result?.sucesso!==true){const detail=String(result?.erro||'');throw Error(/destinat|recipient|chave|key|cópias|copias/i.test(detail)?'provider-recipient-policy':/cota|quota/i.test(detail)?'provider-quota':'provider-validation-rejected');}
  return result;
  };
  await assertEmailDeliveryEnabled(db);
