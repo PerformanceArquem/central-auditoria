@@ -1,8 +1,11 @@
 name: Alert center dry-run tests
 on:
   push:
-    branches: [feat-movidesk-alert-center]
-    paths: ['alert-center/**', '.github/workflows/alert-center-tests.yml']
+    branches: [main, feat-movidesk-alert-center]
+    paths: ['alert-center/**', 'supabase/functions/alert-center-*/**', '.github/workflows/alert-center-tests.yml']
+  pull_request:
+    branches: [main]
+    paths: ['alert-center/**', 'supabase/functions/alert-center-*/**', '.github/workflows/alert-center-tests.yml']
 permissions:
   contents: read
 jobs:
