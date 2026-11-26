@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {runDeliveryHomologation} from './delivery-homologation.mjs';
+const input={profile:{active:true,movideskPersonId:'test-user'},authorizedRecipientId:'test-user',ticketId:92070,requestKey:'12345678-1234-4234-8234-123456789abc',confirmed:true};
+test('default is dry run, no calls',async()=>{const fail=()=>{throw Error('unexpected call')};const r=await runDeliveryHomologation(input,{reserve:fail,send:fail,finish:fail});assert.equal(r.status,'simulated');assert.equal(r.packet.subject,'TM-HOMOLOG-002');});
+test('rejects unauthorized recipient',async()=>{await assert.rejects(runDeliveryHomologation({...input,authorizedRecipientId:'other'}),/não autorizada/);});
+test('duplicate reservation never sends',async()=>{const r=await runDeliveryHomologation({...input,deliveryEnabled:true},{reserve:async()=>({duplicate:true}),send:()=>{throw Error('unexpected send')},finish:()=>{throw Error('unexpected finish')}});assert.equal(r.status,'duplicate');});
+test('accepted only with provider identifier',async()=>{let record;const r=await runDeliveryHomologation({...input,deliveryEnabled:true},{reserve:async()=>({acquired:true,id:'r1'}),send:async()=>({accepted:true,deliveryId:'d1'}),finish:async(id,outcome)=>{record={id,...outcome}}});assert.equal(r.status,'accepted');assert.deepEqual(record,{id:'r1',status:'accepted',deliveryId:'d1'});});
+test('ambiguous failure must be reconciled, not retried',async()=>{let sends=0;let status;const r=await runDeliveryHomologation({...input,deliveryEnabled:true},{reserve:async()=>({acquired:true,id:'r1'}),send:async()=>{sends++;throw Error('timeout')},finish:async(_,o)=>{status=o.status}});assert.equal(sends,1);assert.equal(status,'uncertain');assert.equal(r.status,'uncertain');});
+test('missing transport fails closed',async()=>{await assert.rejects(runDeliveryHomologation({...input,deliveryEnabled:true}),/não configurados/);});

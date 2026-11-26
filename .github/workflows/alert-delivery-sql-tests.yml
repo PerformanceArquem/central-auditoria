@@ -1,0 +1,55 @@
+name: Alert delivery SQL tests
+on:
+  pull_request:
+    branches: [main]
+    paths: ['alert-center/delivery-*.sql', '.github/workflows/alert-delivery-sql-tests.yml']
+permissions:
+  contents: read
+jobs:
+  sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: local-test-only
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: local-test-only
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: |
+          psql -v ON_ERROR_STOP=1 -c 'create role anon; create role authenticated; create role service_role bypassrls;'
+          psql -v ON_ERROR_STOP=1 -f alert-center/delivery-history-draft.sql
+          psql -v ON_ERROR_STOP=1 -f alert-center/delivery-history-rpc-draft.sql
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          begin
+            if has_function_privilege('anon','public.alert_center_reserve_delivery(uuid,text,uuid,text)','EXECUTE') or
+               has_function_privilege('authenticated','public.alert_center_finish_delivery(uuid,uuid,text,text)','EXECUTE') then
+              raise exception 'Unexpected public permission';
+            end if;
+          end $$;
+          set role service_role;
+          do $$
+          declare a jsonb; b jsonb; c jsonb;
+          begin
+            a := public.alert_center_reserve_delivery('11111111-1111-4111-8111-111111111111','test','22222222-2222-4222-8222-222222222222','92070');
+            b := public.alert_center_reserve_delivery('11111111-1111-4111-8111-111111111111','test','22222222-2222-4222-8222-222222222222','92070');
+            if a->>'acquired' is distinct from 'true' or b->>'duplicate' is distinct from 'true' or a->>'id' is distinct from b->>'id' then raise exception 'Reservation failed'; end if;
+            c := public.alert_center_finish_delivery((a->>'id')::uuid,'22222222-2222-4222-8222-222222222222','accepted','mock-provider-id');
+            if c->>'status' is distinct from 'accepted' then raise exception 'Finalization failed'; end if;
+            begin
+              perform public.alert_center_finish_delivery((a->>'id')::uuid,'22222222-2222-4222-8222-222222222222','uncertain',null);
+              raise exception 'Duplicate finalization accepted' using errcode='XX000';
+            exception when raise_exception then null;
+            end;
+          end $$;
+          SQL
