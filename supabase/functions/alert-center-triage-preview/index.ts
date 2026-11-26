@@ -41,7 +41,7 @@ Deno.serve(async(req:Request)=>{
  const stored=ids.length?await read('audit_reporting_tickets',{ticket_id:'in.('+ids.join(',')+')',select:'ticket_id,source_synced_at,payload',limit:'501'}):[];
  const byId=new Map(stored.map(r=>[String(r.ticket_id),r]));
  let now=new Date().toISOString();
- const directIds=new Set<string>();let directRequests=0;
+ const directIds=new Set<string>();let directRequests=0;let directMissing:Record<string,string>={};
  stage='direct';
  if(body.refresh===true){
  const candidates=current.filter(r=>{
@@ -52,7 +52,7 @@ Deno.serve(async(req:Request)=>{
  let live;
  try{live=await readTriageHistories(candidates,env('MOVIDESK_TOKEN'));}
  catch(error){return reply({error:(error as {code?:string}).code==='rate-limit'?'Movidesk limitou as consultas. Aguarde antes de tentar novamente.':'Consulta direta do Movidesk indisponível. Nenhum histórico foi substituído.'},(error as {code?:string}).code==='rate-limit'?429:502);}
- directRequests=live.requests;now=new Date().toISOString();
+ directRequests=live.requests;directMissing=live.missingReasons||{};now=new Date().toISOString();
  const fetched=new Map(live.tickets.map(t=>[String(t.id),t]));
  for(const row of current){
  const payload=fetched.get(String(row.ticket_id));if(!payload)continue;
@@ -62,7 +62,13 @@ Deno.serve(async(req:Request)=>{
  }
  }
  stage='evaluation';
- const rows=current.map(r=>({...evaluateImportedTriage(r,byId.get(String(r.ticket_id)),{now,threshold,holidays:holidayRows.map(h=>h.holiday_date)}),source:directIds.has(String(r.ticket_id))?'Movidesk · consulta direta':'Base importada'}));
+ const rows=current.map(r=>{
+ const id=String(r.ticket_id);
+ const evaluated=evaluateImportedTriage(r,byId.get(id),{now,threshold,holidays:holidayRows.map(h=>h.holiday_date)});
+ const reason=directMissing[id];
+ if(reason&&!evaluated.eligible)return {...evaluated,reason,source:reason==='not-found-by-api'?'Movidesk · chamado não localizado':'Listas consultadas · conferência individual pendente'};
+ return {...evaluated,source:directIds.has(id)?'Movidesk · consulta direta':'Base importada'};
+ });
  return reply({ok:true,mode:'read-only',deliveryEnabled:false,sector:'Inteligência',status:'Em Análise',threshold,now,rows,complete:true,directReads:directIds.size,directRequests});
  }catch{return reply({error:'Consulta interrompida na etapa '+({auth:'de autenticação',snapshot:'de leitura da seleção importada',history:'de leitura dos históricos importados',direct:'de conferência direta',evaluation:'de validação dos históricos'}[stage]||'de consulta')+'. Nenhum resultado foi homologado.'},502);}
 });
