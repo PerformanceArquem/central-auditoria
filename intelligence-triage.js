@@ -1,4 +1,4 @@
-/* Relatório de Triagem da Inteligência. Sem alteração de tickets ou envio de e-mail. */
+/* Relatório de Triagem da Inteligência. Exportação e envio manual de relatório. */
 (()=>{
  const el=id=>document.getElementById(id),safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const date=x=>x?new Date(x).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—';
@@ -13,6 +13,128 @@
   el('itSelectVisible').checked=current.length>0&&count===current.length;
   el('itSelectVisible').indeterminate=count>0&&count<current.length;
  };
+ let emailVersion=0,emailBusy=false,emailSnapshot=null;
+ function invalidateEmail(){
+  emailVersion++;emailSnapshot=null;
+  el('itEmailSend').disabled=true;
+  el('itEmailFrame').hidden=true;
+  el('itEmailFrame').removeAttribute('srcdoc');
+  el('itEmailStatus').textContent='';
+ }
+ async function emailAction(action,data={}){
+  const client=window.tmEmailAdminClient;
+  if(!client)throw Error('Faça login novamente.');
+  const {data:result,error}=await client.functions.invoke('audit-email-dispatch',{body:{action,...data}});
+  if(error){
+   const details=await error.context?.json?.().catch(()=>null);
+   throw Error(details?.error||'Não foi possível concluir a operação de e-mail.');
+  }
+  if(!result?.ok)throw Error(result?.error||'Operação de e-mail indisponível.');
+  return result;
+ }
+ async function runEmail(task){
+  if(emailBusy)return;
+  emailBusy=true;
+  el('itEmailPreview').disabled=true;el('itEmailSend').disabled=true;
+  try{await task()}
+  catch(e){el('itEmailStatus').textContent=e.message}
+  finally{emailBusy=false;el('itEmailPreview').disabled=false;el('itEmailSend').disabled=!emailSnapshot}
+ }
+ let copyContacts=[];
+ const copySelected=new Set();
+ const copyEmails=()=>[...copySelected].sort();
+ function renderCopies(){
+  const list=el('itEmailCcChoices'),recipient=el('itEmailTo').value.toLowerCase();
+  copySelected.delete(recipient);
+  el('itEmailCcSummary').textContent=copySelected.size
+   ?copySelected.size+' selecionado(s) em cópia':'Selecionar e-mails cadastrados';
+  list.replaceChildren();
+  for(const {name,email} of copyContacts){
+   if(email===recipient)continue;
+   const label=document.createElement('label'),box=document.createElement('input');
+   label.style.cssText='display:flex;align-items:center;gap:8px;padding:5px 2px;overflow-wrap:anywhere';
+   box.type='checkbox';box.value=email;box.checked=copySelected.has(email);
+   box.addEventListener('change',()=>{
+    if(box.checked&&copySelected.size>=10){
+     box.checked=false;el('itEmailCcHint').textContent='Selecione até 10 endereços em cópia.';return;
+    }
+    if(box.checked)copySelected.add(email);else copySelected.delete(email);
+    el('itEmailCcSummary').textContent=copySelected.size
+     ?copySelected.size+' selecionado(s) em cópia':'Selecionar e-mails cadastrados';
+    el('itEmailCcHint').textContent='';
+    invalidateEmail();
+   });
+   label.append(box,document.createTextNode(name+' · '+email));
+   list.append(label);
+  }
+  if(!list.childElementCount)list.textContent='Nenhum outro e-mail corporativo ativo.';
+ }
+ async function loadCopies(){
+  const {data,error}=await window.tmEmailAdminClient.from('audit_email_recipients')
+   .select('name,email').eq('active',true).order('name',{ascending:true}).limit(250);
+  const byEmail=new Map();
+  if(!error)for(const item of data||[]){
+   const email=String(item.email||'').trim().toLowerCase();
+   if(/^[a-z0-9._%+-]+@arquem\.com\.br$/.test(email)&&!byEmail.has(email))
+    byEmail.set(email,{email,name:String(item.name||email).trim()});
+  }
+  copyContacts=[...byEmail.values()];
+  for(const selected of copySelected)if(!byEmail.has(selected))copySelected.delete(selected);
+  renderCopies();
+  if(error)el('itEmailCcChoices').textContent='Lista indisponível. Feche e reabra o painel para tentar novamente.';
+ }
+ function initCopies(){
+  const input=el('itEmailCc'),details=document.createElement('details');
+  details.id=input.id;
+  details.style.cssText='min-width:220px;max-width:100%;padding:8px 10px;border:1px solid #61758c;border-radius:8px';
+  details.innerHTML='<summary id="itEmailCcSummary" style="cursor:pointer">Selecionar e-mails cadastrados</summary>'+
+   '<div id="itEmailCcChoices" style="max-height:180px;overflow:auto"></div><small id="itEmailCcHint" role="status"></small>';
+  input.replaceWith(details);
+  const label=details.parentElement.querySelector('label');
+  const caption=document.createElement('span');
+  caption.textContent=label.textContent;
+  caption.style.cssText='display:block;margin-bottom:5px';
+  label.replaceWith(caption);
+ }
+ async function openEmail(){
+  const panel=el('itEmailPanel');
+  if(!panel.classList.contains('hide')){panel.classList.add('hide');invalidateEmail();return;}
+  await runEmail(async()=>{
+   const result=await emailAction('triage_manual_recipients');
+   el('itEmailTo').replaceChildren(...result.recipients.map(({name,email})=>new Option(name+' · '+email,email)));
+   await loadCopies().catch(()=>{copyContacts=[];copySelected.clear();renderCopies();el('itEmailCcChoices').textContent='Lista indisponível. Feche e reabra o painel para tentar novamente.';});
+   panel.classList.remove('hide');
+   el('itEmailStatus').textContent='A prévia usa os chamados da exportação atual.';
+  });
+  if(panel.classList.contains('hide')&&el('itEmailStatus').textContent)status(el('itEmailStatus').textContent);
+ }
+ function previewEmail(){
+  return runEmail(async()=>{
+   invalidateEmail();
+   const version=emailVersion;
+   const ids=exportItems().map(x=>String(x.id));
+   if(!ids.length)throw Error('Nenhum chamado nesta seleção de exportação.');
+   el('itEmailStatus').textContent='Gerando prévia e validando PDF e Excel...';
+   const preview=await emailAction('triage_manual_preview',{ids,to:el('itEmailTo').value,cc:copyEmails()});
+   if(version!==emailVersion)return;
+   emailSnapshot=preview.snapshotId;
+   el('itEmailFrame').srcdoc=preview.html;
+   el('itEmailFrame').hidden=false;
+   const size=n=>new Intl.NumberFormat('pt-BR').format(Math.ceil(n/1024))+' KB';
+   el('itEmailStatus').textContent=preview.subject+' · '+preview.rows+' chamado(s) · Para: '+preview.to+
+    ' · CC: '+(preview.cc.join(', ')||'—')+' · PDF: '+size(preview.pdfBytes)+' · Excel: '+size(preview.xlsxBytes);
+  });
+ }
+ function sendEmail(){
+  if(!emailSnapshot||!window.confirm('Enviar o e-mail com os destinatários e anexos desta prévia?'))return;
+  const snapshotId=emailSnapshot;
+  return runEmail(async()=>{
+   emailSnapshot=null;
+   el('itEmailStatus').textContent='Confirmando envio...';
+   const result=await emailAction('triage_manual_send',{snapshotId});
+   el('itEmailStatus').textContent=result.status==='already_sent'?'Este relatório já foi enviado para esse destinatário.':'E-mail enviado com PDF e Excel.';
+  });
+ }
  const toggleVisible=checked=>{current.forEach(x=>checked?selectedIds.add(String(x.id)):selectedIds.delete(String(x.id)));paint()};
  const status=s=>{if(el('itStatus'))el('itStatus').textContent=s};
  const ageBucket=days=>days>=16&&days<=30?'16-30':
@@ -45,6 +167,7 @@
    '<td><b>'+safe(x.queueDays)+' dias</b></td><td>'+safe(date(x.queueSince))+'</td><td>'+safe(date(x.opened))+
    '</td><td>'+safe(x.ageDays??'—')+'</td><td>'+safe(date(x.forecast))+'</td><td>'+safe(x.status)+'</td></tr>').join('')||'<tr><td colspan="10">Nenhum chamado para os filtros selecionados.</td></tr>';
   syncSelection();
+  invalidateEmail();
   if(el('itNavCount'))el('itNavCount').textContent=String(items.filter(x=>x.queueDays>15).length);
  }
  async function refresh(){
@@ -96,6 +219,12 @@
   if(!loaded){
    loaded=true;
    el('itRefresh').addEventListener('click',refresh);
+   el('itEmailOpen').addEventListener('click',openEmail);
+   el('itEmailPreview').addEventListener('click',previewEmail);
+   el('itEmailSend').addEventListener('click',sendEmail);
+   initCopies();
+   el('itEmailTo').addEventListener('change',()=>{renderCopies();invalidateEmail()});
+   el('itExportSelected').addEventListener('change',invalidateEmail);
    el('itXlsx').addEventListener('click',excel);
    el('itPdf').addEventListener('click',pdf);
    el('itSelectAll').addEventListener('click',()=>toggleVisible(true));
@@ -105,6 +234,7 @@
     const input=e.target.closest('input.itRowSelect');if(!input)return;
     input.checked?selectedIds.add(input.dataset.id):selectedIds.delete(input.dataset.id);
     syncSelection();
+    invalidateEmail();
    });
    el('itDays').addEventListener('change',e=>{if(e.target.matches('input.itDayBucket'))paint()});
    el('itDaysAll').addEventListener('click',()=>{el('itDays').querySelectorAll('input.itDayBucket').forEach(x=>x.checked=true);paint()});
