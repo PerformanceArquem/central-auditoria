@@ -1,3 +1,4 @@
+import {readTriageHistories} from '../../../alert-center/triage-live-reader.mjs';
 import {evaluateImportedTriage} from '../../../alert-center/triage-adapter.mjs';
 const env=(key:string)=>Deno.env.get(key)?.trim()||'';
 Deno.serve(async(req:Request)=>{
@@ -36,8 +37,27 @@ Deno.serve(async(req:Request)=>{
  if(ids.some(id=>!/^\d+$/.test(id)))throw Error('Identificador inválido');
  const stored=ids.length?await read('audit_reporting_tickets',{ticket_id:'in.('+ids.join(',')+')',select:'ticket_id,source_synced_at,payload',limit:'501'}):[];
  const byId=new Map(stored.map(r=>[String(r.ticket_id),r]));
- const now=new Date().toISOString();
- const rows=current.map(r=>evaluateImportedTriage(r,byId.get(String(r.ticket_id)),{now,threshold,holidays:holidayRows.map(h=>h.holiday_date)}));
- return reply({ok:true,mode:'read-only',deliveryEnabled:false,sector:'Inteligência',status:'Em Análise',threshold,now,rows,complete:true});
+ let now=new Date().toISOString();
+ const directIds=new Set<string>();let directRequests=0;
+ if(body.refresh===true){
+ const candidates=current.filter(r=>{
+ const result=evaluateImportedTriage(r,byId.get(String(r.ticket_id)),{now,threshold,holidays:holidayRows.map(h=>h.holiday_date)});
+ return !result.eligible&&!['below-threshold','outside-triage'].includes(result.reason);
+ }).map(r=>String(r.ticket_id));
+ if(candidates.length>50)return reply({error:'Mais de 50 históricos pendentes. Reduza o lote antes da consulta direta.'},409);
+ let live;
+ try{live=await readTriageHistories(candidates,env('MOVIDESK_TOKEN'));}
+ catch(error){return reply({error:(error as {code?:string}).code==='rate-limit'?'Movidesk limitou as consultas. Aguarde antes de tentar novamente.':'Consulta direta do Movidesk indisponível. Nenhum histórico foi substituído.'},(error as {code?:string}).code==='rate-limit'?429:502);}
+ directRequests=live.requests;now=new Date().toISOString();
+ const fetched=new Map(live.tickets.map(t=>[String(t.id),t]));
+ for(const row of current){
+ const payload=fetched.get(String(row.ticket_id));if(!payload)continue;
+ directIds.add(String(row.ticket_id));
+ row.payload=payload;row.closed_at_source=payload.closedIn||null;
+ byId.set(String(row.ticket_id),{ticket_id:String(row.ticket_id),payload,source_synced_at:now});
+ }
+ }
+ const rows=current.map(r=>({...evaluateImportedTriage(r,byId.get(String(r.ticket_id)),{now,threshold,holidays:holidayRows.map(h=>h.holiday_date)}),source:directIds.has(String(r.ticket_id))?'Movidesk · consulta direta':'Base importada'}));
+ return reply({ok:true,mode:'read-only',deliveryEnabled:false,sector:'Inteligência',status:'Em Análise',threshold,now,rows,complete:true,directReads:directIds.size,directRequests});
  }catch{return reply({error:'Consulta indisponível ou histórico não validado'},502);}
 });
