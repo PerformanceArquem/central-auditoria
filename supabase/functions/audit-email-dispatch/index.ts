@@ -649,7 +649,7 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;expor
  const k=REPORT_LABEL[kind];
  const badge=manual?'TESTE MANUAL':partial?'DADOS PARCIAIS':'RELATÓRIO DE APONTAMENTOS';
  const esc=emailEsc;
- const tile=(label:string,value:string)=>'<td width="50%" valign="top" style="padding:8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f6fc;border:1px solid #e0e7f2;border-radius:10px"><tr><td style="padding:15px 16px"><div style="color:#65748b;font-size:12px;font-weight:600">'+esc(label)+'</div><div style="color:#102b51;font-size:23px;font-weight:750;margin-top:6px">'+esc(value)+'</div></td></tr></table></td>';
+ const tile=(label:string,value:string)=>'<td width="50%" valign="top" style="padding:8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fa;border:1px solid #d7deea;border-radius:12px"><tr><td style="padding:15px 16px"><div style="color:#65748b;font-size:12px;font-weight:600">'+esc(label)+'</div><div style="color:#17263e;font-size:23px;font-weight:700;margin-top:6px">'+esc(value)+'</div></td></tr></table></td>';
  const detail=report.text.split('\n').filter(x=>x.startsWith('- ')).slice(0,12);
  const lines=detail.length?detail.map((s,i)=>'<tr><td style="padding:10px 12px;background:'+(i%2?'#f5f8fc':'#ffffff')+';border-bottom:1px solid #e7edf6;color:#293b54;font-size:12px">'+esc(s.slice(2))+'</td></tr>').join(''):
    '<tr><td style="padding:15px 12px;color:#65748b;font-size:13px">Não há apontamentos importados para este período.</td></tr>';
@@ -669,15 +669,15 @@ function reportEmailHtml(rec:R,report:{text:string;teamJourneyHtml?:string;expor
  '<body style="margin:0;padding:0;background:#edf2f9;font-family:Arial,Helvetica,sans-serif;color:#1e304a">'+
  '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#edf2f9"><tr><td align="center" style="padding:32px 12px">'+
  '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:650px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #dbe5f2">'+
- '<tr><td align="center" style="background:#102c4f;padding:28px 30px;color:#fff;text-align:center">'+
+ '<tr><td align="center" style="background:#17263e;padding:26px 26px;color:#fff;text-align:left">'+
  '<div style="font-size:13px;letter-spacing:2px;font-weight:750;color:#8fd5e7">ARQUEM SISTEMAS</div>'+
- '<div style="font-size:26px;font-weight:750;margin-top:12px">Central de Auditoria</div>'+
+ '<div style="font-size:26px;font-weight:700;margin-top:10px">Ticket Manager</div><div style="font-size:11px;color:#c5d4e8;letter-spacing:1px;margin-top:5px">CENTRAL DE AUDITORIA · GESTÃO DA QUALIDADE</div>'+
  '<div style="font-size:13px;color:#bed1e8;margin-top:8px">'+esc(kind==='monthly'||kind==='annual'?'Balancete '+k.toLowerCase():'Relatório '+k.toLowerCase()+' de apontamentos')+'</div>'+
  '</td></tr><tr><td style="padding:26px 26px 12px">'+test+
  '<div style="font-size:11px;color:#3873ae;letter-spacing:1px;font-weight:700;text-align:center">'+esc(badge)+'</div>'+
  '<h1 style="font-size:23px;line-height:1.3;margin:10px 0 8px;color:#102b51;text-align:center">'+esc(person)+'</h1>'+
  '<div style="color:#5e718b;font-size:13px;text-align:center;line-height:1.6">'+esc(identity.kind)+' · '+esc(sector)+'<br>'+esc(displayDate(from))+' a '+esc(displayDate(to))+'</div>'+hierarchy+
- '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:23px -8px 5px"><tr>'+
+ '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0 5px"><tr>'+
  tile('Horas apontadas',duration(m.minutes))+tile('Apontamentos',String(m.appointments))+'</tr><tr>'+
  tile('Chamados com horas',String(m.tickets))+tile('Dias úteis de referência',String(m.days))+'</tr></table>'+
  warning+renderHourCharts({metrics:m,visual:report.exportData?.visual,group:deliveryGroup(rec),dailyAllowed:reportSectionOn(rec,'daily_detail')})+
