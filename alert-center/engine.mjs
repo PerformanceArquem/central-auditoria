@@ -16,8 +16,11 @@ export function businessDays(from, to, holidays = []) {
 export function simulate(tickets, { now, localDate, holidays = [], settings = {}, existingKeys = [] }) {
   if (!Number.isFinite(Date.parse(now)) || !/^\d{4}-\d{2}-\d{2}$/.test(localDate)) throw new Error("Explicit clock and local date required");
   const cfg = {...defaults,...settings};
+  for (const name of Object.keys(defaults)) {
+    if (!Number.isInteger(cfg[name]) || cfg[name] <= 0) throw new Error("Invalid alert setting: "+name);
+  }
   const keys = new Set(existingKeys), alerts = [], triage = [];
-  const active = new Set();
+  const active = new Set(), triageIds = new Set();
   for (const t of tickets) {
     if (t.closed || t.sector !== "intelligence") continue;
     const add = (rule, recipient) => {
@@ -37,7 +40,8 @@ export function simulate(tickets, { now, localDate, holidays = [], settings = {}
     if (idleSince && businessDays(idleSince,localDate,holidays)>=cfg.idleBusinessDays) add("idle","owner");
     if (t.inTriage && t.triageEnteredDate) {
       const days = businessDays(t.triageEnteredDate,localDate,holidays);
-      if (days >= cfg.triageBusinessDays) {
+      if (days >= cfg.triageBusinessDays && !triageIds.has(String(t.id))) {
+        triageIds.add(String(t.id));
         active.add(String(t.id)+":aged-triage");
         triage.push({ticketId:t.id, subject:t.subject, customer:t.customer, owner:t.owner, lastAppointmentDate:t.lastAppointmentDate, link:t.link, days, severity:days>=10?"critical":days>=5?"priority":"attention"});
       }
