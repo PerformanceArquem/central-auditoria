@@ -226,6 +226,15 @@ async function loadLiveTriage(refresh=false,individualTicketId=null){
  liveTriageRows.append(table);if(!individualTicketId)liveTriageLastReference=data.now;triageDraftButton.disabled=false;triageFilter.disabled=false;triageSearch.disabled=false;applyTriageFilter();
  const eligible=rows.filter(r=>r.eligible).length,waiting=rows.filter(r=>r.reason==='below-threshold').length,outside=rows.filter(r=>r.reason==='outside-triage').length;
  liveTriageStatus.textContent=rows.length+' chamados consultados · '+eligible+' acima do limite · '+waiting+' abaixo do limite · '+(rows.length-eligible-waiting-outside)+' para revisão · '+outside+' fora da triagem atual · '+rows.filter(r=>r.source==='Movidesk · consulta direta').length+' históricos consultados diretamente. Inteligência + Em Análise. Nenhuma notificação ou reserva.';
+ const reviewCounts=new Map();
+ for(const row of rows){if(!row.eligible&&!['below-threshold','outside-triage'].includes(row.reason))reviewCounts.set(row.reason,(reviewCounts.get(row.reason)||0)+1);}
+ if(reviewCounts.size){
+ liveTriageStatus.textContent+=' Pendências por motivo: '+[...reviewCounts].map(([reason,count])=>count+' '+(reasons[reason]||'Revisar · motivo não reconhecido').replace(/^Revisar · /,'')).join('; ')+'.';
+ if(reviewCounts.has('stale-history'))liveTriageStatus.textContent+=' Use “Conferir históricos antigos no Movidesk” para atualizar os históricos nesta consulta.';
+ if(reviewCounts.has('not-returned-by-api'))liveTriageStatus.textContent+=' Filtre “Para revisão” e use “Conferir #” nos chamados com consulta individual pendente.';
+ if(reviewCounts.has('not-found-by-api'))liveTriageStatus.textContent+=' Chamados não localizados pela API continuam fora da prévia gerencial.';
+ }
+
  }catch(e){resetLiveTriageResults();liveTriageStatus.textContent=e.message;}finally{liveTriageRefresh.disabled=false;liveTriageButton.disabled=false;liveTriageLimit.disabled=false;}
 }
 liveTriageButton.addEventListener('click',()=>loadLiveTriage(false));
