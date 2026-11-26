@@ -26,3 +26,21 @@ test('rejects invalid selection before issuing requests',async()=>{
  let calls=0;await assert.rejects(readTriageHistories(["1 or id gt 0"],'fixture-token',async()=>{calls++;return Response.json([]);}));
  assert.equal(calls,0);
 });
+
+test('individual GET recovers a ticket absent from both lists',async()=>{
+ let calls=0;
+ const result=await readTriageHistories(['1'],'fixture-token',async(url,options)=>{
+ assert.equal(options.method,'GET');calls++;
+ if(calls<3)return Response.json([]);
+ assert.equal(url.searchParams.get('id'),'1');assert.equal(url.searchParams.has('$filter'),false);
+ return Response.json({id:1,status:'Em Análise'});
+ });
+ assert.equal(result.tickets.length,1);assert.equal(result.requests,3);assert.deepEqual(result.missingIds,[]);
+});
+test('first individual 404 stops subsequent calls and preserves review reasons',async()=>{
+ let calls=0;
+ const result=await readTriageHistories(['1','2'],'fixture-token',async()=>{
+ calls++;return calls<=2?Response.json([]):new Response('',{status:404});
+ });
+ assert.equal(calls,3);assert.equal(result.missingReasons['1'],'not-found-by-api');assert.equal(result.missingReasons['2'],'not-returned-by-api');
+});
