@@ -6,4 +6,7 @@ const teams=new Map([
 ]);
 // Exact aliases only; unknown or unassigned teams must not be charged.
 export function mapRobotSector(ownerTeam){return typeof ownerTeam==='string'?teams.get(norm(ownerTeam))??null:null;}
-export function robotSchedule(ownerTeam){const sector=mapRobotSector(ownerTeam);return sector?{sector,clock:sector==='Produção'?'05:30':'18:05',timezone:'America/Sao_Paulo'}:null;}
+const intelligence=new Set(['Inteligência','QA','Qualidade','Sucesso do Cliente','Implantação','Treinamento']);
+export function robotGroup(sector){return intelligence.has(sector)?'Inteligência':['Suporte','Produção'].includes(sector)?sector:null;}
+export function robotSchedule(ownerTeam){const sector=mapRobotSector(ownerTeam);return sector?{sector,group:robotGroup(sector),clock:sector==='Produção'?'05:30':'18:05',timezone:'America/Sao_Paulo'}:null;}
+
