@@ -15,7 +15,7 @@ function harness({paused=false,providerAccepts=true,time=NOW,rows=[row()],admin=
  const fetcher=async(url,options={})=>{
  const parsed=new URL(url),name=parsed.pathname.split('/').pop(),method=options.method||'GET';
  requests.push({url:String(url),method});
- if(parsed.hostname==='script.google.com'){mailCalls++;return Response.json({sucesso:providerAccepts});}
+ if(parsed.hostname==='script.google.com'){if(JSON.parse(options.body).action==='capabilities')return Response.json({sucesso:true});mailCalls++;return Response.json({sucesso:providerAccepts});}
  if(parsed.pathname.endsWith('/auth/v1/user'))return Response.json({id:'fixture-user'});
  if(name==='audit_users')return Response.json(admin?[{user_id:'fixture-user'}]:[]);
  if(name==='audit_alert_email_settings')return Response.json(parsed.searchParams.has('sector')?settings.filter(s=>s.sector===parsed.searchParams.get('sector').slice(3)&&s.enabled):settings);
@@ -50,7 +50,7 @@ test('preview renders six sectors without provider calls or write reservations',
  const h=harness();const response=await h.handler(h.request('preview'));const data=await response.json();
  assert.equal(response.status,200,JSON.stringify(data));assert.equal(data.bundles.length,6);assert.equal(data.sent,false);
  assert.equal(h.mails(),0);assert.equal(h.reservations.size,0);
- assert.ok(h.requests.every(r=>r.method==='GET'||r.url.endsWith('/rpc/audit_alert_email_snapshot')));
+ assert.ok(h.requests.every(r=>r.method==='GET'||r.url.endsWith('/rpc/audit_alert_email_snapshot')||r.url.startsWith('https://script.google.com/')));
 });
 test('scheduler credentials are mandatory even with an admin session',async()=>{
  const h=harness();assert.equal((await h.handler(h.request('dispatch',{},false))).status,403);
