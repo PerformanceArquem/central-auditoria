@@ -8,6 +8,7 @@ Deno.serve(async(req:Request)=>{
  const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json'}});
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
  if(req.method!=='POST')return reply({error:'Método não permitido'},405);
+ let stage='auth';
  try{
  const base=env('SUPABASE_URL'),anon=env('SUPABASE_ANON_KEY'),key=env('SUPABASE_SERVICE_ROLE_KEY');
  const auth=req.headers.get('authorization')||'';
@@ -28,6 +29,7 @@ Deno.serve(async(req:Request)=>{
  if(body.mode!=='read-only')return reply({error:'Somente consulta sem envio'},400);
  const threshold=body.threshold??3;
  if(!Number.isInteger(threshold)||threshold<1||threshold>365)return reply({error:'Informe de 1 a 365 dias úteis'},400);
+ stage='snapshot';
  const [current,holidayRows]=await Promise.all([
  read('audit_reporting_open_ticket_snapshot',{'payload->>ownerTeam':'eq.Inteligência','payload->>status':'eq.Em Análise',select:'ticket_id,payload,closed_at_source',order:'ticket_id.asc',limit:'501'}),
  read('audit_email_holidays',{affects_delivery:'eq.true',select:'holiday_date',limit:'1000'})
@@ -35,10 +37,12 @@ Deno.serve(async(req:Request)=>{
  if(current.length>500||holidayRows.length>=1000)return reply({error:'Consulta parcial; limite atingido. Não homologar.'},409);
  const ids=current.map(r=>String(r.ticket_id));
  if(ids.some(id=>!/^\d+$/.test(id)))throw Error('Identificador inválido');
+ stage='history';
  const stored=ids.length?await read('audit_reporting_tickets',{ticket_id:'in.('+ids.join(',')+')',select:'ticket_id,source_synced_at,payload',limit:'501'}):[];
  const byId=new Map(stored.map(r=>[String(r.ticket_id),r]));
  let now=new Date().toISOString();
  const directIds=new Set<string>();let directRequests=0;
+ stage='direct';
  if(body.refresh===true){
  const candidates=current.filter(r=>{
  const result=evaluateImportedTriage(r,byId.get(String(r.ticket_id)),{now,threshold,holidays:holidayRows.map(h=>h.holiday_date)});
@@ -57,7 +61,8 @@ Deno.serve(async(req:Request)=>{
  byId.set(String(row.ticket_id),{ticket_id:String(row.ticket_id),payload,source_synced_at:now});
  }
  }
+ stage='evaluation';
  const rows=current.map(r=>({...evaluateImportedTriage(r,byId.get(String(r.ticket_id)),{now,threshold,holidays:holidayRows.map(h=>h.holiday_date)}),source:directIds.has(String(r.ticket_id))?'Movidesk · consulta direta':'Base importada'}));
  return reply({ok:true,mode:'read-only',deliveryEnabled:false,sector:'Inteligência',status:'Em Análise',threshold,now,rows,complete:true,directReads:directIds.size,directRequests});
- }catch{return reply({error:'Consulta indisponível ou histórico não validado'},502);}
+ }catch{return reply({error:'Consulta interrompida na etapa '+({auth:'de autenticação',snapshot:'de leitura da seleção importada',history:'de leitura dos históricos importados',direct:'de conferência direta',evaluation:'de validação dos históricos'}[stage]||'de consulta')+'. Nenhum resultado foi homologado.'},502);}
 });
