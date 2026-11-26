@@ -1,6 +1,6 @@
 // Pure simulation; no network, writes or scheduler.
 // Input dates are local Brasilia calendar dates. Caller must validate source and freshness.
-export const DAY_SECTORS=['suporte','inteligencia','implantacao','qa','qualidade','sucesso do cliente','treinamento'];
+export const DAY_SECTORS=['suporte','implantacao','qa','qualidade','sucesso do cliente','treinamento'];
 const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
 const date=v=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(v??''))throw Error('Data local inválida');const d=new Date(v+'T00:00:00Z');if(!Number.isFinite(+d)||d.toISOString().slice(0,10)!==v)throw Error('Data local inválida');return d;};
 export function businessDays(from,to,holidays=[]){
