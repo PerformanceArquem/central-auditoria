@@ -213,7 +213,7 @@ document.querySelector('#email-alert-load').addEventListener('click',async()=>{
  if(!bundle.parts.length)action.textContent='Nenhum aviso necessário';
  row.append(action);body.append(row);
  }
- container.append(table);status.textContent=data.schedule+' · Consulta sem envio. '+(data.appointmentCoverage?'Conciliação dos apontamentos confirmada.':'Regra de ausência de apontamentos suspensa até a conciliação ser confirmada.');
+ container.append(table);status.textContent=data.schedule+' · Consulta sem envio. '+(data.providerReady?'Serviço de e-mail disponível. ':'Serviço de e-mail indisponível; revisar antes do envio. ')+(data.directUnavailable?'Históricos antigos permanecem para revisão. ':'')+(data.appointmentCoverage?'Conciliação dos apontamentos confirmada.':'Regra de ausência de apontamentos suspensa até a conciliação ser confirmada.');
  }catch(error){if(epoch===emailAlertEpoch){container.replaceChildren();frame.hidden=true;frame.removeAttribute('srcdoc');status.textContent=error.message;}}
  finally{button.disabled=false;}
 });
