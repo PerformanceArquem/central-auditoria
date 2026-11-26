@@ -15,3 +15,13 @@ test('UTC midnight is converted to the previous Brazilian calendar date',()=>{
 test('missing stored record stays in review',()=>assert.equal(evaluateImportedTriage(current,undefined,{now}).eligible,false));
 test('confirmed threshold is applied',()=>assert.equal(evaluateImportedTriage(current,stored,{now,threshold:10}).reason,'below-threshold'));
 test('stale historical data never becomes eligible',()=>assert.equal(evaluateImportedTriage(current,{...stored,source_synced_at:'2026-11-01T00:00:00Z'},{now}).reason,'stale-history'));
+
+test('returns only owner identity and sector without contact details',()=>{
+ const result=evaluateImportedTriage({...current,payload:{...current.payload,owner:{id:'123',businessName:'Responsável\nTeste',email:'private@example.com',phone:'private'}}},stored,{now});
+ assert.equal(result.ownerId,'123');assert.equal(result.ownerName,'Responsável Teste');assert.equal(result.sector,'Inteligência');
+ assert.equal('email' in result,false);assert.equal('phone' in result,false);
+});
+test('missing owner is explicit and does not invent a recipient',()=>{
+ const result=evaluateImportedTriage(current,stored,{now});
+ assert.equal(result.ownerId,null);assert.equal(result.ownerName,null);
+});
