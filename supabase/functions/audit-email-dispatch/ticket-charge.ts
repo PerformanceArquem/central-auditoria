@@ -123,15 +123,15 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  const table=normalized.map((t,i)=>{
   const bg=i%2===0?'#ffffff':'#f5f8fc';
   return '<tr style="background:'+bg+'">'+
-   '<td style="'+cell+'white-space:nowrap">'+
-    '<a href="'+t.url+'" target="_blank" rel="noopener noreferrer" style="font-weight:700;text-decoration:none;color:#1559a4">#'+esc(t.id)+'</a>'+
+   '<td style="'+cell+'white-space:normal;overflow-wrap:anywhere">'+
+    '<a href="'+t.url+'" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:7px 9px;background:#245b9e;border-radius:6px;font-weight:700;text-decoration:none;color:#ffffff">#'+esc(t.id)+'</a>'+
     '<div style="font-size:10px;color:#65778f;margin-top:5px">Item '+String(i+1).padStart(2,'0')+'</div></td>'+
    '<td style="'+cell+'max-width:190px"><strong style="color:#173454">'+esc(t.client)+'</strong></td>'+ 
-   '<td style="'+cell+'min-width:105px">'+esc(t.sector)+'</td>'+ 
-   '<td style="'+cell+'min-width:170px">'+esc(t.subject)+'</td>'+
-   '<td style="'+cell+'white-space:nowrap">'+esc(t.daysOpen===null?'Não disponível':t.daysOpen+' dia(s)')+'</td>'+
-   '<td style="'+cell+'min-width:135px">'+esc(t.lastAppointment?(t.lastAppointment+' · '+t.lastAppointmentMinutes+' min'):'Não localizado')+'</td>'+
-   '<td style="'+cell+'min-width:125px">'+esc(t.owner)+
+   '<td style="'+cell+'overflow-wrap:anywhere">'+esc(t.sector)+'</td>'+ 
+   '<td style="'+cell+'overflow-wrap:anywhere">'+esc(t.subject)+'</td>'+
+   '<td style="'+cell+'white-space:normal;overflow-wrap:anywhere">'+esc(t.daysOpen===null?'Não disponível':t.daysOpen+' dia(s)')+'</td>'+
+   '<td style="'+cell+'overflow-wrap:anywhere">'+esc(t.lastAppointment?(t.lastAppointment+' · '+t.lastAppointmentMinutes+' min'):'Não localizado')+'</td>'+
+   '<td style="'+cell+'overflow-wrap:anywhere">'+esc(t.owner)+
     '<div style="font-size:11px;color:#65778f;margin-top:5px">Situação: '+esc(t.status)+'</div>'+
     '<div style="font-size:10px;color:#8794a4;margin-top:5px">Atualização: '+esc(safeDate(t.last))+'</div></td></tr>';
  }).join('');
@@ -146,15 +146,15 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  const html='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'+
  '<body style="margin:0;padding:24px 12px;background:#edf2f8;'+font+';color:#213b58">'+
  '<div style="max-width:780px;margin:0 auto;border:1px solid #dae5f2;border-radius:14px;overflow:hidden;background:#ffffff">'+
- '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#122d4d"><tr><td style="padding:24px 28px">'+
+ '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#17263e"><tr><td style="padding:24px 28px">'+
  '<div style="font-size:12px;letter-spacing:2.5px;font-weight:700;color:#8fd5e8">ARQUEM <span style="color:#ffffff">SISTEMAS</span></div>'+
  '<div style="height:3px;width:54px;background:#55c5db;margin:15px 0"></div>'+
- '<h1 style="font-size:24px;color:#ffffff;line-height:1.25;font-weight:700;margin:0">Acompanhamento de chamados</h1>'+
+ '<div style="font-size:11px;letter-spacing:1px;color:#c5d4e8;margin:0 0 8px">TICKET MANAGER · CENTRAL DE AUDITORIA</div><h1 style="font-size:24px;color:#ffffff;line-height:1.25;font-weight:700;margin:0">Acompanhamento de chamados</h1>'+
  '<p style="font-size:12px;line-height:1.6;color:#c4d7e9;margin:8px 0 0">Acompanhamento de chamados · Comunicação corporativa</p>'+
  '</td></tr></table>'+
  '<div style="padding:24px 28px 8px">'+
  '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse"><tr>'+
- '<td style="padding:14px 16px;background:#f0f6fc;border:1px solid #dce9f5;border-radius:8px">'+
+ '<td style="padding:14px 16px;background:#f4f6fa;border:1px solid #d7deea;border-radius:12px">'+
  '<div style="color:#627997;font-size:11px;text-transform:uppercase;letter-spacing:1px">Demandas para acompanhamento</div>'+
  '<div style="color:#153658;font-size:27px;font-weight:700;margin-top:4px">'+normalized.length+' <span style="font-size:13px;font-weight:400">chamado(s) em aberto</span></div>'+
  '</td></tr></table>'+
@@ -162,7 +162,7 @@ export function composeTicketCharge(rows:TicketRow[],recipient:string,body?:stri
  '<h2 style="font-size:15px;color:#173454;margin:15px 0 10px;border-left:4px solid #2388c8;padding-left:10px">Chamados selecionados</h2>'+
  '</div>'+
  '<div style="padding:0 18px 22px;overflow-x:auto">'+
- '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;min-width:620px">'+
+ '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;table-layout:fixed">'+
  '<thead style="background:#eaf2fa"><tr>'+header('Chamado')+header('Cliente')+header('Setor')+header('Assunto')+header('Dias em aberto')+header('Último apontamento real')+header('Responsável / status')+'</tr></thead>'+
  '<tbody>'+table+'</tbody></table></div>'+
  projectHtml+guidanceHtml+
