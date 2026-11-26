@@ -65,7 +65,12 @@ export function evaluateEmailAlerts(records,{now,holidays=[],appointmentCoverage
  const from=since||(/^\d{4}-\d{2}-\d{2}/.test(created)?localClock(/(Z|[+-]\d{2}:\d{2})$/.test(created)?created:created+'Z').date:'');
  if(from&&businessDays(from,clock.date,holidays)>=3)rules.push('idle');
  }
- if(rules.length)alerts.push({...row,ticket_id:id,rules});
+ if(rules.length){
+ const source=p.owner;
+ const name=typeof source==='string'?source:source&&typeof source==='object'?
+ (typeof source.businessName==='string'&&source.businessName.trim()?source.businessName:typeof source.name==='string'&&source.name.trim()?source.name:/^\d{1,20}$/.test(String(source.id||''))?'ID '+source.id:null):null;
+ alerts.push({...row,payload:{...p,owner:name?{businessName:name}:null},ticket_id:id,rules});
+ }
  }
  return {date:clock.date,alerts,review,appointmentCoverage};
 }
@@ -75,3 +80,5 @@ export function alertBody(rows,sector,now){
  rows.map(row=>'#'+row.ticket_id+' · '+row.rules.map(rule=>RULE_LABELS[rule]).join(' · ')).join('\n')+
  '\n\nA ausência de apontamentos não comprova ausência de trabalho. Este acompanhamento não altera chamados nem registra horas.';
 }
+
+export function formatEmailDates(content){return String(content).replace(/\b(20\d{2})-(\d{2})-(\d{2})\b/g,'$3/$2/$1');}
