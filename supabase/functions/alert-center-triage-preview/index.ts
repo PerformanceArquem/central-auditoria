@@ -53,7 +53,7 @@ Deno.serve(async(req:Request)=>{
  for(const row of current){
  const payload=fetched.get(String(row.ticket_id));if(!payload)continue;
  directIds.add(String(row.ticket_id));
- row.payload=payload;row.closed_at_source=payload.closedIn||null;
+ row.payload=payload;row.closed_at_source=payload.isDeleted===true?now:(payload.closedIn||null);
  byId.set(String(row.ticket_id),{ticket_id:String(row.ticket_id),payload,source_synced_at:now});
  }
  }
