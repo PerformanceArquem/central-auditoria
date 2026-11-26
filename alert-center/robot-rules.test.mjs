@@ -4,7 +4,7 @@ import {businessDays,evaluateRobot,DAY_SECTORS} from './robot-rules.mjs';
 const t={id:102945,sector:'Suporte',status:'Em análise',sourceVerified:true,historyVerified:true,conditionsVerified:true,forecastState:'valid',idleBusinessMinutes:1080};
 const p={today:'2026-11-26',clock:'18:05',holidays:[]};
 test('weekends and holidays excluded',()=>assert.equal(businessDays('2026-11-19','2026-11-23',['2026-11-20']),1));
-test('seven daytime sectors',()=>{for(const sector of DAY_SECTORS)assert.equal(evaluateRobot({...t,sector},p).actions[0].level,1);});
+test('six daytime sectors',()=>{for(const sector of DAY_SECTORS)assert.equal(evaluateRobot({...t,sector},p).actions[0].level,1);});
 test('before cutoff no action',()=>assert.equal(evaluateRobot(t,{...p,clock:'18:00'}).actions.length,0));
 test('holiday no action',()=>assert.equal(evaluateRobot(t,{...p,holidays:[p.today]}).actions.length,0));
 test('weekend no action',()=>assert.equal(evaluateRobot(t,{...p,today:'2026-11-28'}).actions.length,0));
@@ -19,3 +19,5 @@ test('regularization closes cycle',()=>assert.deepEqual(evaluateRobot({...t,idle
 test('unverified history held for review',()=>assert.equal(evaluateRobot({...t,historyVerified:false},p).review,true));
 test('closed ticket never charged',()=>assert.equal(evaluateRobot({...t,status:'Fechado',forecastState:'overdue'},p).actions.length,0));
 test('combined friendly message stays dry run',()=>{const a=evaluateRobot({...t,forecastState:'overdue'},p);assert.equal(a.actions.length,2);assert.equal(a.deliveryEnabled,false);assert.match(a.message,/por gentileza/);assert.match(a.message,/apoio/);});
+
+test('direct Intelligence queue excluded',()=>assert.equal(evaluateRobot({...t,sector:'Inteligência',forecastState:'overdue'},p).actions.length,0));
