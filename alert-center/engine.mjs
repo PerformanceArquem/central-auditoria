@@ -1,3 +1,4 @@
+import {triageEntry} from "./triage-history.mjs";
 // Pure simulation engine. No network, database writes or notification dispatch.
 export const defaults = Object.freeze({ preventiveHours: 24, escalationHours: 48, idleBusinessDays: 3, triageBusinessDays: 3 });
 export function businessDays(from, to, holidays = []) {
@@ -20,7 +21,7 @@ export function simulate(tickets, { now, localDate, holidays = [], settings = {}
     if (!Number.isInteger(cfg[name]) || cfg[name] <= 0) throw new Error("Invalid alert setting: "+name);
   }
   const keys = new Set(existingKeys), alerts = [], triage = [];
-  const active = new Set(), triageIds = new Set();
+  const active = new Set(), triageIds = new Set(), triageReview = [];
   for (const t of tickets) {
     if (t.closed || t.sector !== "intelligence") continue;
     const add = (rule, recipient) => {
@@ -38,8 +39,13 @@ export function simulate(tickets, { now, localDate, holidays = [], settings = {}
     } else if (hours <= cfg.preventiveHours) add("preventive","owner");
     const idleSince = t.lastAppointmentDate || t.createdDate;
     if (idleSince && businessDays(idleSince,localDate,holidays)>=cfg.idleBusinessDays) add("idle","owner");
-    if (t.inTriage && t.triageEnteredDate) {
-      const days = businessDays(t.triageEnteredDate,localDate,holidays);
+    const historyResult = t.history ? triageEntry(t.history,{now,localDate}) : null;
+    if (historyResult && !historyResult.eligible && historyResult.reason!=='outside-triage')
+      triageReview.push({ticketId:t.id,reason:historyResult.reason});
+    const triageDate = historyResult ? historyResult.enteredDate : t.triageEnteredDate;
+    const inTriage = historyResult ? historyResult.eligible : t.inTriage;
+    if (inTriage && triageDate) {
+      const days = businessDays(triageDate,localDate,holidays);
       if (days >= cfg.triageBusinessDays && !triageIds.has(String(t.id))) {
         triageIds.add(String(t.id));
         active.add(String(t.id)+":aged-triage");
@@ -49,5 +55,5 @@ export function simulate(tickets, { now, localDate, holidays = [], settings = {}
   }
   const key = "production-manager:aged-triage:"+localDate;
   if (triage.length && !keys.has(key)) alerts.push({key,rule:"aged-triage",recipient:"production-manager",tickets:triage,simulated:true});
-  return {alerts,activeOccurrences:[...active],simulated:true};
+  return {alerts,activeOccurrences:[...active],triageReview,simulated:true};
 }
