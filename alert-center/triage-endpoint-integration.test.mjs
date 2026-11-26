@@ -26,7 +26,7 @@ function createHandler({admin=true,individualStatus=200}={}){
  vm.runInNewContext(source,{Deno:{env:{get:key=>({SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_ANON_KEY:'fixture',SUPABASE_SERVICE_ROLE_KEY:'fixture',MOVIDESK_TOKEN:'fixture'}[key])},serve:h=>handler=h},Request,Response,URL,Headers,AbortSignal,fetch:mockFetch,evaluateImportedTriage,readTriageHistories:(ids,token)=>readTriageHistories(ids,token,mockFetch),console});
  return {handler,requests};
 }
-const request=(auth=true)=>new Request('https://fixture.functions.supabase.co/',{method:'POST',headers:{...(auth?{authorization:'Bearer fixture'}:{}),'content-type':'application/json'},body:JSON.stringify({mode:'read-only',refresh:true,threshold:3})});
+const request=(auth=true,extra={})=>new Request('https://fixture.functions.supabase.co/',{method:'POST',headers:{...(auth?{authorization:'Bearer fixture'}:{}),'content-type':'application/json'},body:JSON.stringify({mode:'read-only',refresh:true,threshold:3,...extra})});
 test('authenticated individual fallback returns current rows without any writes',async()=>{
  const {handler,requests}=createHandler();const response=await handler(request());const result=await response.json();
  assert.equal(response.status,200,JSON.stringify(result));assert.equal(result.directReads,2);
@@ -43,5 +43,15 @@ test('unauthenticated request is rejected before any database read',async()=>{
 });
 test('non-admin request never reaches the Movidesk API',async()=>{
  const {handler,requests}=createHandler({admin:false});assert.equal((await handler(request())).status,403);
+ assert.ok(requests.every(r=>new URL(r.url).hostname!=='api.movidesk.com'));
+});
+
+test('individual check only returns the selected triage ticket',async()=>{
+ const {handler,requests}=createHandler();const response=await handler(request(true,{individualTicketId:'2'}));const result=await response.json();
+ assert.equal(response.status,200);assert.equal(result.rows.length,1);assert.equal(result.rows[0].ticketId,'2');
+ assert.ok(requests.filter(r=>new URL(r.url).hostname==='api.movidesk.com').every(r=>!new URL(r.url).searchParams.get('$filter')?.includes('id eq 1')));
+});
+test('individual check rejects tickets outside the authorized imported selection',async()=>{
+ const {handler,requests}=createHandler();assert.equal((await handler(request(true,{individualTicketId:'99'}))).status,403);
  assert.ok(requests.every(r=>new URL(r.url).hostname!=='api.movidesk.com'));
 });
