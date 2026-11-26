@@ -1,4 +1,4 @@
-import {EMAIL_SECTORS,localClock,idleCoverageStart,inEmailWindow,sectorRecipient,evaluateEmailAlerts,alertBody} from '../../../alert-center/email-policy.mjs';
+import {EMAIL_SECTORS,localClock,idleCoverageStart,inEmailWindow,sectorRecipient,evaluateEmailAlerts,alertBody,formatEmailDates} from '../../../alert-center/email-policy.mjs';
 import {readTriageHistories} from '../../../alert-center/triage-live-reader.mjs';
 import {composeTicketCharge} from '../audit-email-dispatch/ticket-charge.ts';
 import {assertEmailDeliveryEnabled} from '../_shared/email-delivery-control.ts';
@@ -84,7 +84,7 @@ export function createAlertEmailHandler(fetcher:typeof fetch=fetch,getEnv=env,cl
  const chunk=rows.slice(offset,offset+20);
  const subject='ARQUEM | Ticket Manager | '+target.sector+' | Alertas | '+local.date.split('-').reverse().join('/')+(rows.length>20?' | Parte '+(parts.length+1):'');
  const draft=composeTicketCharge(chunk,recipient.email,alertBody(chunk,target.sector,clock().toISOString()),{subject,customBody:true});
- parts.push({subject:draft.subject,text:draft.text,html:draft.html});
+ parts.push({subject:draft.subject,text:formatEmailDates(draft.text),html:formatEmailDates(draft.html)});
  }
  bundles.push({sector:target.sector,recipientId:recipient.id,recipient:recipient.email,name:recipient.name,enabled:setting.enabled===true,ticketCount:rows.length,ticketIds:rows.map((r:Row)=>r.ticket_id),reviewCount:evaluation.review.filter((r:Row)=>r.sector===target.sector).length,parts});
  }
