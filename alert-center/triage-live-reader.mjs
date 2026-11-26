@@ -20,5 +20,23 @@ export async function readTriageHistories(ids,token,fetcher=fetch){
  found.set(id,row);
  }
  }
- return {tickets:[...found.values()],missingIds:ids.filter(id=>!found.has(id)),requests};
+
+ // The individual documented GET can return tickets absent from both lists.
+ // Bound the fallback to three tickets; stop after the first HTTP failure.
+ const pending=ids.filter(id=>!found.has(id)),missingReasons={};
+ for(const id of pending.slice(0,3)){
+ const url=new URL('https://api.movidesk.com/public/v1/tickets');
+ url.searchParams.set('token',token);url.searchParams.set('id',id);
+ requests++;
+ const response=await fetcher(url,{method:'GET',redirect:'error',signal:AbortSignal.timeout(25000)});
+ if(response.status===429){const error=new Error('Movidesk rate limit');error.code='rate-limit';throw error;}
+ if(response.status===404){missingReasons[id]='not-found-by-api';break;}
+ if(!response.ok)throw Error('Movidesk individual read unavailable');
+ const ticket=await response.json();
+ if(!ticket||Array.isArray(ticket)||String(ticket.id)!==id)throw Error('Unexpected individual ticket');
+ found.set(id,ticket);
+ }
+ for(const id of ids.filter(id=>!found.has(id)))missingReasons[id]??='not-returned-by-api';
+
+ return {tickets:[...found.values()],missingIds:ids.filter(id=>!found.has(id)),missingReasons,requests};
 }
