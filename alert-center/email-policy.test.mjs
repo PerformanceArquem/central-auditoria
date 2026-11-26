@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {EMAIL_SECTORS,localClock,idleCoverageStart,inEmailWindow,sectorRecipient,evaluateEmailAlerts,alertBody} from './email-policy.mjs';
+import {EMAIL_SECTORS,localClock,idleCoverageStart,inEmailWindow,sectorRecipient,evaluateEmailAlerts,alertBody,formatEmailDates} from './email-policy.mjs';
 const now='2026-11-26T11:30:00Z';
 const ticket=(id='1',extra={})=>({ticket_id:id,source_synced_at:now,payload:{subject:'Fixture',ownerTeam:'Inteligência',status:'Em Análise',createdDate:'2026-11-01T12:00:00Z',slaSolutionDate:'2026-11-24T11:30:00Z',slaSolutionDateIsPaused:false,...extra}});
 test('only the six explicitly approved sectors are eligible',()=>{
@@ -50,4 +50,15 @@ test('humanized email copy describes rules without inventing work',()=>{
  const text=alertBody(rows,'Inteligência',now);
  assert.ok(text.includes('26/11/2026 às 08:30'));assert.ok(text.includes('Prazo vencido'));
  assert.ok(text.includes('não comprova ausência de trabalho'));assert.ok(!text.includes('2026-11-26T'));
+});
+
+test('owner objects without a name never reach the email renderer as objects',()=>{
+ const records=[ticket('1',{owner:{id:null,businessName:null}}),ticket('2',{owner:{id:'123',businessName:null}})];
+ const result=evaluateEmailAlerts(records,{now});
+ assert.equal(result.alerts[0].payload.owner,null);
+ assert.deepEqual(result.alerts[1].payload.owner,{businessName:'ID 123'});
+});
+test('email presentation uses Brazilian dates and preserves ticket links',()=>{
+ const text=formatEmailDates('Último apontamento: 2026-11-18 · https://arquem.movidesk.com/Ticket/Edit/101360');
+ assert.equal(text,'Último apontamento: 18/11/2026 · https://arquem.movidesk.com/Ticket/Edit/101360');
 });
