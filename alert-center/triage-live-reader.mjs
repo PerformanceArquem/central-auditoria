@@ -7,8 +7,8 @@ export async function readTriageHistories(ids,token,fetcher=fetch){
  const missing=ids.filter(id=>!found.has(id));if(!missing.length)break;
  const url=new URL('https://api.movidesk.com/public/v1/'+path);
  url.searchParams.set('token',token);url.searchParams.set('$filter',missing.map(id=>'id eq '+id).join(' or '));
- url.searchParams.set('$select','id,subject,ownerTeam,status,baseStatus,closedIn,ownerHistories,statusHistories');
- url.searchParams.set('$expand','ownerHistories,statusHistories');
+ url.searchParams.set('$select','id,subject,ownerTeam,owner,status,baseStatus,closedIn,ownerHistories,statusHistories');
+ url.searchParams.set('$expand','owner,ownerHistories,statusHistories');
  url.searchParams.set('$top','100');
  requests++;
  const response=await fetcher(url,{method:'GET',redirect:'error',signal:AbortSignal.timeout(25000)});
