@@ -29,10 +29,10 @@ export function corporateFallbackHtml(subject:string,body:string):string {
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef3fa"><tr>'+
     '<td align="center" style="padding:24px 12px">'+
     '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:720px;background:#fff;border:1px solid #dce7f3;border-radius:12px">'+
-    '<tr><td style="background:#142f50;color:#fff;padding:26px 30px">'+
+    '<tr><td style="background:#17263e;color:#fff;padding:26px 26px">'+
     '<div style="font-size:12px;color:#9edbea;font-weight:700;letter-spacing:1.5px">ARQUEM SISTEMAS</div>'+
-    '<div style="font-size:23px;font-weight:700;margin-top:12px">Central de Auditoria</div>'+
-    '<div style="font-size:12px;color:#d3e2f0;margin-top:7px">Gestão de Qualidade · Comunicação corporativa</div>'+
+    '<div style="font-size:23px;font-weight:700;margin-top:12px">Ticket Manager</div>'+
+    '<div style="font-size:12px;color:#d3e2f0;margin-top:7px">Central de Auditoria · Gestão de Qualidade</div>'+
     '</td></tr><tr><td style="padding:26px 30px">'+
     '<h1 style="margin:0 0 18px;font-size:20px;line-height:1.4;color:#173b65">'+title+'</h1>'+
     '<div style="font-size:13px;line-height:1.8;overflow-wrap:anywhere">'+content+'</div>'+
