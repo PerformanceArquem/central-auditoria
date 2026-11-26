@@ -35,6 +35,13 @@ Deno.serve(async(req:Request)=>{
  read('audit_email_holidays',{affects_delivery:'eq.true',select:'holiday_date',limit:'1000'})
  ]);
  if(current.length>500||holidayRows.length>=1000)return reply({error:'Consulta parcial; limite atingido. Não homologar.'},409);
+ if(body.individualTicketId!==undefined){
+ const requested=String(body.individualTicketId);
+ if(!/^\d+$/.test(requested))return reply({error:'Chamado inválido'},400);
+ const selected=current.filter(r=>String(r.ticket_id)===requested);
+ if(selected.length!==1)return reply({error:'Chamado fora da seleção de triagem autorizada'},403);
+ current.splice(0,current.length,...selected);
+ }
  const ids=current.map(r=>String(r.ticket_id));
  if(ids.some(id=>!/^\d+$/.test(id)))throw Error('Identificador inválido');
  stage='history';
