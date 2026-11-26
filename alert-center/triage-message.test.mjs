@@ -24,3 +24,9 @@ test('invalid calendar dates remain in review',()=>{
  const d=composeTriageDraft({...context,rows:[{...base,enteredDate:'2026-02-30'}]});
  assert.equal(d.eligibleCount,0);assert.equal(d.reviewCount,1);
 });
+
+test('shows the responsible person and marks missing identity explicitly',()=>{
+ const named=composeTriageDraft({...context,rows:[{...base,sector:'Inteligência',ownerId:'123',ownerName:'Pessoa responsável'}]});
+ assert.match(named.text,/Setor: Inteligência \| Responsável: Pessoa responsável/);
+ const unknown=composeTriageDraft({...context,rows:[base]});assert.match(unknown.text,/Responsável: Não identificado/);
+});
