@@ -184,7 +184,8 @@ function clearTriageDraft(){triageDraftButton.disabled=true;triageDraftText.hidd
 triageDraftButton.addEventListener('click',()=>{try{const draft=composeTriageDraft({rows:liveTriageLastRows,threshold:Number(liveTriageLimit.value),referenceTime:liveTriageLastReference,now:new Date().toISOString()});triageDraftText.value=draft.text;triageDraftText.hidden=false;triageDraftStatus.textContent=draft.eligibleCount+' chamados para avaliação · '+draft.reviewCount+' para revisão de dados. Nenhum envio.';}catch(e){clearTriageDraft();triageDraftStatus.textContent=e.message;}});
 const liveTriageRefresh=document.querySelector('#live-triage-refresh');
 const liveTriageButton=document.querySelector('#live-triage-load'),liveTriageLimit=document.querySelector('#live-triage-limit'),liveTriageStatus=document.querySelector('#live-triage-status'),liveTriageRows=document.querySelector('#live-triage-rows');
-liveTriageLimit.addEventListener('input',()=>{liveTriageLastRows=[];liveTriageLastReference=null;clearTriageDraft();triageFilter.disabled=true;triageSearch.disabled=true;triageFilterStatus.textContent='';liveTriageRows.replaceChildren();liveTriageStatus.textContent='Limite alterado. Consulte novamente.';});
+function resetLiveTriageResults(){liveTriageLastRows=[];liveTriageLastReference=null;clearTriageDraft();triageFilter.disabled=true;triageSearch.disabled=true;triageFilterStatus.textContent='';liveTriageRows.replaceChildren();}
+liveTriageLimit.addEventListener('input',()=>{resetLiveTriageResults();liveTriageStatus.textContent='Limite alterado. Consulte novamente.';});
 
 const triageFilter=document.querySelector('#live-triage-filter'),triageSearch=document.querySelector('#live-triage-search'),triageFilterStatus=document.querySelector('#live-triage-filter-status');
 const foldTriage=value=>String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
@@ -200,9 +201,11 @@ function applyTriageFilter(){
 triageFilter.addEventListener('change',applyTriageFilter);triageSearch.addEventListener('input',applyTriageFilter);
 
 async function loadLiveTriage(refresh=false,individualTicketId=null){
+ if(!individualTicketId)resetLiveTriageResults();
  clearTriageDraft();triageFilter.disabled=true;triageSearch.disabled=true;triageFilterStatus.textContent='';
  liveTriageRows.replaceChildren();liveTriageRefresh.disabled=true;liveTriageButton.disabled=true;liveTriageLimit.disabled=true;liveTriageStatus.textContent='Consultando histórico real da triagem...';
  try{
+ if(individualTicketId&&(!liveTriageLastReference||!liveTriageLastRows.some(row=>row.ticketId===individualTicketId)))throw Error('Consulte a triagem novamente antes da conferência individual.');
  const threshold=Number(liveTriageLimit.value);if(!Number.isInteger(threshold)||threshold<1||threshold>365)throw Error('Informe de 1 a 365 dias úteis.');
  const api=await channelClient(),{data,error}=await api.functions.invoke('alert-center-triage-preview',{body:{mode:'read-only',threshold,refresh,...(individualTicketId?{individualTicketId}:{})}});
  if(error){let message='Consulta indisponível. Confira a sessão administrativa e tente novamente.';try{const detail=await error.context.json();if(typeof detail.error==='string')message=detail.error;}catch{}throw Error(message);}
@@ -220,10 +223,10 @@ async function loadLiveTriage(refresh=false,individualTicketId=null){
  const values=['#'+row.ticketId,row.subject,row.sector||'Inteligência',row.ownerName||(row.ownerId?'ID '+row.ownerId:'Não identificado no cadastro consultado'),row.enteredDate?formatReportDate(row.enteredDate):'Não validado',row.businessDays===null?'Não calculado':String(row.businessDays),reasons[row.reason]||'Revisar · motivo não reconhecido',Number.isFinite(+synced)&&row.syncedAt?synced.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'Não informada',row.source||'Base importada'];
  for(const value of values){const td=document.createElement('td');td.textContent=value;tr.append(td);}const action=document.createElement('td');if(!row.eligible&&row.reason!=='below-threshold'&&row.reason!=='outside-triage'){const button=document.createElement('button');button.type='button';button.textContent='Conferir #'+row.ticketId;button.addEventListener('click',()=>loadLiveTriage(true,row.ticketId));action.append(button);}else{action.textContent='Histórico validado';}tr.append(action);body.append(tr);
  }
- liveTriageRows.append(table);liveTriageLastReference=data.now;triageDraftButton.disabled=false;triageFilter.disabled=false;triageSearch.disabled=false;applyTriageFilter();
+ liveTriageRows.append(table);if(!individualTicketId)liveTriageLastReference=data.now;triageDraftButton.disabled=false;triageFilter.disabled=false;triageSearch.disabled=false;applyTriageFilter();
  const eligible=rows.filter(r=>r.eligible).length,waiting=rows.filter(r=>r.reason==='below-threshold').length,outside=rows.filter(r=>r.reason==='outside-triage').length;
  liveTriageStatus.textContent=rows.length+' chamados consultados · '+eligible+' acima do limite · '+waiting+' abaixo do limite · '+(rows.length-eligible-waiting-outside)+' para revisão · '+outside+' fora da triagem atual · '+rows.filter(r=>r.source==='Movidesk · consulta direta').length+' históricos consultados diretamente. Inteligência + Em Análise. Nenhuma notificação ou reserva.';
- }catch(e){liveTriageRows.replaceChildren();liveTriageStatus.textContent=e.message;}finally{liveTriageRefresh.disabled=false;liveTriageButton.disabled=false;liveTriageLimit.disabled=false;}
+ }catch(e){resetLiveTriageResults();liveTriageStatus.textContent=e.message;}finally{liveTriageRefresh.disabled=false;liveTriageButton.disabled=false;liveTriageLimit.disabled=false;}
 }
 liveTriageButton.addEventListener('click',()=>loadLiveTriage(false));
 liveTriageRefresh.addEventListener('click',()=>loadLiveTriage(true));
