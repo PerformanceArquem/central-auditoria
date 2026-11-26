@@ -7,7 +7,7 @@ import {readTriageHistories} from './triage-live-reader.mjs';
 import {evaluateImportedTriage} from './triage-adapter.mjs';
 const source=stripTypeScriptTypes(readFileSync(new URL('../supabase/functions/alert-center-triage-preview/index.ts',import.meta.url),'utf8')).replace(/^import .*;\r?\n/gm,'');
 const payload=id=>({id,subject:'Fixture',ownerTeam:'Inteligência',status:'Em Análise',ownerHistories:[{changedDate:'2026-11-01T12:00:00',ownerTeam:'Inteligência'}],statusHistories:[{changedDate:'2026-11-01T12:00:00',status:'Em Análise'}]});
-function createHandler({admin=true,individualStatus=200}={}){
+function createHandler({admin=true,individualStatus=200,liveOwner=null}={}){
  let handler;const requests=[];
  const mockFetch=async(url,opts={})=>{
  requests.push({url:String(url),method:opts.method||'GET'});
@@ -19,7 +19,7 @@ function createHandler({admin=true,individualStatus=200}={}){
  if(name==='audit_reporting_tickets')return Response.json([1,2].map(id=>({ticket_id:String(id),payload:payload(id),source_synced_at:new Date(Date.now()-48*3600000).toISOString()})));
  if(parsed.hostname==='api.movidesk.com'){
  if(!parsed.searchParams.has('id'))return Response.json([]);
- return individualStatus===200?Response.json(payload(Number(parsed.searchParams.get('id')))):new Response('',{status:individualStatus});
+ return individualStatus===200?Response.json({...payload(Number(parsed.searchParams.get('id'))),owner:liveOwner}):new Response('',{status:individualStatus});
  }
  throw Error('Unexpected read');
  };
@@ -54,4 +54,27 @@ test('individual check only returns the selected triage ticket',async()=>{
 test('individual check rejects tickets outside the authorized imported selection',async()=>{
  const {handler,requests}=createHandler();assert.equal((await handler(request(true,{individualTicketId:'99'}))).status,403);
  assert.ok(requests.every(r=>new URL(r.url).hostname!=='api.movidesk.com'));
+});
+
+test('direct consultation returns current owner identity without contact information',async()=>{
+ const {handler,requests}=createHandler({liveOwner:{id:42,businessName:'Responsável atual',email:'private@example.test',phone:'41999999999'}});
+ const response=await handler(request());const result=await response.json();
+ assert.equal(response.status,200);assert.equal(result.rows.length,2);
+ for(const row of result.rows){
+ assert.equal(row.ownerId,'42');assert.equal(row.ownerName,'Responsável atual');assert.equal(row.sector,'Inteligência');
+ assert.equal(row.source,'Movidesk · consulta direta');
+ }
+ const serialized=JSON.stringify(result);
+ assert.ok(!serialized.includes('private@example.test'));assert.ok(!serialized.includes('41999999999'));
+ assert.equal(result.deliveryEnabled,false);assert.ok(requests.every(r=>r.method==='GET'));
+});
+test('missing live owner remains explicit without inventing a recipient',async()=>{
+ const {handler}=createHandler();const response=await handler(request());const result=await response.json();
+ assert.equal(response.status,200);
+ assert.ok(result.rows.every(row=>row.ownerId===null&&row.ownerName===null));
+ assert.equal(result.deliveryEnabled,false);
+});
+test('invalid threshold is rejected before reading ticket data or Movidesk',async()=>{
+ const {handler,requests}=createHandler();assert.equal((await handler(request(true,{threshold:0}))).status,400);
+ assert.ok(requests.every(r=>!new URL(r.url).pathname.includes('audit_reporting')&&new URL(r.url).hostname!=='api.movidesk.com'));
 });
