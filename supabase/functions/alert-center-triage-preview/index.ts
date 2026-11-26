@@ -30,11 +30,13 @@ Deno.serve(async(req:Request)=>{
  const threshold=body.threshold??3;
  if(!Number.isInteger(threshold)||threshold<1||threshold>365)return reply({error:'Informe de 1 a 365 dias úteis'},400);
  stage='snapshot';
- const [current,holidayRows]=await Promise.all([
- read('audit_reporting_open_ticket_snapshot',{'payload->>ownerTeam':'eq.Inteligência','payload->>status':'eq.Em Análise',select:'ticket_id,payload,closed_at_source',order:'ticket_id.asc',limit:'501'}),
+ const [imported,holidayRows]=await Promise.all([
+ read('audit_reporting_tickets',{'payload->>ownerTeam':'eq.Inteligência','payload->>status':'eq.Em Análise',closed_at_source:'is.null',select:'ticket_id,payload,closed_at_source,source_synced_at',order:'ticket_id.asc',limit:'501'}),
  read('audit_email_holidays',{affects_delivery:'eq.true',select:'holiday_date',limit:'1000'})
  ]);
- if(current.length>500||holidayRows.length>=1000)return reply({error:'Consulta parcial; limite atingido. Não homologar.'},409);
+ if(imported.length>500||holidayRows.length>=1000)return reply({error:'Consulta parcial; limite atingido. Não homologar.'},409);
+ // Apply the open-snapshot lifecycle checks to the already scoped records.
+ const current=imported.filter(row=>!row.closed_at_source&&!String(row.payload?.closedIn??'')&&!String(row.payload?.canceledIn??'')&&String(row.payload?.isDeleted??false)!=='true');
  if(body.individualTicketId!==undefined){
  const requested=String(body.individualTicketId);
  if(!/^\d+$/.test(requested))return reply({error:'Chamado inválido'},400);
@@ -45,7 +47,8 @@ Deno.serve(async(req:Request)=>{
  const ids=current.map(r=>String(r.ticket_id));
  if(ids.some(id=>!/^\d+$/.test(id)))throw Error('Identificador inválido');
  stage='history';
- const stored=ids.length?await read('audit_reporting_tickets',{ticket_id:'in.('+ids.join(',')+')',select:'ticket_id,source_synced_at,payload',limit:'501'}):[];
+ // Selection and histories come from one read, avoiding a second expensive scan.
+ const stored=current;
  const byId=new Map(stored.map(r=>[String(r.ticket_id),r]));
  let now=new Date().toISOString();
  const directIds=new Set<string>();let directRequests=0;let directMissing:Record<string,string>={};
