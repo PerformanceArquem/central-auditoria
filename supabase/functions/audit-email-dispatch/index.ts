@@ -1334,7 +1334,7 @@ async function recentCoverage(from:string,to:string) {
     from:s.period_start,to:s.period_end,offset:s.next_offset,
     completed:s.completed,lastSuccess:s.last_success_at,lastError:s.last_error};
 }
-async function manualOfficial(payload: R, movideskPreview = false) {
+async function manualOfficial(payload: R) {
   const id = String(payload.recipientId || '');
   const kind = String(payload.kind || 'daily');
   const previewOnly = payload.previewOnly === true;
@@ -1388,24 +1388,6 @@ async function manualOfficial(payload: R, movideskPreview = false) {
   // Mesmo com zero apontamentos, o teste manual verifica o envio e informa a ausencia no corpo.
   const partial = !checkpoint.completed || !coverage.ready;
   const empty = !report.metrics.appointments;
-  // Isolated Movidesk HTML preview. Never call sendMail or create attachments.
-  if (movideskPreview) {
-    if (!previewOnly || partial || empty) return json({ok:false,error:'Prévia bloqueada: dados incompletos ou sem apontamentos importados.'},409);
-    let text=report.text+overview.text+quality.text+'\n\n'+tickets.text+forecast.text;
-    let html=reportEmailHtml(rec,report,from,to,kind,false,false,tickets.html,report.detailsHtml+quality.html,overview.html,forecast.html);
-    const comparison=renderComparisons(await comparisonData(rec,from,to));
-    text+=comparison.text; html=appendReportSection(html,comparison.html);
-    const voice=await voiceChatSection(rec,from,to);
-    if(voice){text+=voice.text;html=appendReportSection(html,voice.html);}
-    const packet=reportPacket(rec,report,tickets,from,to,kind,false,false,clients,forecast.rows);
-    const timing=await reportTiming(packet,db,list);
-    if(timing){const section=timingContent(timing);text+=section.text;html=appendReportSection(html,section.html);}
-    const subject=corporateCopy(reportSubject(rec,kind,from,to,{}));
-    const cleanText=corporateCopy('TICKET MANAGER | ACOMPANHAMENTO OPERACIONAL\nConfira os alertas e encaminhamentos abaixo.\n\n'+text);
-    const cleanHtml=corporateCopy('<div style="padding:12px;background:#17263e;color:white;font-weight:bold">TICKET MANAGER | ACOMPANHAMENTO OPERACIONAL</div>'+html);
-    assertCorporateCopy({cleanSubject:subject,cleanText,cleanHtml,cleanReportData:undefined});
-    return json({ok:true,preview:true,deliveryEnabled:false,attachments:[],subject,text:cleanText,html:cleanHtml,kind,from,to});
-  }
   // Prévia de auditoria não cria disparos, não acessa o Gmail e não muda agendamentos.
   if (previewOnly) return json({ok:true,preview:true,release:RELEASE_ID,
     recipient:target,kind,from,to,partial,empty,
@@ -2637,18 +2619,6 @@ async function handleRequest(req: Request): Promise<Response> {
   try { payload = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
   try {
     const action = String(payload.action || '');
-    if(action==='movidesk_report_preview'){
-      if(!await isAdmin(req))return json({ok:false,error:'Acesso restrito'},403);
-      const auth=req.headers.get('authorization')||'';
-      const u=await fetch(E('SUPABASE_URL').replace(/\\/$/,'')+'/auth/v1/user',{headers:{apikey:E('SUPABASE_ANON_KEY'),Authorization:auth},signal:AbortSignal.timeout(10000)});
-      if(!u.ok)return json({ok:false,error:'Sessão inválida'},401);
-      const actor=await u.json();
-      if(typeof actor.id!=='string'||!E('ALERT_CENTER_TEST_RECIPIENT_ID'))return json({ok:false,error:'Homologação indisponível'},403);
-      const links=await db('audit_movidesk_report_test_links?profile_user_id=eq.'+encodeURIComponent(actor.id)+'&movidesk_person_id=eq.'+encodeURIComponent(E('ALERT_CENTER_TEST_RECIPIENT_ID'))+'&delivery_enabled=eq.false&select=report_recipient_id,movidesk_person_id&limit=2');
-      const profiles=await db('audit_movidesk_note_profiles?user_id=eq.'+encodeURIComponent(actor.id)+'&movidesk_person_id=eq.'+encodeURIComponent(E('ALERT_CENTER_TEST_RECIPIENT_ID'))+'&active=eq.true&team_name=eq.Qualidade&select=user_id&limit=2');
-      if(links.length!==1||profiles.length!==1)return json({ok:false,error:'Vínculo de homologação não autorizado'},403);
-      return await manualOfficial({recipientId:links[0].report_recipient_id,kind:'daily',previewOnly:true},true);
-    }
     if(action==='failed_report_review'||action==='failed_report_send'||action==='comparison_preview'){
       // The existing server-only scheduler credential already authorizes official
       // deliveries. Keep browser access under the existing active-admin session.
