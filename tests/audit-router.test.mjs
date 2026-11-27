@@ -33,14 +33,14 @@ test('unexpected failures do not disclose provider messages or secrets',async()=
  const router=createAuditRouter({inspection:async()=>{throw Error('private-token');}}),res=response();await router({query:{route:'inspection'}},res);assert.equal(res.code,502);assert.doesNotMatch(JSON.stringify(res.data),/private-token/);
 });
 test('real delegated handlers preserve authentication and do not fetch for anonymous requests',async()=>{
- const names=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','TICKET_INSPECTION_ENABLED'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]])),fetchImpl=globalThis.fetch;
+ const names=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','TICKET_INSPECTION_ENABLED','ROBOT_OVERVIEW_ENABLED'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]])),fetchImpl=globalThis.fetch;
  try{
-  Object.assign(process.env,{SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'fixture-only',TICKET_INSPECTION_ENABLED:'true'});
+  Object.assign(process.env,{SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'fixture-only',TICKET_INSPECTION_ENABLED:'true',ROBOT_OVERVIEW_ENABLED:'true'});
   globalThis.fetch=async()=>assert.fail('Anonymous request reached upstream');
   let realCode=code;
-  for(const file of ['audit-ticket-inspection','audit-ticket-lookup','audit-forecast-variances','audit-production-flow'])realCode=realCode.replace("'../server/"+file+".mjs'",JSON.stringify(new URL('../server/'+file+'.mjs',import.meta.url).href));
+  for(const file of ['audit-ticket-inspection','audit-ticket-lookup','audit-forecast-variances','audit-production-flow','audit-robot-overview'])realCode=realCode.replace("'../server/"+file+".mjs'",JSON.stringify(new URL('../server/'+file+'.mjs',import.meta.url).href));
   const {default:realRouter}=await import('data:text/javascript;base64,'+Buffer.from(realCode).toString('base64'));
-  for(const route of ['inspection','lookup','forecast','production-flow']){
+  for(const route of ['inspection','lookup','forecast','production-flow','robot-overview']){
    const res=response();await realRouter({method:'GET',headers:{},query:{route,id:'123',from:'2026-11-01',to:'2026-11-01'}},res);assert.equal(res.code,401,route);
   }
  }finally{globalThis.fetch=fetchImpl;for(const key of names)if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key];}

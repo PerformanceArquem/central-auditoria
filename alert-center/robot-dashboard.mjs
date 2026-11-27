@@ -3,6 +3,7 @@ export const GROUPS = ['Inteligência', 'Produção', 'Suporte'];
 export const LEVELS = {preventive:'Preventivo', operational:'Responsável', management:'Gestão', review:'Revisão de dados'};
 export const REASONS = {overdue:'Previsão vencida', preventive:'Aviso preventivo', escalation:'Escalonamento', idle:'Sem apontamentos', 'aged-triage':'Triagem antiga', 'stale-history':'Histórico desatualizado', 'missing-history':'Histórico ausente', 'history-coverage-unconfirmed':'Cobertura não confirmada', 'invalid-history':'Histórico inválido', 'unordered-history':'Ordem do histórico não confirmada', 'history-does-not-match-current-state':'Setor ou status divergente', 'invalid-sync-time':'Atualização não informada', 'not-found-by-api':'Chamado não localizado pela API', 'not-returned-by-api':'Consulta individual pendente'};
 const fold = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+const overviewReasons={'no-forecast':'Previsão não informada','owner-not-informed':'Responsável não informado','invalid-forecast':'Previsão inválida'};
 function groupFor(sector) {
   const name = fold(sector);
   if (['intelligence','inteligencia','qualidade','quali','testes (qa)','qa','sucesso do cliente','sucesso','implantacao','treinamento'].includes(name)) return 'Inteligência';
@@ -29,7 +30,7 @@ export function consolidateRobot({alerts = [], review = [], tickets = []} = {}) 
     const ticket = {...lookup.get(id), ...item};
     const sector = sectorName(ticket.sector);
     const level = isReview ? 'review' : rule === 'escalation' || rule === 'aged-triage' ? 'management' : rule === 'preventive' ? 'preventive' : 'operational';
-    const reason = REASONS[rule] || (isReview ? 'Dados precisam de conferência' : 'Regra não identificada');
+    const reason = REASONS[rule] || overviewReasons[rule] || (isReview ? 'Dados precisam de conferência' : 'Regra não identificada');
     const key = JSON.stringify([id, sector, level, rule]);
     rows.set(key, {ticketId:id, subject:String(ticket.subject || 'Assunto não informado'), sector, owner:ownerName(ticket), group:rule === 'aged-triage' && !isReview ? 'Produção' : groupFor(sector), level, reason, rule, review:isReview});
   }
@@ -84,7 +85,7 @@ export function mountRobotDashboard(root) {
       const message = !hasSnapshot ? 'Execute “Simular alertas” para preencher este painel.' : rows.length ? 'Nenhum resultado para os filtros atuais.' : container===reviewTable ? 'Nenhum chamado para revisão neste cenário.' : 'Nenhuma ocorrência de cobrança neste cenário.';
       container.append(element('p',message)); return;
     }
-    const table = element('table'), caption = element('caption', container === reviewTable ? 'Revisão de dados · fora da cobrança' : source==='triage-read-only' ? 'Triagem consultada · acompanhamento sem envio' : 'Cobranças simuladas por chamado');
+    const table = element('table'), caption = element('caption', container === reviewTable ? 'Revisão de dados · fora da cobrança' : source==='triage-read-only' ? 'Triagem consultada · acompanhamento sem envio' : source==='overview-read-only' ? 'Setores consultados · acompanhamento sem envio' : 'Cobranças simuladas por chamado');
     const head = element('thead'), tr = element('tr'), body = element('tbody');
     for (const text of ['Chamado','Assunto','Grupo gerencial','Setor','Responsável','Nível','Motivo']) {const th = element('th',text); th.scope='col'; tr.append(th);}
     head.append(tr);
@@ -98,7 +99,7 @@ export function mountRobotDashboard(root) {
   function render() {
     const filters = Object.fromEntries(Object.entries(selects).map(([key,select])=>[key,select.value]));
     const filtered = filterRobot(rows,filters), summary = summarizeRobot(filtered), total = summarizeRobot(rows);
-    status.textContent = summary.tickets+' de '+total.tickets+' chamados · '+summary.occurrences+' de '+total.occurrences+' ocorrências · '+summary.review+' de '+total.review+' chamados para revisão. '+(source==='triage-read-only'?'Consulta somente leitura; nenhum envio.':'Simulação.');
+    status.textContent = summary.tickets+' de '+total.tickets+' chamados · '+summary.occurrences+' de '+total.occurrences+' ocorrências · '+summary.review+' de '+total.review+' chamados para revisão. '+(source!=='simulation'?'Consulta somente leitura; nenhum envio.':'Simulação.');
     const missingOwners = new Set(filtered.filter(row=>row.owner==='Responsável não informado na consulta').map(row=>row.ticketId)).size;
     if(missingOwners)status.textContent+=' '+countLabel(missingOwners,'chamado sem responsável informado na consulta.','chamados sem responsável informado na consulta.');
     cards.replaceChildren();
@@ -114,13 +115,16 @@ export function mountRobotDashboard(root) {
     rows = consolidateRobot(data);
     hasSnapshot = Object.hasOwn(data,'alerts');
     const previousSource=source;
-    source = data.source==='triage-read-only'?'triage-read-only':'simulation';
-    heading.textContent=source==='triage-read-only'?'Robô Fiscalizador · triagem consultada':'Robô Fiscalizador · painel de simulação';
+    source = ['triage-read-only','overview-read-only'].includes(data.source)?data.source:'simulation';
+    heading.textContent=source==='triage-read-only'?'Robô Fiscalizador · triagem consultada':source==='overview-read-only'?'Robô Fiscalizador · setores consultados':'Robô Fiscalizador · painel de simulação';
     if(source==='triage-read-only') {
       const reference=new Date(data.referenceTime);
       note.textContent='Dados da consulta de triagem · '+(Number.isFinite(+reference)?reference.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'Referência não informada')+' (Brasília). Limite: '+data.threshold+' dias úteis. '+(data.waiting||0)+' abaixo do limite · '+(data.outside||0)+' fora da triagem, excluídos das cobranças. Escopo: triagem consultada, sem varredura geral dos setores. Nenhum registro no Movidesk ou alteração nos e-mails.';
+    } else if(source==='overview-read-only') {
+      const reference=new Date(data.referenceTime);
+      note.textContent='Setores da seleção consultada · '+reference.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})+' (Brasília). '+data.recordsRead+' chamados lidos · '+data.excluded+' encerrados ou excluídos na origem · '+data.unflagged+' sem ocorrência nas regras avaliadas. Ausência de apontamentos e permanência na fila não avaliadas. Nenhuma gravação ou envio.';
     } else note.textContent='Filtros locais sobre o último cenário simulado. Nenhum registro no Movidesk ou alteração nos e-mails. Um chamado pode ter mais de um motivo.';
-    chargeTable.setAttribute('aria-label',source==='triage-read-only'?'Ocorrências da consulta de triagem':'Ocorrências de cobrança simuladas');
+    chargeTable.setAttribute('aria-label',source!=='simulation'?'Ocorrências da consulta somente leitura':'Ocorrências de cobrança simuladas');
     for (const [key,select] of Object.entries(selects)) {
       const previous = previousSource===source?select.value:'';
       const all = element('option','Todos'); all.value=''; select.replaceChildren(all);
@@ -131,5 +135,5 @@ export function mountRobotDashboard(root) {
     reset.disabled = !rows.length; render();
   }
   setData({});
-  return {setData,clearTriage:()=>{if(source==='triage-read-only')setData({});}};
+  return {setData,clearTriage:()=>{if(source!=='simulation')setData({});}};
 }
