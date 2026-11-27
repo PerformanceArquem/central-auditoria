@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {composeTriageDraft} from './triage-message.mjs';
 import {triageRobotSnapshot} from './robot-triage.mjs';
+import {createTriageAuthGuard} from './triage-auth.mjs';
 
 const html=readFileSync(new URL('./preview.html',import.meta.url),'utf8');
 const source=html.slice(html.indexOf('let liveTriageLastRows='),html.indexOf('</script>',html.indexOf('let liveTriageLastRows=')));
@@ -15,14 +16,16 @@ class Element{
  querySelectorAll(){return [];}
  scrollIntoView(){}
 }
-function screen(responses){
+function screen(responses,authEvents=[]){
+ let authChange=()=>{};
  const elements=new Map(),calls=[],snapshots=[];
  const get=key=>{if(!elements.has(key))elements.set(key,new Element());return elements.get(key);};
  get('#live-triage-limit').value='3';get('#live-triage-filter').value='all';
  const context=vm.createContext({document:{querySelector:get,createElement:()=>new Element()},composeTriageDraft,triageRobotSnapshot,robotDashboard:{setData:data=>snapshots.push(data),clearTriage:()=>snapshots.splice(0)},formatReportDate:value=>value,
- channelClient:async()=>({functions:{invoke:async(name,request)=>{calls.push(request.body);const next=responses.shift();if(!next)throw Error('Unexpected request');return next;}}})});
+ channelClient:async()=>{for(const [event,session] of authEvents.splice(0))authChange(event,session);return {functions:{invoke:async(name,request)=>{calls.push(request.body);const next=responses.shift();if(!next)throw Error('Unexpected request');return next;}}};}});
  vm.runInContext(source,context);
- return {get,calls,snapshots,load:(...args)=>context.loadLiveTriage(...args),read:expression=>vm.runInContext(expression,context)};
+ authChange=createTriageAuthGuard(()=>context.resetLiveTriageResults());
+ return {get,calls,snapshots,auth:(...args)=>authChange(...args),load:(...args)=>context.loadLiveTriage(...args),read:expression=>vm.runInContext(expression,context)};
 }
 const now=new Date().toISOString();
 const old=new Date(Date.now()-2*3600000).toISOString();
@@ -97,4 +100,21 @@ test('in-flight query cannot restore data after session invalidation',async()=>{
  assert.equal(ui.get('#live-triage-panel').disabled,true);
  assert.equal(ui.snapshots.length,0);
  assert.match(ui.get('#live-triage-status').textContent,/Consulte novamente a triagem/);
+});
+
+test('initial same-user sign-in during authorization does not require a second click',async()=>{
+ const session={user:{id:'a'}};
+ const ui=screen([result([row('1')])],[['INITIAL_SESSION',session],['SIGNED_IN',session]]);
+ await ui.load();
+ assert.equal(ui.calls.length,1);assert.equal(ui.read('liveTriageLastRows.length'),1);
+ assert.equal(ui.get('#live-triage-panel').disabled,false);
+ assert.doesNotMatch(ui.get('#live-triage-status').textContent,/Consulte novamente|Consultando/);
+});
+
+test('sign-out still discards an in-flight response through the auth guard',async()=>{
+ let resolve;const pending=new Promise(done=>{resolve=done;});
+ const ui=screen([pending],[['INITIAL_SESSION',{user:{id:'a'}}]]),loading=ui.load();
+ await new Promise(done=>setImmediate(done));ui.auth('SIGNED_OUT',null);
+ resolve(result([row('1')]));await loading;
+ assert.equal(ui.read('liveTriageLastRows.length'),0);assert.equal(ui.get('#live-triage-panel').disabled,true);
 });
