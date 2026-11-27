@@ -2,6 +2,10 @@
 const dateBR = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value ? value.split('-').reverse().join('/') : '';
 const positive = n => Number.isSafeInteger(n) && n > 0;
 const duration = n => n + (n === 1 ? ' dia' : ' dias');
+const QUEUE_SECTORS = new Map([
+ ['Suporte','do Suporte'], ['Qualidade','da Qualidade'], ['Testes (QA)','de Testes (QA)'],
+ ['Sucesso do Cliente','do Sucesso do Cliente'], ['Implantação','da Implantação'], ['Treinamento','de Treinamento']
+]);
 export function robotOwnerMessage(ticket, facts = {}) {
   const owner = ticket?.owner;
   const hasOwner = owner?.id != null && String(owner.id).trim() !== '';
@@ -15,8 +19,9 @@ export function robotOwnerMessage(ticket, facts = {}) {
   if (facts.sem_registro === true && opened) reasons.push('ainda não possui registro de acompanhamento desde a abertura em '+opened);
   else if (positive(idle)) reasons.push('está há '+duration(idle)+' sem atualização'+(last ? ', com último registro em '+last : ''));
   if (deadline) reasons.push('está com a previsão de solução vencida desde '+deadline);
-  const queue = ticket?.ownerTeam === 'Suporte' && positive(facts.dias_na_fila);
-  if (queue) reasons.push('está na fila do Suporte há '+duration(facts.dias_na_fila)+(dateBR(facts.data_entrada_fila) ? ', desde '+dateBR(facts.data_entrada_fila) : ''));
+  const sector = QUEUE_SECTORS.get(ticket?.ownerTeam);
+  const queue = Boolean(sector) && positive(facts.dias_na_fila);
+  if (queue) reasons.push('está na fila '+sector+' há '+duration(facts.dias_na_fila)+(dateBR(facts.data_entrada_fila) ? ', desde '+dateBR(facts.data_entrada_fila) : ''));
   const unassigned = queue && owner === null;
   if (unassigned) reasons.push('ainda não possui um responsável definido');
   // Waiting-customer facts are supplied only by the validated status/contact evaluator.
