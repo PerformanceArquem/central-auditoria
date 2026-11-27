@@ -61,17 +61,29 @@ Deno.serve(async(req:Request)=>{
  const executor=createWaitingExecutor({readPolicy,readTicket,...robotPersistence(db),enabled:false});
  if(batch){
  const sectors=['Suporte','Qualidade','Testes (QA)','Sucesso do Cliente','Implantação','Treinamento'];
- const params:Record<string,string>={select:'ticket_id',closed_at_source:'is.null','payload->>ownerTeam':'in.('+sectors.map(s=>'"'+s+'"').join(',')+')',or:'(payload->>status.eq.Aguardando cliente,payload->>justification.eq.Aguardando ação do cliente)',order:'ticket_id.asc',limit:'6'};
- if(cursor!==null)params.ticket_id='gt.'+cursor;
- const candidates=await read('audit_reporting_tickets',params);
- const ids=candidates.slice(0,5).map(x=>String(x.ticket_id));
- if(ids.some(x=>!/^\d{1,12}$/.test(x))||new Set(ids).size!==ids.length)throw Error('Seleção inválida');
+ // Query the provider directly, using a numeric keyset rather than a mutable offset.
+ const url=new URL('https://api.movidesk.com/public/v1/tickets');
+ url.searchParams.set('token',token);
+ url.searchParams.set('$select','id,ownerTeam,status,justification,baseStatus');
+ const sectorFilter=sectors.map(s=>"ownerTeam eq '"+s.replaceAll("'","''")+"'").join(' or ');
+ const clauses=["("+sectorFilter+")","(status eq 'Aguardando cliente' or (status eq 'Agendado' and justification eq 'Aguardando ação do cliente'))"];
+ if(cursor!==null)clauses.push('id gt '+cursor);
+ url.searchParams.set('$filter',clauses.join(' and '));
+ url.searchParams.set('$orderby','id asc');
+ url.searchParams.set('$top','6');
+ const response=await fetch(url,{method:'GET',redirect:'error',headers:{Accept:'application/json'},signal:AbortSignal.timeout(20000)});
+ if(!response.ok)return reply({error:'Consulta direta Movidesk indisponível',providerStatus:response.status},502);
+ const candidates=await response.json();
+ if(!Array.isArray(candidates)||candidates.length>6)throw Error('Lista Movidesk inválida');
+ const allIds=candidates.map(x=>String(x.id));
+ if(allIds.some((x,i)=>!/^\d{1,12}$/.test(x)||(i>0&&Number(x)<=Number(allIds[i-1]))||(cursor!==null&&Number(x)<=Number(cursor))))throw Error('Paginação direta inválida');
+ const ids=allIds.slice(0,5);
  const rows=[];
  for(const ticketId of ids){
  try{const result=await executor.preview(ticketId);rows.push({ticketId,plan:result.plan,review:false});}
  catch{rows.push({ticketId,plan:null,review:true});}
  }
- return reply({ok:true,mode:'read-only',deliveryEnabled:false,coverage:'not-exhaustive',rows,nextCursor:candidates.length>5?ids[ids.length-1]:null});
+ return reply({ok:true,mode:'read-only',deliveryEnabled:false,coverage:'live-provider-page',rows,nextCursor:candidates.length>5?ids[ids.length-1]:null});
  }
  const result=await executor.preview(id);
  return reply({ok:true,deliveryEnabled:false,mode:'read-only',plan:result.plan});
