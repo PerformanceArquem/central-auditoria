@@ -168,7 +168,22 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
   ![a.zenviaCallId,a.voiceCallId,a.callId,a.telephonyCallId].some(v=>
    v!==undefined&&v!==null&&String(v).trim())).length,0);
  const withPhone=records.filter(r=>r.phoneMasked!=='Indisponível').length;
- return {stats,records,coverage:{callsWithPhone:withPhone,
+ const confirmed=records.filter(r=>['vinculado','vinculado_gravacao'].includes(r.reconciliation)).length;
+ const pending=records.filter(r=>!['vinculado','vinculado_gravacao'].includes(r.reconciliation));
+ const evidenceGroups={};
+ for(const r of pending){
+  const key=r.status+'|'+r.recordingState+'|'+r.reconciliation;
+  if(!evidenceGroups[key])evidenceGroups[key]={status:r.status,recordingState:r.recordingState,reconciliation:r.reconciliation,count:0};
+  evidenceGroups[key].count++;
+ }
+ const auditEvidence={confirmedByIdentifier:stats.vinculado,matchedByRecording:stats.vinculado_gravacao,
+  provisional:stats.possivel_vinculo,ambiguous:stats.ambiguo,
+  unidentified:stats.sem_vinculo_identificado,insufficient:stats.dados_insuficientes,
+  confirmedOrRecording:confirmed,requiresReview:pending.length,
+  identifierRate:records.length?stats.vinculado/records.length:null,
+  pendingEvidence:Object.values(evidenceGroups),
+  caveat:'Correspondência de gravação é evidência adicional; telefone e horário são hipóteses. Chamados criados antes da janela podem não estar na base consultada. Ausência de vínculo não prova ausência de chamado.'};
+ return {stats,records,auditEvidence,coverage:{callsWithPhone:withPhone,
   callsWithoutPhone:records.length-withPhone,ticketsWithPhone,ticketsWithCallId,
   ticketsWithTelephonyAction,ticketsWithRecordingReference,telephonyActionsWithoutCallId,
   ticketsWithoutPhone:prepared.length-ticketsWithPhone}};
