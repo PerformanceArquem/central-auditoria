@@ -72,7 +72,7 @@ export function createAlertEmailHandler(fetcher:typeof fetch=fetch,getEnv=env,cl
  // Persist lookup failures before calculating alerts. Preview never writes.
  const observedAt=clock().toISOString();
  for(const id of staleIds){
- const reason=live.missingReasons?.[id];
+ const reason=(live.missingReasons as Record<string,string> | undefined)?.[id];
  if(reason){
  if(!['not-found-by-api','not-returned-by-api'].includes(reason))throw Error('Motivo de revisão inválido.');
  blocked.add(id);
