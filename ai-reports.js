@@ -154,6 +154,33 @@
    const heading=document.createElement('p');heading.textContent='Consultas rápidas — situação atual da base (resumo diário usa a data final).';
    group.append(heading);
    for(const [intent,label] of INSIGHT_OPTIONS){const button=document.createElement('button');button.type='button';button.className='s';button.textContent=label;button.addEventListener('click',()=>runLocalInsight(intent,label));group.append(button);}
+   const followUp=document.createElement('div');followUp.className='row';
+   const ticket=document.createElement('input');ticket.type='text';ticket.inputMode='numeric';ticket.placeholder='Número do chamado';ticket.setAttribute('aria-label','Número do chamado para acompanhamento');
+   const draftButton=document.createElement('button');draftButton.type='button';draftButton.className='s';draftButton.textContent='Gerar cobrança humanizada';
+   const copyButton=document.createElement('button');copyButton.type='button';copyButton.className='s';copyButton.textContent='Copiar último rascunho';copyButton.disabled=true;
+   let draftText='';
+   draftButton.addEventListener('click',async()=>{
+    if(processing)return;
+    processing=true;draftButton.disabled=true;$('aiReportSend').disabled=true;copyButton.disabled=true;draftText='';
+    try{
+     const {draftTicketFollowUp}=await import('/lib/ticket-manager-insights.mjs');
+     const source=window.managementDashboardSource?.();
+     if(!source)throw Error('Base sincronizada indisponível.');
+     const result=draftTicketFollowUp(ticket.value,{...source,sector:$('aiReportSector').value.trim(),client:$('aiReportClient').value.trim(),collaborator:$('aiReportCollaborator').value.trim()});
+     post('user','Gerar rascunho de acompanhamento');
+     post('assistant',result.answer+'\n\n'+result.notice);
+     draftText=result.answer;copyButton.disabled=false;
+     $('aiReportStatus').textContent=result.notice;
+    }catch(err){$('aiReportStatus').textContent=String(err?.message||err);}
+    finally{processing=false;draftButton.disabled=false;$('aiReportSend').disabled=false;}
+   });
+   copyButton.addEventListener('click',async()=>{
+    if(!draftText)return;
+    try{await navigator.clipboard.writeText(draftText);$('aiReportStatus').textContent='Rascunho copiado. Confira eventuais bloqueios antes de utilizar. Nenhum envio realizado.';}
+    catch{$('aiReportStatus').textContent='Não foi possível copiar automaticamente. Selecione o texto no chat.';}
+   });
+   ticket.addEventListener('input',()=>{draftText='';copyButton.disabled=true;});
+   followUp.append(ticket,draftButton,copyButton);group.append(followUp);
    $('aiReportForm').before(group);
   }catch{$('aiReportStatus').textContent='Consultas rápidas indisponíveis; relatórios existentes preservados.';}
  }
