@@ -1,4 +1,4 @@
-import {RADAR_CATEGORIES,summarizeRadar,filterRadar} from '/lib/preventive-risk-radar.mjs';
+import {RADAR_CATEGORIES,summarizeRadar,filterRadar,preventiveGuidance} from '/lib/preventive-risk-radar.mjs';
 import {inspectTickets,filterInspections,recordOccurrences} from '/lib/ticket-inspection.mjs';
 const panel=document.getElementById('ticketInspection');
 let history=[], report=[],clientCriticality={};
@@ -114,6 +114,12 @@ function render(){
     for(const text of [r.id,r.subject,r.client,r.sector,r.owner,r.criticality+' ('+(r.risk?.score===null?'sem índice':r.score+'/100')+') · cobertura '+(r.risk?.coverage??0)+'%',r.findings.map(f=>f.label).join('; ')||'Sem ocorrências',r.reasons.join('; ')||'Sem agravantes identificados'])cell(tr,text);
     const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Histórico e transferências';details.append(summary);
     riskDetails(details,r.risk);
+    const guidance=document.createElement('div');guidance.className='radar-guidance';
+    const heading=document.createElement('h4');heading.textContent='Sugestões preventivas do Ticket Manager';guidance.append(heading);
+    const list=document.createElement('ul');
+    for(const suggestion of preventiveGuidance(r)){const li=document.createElement('li');li.textContent=suggestion;list.append(li);}
+    if(list.childElementCount)guidance.append(list);else paragraph(guidance,'Nenhuma orientação adicional identificada.');
+    details.append(guidance);
     for(const h of r.timeline){const p=document.createElement('p');p.textContent=date(h.at)+' → '+date(h.until)+' · '+(h.sector||'Setor não informado')+' · '+(h.owner||'Responsável não informado')+' · '+h.hours.toFixed(1)+' h';details.append(p);}
     for(const e of history.filter(e=>e.id===r.id)){const p=document.createElement('p');p.textContent=e.label+' · detectado '+date(e.openedAt)+(e.resolvedAt?' · encerrado '+date(e.resolvedAt):' · ativo');details.append(p);}
     for(const gap of r.gaps){const p=document.createElement('p');p.textContent=gap;details.append(p);}
