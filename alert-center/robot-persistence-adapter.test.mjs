@@ -7,7 +7,7 @@ test('reservation uses Brasilia date and dedicated RPC only',async()=>{
  assert.deepEqual(await p.reserve({ticketId:'123',day:'2026-11-28',rules:['idle-record'],text:'Test'}),{acquired:false});
  assert.equal(calls.length,0);
  assert.deepEqual(await p.reserve({ticketId:'123',day:'2026-11-27',rules:['idle-record'],text:'Test'}),{acquired:true});
- assert.deepEqual(calls,[['rpc/audit_reserve_robot_internal_note',{p_ticket_id:'123',p_rules:['idle-record'],p_note_body:'Test'}]]);
+ assert.deepEqual(calls,[['rpc/audit_reserve_robot_internal_note',{p_ticket_id:'123',p_day:'2026-11-27',p_rules:['idle-record'],p_note_body:'Test'}]]);
 });
 test('only explicit true confirms a reservation or finalization',async()=>{
  const p=robotPersistence(async()=>({ok:true}),{clock});
