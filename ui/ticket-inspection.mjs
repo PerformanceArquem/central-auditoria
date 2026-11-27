@@ -1,3 +1,4 @@
+import {summarizeSectorTraceability} from '/lib/sector-traceability.mjs';
 import {RADAR_CATEGORIES,summarizeRadar,filterRadar,preventiveGuidance} from '/lib/preventive-risk-radar.mjs';
 import {inspectTickets,filterInspections,recordOccurrences} from '/lib/ticket-inspection.mjs';
 const panel=document.getElementById('ticketInspection');
@@ -103,10 +104,39 @@ function renderRadar(base){
  }
  radarSelection.textContent='Filtros do radar: '+(RADAR_CATEGORIES.find(([key])=>key===radarCategory)?.[1]||'Todas as categorias')+' · '+(radarOwner||'Todos os responsáveis');
 }
+const trace=document.createElement('section');trace.className='preventive-risk-radar';trace.setAttribute('aria-label','Rastreabilidade entre setores');
+const traceTitle=document.createElement('h3');traceTitle.textContent='Ticket Manager | Rastreabilidade entre setores';
+const traceNote=document.createElement('p');traceNote.textContent='Horas corridas observadas no histórico dos chamados abertos filtrados; não equivalem a horas trabalhadas ou responsabilidade pelo atraso.';
+const traceStats=document.createElement('p');traceStats.setAttribute('aria-live','polite');
+const traceRanks=document.createElement('div');traceRanks.className='radar-ranks';
+trace.append(traceTitle,traceNote,traceStats,traceRanks);radar.after(trace);
+const number=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1});
+function renderTrace(rows){
+ const data=summarizeSectorTraceability(rows);
+ traceStats.textContent=data.total+' chamados · '+data.missing+' sem histórico · '+number.format(data.unknownHours)+' h sem setor identificado · '+data.routes.reduce((sum,r)=>sum+r.count,0)+' transferências observadas';
+ traceRanks.replaceChildren();
+ for(const [title,entries] of [
+  ['Permanência histórica por setor',data.sectors.slice(0,10).map(r=>[r.sector+' · '+r.tickets+' chamados · '+number.format(r.hours)+' h',r.hours])],
+  ['Rotas de transferência mais frequentes',data.routes.slice(0,10).map(r=>[r.from+' → '+r.to+' · '+r.count,r.count])],
+  ['Permanência atual confirmada',data.sectors.filter(r=>r.knownCurrentTickets).sort((a,b)=>b.currentHours-a.currentHours).slice(0,10).map(r=>[r.sector+' · '+r.knownCurrentTickets+' chamados · '+number.format(r.currentHours/r.knownCurrentTickets)+' h em média',r.currentHours/r.knownCurrentTickets])]
+ ]){
+  const group=document.createElement('div');const heading=document.createElement('h4');heading.textContent=title;group.append(heading);
+  if(!entries.length)paragraph(group,'Sem dados suficientes nesta seleção.');
+  const max=Math.max(1,...entries.map(e=>e[1]));
+  for(const [label,value] of entries){
+   const line=document.createElement('div');line.className='radar-rank';line.style.cursor='default';
+   const text=document.createElement('span');text.textContent=label;
+   const bar=document.createElement('meter');bar.min=0;bar.max=max;bar.value=value;bar.setAttribute('aria-label',label);
+   line.append(text,bar);group.append(line);
+  }
+  traceRanks.append(group);
+ }
+}
 function render(){
   const baseRows=filterInspections(report,{sector:panel.querySelector('[name=sector]').value,client:panel.querySelector('[name=client]').value,criticality:panel.querySelector('[name=criticality]').value});
   renderRadar(baseRows);
   const rows=filterRadar(baseRows,{category:radarCategory,owner:radarOwner});
+  renderTrace(rows);
   panel.querySelector('[role=status]').textContent=rows.length+' chamados nos dados carregados. Risco por regras; pontuação não representa probabilidade estatística.';
   const body=panel.querySelector('tbody');body.replaceChildren();
   for(const r of rows.slice(0,200)){
