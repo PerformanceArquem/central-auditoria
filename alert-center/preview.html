@@ -74,6 +74,26 @@ waitingButton.addEventListener('click',async()=>{
  }catch(e){waitingResult.textContent=e.message;}finally{waitingButton.disabled=false;waitingId.disabled=false;}
 });
 
+const executorButton=document.createElement('button');executorButton.type='button';executorButton.textContent='Simular mensagem interna';
+const executorResult=document.createElement('pre');executorResult.style.whiteSpace='pre-wrap';executorResult.setAttribute('role','status');
+waitingPreview.append(executorButton,executorResult);
+let executorGeneration=0;
+waitingId.addEventListener('input',()=>{executorGeneration++;executorResult.textContent='';});
+executorButton.addEventListener('click',async()=>{
+ const id=waitingId.value.trim();const generation=++executorGeneration;
+ if(!/^\d{1,12}$/.test(id)){executorResult.textContent='Informe um chamado válido.';return;}
+ executorButton.disabled=true;executorResult.textContent='Validando mensagem sem envio...';
+ try{
+ const api=await channelClient();
+ const {data,error}=await api.functions.invoke('alert-center-robot-executor',{body:{mode:'read-only',ticketId:id}});
+ if(generation!==executorGeneration)return;
+ if(error||data?.ok!==true||data.mode!=='read-only'||data.deliveryEnabled!==false)throw Error('Simulação não confirmada.');
+ const p=data.plan;
+ if(p!==null&&(p?.ticketId!==id||p.channel!=='movidesk-internal'||p.simulated!==true||typeof p.text!=='string'))throw Error('Plano inválido.');
+ executorResult.textContent=p?'SIMULAÇÃO — nenhuma cobrança realizada.\n\n'+p.text:'Nenhuma mensagem elegível confirmada para este chamado. Nenhuma cobrança realizada.';
+ }catch(e){if(generation===executorGeneration)executorResult.textContent=e.message;}finally{executorButton.disabled=false;}
+});
+
 import {composeTriageDraft} from "./triage-message.mjs";
 import {calculateSchedule} from "./schedule.mjs";
 import {simulateRecipient} from "./recipient-test.mjs";
