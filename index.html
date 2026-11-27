@@ -6978,6 +6978,24 @@ function buildUnlinkedReport(data){
    return [UraPeriods.label(g.month),rows.length,rows.filter(r=>r.status==='atendida').length,rows.filter(r=>r.status==='nao_atendida').length,rows.filter(r=>r.status==='abandonada_ou_cancelada').length,rows.filter(r=>r.recordingState==='informada').length,rows.filter(r=>!['atendida','nao_atendida','abandonada_ou_cancelada'].includes(r.status)).length];
   });
   append('Resumo mensal','Resumo mensal — ligações sem vínculo',['Mês','Sem vínculo','Atendidas','Não atendidas','Canceladas/abandonadas','Com gravação','Outras situações'],monthly);
+  const reviewMonthly=UraPeriods.monthly(data).map(g=>{
+   const rows=data.records.filter(r=>UraPeriods.month(r)===g.month);
+   const ids=rows.filter(r=>r.reconciliation==='vinculado').length;
+   const rec=rows.filter(r=>r.reconciliation==='vinculado_gravacao').length;
+   const pending=rows.filter(r=>!['vinculado','vinculado_gravacao'].includes(r.reconciliation));
+   return [UraPeriods.label(g.month),rows.length,ids,rec,rows.length?ids/rows.length:null,pending.length,
+    pending.filter(r=>r.status==='atendida').length,pending.filter(r=>r.recordingState==='informada').length,
+    pending.filter(r=>r.status==='abandonada_ou_cancelada').length];
+  });
+  const evidenceHeaders=['Mês','Total','ID confirmado','Por gravação','Taxa por ID','Revisão pendente','Pendentes atendidas','Pendentes com gravação','Pendentes canceladas/abandonadas'];
+  const evidenceMatrix=[['ARQUEM SISTEMAS / Central de Auditoria'],['Evidências de conciliação — todas as ligações'],[report.period],['Gravação é evidência adicional; telefone e horário são hipóteses.'],['Pendências por situação e gravação podem se sobrepor. Dados sem vínculo não comprovam ausência de chamado.'],[],evidenceHeaders,...reviewMonthly];
+  const evidenceSheet=X.utils.aoa_to_sheet(evidenceMatrix);
+  evidenceSheet['!cols']=evidenceHeaders.map(h=>({wch:Math.min(36,Math.max(15,h.length+2))}));
+  evidenceSheet['!merges']=[0,1,2,3,4].map(r=>({s:{r,c:0},e:{r,c:evidenceHeaders.length-1}}));
+  for(let r=7;r<evidenceMatrix.length;r++){const cell=evidenceSheet[X.utils.encode_cell({r,c:4})];if(cell)cell.z='0.0%';}
+  evidenceSheet['!autofilter']={ref:X.utils.encode_range({s:{r:6,c:0},e:{r:Math.max(6,evidenceMatrix.length-1),c:evidenceHeaders.length-1}})};
+  X.utils.book_append_sheet(wb,evidenceSheet,'Evidências por mês');
+
   const groups=[['Atendidas','Ligações atendidas sem vínculo',r=>r.status==='atendida'],['Não atendidas e canceladas','Não atendidas, canceladas e abandonadas sem vínculo',r=>['nao_atendida','abandonada_ou_cancelada'].includes(r.status)]];
   if(report.records.some(r=>!['atendida','nao_atendida','abandonada_ou_cancelada'].includes(r.status)))groups.push(['Outras situações','Outras situações sem vínculo',r=>!['atendida','nao_atendida','abandonada_ou_cancelada'].includes(r.status)]);
   for(const [name,title,accept] of groups){const rows=report.rows.filter((row,i)=>accept(report.records[i])).map(row=>[row[11],...row.slice(0,11),row[12]]);append(name,title+' — ordenadas por mês',header,rows);}
@@ -7034,7 +7052,6 @@ function showReconciliation(){
    fillReconciliationPeople();
    const metrics=[['Entradas nos DIDs da URA',data.stats.total],['Confirmadas por ID',data.stats.vinculado],['Por gravação',data.stats.vinculado_gravacao],['Possíveis (não comprovadas)',data.stats.possivel_vinculo],['Sem vínculo',data.stats.sem_vinculo_identificado],['Ambíguas',data.stats.ambiguo],['Reutilização de chamado',data.stats.ticket_ja_utilizado],['Insuficientes',data.stats.dados_insuficientes],['Abandonadas/canceladas',data.stats.abandonada_ou_cancelada]];
    const confirmedIds=data.records.filter(r=>r.reconciliation==='vinculado').length;
-   const recordingMatches=data.records.filter(r=>r.reconciliation==='vinculado_gravacao').length;
    const pending=data.records.filter(r=>!['vinculado','vinculado_gravacao'].includes(r.reconciliation));
    metrics.push(['Taxa confirmada por ID',data.records.length?(100*confirmedIds/data.records.length).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'Não aplicável'],
     ['Pendentes de revisão',pending.length],
