@@ -21,11 +21,14 @@ test('incomplete coverage or invalid evidence never triggers a claim',()=>{
  }
 });
 
-test('default waiting customer threshold is five business days',()=>{
+test('waiting customer threshold is three business days since verified appointment',()=>{
  const {contactThreshold,...defaults}=base;
- const args={...defaults,waitingSince:'2026-11-19',records:[]};
- assert.equal(robotRecordFacts({...args,today:'2026-11-26'}).facts.dias_sem_contato,undefined);
- assert.equal(robotRecordFacts(args).facts.dias_sem_contato,5);
- assert.equal(robotRecordFacts({...args,records:[{id:'robot1',date:'2026-11-26',kind:'robot'}]}).facts.dias_sem_contato,5);
- assert.equal(robotRecordFacts({...args,records:[{id:'human1',date:'2026-11-25',kind:'human-contact'}]}).facts.dias_sem_contato,undefined);
+ const args={...defaults,waitingSince:'2026-11-19',records:[],appointmentCoverage:true,lastAppointmentDate:'2026-11-24'};
+ assert.equal(robotRecordFacts({...args,today:'2026-11-26'}).facts.dias_sem_apontamento,undefined);
+ assert.equal(robotRecordFacts(args).facts.dias_sem_apontamento,3);
+ assert.equal(robotRecordFacts(args).facts.data_ultimo_apontamento,'2026-11-24');
+ assert.equal(robotRecordFacts({...args,lastAppointmentDate:'2026-11-25'}).facts.dias_sem_apontamento,undefined);
+ assert.equal(robotRecordFacts({...args,appointmentCoverage:false}).facts.dias_sem_apontamento,undefined);
+ assert.equal(robotRecordFacts({...args,records:[{id:'robot1',date:'2026-11-26',kind:'robot'}]}).facts.dias_sem_apontamento,3);
+ assert.equal(robotRecordFacts({...args,lastAppointmentDate:'2026-11-19',today:'2026-11-24'}).facts.dias_sem_apontamento,undefined);
 });
