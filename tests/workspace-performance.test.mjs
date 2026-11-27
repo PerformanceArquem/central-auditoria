@@ -31,3 +31,27 @@ test('chart update reuses a matching instance; type change destroys the old one'
   assert.equal(CH.graph,instance);assert.equal(constructed,1);assert.equal(updated,1);assert.equal(destroyed,0);assert.equal(instance.options.animation,false);
   mkc('graph',{type:'line',data:{labels:['B']}});assert.equal(constructed,2);assert.equal(destroyed,1);
 });
+
+test('concurrent identical authenticated reads share only pending network requests',async()=>{
+ const source=slice('const cloudPendingReads=new Map();','function cloudStateSnapshot()');
+ let requests=0,token='one',release;
+ const fetch=async()=>{requests++;await new Promise(r=>release=r);return {ok:true,json:async()=>({ok:true})}};
+ const api=new Function('window','location','fetch',source+'return cloudApi;')({tmAuth:{getSession:async()=>({access_token:token})}},{origin:'https://test.invalid'},fetch);
+ const a=api('loadTickets','GET',null,{offset:0,limit:150}),b=api('loadTickets','GET',null,{limit:150,offset:0});
+ await Promise.resolve();assert.equal(requests,1);release();await Promise.all([a,b]);
+ const c=api('loadTickets','GET',null,{offset:0,limit:150});await Promise.resolve();assert.equal(requests,2);release();await c;
+});
+test('table sorting extracts each key once and preserves numeric order',()=>{
+ const source=slice('function sortTable(t,c,d){','function enhanceTables(){');
+ let reads=0;const row=n=>({cells:[{dataset:{},querySelector:()=>null,get textContent(){reads++;return String(n)}}]});
+ const rows=[row(10),row(2),row(7)],ordered=[];
+ const table={tBodies:[{rows,appendChild:r=>ordered.push(r)}],tHead:{rows:[{cells:[{}]}]}};
+ new Function(source+'return sortTable;')()(table,0,1);
+ assert.equal(reads,3);assert.deepEqual(ordered,[rows[1],rows[2],rows[0]]);
+});
+test('inactive modules avoid calendar calculations and global KPIs traverse each row once',()=>{
+ let config=0,calendar=0,reads=0;const nodes={};
+ const rows=Array.from({length:10000},(_,i)=>({ticket_id:String(i%500),owner_name:'A',client_name:'B',get hours(){reads++;return 1}}));
+ const render=new Function('ACT','rows','R','mk','$','H','window',...names,renderSource+'return render;')('email-admin',rows,()=>{config++;return {}},()=>{calendar++;return {}},id=>nodes[id]??={},String,{},...names.map(()=>()=>{}));
+ render();assert.equal(config,0);assert.equal(calendar,0);assert.equal(reads,10000);assert.equal(nodes.kT.textContent,500);assert.equal(nodes.kH.textContent,'10000');
+});
