@@ -45,6 +45,10 @@ Deno.serve(async(req:Request)=>{
  const allPages=body?.allPages===true;
  if(allPages&&(!scheduled||!batch))return reply({error:'Execução completa restrita ao servidor'},403);
  if(body?.mode!=='read-only'||(batch?(cursor!==null&&(typeof cursor!=='string'||!/^\d{1,12}$/.test(cursor))):!/^\d{1,12}$/.test(id)))return reply({error:'Consulta de homologação inválida'},400);
+ // Resolve the authorized author from the existing profile; never accept an author from the request.
+ const authors=await read('audit_movidesk_note_profiles',{display_name:'eq.Alan Reis',team_name:'eq.Qualidade',active:'eq.true',select:'movidesk_person_id,display_name,team_name',limit:'2'});
+ if(authors.length!==1||!/^\d{1,20}$/.test(String(authors[0]?.movidesk_person_id??'')))return reply({error:'Perfil autorizado da Qualidade não confirmado'},503);
+ const author={displayName:'Alan Reis',team:'Qualidade',verifiedProfile:true};
  const readPolicy=async(ticketId:string)=>{
  const [holidays,blocks]=await Promise.all([
  read('audit_email_holidays',{affects_delivery:'eq.true',select:'holiday_date',limit:'1000'}),
@@ -92,9 +96,9 @@ Deno.serve(async(req:Request)=>{
  pages++;
  currentCursor=candidates.length>5?ids[ids.length-1]:null;
  }while(allPages&&currentCursor!==null&&pages<10&&Date.now()-started<60000);
- return reply({ok:true,mode:'read-only',deliveryEnabled:false,coverage:'live-provider-page',rows,nextCursor:currentCursor,pages,complete:currentCursor===null});
+ return reply({ok:true,mode:'read-only',deliveryEnabled:false,coverage:'live-provider-page',author,rows,nextCursor:currentCursor,pages,complete:currentCursor===null});
  }
  const result=await executor.preview(id);
- return reply({ok:true,deliveryEnabled:false,mode:'read-only',plan:result.plan});
+ return reply({ok:true,deliveryEnabled:false,mode:'read-only',author,plan:result.plan});
  }catch{return reply({error:'Homologação interrompida; nenhuma cobrança realizada'},502);}
 });
