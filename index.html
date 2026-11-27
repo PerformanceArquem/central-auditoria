@@ -5076,6 +5076,7 @@ const CLOUD_EXCLUDE=new Set(['md_token','md_iakey','md_cloudkey']);
 let cloudReady=false,cloudHydrating=true,cloudStateTimer=null,cloudLastPull=new Date(0).toISOString(),cloudStateUpdated='',cloudTicketSig=new Map(),cloudPullBusy=false;
 function cloudMessage(msg,cls){const e=$('cloudMsg');if(e){e.textContent=msg;e.className=cls||''}}
 // A autorização ocorre no backend, usando a sessão segura do usuário.
+const cloudPendingReads=new Map();
 async function cloudApi(action,method='GET',body=null,params={}){
   const session=await window.tmAuth.getSession();
   if(!session?.access_token)throw new Error('Sessão expirada. Entre novamente.');
@@ -5087,9 +5088,19 @@ async function cloudApi(action,method='GET',body=null,params={}){
     opt.headers['Content-Type']='application/json;charset=utf-8';
     opt.body=payload;
   }
-  const r=await fetch(u.toString(),opt);const j=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(j.error||('Erro HTTP '+r.status+' ao acessar o Supabase'));
-  return j;
+  const execute=async()=>{const r=await fetch(u.toString(),opt);const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||('Erro HTTP '+r.status+' ao acessar o Supabase'));
+    return j;
+  };
+  // Coalesce only concurrent identical authenticated reads. Never cache completed
+  // responses, share across sessions, or deduplicate writes.
+  if(method!=='GET'||body!==null)return execute();
+  u.searchParams.sort();
+  const key=session.access_token+'\n'+u.toString();
+  if(cloudPendingReads.has(key))return cloudPendingReads.get(key);
+  const pending=execute();cloudPendingReads.set(key,pending);
+  try{return await pending;}finally{if(cloudPendingReads.get(key)===pending)cloudPendingReads.delete(key);}
+
 }
 function cloudStateSnapshot(){const out={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('md_')&&!CLOUD_EXCLUDE.has(k))out[k]=localStorage.getItem(k)}return out}
 function cloudScheduleState(){if(!cloudReady||cloudHydrating)return;clearTimeout(cloudStateTimer);cloudStateTimer=setTimeout(()=>cloudSaveState().catch(e=>cloudMessage('Falha ao salvar configurações na nuvem: '+e.message,'err')),1200)}
