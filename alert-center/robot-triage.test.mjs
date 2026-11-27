@@ -31,3 +31,13 @@ test('expired query, duplicate IDs, invalid threshold and invalid clock are reje
  for(const change of [{referenceTime:'2026-11-27T10:00:00Z'},{rows:[base,base]},{threshold:0},{now:'invalid'}])
   assert.throws(()=>triageRobotSnapshot({...context,rows:[base],...change}));
 });
+
+test('direct API outcomes remain the review reason even when imported history is stale',()=>{
+ for(const reason of ['not-found-by-api','not-returned-by-api']) {
+  const snapshot=triageRobotSnapshot({...context,rows:[{...base,eligible:false,reason,syncedAt:'2026-11-06T12:00:00Z'}]});
+  assert.equal(snapshot.alerts.length,0);assert.equal(snapshot.review[0].reason,reason);
+  const row=consolidateRobot(snapshot)[0];
+  assert.equal(row.review,true);
+  assert.equal(row.reason,reason==='not-found-by-api'?'Chamado não localizado pela API':'Consulta individual pendente');
+ }
+});

@@ -46,3 +46,11 @@ Os chamados 81901, 91853 e 92989 retornaram 404. Isso não comprova exclusão ou
 A ação `Preparar prévia gerencial` confirmou 18 chamados para avaliação e três para revisão de dados. A conferência direta vale somente para a consulta atual: não atualiza a base importada, não envia mensagens e não cria reservas. Recarregar a base recupera os históricos importados.
 
 Nenhuma publicação da branch local foi realizada. A validação autenticada desta etapa se refere à consulta de triagem e à prévia já existentes na versão oficial.
+
+## Prévia publicada e validação do novo botão — 27/11/2026
+
+Após autorização específica para publicar somente a prévia de testes, foi criada a PR #210 em rascunho. A branch foi isolada de `main`, sem os commits do mecanismo de entrega da PR #209. Os 162 testes dessa versão passaram localmente e o workflow da Central de Alertas foi aprovado no GitHub. Produção e funções do Supabase não foram alteradas.
+
+Na prévia `central-auditoria-1kpdr14tk-arquem.vercel.app`, após login do usuário, o botão `Exibir consulta no painel do robô` foi validado com dados reais. A consulta importada mostrou cinco ocorrências e 16 revisões. Após conferência direta e individual, o painel exibiu 18 ocorrências e três revisões. A combinação dos quatro filtros isolou as 18 ocorrências; o filtro Revisão de dados isolou os três chamados sem incluí-los na cobrança. Nenhuma mensagem ou reserva foi gerada.
+
+A validação encontrou um defeito de apresentação: a ausência do chamado na API era substituída por Histórico desatualizado, devido à data do registro importado. O adaptador foi corrigido para preservar as respostas específicas de consulta direta (404 ou consulta individual pendente), mantendo os chamados para revisão. Foi acrescentado um teste de regressão para ambos os motivos com histórico antigo.
