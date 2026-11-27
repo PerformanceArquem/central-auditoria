@@ -49,6 +49,19 @@ export function createAlertEmailHandler(fetcher:typeof fetch=fetch,getEnv=env,cl
  const records=await db('rpc/audit_alert_email_snapshot',{method:'POST',body:'{}'});
  if(!Array.isArray(records)||records.length>2000)throw Error('Seleção incompleta.');
  const selectedSector=body.action==='dispatch'?EMAIL_SECTORS[body.sectorIndex].sector:null;
+ const lookupBlocks=async(ids:string[])=>{
+ const blocked=new Set<string>();
+ const unique=[...new Set(ids)];
+ if(unique.some(id=>!/^\d+$/.test(id)))throw Error('Identificador inválido.');
+ for(let offset=0;offset<unique.length;offset+=50){
+ const batch=unique.slice(offset,offset+50);
+ const rows=await db('audit_triage_lookup_review?ticket_id=in.('+batch.join(',')+')&resolved_at=is.null&select=ticket_id&limit=51');
+ if(!Array.isArray(rows)||rows.length>batch.length||rows.some((r:Row)=>!batch.includes(String(r.ticket_id))))throw Error('Consulta de revisão incompleta.');
+ for(const row of rows)blocked.add(String(row.ticket_id));
+ }
+ return blocked;
+ };
+ const blocked=await lookupBlocks(records.map((r:Row)=>String(r.ticket_id)));
  const staleIds=records.filter((row:Row)=>(!selectedSector||row.payload?.ownerTeam===selectedSector)&&(!Number.isFinite(Date.parse(row.source_synced_at))||Date.parse(now)-Date.parse(row.source_synced_at)>86400000)).map((row:Row)=>String(row.ticket_id));
  let directReads=0,directUnavailable=false;
  // Read-only refresh: unchanged tickets may have old import timestamps even while still open.
@@ -65,6 +78,7 @@ export function createAlertEmailHandler(fetcher:typeof fetch=fetch,getEnv=env,cl
  }else if(staleIds.length)directUnavailable=true;
  const reference=clock().toISOString();
  const evaluation=evaluateEmailAlerts(records,{now:reference,holidays,appointmentCoverage});
+ evaluation.alerts=evaluation.alerts.filter((r:Row)=>!blocked.has(String(r.ticket_id)));
  const targets=body.action==='preview'?EMAIL_SECTORS:[EMAIL_SECTORS[body.sectorIndex]];
  const bundles=[];
  for(const target of targets){
@@ -122,6 +136,7 @@ export function createAlertEmailHandler(fetcher:typeof fetch=fetch,getEnv=env,cl
  const active=await db('audit_alert_email_settings?sector=eq.'+encodeURIComponent(bundle.sector)+'&enabled=eq.true&recipient_id=eq.'+bundle.recipientId+'&select=sector&limit=1');
  const recipient=await db('audit_email_recipients?id=eq.'+bundle.recipientId+'&active=eq.true&daily_enabled=eq.true&select=email&limit=1');
  if(active.length!==1||recipient.length!==1||String(recipient[0].email).toLowerCase()!==bundle.recipient)throw Error('Destinatário ou setor alterado.');
+ if((await lookupBlocks(bundle.ticketIds.map(String))).size)throw Error('Chamado encaminhado para revisão durante o envio.');
  await assertEmailDeliveryEnabled(db);
  const response=await fetcher(provider.toString(),{method:'POST',redirect:'follow',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({token:getEnv('GMAIL_MAIL_SECRET'),email:bundle.recipient,assunto:part.subject,texto:part.text,html:part.html}),signal:AbortSignal.timeout(60000)});
  const result=response.ok?await response.json().catch(()=>null):null;
