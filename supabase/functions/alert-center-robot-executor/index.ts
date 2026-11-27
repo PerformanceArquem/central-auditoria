@@ -45,7 +45,9 @@ Deno.serve(async(req:Request)=>{
  const cursor=body?.cursor??null;
  const allPages=body?.allPages===true;
  if(allPages&&(!scheduled||!batch))return reply({error:'Execução completa restrita ao servidor'},403);
- if(body?.mode!=='read-only'||(batch?(cursor!==null&&(typeof cursor!=='string'||!/^\d{1,12}$/.test(cursor))):!/^\d{1,12}$/.test(id)))return reply({error:'Consulta de homologação inválida'},400);
+ const real=body?.mode==='execute';
+ if(real&&(!scheduled||!cronSecret||!batch||!allPages))return reply({error:'Execução real restrita ao agendamento autenticado'},403);
+ if((body?.mode!=='read-only'&&!real)||(batch?(cursor!==null&&(typeof cursor!=='string'||!/^\d{1,12}$/.test(cursor))):!/^\d{1,12}$/.test(id)))return reply({error:'Consulta de homologação inválida'},400);
  // Resolve the authorized author from the existing profile; never accept an author from the request.
  const authors=await read('audit_movidesk_note_profiles',{display_name:'eq.Alan Reis',team_name:'eq.Qualidade',active:'eq.true',select:'movidesk_person_id,display_name,team_name',limit:'2'});
  if(authors.length!==1||!/^\d{1,20}$/.test(String(authors[0]?.movidesk_person_id??'')))return reply({error:'Perfil autorizado da Qualidade não confirmado'},503);
@@ -65,11 +67,13 @@ Deno.serve(async(req:Request)=>{
  return response.json();
  };
  // Wire authorized identity and final evidence validation; keep execution locked until homologation.
- const deliveryEnabled=false;
+ const deliveryEnabled=real;
+ const withinWindow=()=>{const p=new Intl.DateTimeFormat('en-GB',{timeZone:'America/Sao_Paulo',hour:'2-digit',hourCycle:'h23'}).format(new Date());return Number(p)===9||Number(p)===10;};
  const dayAt=(now:Date)=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+ if(real){const today=dayAt(new Date());const policy=await readPolicy('0');if(!withinWindow()||!policy.complete||policy.holidays.includes(today)||[0,6].includes(new Date(today+'T12:00:00Z').getUTCDay()))return reply({error:'Fora da janela autorizada'},403);}
  const validateBeforeWrite=async(ticket:Record<string,unknown>,note:{ticketId:string,text:string,marker:string,ownerId?:string})=>{
  const policy=await readPolicy(note.ticketId);
- if(!policy.complete||policy.blocked)return false;
+ if(!withinWindow()||!policy.complete||policy.blocked)return false;
  const today=dayAt(new Date());
  if(policy.holidays.includes(today)||[0,6].includes(new Date(today+'T12:00:00Z').getUTCDay()))return false;
  const plan=waitingPlan(ticket,{today,holidays:policy.holidays,complete:true});
@@ -80,7 +84,7 @@ Deno.serve(async(req:Request)=>{
  if(batch){
  let currentCursor=cursor;
  const started=Date.now();
- const rows: {ticketId:string,plan:unknown,review:boolean}[]=[];
+ const rows: {ticketId:string,plan:unknown,review:boolean,deliveryStatus?:string}[]=[];
  let pages=0;
  do {
  const sectors=['Suporte','Qualidade','Testes (QA)','Sucesso do Cliente','Implantação','Treinamento'];
@@ -102,15 +106,15 @@ Deno.serve(async(req:Request)=>{
  if(allIds.some((x,i)=>!/^\d{1,12}$/.test(x)||(i>0&&Number(x)<=Number(allIds[i-1]))||(currentCursor!==null&&Number(x)<=Number(currentCursor))))throw Error('Paginação direta inválida');
  const ids=allIds.slice(0,5);
  for(const ticketId of ids){
- try{const result=await executor.preview(ticketId);rows.push({ticketId,plan:result.plan,review:false});}
+ try{const result=await executor.preview(ticketId);if(real&&result.plan){const outcome=await executor.execute(ticketId);rows.push({ticketId,plan:result.plan,review:!['confirmed','duplicate-or-blocked'].includes(outcome.status),deliveryStatus:outcome.status});}else rows.push({ticketId,plan:result.plan,review:false});}
  catch{rows.push({ticketId,plan:null,review:true});}
  }
  pages++;
  currentCursor=candidates.length>5?ids[ids.length-1]:null;
  }while(allPages&&currentCursor!==null&&pages<10&&Date.now()-started<60000);
- return reply({ok:true,mode:'read-only',deliveryEnabled:false,coverage:'live-provider-page',author,rows,nextCursor:currentCursor,pages,complete:currentCursor===null});
+ return reply({ok:true,mode:real?'execute':'read-only',deliveryEnabled,coverage:'live-provider-page',author,rows,nextCursor:currentCursor,pages,complete:currentCursor===null});
  }
  const result=await executor.preview(id);
  return reply({ok:true,deliveryEnabled:false,mode:'read-only',author,plan:result.plan});
- }catch{return reply({error:'Homologação interrompida; nenhuma cobrança realizada'},502);}
+ }catch{return reply({error:'Execução interrompida; consulte o histórico antes de repetir'},502);}
 });
