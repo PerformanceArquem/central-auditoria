@@ -9,10 +9,14 @@ Deno.serve(async(req:Request)=>{
  if(!base||!anon||!role||!token)return reply({error:'Configuração indisponível'},503);
  const auth=req.headers.get('authorization')||'';
  if(!/^Bearer\s+\S+$/i.test(auth))return reply({error:'Sessão necessária'},401);
+ const scheduled=auth==='Bearer '+role;
+ let user: {id:string}|null=null;
+ if(!scheduled){
  const userResponse=await fetch(base+'/auth/v1/user',{headers:{apikey:anon,Authorization:auth},signal:AbortSignal.timeout(10000)});
  if(!userResponse.ok)return reply({error:'Sessão inválida'},401);
- const user=await userResponse.json();
+ user=await userResponse.json();
  if(typeof user?.id!=='string')return reply({error:'Sessão inválida'},401);
+ }
  const db=async(path:string,opts:RequestInit={})=>{
  const response=await fetch(base+'/rest/v1/'+path,{...opts,headers:{apikey:role,Authorization:'Bearer '+role,'Content-Type':'application/json'},signal:AbortSignal.timeout(15000)});
  if(!response.ok)throw Error('Consulta indisponível');
@@ -22,11 +26,14 @@ Deno.serve(async(req:Request)=>{
  const rows=await db(table+'?'+new URLSearchParams(params));
  if(!Array.isArray(rows))throw Error('Resposta inválida');return rows;
  };
- const admins=await read('audit_users',{user_id:'eq.'+user.id,role:'eq.admin',is_active:'eq.true',select:'user_id',limit:'2'});
+ if(!scheduled){
+ const admins=await read('audit_users',{user_id:'eq.'+user!.id,role:'eq.admin',is_active:'eq.true',select:'user_id',limit:'2'});
  if(admins.length!==1)return reply({error:'Acesso restrito'},403);
+ }
  const body=await req.json().catch(()=>null);
  const id=String(body?.ticketId??'');
  const batch=body?.action==='batch';
+ if(scheduled&&!batch)return reply({error:'Somente consulta coletiva agendada'},400);
  const cursor=body?.cursor??null;
  if(body?.mode!=='read-only'||(batch?(cursor!==null&&(typeof cursor!=='string'||!/^\d{1,12}$/.test(cursor))):!/^\d{1,12}$/.test(id)))return reply({error:'Consulta de homologação inválida'},400);
  const readPolicy=async(ticketId:string)=>{
