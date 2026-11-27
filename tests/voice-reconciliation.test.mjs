@@ -346,8 +346,7 @@ test('Movidesk queries keep both date boundaries on every page',async()=>{
  vm.runInContext(source+'\nthis.readTickets=movideskTickets;',ctx);
  const result=await ctx.readTickets('2026-11-01','2026-11-23','https://test.invalid','not-real');
  assert.equal(result.length,500);assert.equal(urls.length,2);
- for(const u of urls){assert.deepEqual(u.searchParams.getAll('created_at_source'),[
-  'gte.2026-11-01T02:40:00.000Z','lt.2026-11-24T03:20:00.000Z']);}
+ for(const u of urls){assert.equal(u.searchParams.get('or'),'(and(created_at_source.gte.2026-11-01T02:40:00.000Z,created_at_source.lt.2026-11-24T03:20:00.000Z),and(created_at_source.lt.2026-11-01T02:40:00.000Z,last_update_source.gte.2026-11-01T02:40:00.000Z))');assert.equal(u.searchParams.get('order'),'created_at_source.asc,ticket_id.asc');}
  assert.equal(urls[1].searchParams.get('offset'),'500');
 });
 
@@ -471,8 +470,9 @@ test('Excel separates answered and missed/canceled calls, only unmatched, sorted
  const X={utils:{book_new:()=>({SheetNames:[],Sheets:{}}),aoa_to_sheet:matrix=>{const ws={matrix};matrix.forEach((row,r)=>row.forEach((v,c)=>ws[r+','+c]={v}));return ws;},encode_cell:({r,c})=>r+','+c,encode_range:()=>'',book_append_sheet:(wb,ws,name)=>{wb.SheetNames.push(name);wb.Sheets[name]=ws;}}};
  const row=(id,date,status,reconciliation='sem_vinculo_identificado')=>({callId:id,startedAt:date+'T10:00:00-03:00',status,reconciliation,recordingState:'informada',phoneMasked:'****1234'});
  const wb=ctx.build({from:'2026-01-01',to:'2026-02-28',records:[row('1','2026-02-05','atendida'),row('2','2026-01-05','atendida'),row('3','2026-02-06','nao_atendida'),row('4','2026-01-06','abandonada_ou_cancelada'),row('5','2026-01-06','atendida','possivel_vinculo')]},X);
- assert.equal(wb.SheetNames.length,3);assert.equal(wb.SheetNames[0],'Resumo mensal');assert.equal(wb.SheetNames[1],'Atendidas');
- const yes=wb.Sheets[wb.SheetNames[1]],no=wb.Sheets[wb.SheetNames[2]];
+ assert.equal(wb.SheetNames.length,4);assert.equal(wb.SheetNames[0],'Resumo mensal');assert.equal(wb.SheetNames[1],'Evidências por mês');assert.equal(wb.SheetNames[2],'Atendidas');
+ const ev=wb.Sheets['Evidências por mês'];assert.equal(ev.matrix[7][1],3);assert.equal(ev.matrix[7][5],3);assert.equal(ev.matrix[8][1],2);assert.equal(ev['7,4'].z,'0.0%');
+ const yes=wb.Sheets[wb.SheetNames[2]],no=wb.Sheets[wb.SheetNames[3]];
  assert.equal(yes.matrix.length,9);assert.equal(no.matrix.length,9);
  assert.equal(yes.matrix[7][0],'01/2026');assert.equal(yes.matrix[8][0],'02/2026');
  assert.equal(no.matrix[7][0],'01/2026');assert.equal(no.matrix[8][0],'02/2026');
@@ -500,3 +500,9 @@ test('recording page waits for Supabase client before requesting a session',asyn
  vm.runInContext(readFileSync('ui/ura-recording.js','utf8'),ctx);await done;
  assert.equal(sessionCalls,1);assert.equal(redirected,'https://voice-api.zenvia.com/rec/123456789');
 });
+
+ test('evidence totals distinguish ID, tentative association and missing matches',()=>{
+ const t=ticket(987,'2026-11-20T10:00:00-03:00','41999990000');t.payload.zenviaCallId='901';
+ const r=run([call(901,'2026-11-20T10:00:00-03:00','41999990000'),call(902,'2026-11-20T11:00:00-03:00','41999990000')],[t]);
+ assert.equal(r.auditEvidence.confirmedByIdentifier,1);assert.equal(r.auditEvidence.requiresReview,1);assert.equal(r.auditEvidence.identifierRate,.5);assert.equal(r.auditEvidence.pendingEvidence.reduce((n,x)=>n+x.count,0),1);
+ });
