@@ -1,4 +1,4 @@
-import {previewWaitingAppointment} from '../../../alert-center/robot-live-preview.mjs';
+import {previewWaitingAppointment,isWaitingCustomer} from '../../../alert-center/robot-live-preview.mjs';
 const env=(k:string)=>Deno.env.get(k)?.trim()||'';
 Deno.serve(async(req:Request)=>{
  const origin=req.headers.get('origin')||'';
@@ -25,7 +25,24 @@ Deno.serve(async(req:Request)=>{
  const admins=await read('audit_users',{user_id:'eq.'+user.id,role:'eq.admin',is_active:'eq.true',select:'user_id',limit:'2'});
  if(admins.length!==1)return reply({error:'Acesso restrito'},403);
  const body=await req.json().catch(()=>null);
- if(body?.mode!=='read-only'||!/^\d{1,12}$/.test(String(body?.ticketId??'')))return reply({error:'Informe o chamado e o modo somente leitura'},400);
+ if(body?.mode!=='read-only'||(body?.action!=='batch'&&!/^\d{1,12}$/.test(String(body?.ticketId??''))))return reply({error:'Informe o chamado e o modo somente leitura'},400);
+ if(body.action==='batch'){
+ const sectors=['Suporte','Qualidade','Testes (QA)','Sucesso do Cliente','Implantação','Treinamento'];
+ const [candidates,holidays]=await Promise.all([
+ read('audit_reporting_tickets',{'payload->>ownerTeam':'in.('+sectors.join(',')+')',closed_at_source:'is.null',or:'(payload->>status.eq.Aguardando cliente,payload->>justification.eq.Aguardando ação do cliente)',select:'ticket_id,payload,source_synced_at',order:'ticket_id.asc',limit:'101'}),
+ read('audit_email_holidays',{affects_delivery:'eq.true',select:'holiday_date',limit:'1000'})
+ ]);
+ if(candidates.length>100||holidays.length>=1000||holidays.some(h=>!/^\d{4}-\d{2}-\d{2}$/.test(h.holiday_date)))return reply({error:'Consulta parcial; reduza o escopo ou revise o calendário'},409);
+ const ids=[...new Set(candidates.filter(r=>isWaitingCustomer(r.payload)&&!r.payload.closedIn&&!r.payload.canceledIn&&String(r.payload.isDeleted)!=='true').map(r=>String(r.ticket_id)))];
+ if(ids.some(id=>!/^\d{1,12}$/.test(id)))return reply({error:'Identificador inválido'},409);
+ if(ids.length>5)return reply({error:'Mais de cinco candidatos; consulta coletiva requer paginação antes da homologação'},409);
+ const rows=[];
+ for(const id of ids){
+ const blocks=await read('audit_triage_lookup_review',{ticket_id:'eq.'+id,resolved_at:'is.null',select:'ticket_id',limit:'2'});
+ rows.push(await previewWaitingAppointment(id,{token,holidays:holidays.map(h=>h.holiday_date),blocked:blocks.length>0}));
+ }
+ return reply({ok:true,mode:'read-only',deliveryEnabled:false,threshold:3,source:'imported-candidates-live-check',scope:sectors,candidateCount:ids.length,rows,coverage:'not-exhaustive'});
+ }
  const id=String(body.ticketId);
  const [holidays,blocks]=await Promise.all([
  read('audit_email_holidays',{affects_delivery:'eq.true',select:'holiday_date',limit:'1000'}),
