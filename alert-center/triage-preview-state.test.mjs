@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {composeTriageDraft} from './triage-message.mjs';
+import {triageRobotSnapshot} from './robot-triage.mjs';
 
 const html=readFileSync(new URL('./preview.html',import.meta.url),'utf8');
 const source=html.slice(html.indexOf('let liveTriageLastRows='),html.indexOf('</script>',html.indexOf('let liveTriageLastRows=')));
@@ -12,15 +13,16 @@ class Element{
  replaceChildren(...children){this.children=children;}
  append(...children){this.children.push(...children);}
  querySelectorAll(){return [];}
+ scrollIntoView(){}
 }
 function screen(responses){
- const elements=new Map(),calls=[];
+ const elements=new Map(),calls=[],snapshots=[];
  const get=key=>{if(!elements.has(key))elements.set(key,new Element());return elements.get(key);};
  get('#live-triage-limit').value='3';get('#live-triage-filter').value='all';
- const context=vm.createContext({document:{querySelector:get,createElement:()=>new Element()},composeTriageDraft,formatReportDate:value=>value,
+ const context=vm.createContext({document:{querySelector:get,createElement:()=>new Element()},composeTriageDraft,triageRobotSnapshot,robotDashboard:{setData:data=>snapshots.push(data),clearTriage:()=>snapshots.splice(0)},formatReportDate:value=>value,
  channelClient:async()=>({functions:{invoke:async(name,request)=>{calls.push(request.body);const next=responses.shift();if(!next)throw Error('Unexpected request');return next;}}})});
  vm.runInContext(source,context);
- return {get,calls,load:(...args)=>context.loadLiveTriage(...args),read:expression=>vm.runInContext(expression,context)};
+ return {get,calls,snapshots,load:(...args)=>context.loadLiveTriage(...args),read:expression=>vm.runInContext(expression,context)};
 }
 const now=new Date().toISOString();
 const old=new Date(Date.now()-2*3600000).toISOString();
@@ -63,4 +65,35 @@ test('changing the threshold invalidates the existing query',async()=>{
  assert.equal(ui.read('liveTriageLastRows.length'),0);
  assert.equal(ui.read('liveTriageLastReference'),null);
  assert.equal(ui.get('#live-triage-draft').disabled,true);
+});
+
+test('displaying the robot snapshot reuses the query without another API request',async()=>{
+ const ui=screen([result([row('1'),{...row('2'),eligible:false,reason:'stale-history'}])]);
+ await ui.load();
+ await ui.get('#live-triage-panel').listeners.get('click')();
+ assert.equal(ui.calls.length,1);assert.equal(ui.snapshots.length,1);
+ assert.equal(ui.snapshots[0].source,'triage-read-only');
+ assert.deepEqual(ui.snapshots[0].alerts.map(r=>r.ticketId),['1']);
+ assert.deepEqual(ui.snapshots[0].review.map(r=>r.ticketId),['2']);
+ ui.get('#live-triage-limit').listeners.get('input')();
+ assert.equal(ui.snapshots.length,0);assert.equal(ui.get('#live-triage-panel').disabled,true);
+});
+
+test('expired query cannot populate the robot panel',async()=>{
+ const ui=screen([result([row('1')],old)]);await ui.load();
+ await ui.get('#live-triage-panel').listeners.get('click')();
+ assert.equal(ui.snapshots.length,0);
+ assert.match(ui.get('#live-triage-draft-status').textContent,/Consulte a triagem novamente/);
+});
+
+test('in-flight query cannot restore data after session invalidation',async()=>{
+ let resolve;
+ const pending=new Promise(done=>{resolve=done;});
+ const ui=screen([pending]),loading=ui.load();
+ await new Promise(done=>setImmediate(done));
+ ui.read('resetLiveTriageResults()');
+ resolve(result([row('1')]));await loading;
+ assert.equal(ui.read('liveTriageLastRows.length'),0);
+ assert.equal(ui.get('#live-triage-panel').disabled,true);
+ assert.equal(ui.snapshots.length,0);
 });
