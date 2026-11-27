@@ -12,7 +12,7 @@ export function waitingPlan(ticket,{today,holidays,blocked=false,complete=false}
  const days=businessDays(evidence.lastAppointmentDate,today,holidays);
  if(days<3)return null;
  const id=String(ticket.id);
- return {key:'robot-note:'+id+':'+today,ticketId:id,ownerId:String(ticket.owner.id),rules:['customer-followup'],channel:'movidesk-internal',simulated:true,text:robotOwnerMessage(ticket,{aguardando_cliente:true,dias_sem_apontamento:days,data_ultimo_apontamento:evidence.lastAppointmentDate})};
+ return {key:'robot-note:'+id+':'+today,ticketId:id,ownerId:String(ticket.owner.id),rules:['customer-followup'],channel:'movidesk-internal',simulated:true,text:robotOwnerMessage(ticket,{aguardando_cliente:true,dias_sem_apontamento:days,data_ultimo_apontamento:evidence.lastAppointmentDate}).replace(/Ticket Manager$/,'Alan — Qualidade | Ticket Manager\nMensagem automática autorizada')};
 }
 // Only the waiting-customer rule is wired here. Other robot rules remain independent.
 /** @param {{readTicket: Function, readPolicy: Function, reserve?: Function, finish?: Function, writeInternal?: Function, enabled?: boolean, clock?: ()=>Date}} options */
