@@ -65,7 +65,7 @@ export function expandedPlan(ticket,{now,today,holidays=[],complete=false,blocke
  const details=[];
  if(unassigned&&!queue.eligible)details.push('O chamado não possui responsável definido. Solicitamos à equipe que verifique a atribuição.');
  if(preventive)details.push('A previsão de solução vence nas próximas 24 horas. Por gentileza, verifique o andamento e atualize a previsão se necessário.');
- if(escalationReview)details.push('A previsão está vencida há pelo menos 48 horas; situação sinalizada para revisão da gestão.');
+ if(escalationReview)details.push('A previsão está vencida há pelo menos 48 horas; situação sinalizada para revisão da gestão.\n\nCENTRAL-ROBOT-ESCALATION-48H');
  const text=robotOwnerMessage(ticket,facts).replace(/Ticket Manager$/,'Alan — Qualidade | Ticket Manager\nMensagem automática autorizada');
  const consolidated=text.replace('Alan — Qualidade | Ticket Manager',details.length?details.join('\n\n')+'\n\nAlan — Qualidade | Ticket Manager':'Alan — Qualidade | Ticket Manager');
  const id=String(ticket.id);
