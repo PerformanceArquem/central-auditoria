@@ -77,7 +77,7 @@ Deno.serve(async(req:Request)=>{
  const id=String(r.ticket_id);
  const evaluated=evaluateImportedTriage(r,byId.get(id),{now,threshold,holidays:holidayRows.map(h=>h.holiday_date)});
  const reason=directMissing[id];
- if(reason&&!evaluated.eligible)return {...evaluated,reason,source:reason==='not-found-by-api'?'Movidesk · chamado não localizado':'Listas consultadas · conferência individual pendente'};
+ if(reason)return {...evaluated,eligible:false,reason,source:reason==='not-found-by-api'?'Movidesk · chamado não localizado':'Listas consultadas · conferência individual pendente'};
  return {...evaluated,source:directIds.has(id)?'Movidesk · consulta direta':'Base importada'};
  });
  return reply({ok:true,mode:'read-only',deliveryEnabled:false,sector:'Inteligência',status:'Em Análise',threshold,now,rows,complete:true,directReads:directIds.size,directRequests});
