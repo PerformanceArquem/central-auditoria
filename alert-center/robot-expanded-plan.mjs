@@ -1,3 +1,5 @@
+import {robotQueueFacts} from './robot-queue-facts.mjs';
+import {defaults} from './engine.mjs';
 import {robotRecordFacts} from './robot-record-facts.mjs';
 import {waitingPlan} from './robot-waiting-executor.mjs';
 import {robotDeadlineFacts} from './robot-deadline-facts.mjs';
@@ -36,19 +38,36 @@ const sectors=new Set(['Suporte','Qualidade','Testes (QA)','Sucesso do Cliente',
 // Deadline expansion: require explicit evidence and preserve waiting rule.
 /** @param {any} ticket @param {{now?:string,today?:string,holidays?:string[],complete?:boolean,blocked?:boolean}} options */
 export function expandedPlan(ticket,{now,today,holidays=[],complete=false,blocked=false}={}){
- if(!complete||blocked||!sectors.has(ticket?.ownerTeam)||!ticket.owner?.id||!ticket.owner?.businessName||!/^\d{1,12}$/.test(String(ticket.id))||ticket.closedIn||ticket.canceledIn||String(ticket.isDeleted)==='true'||!ticket.status||/^(fechado|resolvido|cancelado|conclu[ií]do(?: \(sem confirma[cç][aã]o\))?|encerrado|finalizado)$/i.test(ticket.status.trim()))return null;
+ if(!complete||blocked||!sectors.has(ticket?.ownerTeam)||(ticket.owner!==null&&(!ticket.owner?.id||!ticket.owner?.businessName))||!/^\d{1,12}$/.test(String(ticket.id))||ticket.closedIn||ticket.canceledIn||String(ticket.isDeleted)==='true'||!ticket.status||/^(fechado|resolvido|cancelado|conclu[ií]do(?: \(sem confirma[cç][aã]o\))?|encerrado|finalizado)$/i.test(ticket.status.trim()))return null;
+ if(ticket.baseStatus!=null&&!['New','InAttendance','Stopped'].includes(ticket.baseStatus))return null;
+ const unassigned=ticket.owner===null;
  const waiting=isWaitingCustomer(ticket);
  const existing=waitingPlan(ticket,{today,holidays,complete});
  const deadline=robotDeadlineFacts(ticket,{now,waitingConfirmed:waiting,deadlineCoverage:Object.hasOwn(ticket,'slaSolutionDate'),holidays,maxFutureBusinessDays:10});
  const facts={...(deadline.verified?deadline.facts:{}),...verifiedFollowup(ticket,today,holidays)};
+ const queue=robotQueueFacts(ticket,{now,syncedAt:now,historyComplete:Array.isArray(ticket.ownerHistories),holidays,thresholds:Object.fromEntries([...sectors].map(s=>[s,defaults.triageBusinessDays]))});
+ Object.assign(facts,queue.facts);
+ const due=typeof ticket.slaSolutionDate==='string'?Date.parse(/(?:Z|[+-]\\d{2}:\\d{2})$/i.test(ticket.slaSolutionDate)?ticket.slaSolutionDate:ticket.slaSolutionDate+'Z'):NaN;
+ const hours=(due-Date.parse(now))/3600000;
+ const activeDeadline=ticket.slaSolutionDateIsPaused===false||ticket.slaSolutionDateIsPaused==='false';
+ const preventive=activeDeadline&&Number.isFinite(hours)&&hours>=0&&hours<=defaults.preventiveHours;
+ const escalationReview=activeDeadline&&Number.isFinite(hours)&&hours<=-defaults.escalationHours;
  const rules=[];
+ if(queue.eligible)rules.push('aged-queue');
+ if(unassigned)rules.push('unassigned');
+ if(preventive)rules.push('preventive');
  if(facts.sem_registro===true)rules.push('no-record');
  else if(Number.isSafeInteger(facts.dias_sem_registro)&&facts.dias_sem_registro>0)rules.push('idle-record');
  if(facts.data_previsao_vencida)rules.push('overdue');
  if(facts.sem_previsao)rules.push('missing-deadline');
  if(facts.previsao_distante)rules.push('distant-deadline');
  if(!rules.length)return existing;
+ const details=[];
+ if(unassigned&&!queue.eligible)details.push('O chamado não possui responsável definido. Solicitamos à equipe que verifique a atribuição.');
+ if(preventive)details.push('A previsão de solução vence nas próximas 24 horas. Por gentileza, verifique o andamento e atualize a previsão se necessário.');
+ if(escalationReview)details.push('A previsão está vencida há pelo menos 48 horas; situação sinalizada para revisão da gestão.');
  const text=robotOwnerMessage(ticket,facts).replace(/Ticket Manager$/,'Alan — Qualidade | Ticket Manager\nMensagem automática autorizada');
+ const consolidated=text.replace('Alan — Qualidade | Ticket Manager',details.length?details.join('\n\n')+'\n\nAlan — Qualidade | Ticket Manager':'Alan — Qualidade | Ticket Manager');
  const id=String(ticket.id);
- return {key:'robot-note:'+id+':'+today,ticketId:id,ownerId:String(ticket.owner.id),rules:[...new Set([...(existing?.rules||[]),...rules])],channel:'movidesk-internal',simulated:true,text:existing?existing.text.split('\n\nAlan — Qualidade')[0]+'\n\nComplemento da fiscalização:\n'+text:text};
+ return {key:'robot-note:'+id+':'+today,ticketId:id,ownerId:unassigned?null:String(ticket.owner.id),rules:[...new Set([...(existing?.rules||[]),...rules])],channel:'movidesk-internal',simulated:true,escalationReview,text:existing?existing.text.split('\n\nAlan — Qualidade')[0]+'\n\nComplemento da fiscalização:\n'+consolidated:consolidated};
 }
