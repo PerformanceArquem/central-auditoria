@@ -27,14 +27,16 @@ export function robotOwnerMessage(ticket, facts = {}) {
   // Waiting-customer facts are supplied only by the validated status/contact evaluator.
   const waiting = facts.aguardando_cliente === true;
   const noContact = waiting && positive(facts.dias_sem_contato);
+  const noAppointment = waiting && positive(facts.dias_sem_apontamento) && dateBR(facts.data_ultimo_apontamento);
   const future = waiting && facts.previsao_distante === true && dateBR(facts.data_previsao) && positive(facts.dias_ate_previsao);
   const missing = waiting && facts.sem_previsao === true && !deadline && !dateBR(facts.data_previsao);
   const followup = [];
   if (waiting && positive(facts.dias_aguardando_cliente)) reasons.push('aguarda o retorno do cliente há '+duration(facts.dias_aguardando_cliente));
-  if (noContact) followup.push('Não identificamos um novo registro de contato nos últimos '+duration(facts.dias_sem_contato)+(facts.dias_contato_uteis===true?' úteis':'')+(dateBR(facts.data_ultimo_contato)?' (último contato registrado em '+dateBR(facts.data_ultimo_contato)+')':'')+'.');
+  if (noAppointment) followup.push('O último apontamento foi realizado em '+dateBR(facts.data_ultimo_apontamento)+', há '+duration(facts.dias_sem_apontamento)+' úteis.');
+  if (noContact && !noAppointment) followup.push('Não identificamos um novo registro de contato nos últimos '+duration(facts.dias_sem_contato)+(facts.dias_contato_uteis===true?' úteis':'')+(dateBR(facts.data_ultimo_contato)?' (último contato registrado em '+dateBR(facts.data_ultimo_contato)+')':'')+'.');
   if (missing) followup.push('Também não identificamos uma previsão definida.');
   if (future) followup.push('A previsão cadastrada é para '+dateBR(facts.data_previsao)+', daqui a '+duration(facts.dias_ate_previsao)+(facts.dias_previsao_uteis===true?' úteis':'')+'.');
-  const customerRequest = waiting && (noContact || missing || future || positive(facts.dias_aguardando_cliente)) ? (unassigned?'Poderiam':'Poderia')+', por gentileza, verificar a possibilidade de retomar o contato com o cliente e atualizar o chamado?'+(missing?' Pedimos também que seja definida uma previsão de acompanhamento.':'')+(future||deadline?' Pedimos também que seja revisada a previsão.':'')+' Caso já tenha ocorrido algum contato, pedimos que registre as informações.' : '';
+  const customerRequest = waiting && (noAppointment || noContact || missing || future || positive(facts.dias_aguardando_cliente)) ? (unassigned?'Poderiam':'Poderia')+', por gentileza, verificar a possibilidade de retomar o contato com o cliente e atualizar o chamado?'+(missing?' Pedimos também que seja definida uma previsão de acompanhamento.':'')+(future||deadline?' Pedimos também que seja revisada a previsão.':'')+' Caso já tenha ocorrido algum contato, pedimos que registre as informações.' : '';
   const request = unassigned ? 'Poderiam, por gentileza, verificar a situação e direcionar o chamado para acompanhamento?'+(deadline?' Pedimos também que verifiquem a previsão de solução.':'') : deadline ? 'Poderia, por gentileza, nos atualizar sobre o andamento e verificar a possibilidade de ajustar a previsão?' : 'Poderia, por gentileza, nos atualizar sobre o andamento deste chamado e os próximos passos?';
   return [
     'Olá, '+nome_responsavel+'! Tudo bem?',
