@@ -7000,7 +7000,7 @@ function showReconciliation(){
    for(const v of [r.startedAt,r.callId,r.phoneMasked,names[r.status]||r.status,names[r.reconciliation]||r.reconciliation,r.ticketId,r.sector||'Não identificado',r.employee||'Não identificado',(r.movideskTelephonyOrigins||[]).join(', ')||'—',r.deltaSeconds,names[r.matchMethod]||r.matchMethod])addCell(tr,v??'—');
    addCell(tr,UraPeriods.label(UraPeriods.month(r)));appendRecordingCell(tr,r);root.appendChild(tr);
   }
-  el('zvReconcileStatus').textContent=rows.length+' ligação(ões) exibidas de '+data.records.length+' no período '+data.from.split('-').reverse().join('/')+' a '+data.to.split('-').reverse().join('/')+'. '+data.metadata.ticketsExamined+' leituras de chamados em '+data.metadata.batches+' consulta(s) mensais; um chamado pode ser examinado em mais de um mês. Nenhuma alteração realizada.';
+  el('zvReconcileStatus').textContent=rows.length+' ligação(ões) exibidas de '+data.records.length+' no período '+data.from.split('-').reverse().join('/')+' a '+data.to.split('-').reverse().join('/')+'. '+data.metadata.ticketsExamined+' leituras de chamados em '+data.metadata.batches+' consulta(s) mensais; um chamado pode ser examinado em mais de um mês. Indicadores gerais não seguem os filtros da tabela. Telefone e horário são hipóteses; ausência de vínculo não prova ausência de chamado. Nenhuma alteração realizada.';
  }
  async function runReconciliation(){
   const btn=el('zvReconcile');btn.disabled=true;reconcileDataset=null;
@@ -7033,6 +7033,14 @@ function showReconciliation(){
    reconcileDataset=data;
    fillReconciliationPeople();
    const metrics=[['Entradas nos DIDs da URA',data.stats.total],['Confirmadas por ID',data.stats.vinculado],['Por gravação',data.stats.vinculado_gravacao],['Possíveis (não comprovadas)',data.stats.possivel_vinculo],['Sem vínculo',data.stats.sem_vinculo_identificado],['Ambíguas',data.stats.ambiguo],['Reutilização de chamado',data.stats.ticket_ja_utilizado],['Insuficientes',data.stats.dados_insuficientes],['Abandonadas/canceladas',data.stats.abandonada_ou_cancelada]];
+   const confirmedIds=data.records.filter(r=>r.reconciliation==='vinculado').length;
+   const recordingMatches=data.records.filter(r=>r.reconciliation==='vinculado_gravacao').length;
+   const pending=data.records.filter(r=>!['vinculado','vinculado_gravacao'].includes(r.reconciliation));
+   metrics.push(['Taxa confirmada por ID',data.records.length?(100*confirmedIds/data.records.length).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'Não aplicável'],
+    ['Pendentes de revisão',pending.length],
+    ['Pendentes atendidas',pending.filter(r=>r.status==='atendida').length],
+    ['Pendentes com gravação informada',pending.filter(r=>r.recordingState==='informada').length],
+    ['Pendentes canceladas/abandonadas',pending.filter(r=>r.status==='abandonada_ou_cancelada').length]);
    for(const [label,value] of metrics){const box=document.createElement('div');box.className='kpi';const title=document.createElement('div');title.textContent=label;const strong=document.createElement('strong');strong.textContent=String(value||0);box.append(title,strong);el('zvReconcileKpis').appendChild(box);}
    el('zvReconcileCsv').disabled=!data.records?.length;showReconciliation();showUnlinkedReport();showMonthlyReconciliation();
   }catch(e){el('zvReconcileStatus').textContent='Conciliação indisponível: '+e.message;}
