@@ -2,7 +2,7 @@ import {businessDays} from './engine.mjs';
 // Input evidence must be normalized by the server from complete Movidesk action history.
 // Contact classification is explicit; generic internal notes do not prove customer contact.
 const valid=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&Number.isFinite(Date.parse(d))&&new Date(d).toISOString().slice(0,10)===d;
-export function robotRecordFacts({today,opened,records,coverageConfirmed=false,holidays=[],idleThreshold=3,contactThreshold=5,waitingSince=null}={}){
+export function robotRecordFacts({today,opened,records,coverageConfirmed=false,holidays=[],idleThreshold=3,contactThreshold=5,waitingSince=null,lastAppointmentDate=null,appointmentCoverage=false}={}){
  const fail=reason=>({verified:false,reason,facts:{}});
  if(!coverageConfirmed||!Array.isArray(records)||!valid(today)||!valid(opened)||opened>today||![idleThreshold,contactThreshold].every(n=>Number.isSafeInteger(n)&&n>0&&n<=365))return fail('unconfirmed-history');
  if(waitingSince!==null&&(!valid(waitingSince)||waitingSince<opened||waitingSince>today))return fail('invalid-waiting-history');
@@ -22,6 +22,11 @@ export function robotRecordFacts({today,opened,records,coverageConfirmed=false,h
  if(waitingSince){
   facts.aguardando_cliente=true;
   facts.dias_aguardando_cliente=businessDays(waitingSince,today,holidays);
+  if(appointmentCoverage===true && valid(lastAppointmentDate) && lastAppointmentDate>=opened && lastAppointmentDate<=today){
+   const elapsed=businessDays(lastAppointmentDate,today,holidays);
+   if(elapsed>=contactThreshold){facts.dias_sem_apontamento=elapsed;facts.data_ultimo_apontamento=lastAppointmentDate;}
+  }
+  // Contact evidence remains available for diagnostics, not the waiting-customer trigger.
   const contact=latest(human.filter(r=>r.kind==='human-contact'&&r.date>=waitingSince));
   const elapsed=businessDays(contact||waitingSince,today,holidays);
   if(elapsed>=contactThreshold){
