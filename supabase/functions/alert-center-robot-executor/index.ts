@@ -12,7 +12,7 @@ Deno.serve(async(req:Request)=>{
  const cronSecret=req.headers.get('x-robot-cron-secret');
  let scheduled=auth==='Bearer '+role;
  if(cronSecret){
- if(auth!=='Bearer '+anon||cronSecret.length!==64)return reply({error:'Acesso restrito'},403);
+ if(!/^[a-f0-9]{64}$/.test(cronSecret))return reply({error:'Acesso restrito'},403);
  const check=await fetch(base+'/rest/v1/rpc/audit_robot_verify_cron_secret',{method:'POST',headers:{apikey:role,Authorization:'Bearer '+role,'Content-Type':'application/json'},body:JSON.stringify({p_secret:cronSecret}),signal:AbortSignal.timeout(10000)});
  scheduled=check.ok&&(await check.json())===true;
  if(!scheduled)return reply({error:'Acesso restrito'},403);
