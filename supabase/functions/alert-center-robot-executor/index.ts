@@ -26,7 +26,9 @@ Deno.serve(async(req:Request)=>{
  if(admins.length!==1)return reply({error:'Acesso restrito'},403);
  const body=await req.json().catch(()=>null);
  const id=String(body?.ticketId??'');
- if(body?.mode!=='read-only'||!/^\d{1,12}$/.test(id))return reply({error:'Somente homologação individual autorizada'},400);
+ const batch=body?.action==='batch';
+ const cursor=body?.cursor??null;
+ if(body?.mode!=='read-only'||(batch?(cursor!==null&&(typeof cursor!=='string'||!/^\d{1,12}$/.test(cursor))):!/^\d{1,12}$/.test(id)))return reply({error:'Consulta de homologação inválida'},400);
  const readPolicy=async(ticketId:string)=>{
  const [holidays,blocks]=await Promise.all([
  read('audit_email_holidays',{affects_delivery:'eq.true',select:'holiday_date',limit:'1000'}),
@@ -43,6 +45,20 @@ Deno.serve(async(req:Request)=>{
  };
  // Explicit hard lock. No production PATCH capability is exposed by this endpoint.
  const executor=createWaitingExecutor({readPolicy,readTicket,...robotPersistence(db),enabled:false});
+ if(batch){
+ const sectors=['Suporte','Qualidade','Testes (QA)','Sucesso do Cliente','Implantação','Treinamento'];
+ const params:Record<string,string>={select:'ticket_id',closed_at_source:'is.null','payload->>ownerTeam':'in.('+sectors.map(s=>'"'+s+'"').join(',')+')',or:'(payload->>status.eq.Aguardando cliente,payload->>justification.eq.Aguardando ação do cliente)',order:'ticket_id.asc',limit:'6'};
+ if(cursor!==null)params.ticket_id='gt.'+cursor;
+ const candidates=await read('audit_reporting_tickets',params);
+ const ids=candidates.slice(0,5).map(x=>String(x.ticket_id));
+ if(ids.some(x=>!/^\d{1,12}$/.test(x))||new Set(ids).size!==ids.length)throw Error('Seleção inválida');
+ const rows=[];
+ for(const ticketId of ids){
+ try{const result=await executor.preview(ticketId);rows.push({ticketId,plan:result.plan,review:false});}
+ catch{rows.push({ticketId,plan:null,review:true});}
+ }
+ return reply({ok:true,mode:'read-only',deliveryEnabled:false,coverage:'not-exhaustive',rows,nextCursor:candidates.length>5?ids[ids.length-1]:null});
+ }
  const result=await executor.preview(id);
  return reply({ok:true,deliveryEnabled:false,mode:'read-only',plan:result.plan});
  }catch{return reply({error:'Homologação interrompida; nenhuma cobrança realizada'},502);}
