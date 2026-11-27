@@ -21,7 +21,7 @@ function screen(responses,authEvents=[]){
  const elements=new Map(),calls=[],snapshots=[];
  const get=key=>{if(!elements.has(key))elements.set(key,new Element());return elements.get(key);};
  get('#live-triage-limit').value='3';get('#live-triage-filter').value='all';
- const context=vm.createContext({document:{querySelector:get,createElement:()=>new Element()},composeTriageDraft,triageRobotSnapshot,robotDashboard:{setData:data=>snapshots.push(data),clearTriage:()=>snapshots.splice(0)},formatReportDate:value=>value,
+ const context=vm.createContext({overviewUi:null,robotSection:{before(){}},mountRobotOverviewControls:()=>({invalidate(){}}),document:{querySelector:get,createElement:()=>new Element()},composeTriageDraft,triageRobotSnapshot,robotDashboard:{setData:data=>snapshots.push(data),clearTriage:()=>snapshots.splice(0)},formatReportDate:value=>value,
  channelClient:async()=>{for(const [event,session] of authEvents.splice(0))authChange(event,session);return {functions:{invoke:async(name,request)=>{calls.push(request.body);const next=responses.shift();if(!next)throw Error('Unexpected request');return next;}}};}});
  vm.runInContext(source,context);
  authChange=createTriageAuthGuard(()=>context.resetLiveTriageResults());

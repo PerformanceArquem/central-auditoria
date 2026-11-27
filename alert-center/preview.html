@@ -17,10 +17,12 @@ import {simulate, defaults} from "./engine.mjs";
 import {mountRobotDashboard} from './robot-dashboard.mjs';
 import {triageRobotSnapshot} from './robot-triage.mjs';
 import {createTriageAuthGuard} from './triage-auth.mjs';
+import {mountRobotOverviewControls} from './robot-overview-ui.mjs';
 const triageAuthChange=createTriageAuthGuard(()=>resetLiveTriageResults());
 const robotSection=document.createElement('section');robotSection.id='robot-dashboard';
 document.querySelector('header').after(robotSection);
 const robotDashboard=mountRobotDashboard(robotSection);
+let overviewUi=null;
 import {composeTriageDraft} from "./triage-message.mjs";
 import {calculateSchedule} from "./schedule.mjs";
 import {simulateRecipient} from "./recipient-test.mjs";
@@ -253,7 +255,7 @@ function clearTriageDraft(){triageDraftButton.disabled=true;triageDraftText.hidd
 triageDraftButton.addEventListener('click',()=>{try{const draft=composeTriageDraft({rows:liveTriageLastRows,threshold:Number(liveTriageLimit.value),referenceTime:liveTriageLastReference,now:new Date().toISOString()});triageDraftText.value=draft.text;triageDraftText.hidden=false;triageDraftStatus.textContent=draft.eligibleCount+' chamados para avaliação · '+draft.reviewCount+' para revisão de dados. Nenhum envio.';}catch(e){clearTriageDraft();triageDraftStatus.textContent=e.message;}});
 const liveTriageRefresh=document.querySelector('#live-triage-refresh');
 const liveTriageButton=document.querySelector('#live-triage-load'),liveTriageLimit=document.querySelector('#live-triage-limit'),liveTriageStatus=document.querySelector('#live-triage-status'),liveTriageRows=document.querySelector('#live-triage-rows');
-function resetLiveTriageResults(){liveTriageEpoch++;liveTriageLastRows=[];liveTriageLastReference=null;clearTriageDraft();robotDashboard.clearTriage();triagePanelButton.disabled=true;triageFilter.disabled=true;triageSearch.disabled=true;triageFilterStatus.textContent='';liveTriageRows.replaceChildren();}
+function resetLiveTriageResults(){liveTriageEpoch++;overviewUi?.invalidate();liveTriageLastRows=[];liveTriageLastReference=null;clearTriageDraft();robotDashboard.clearTriage();triagePanelButton.disabled=true;triageFilter.disabled=true;triageSearch.disabled=true;triageFilterStatus.textContent='';liveTriageRows.replaceChildren();}
 liveTriageLimit.addEventListener('input',()=>{resetLiveTriageResults();liveTriageStatus.textContent='Limite alterado. Consulte novamente.';});
 
 const triageFilter=document.querySelector('#live-triage-filter'),triageSearch=document.querySelector('#live-triage-search'),triageFilterStatus=document.querySelector('#live-triage-filter-status');
@@ -311,5 +313,11 @@ async function loadLiveTriage(refresh=false,individualTicketId=null){
 }
 liveTriageButton.addEventListener('click',()=>loadLiveTriage(false));
 liveTriageRefresh.addEventListener('click',()=>loadLiveTriage(true));
+
+const overviewControls=document.createElement('section');overviewControls.id='robot-overview-controls';robotSection.before(overviewControls);
+overviewUi=mountRobotOverviewControls(overviewControls,{
+ authorize:async()=>{const api=await channelClient();const {data,error}=await api.auth.getSession();if(error||!data?.session?.access_token)throw Error('Entre na Central para consultar os setores.');return data.session.access_token;},
+ beforeRead:()=>resetLiveTriageResults(),getEpoch:()=>liveTriageEpoch,onData:data=>robotDashboard.setData(data)
+});
 
 </script></body></html>

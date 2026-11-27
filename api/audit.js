@@ -1,4 +1,5 @@
 const loaders={
+  'robot-overview':()=>import('../server/audit-robot-overview.mjs'),
   inspection:()=>import('../server/audit-ticket-inspection.mjs'),
   lookup:()=>import('../server/audit-ticket-lookup.mjs'),
   forecast:()=>import('../server/audit-forecast-variances.mjs'),
