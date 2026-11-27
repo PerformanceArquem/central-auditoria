@@ -5,7 +5,7 @@ export function robotPersistence(db,{clock=()=>new Date()}={}){
  return {
  async reserve({ticketId,day,rules,text}){
   if(day!==localDay())return {acquired:false};
-  const result=await db('rpc/audit_reserve_robot_internal_note',{method:'POST',body:JSON.stringify({p_ticket_id:ticketId,p_rules:rules,p_note_body:text})});
+  const result=await db('rpc/audit_reserve_robot_internal_note',{method:'POST',body:JSON.stringify({p_ticket_id:ticketId,p_day:day,p_rules:rules,p_note_body:text})});
   return {acquired:result===true};
  },
  async finish({ticketId,day,status}){
