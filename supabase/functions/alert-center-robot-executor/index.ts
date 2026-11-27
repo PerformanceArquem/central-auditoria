@@ -1,4 +1,5 @@
-import {createWaitingExecutor,waitingPlan} from '../../../alert-center/robot-waiting-executor.mjs';
+import {expandedPlan} from '../../../alert-center/robot-expanded-plan.mjs';
+import {deliverRobotNote} from '../../../alert-center/robot-internal-delivery.mjs';
 import {robotPersistence} from '../../../alert-center/robot-persistence-adapter.mjs';
 import {robotMovideskTransport} from '../../../alert-center/robot-movidesk-transport.mjs';
 const env=(k:string)=>Deno.env.get(k)?.trim()||'';
@@ -76,11 +77,19 @@ Deno.serve(async(req:Request)=>{
  if(!withinWindow()||!policy.complete||policy.blocked)return false;
  const today=dayAt(new Date());
  if(policy.holidays.includes(today)||[0,6].includes(new Date(today+'T12:00:00Z').getUTCDay()))return false;
- const plan=waitingPlan(ticket,{today,holidays:policy.holidays,complete:true});
+ const plan=expandedPlan(ticket,{now:new Date().toISOString(),today,holidays:policy.holidays,complete:true});
  return plan!==null&&plan.ticketId===note.ticketId&&plan.ownerId===note.ownerId&&note.marker==='CENTRAL-ROBOT-NOTE:'+note.ticketId+':'+today&&note.text===plan.text+'\n\n'+note.marker;
  };
  const writeInternal=robotMovideskTransport({token,agentId:String(authors[0].movidesk_person_id),enabled:deliveryEnabled,validateBeforeWrite});
- const executor=createWaitingExecutor({readPolicy,readTicket,...robotPersistence(db),writeInternal,enabled:deliveryEnabled});
+ const readAndEvaluate=async(ticketId:string)=>{
+ const policy=await readPolicy(ticketId);
+ if(!policy.complete||policy.blocked)return {plan:null};
+ const ticket=await readTicket(ticketId);
+ if(String(ticket?.id)!==ticketId)return {plan:null};
+ const now=new Date();
+ return {plan:expandedPlan(ticket,{now:now.toISOString(),today:dayAt(now),holidays:policy.holidays,complete:true})};
+ };
+ const executor={preview:readAndEvaluate,execute:(ticketId:string)=>deliverRobotNote(ticketId,{enabled:deliveryEnabled,readAndEvaluate,...robotPersistence(db),writeInternal})};
  if(batch){
  let currentCursor=cursor;
  const started=Date.now();
@@ -93,7 +102,7 @@ Deno.serve(async(req:Request)=>{
  url.searchParams.set('token',token);
  url.searchParams.set('$select','id,ownerTeam,status,justification,baseStatus');
  const sectorFilter=sectors.map(s=>"ownerTeam eq '"+s.replaceAll("'","''")+"'").join(' or ');
- const clauses=["("+sectorFilter+")","(status eq 'Aguardando cliente' or (status eq 'Agendado' and justification eq 'Aguardando ação do cliente'))"];
+ const clauses=["("+sectorFilter+")","(status eq 'Aguardando cliente' or (status eq 'Agendado' and justification eq 'Aguardando ação do cliente') or (slaSolutionDate lt "+new Date().toISOString()+" and slaSolutionDateIsPaused eq false))"];
  if(currentCursor!==null)clauses.push('id gt '+currentCursor);
  url.searchParams.set('$filter',clauses.join(' and '));
  url.searchParams.set('$orderby','id asc');
