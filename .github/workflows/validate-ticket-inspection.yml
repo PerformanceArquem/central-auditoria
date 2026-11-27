@@ -1,7 +1,7 @@
 name: Validate ticket inspection
 on:
   pull_request:
-    paths: ['lib/ticket-inspection.mjs', 'lib/sector-traceability.mjs', 'tests/sector-traceability.test.mjs', 'lib/ticket-delay-risk.mjs', 'lib/preventive-risk-radar.mjs', 'tests/preventive-risk-radar.test.mjs', 'ui/workspace.css', 'ui/ticket-inspection.mjs', 'server/audit-ticket-inspection.mjs', 'supabase/migrations/*ticket_inspection*', 'tests/ticket-inspection*.mjs', 'tests/ticket-delay-risk.test.mjs', 'index.html', '.github/workflows/validate-ticket-inspection.yml']
+    paths: ['lib/ticket-inspection.mjs', 'lib/live-management-dashboard.mjs', 'ui/live-management-dashboard.mjs', 'tests/live-management-dashboard.test.mjs', 'lib/sector-traceability.mjs', 'tests/sector-traceability.test.mjs', 'lib/ticket-delay-risk.mjs', 'lib/preventive-risk-radar.mjs', 'tests/preventive-risk-radar.test.mjs', 'ui/workspace.css', 'ui/ticket-inspection.mjs', 'server/audit-ticket-inspection.mjs', 'supabase/migrations/*ticket_inspection*', 'tests/ticket-inspection*.mjs', 'tests/ticket-delay-risk.test.mjs', 'index.html', '.github/workflows/validate-ticket-inspection.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,8 +13,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --check ui/ticket-inspection.mjs
-      - run: node --test tests/sector-traceability.test.mjs tests/preventive-risk-radar.test.mjs tests/ticket-delay-risk.test.mjs tests/ticket-inspection.test.mjs tests/ticket-inspection-api.test.mjs
+      - run: node --check ui/ticket-inspection.mjs && node --check ui/live-management-dashboard.mjs
+      - run: node --test tests/live-management-dashboard.test.mjs tests/sector-traceability.test.mjs tests/preventive-risk-radar.test.mjs tests/ticket-delay-risk.test.mjs tests/ticket-inspection.test.mjs tests/ticket-inspection-api.test.mjs
       - name: Prepare disposable PostgreSQL runtime
         run: npm install --prefix "$RUNNER_TEMP/ticket-inspection-db" --no-save --ignore-scripts @electric-sql/pglite@0.6.0
       - name: Validate migration and database permissions locally

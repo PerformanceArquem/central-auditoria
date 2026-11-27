@@ -910,6 +910,7 @@ main button:focus-visible,main select:focus-visible,main input:focus-visible{out
 <script src="/ui/workspace.js" defer></script>
 <script src="/ai-reports.js" defer></script>
 <script type="module" src="/ui/ticket-inspection.mjs"></script>
+<script type="module" src="/ui/live-management-dashboard.mjs"></script>
 <style id="ai-reports-style">#aiReportPanel .ai-report-message{padding:12px 14px;max-width:90%;border-radius:12px;background:#eff5fd;border:1px solid #d7e4f3;color:#243c55;overflow-wrap:anywhere}#aiReportPanel .ai-report-user{align-self:flex-end;background:#e4f0ff}#aiReportPanel .ai-report-assistant{align-self:flex-start}#aiReportPanel .ai-report-message strong{display:block;margin-bottom:6px;font-size:12px}#aiReportPanel .ai-report-message div{font-size:14px;line-height:1.5}#aiReportRanking ol{padding-left:25px}#aiReportRanking li{margin:5px 0}@media(max-width:700px){#aiReportPanel .fg{min-width:140px;flex:1 1 45%}#aiReportPanel .ai-report-message{max-width:100%}}</style>
 <script src="/ui/ura-periods.js"></script>
 <script src="/ui/ura-recording.js" defer></script>
@@ -2581,6 +2582,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function build(all){stats={tk:all.length,ac:0,ap:0,tw:0};raw=all.flatMap(flatten)}
 
 window.ticketInspectionSource=()=>[...TK.values()];
+window.managementDashboardSource=()=>({tickets:[...TK.values()],appointments:raw,lastSync});
 let TK=new Map(),syncing=false,apiOn=false,EXP=null,lastSync=0,lastTry=0,lastFull=0,lastSig='',lastToday='',fails=0,lastErr='';
 let liveEvents=JSON.parse(localStorage.getItem('md_live_events')||'[]');
 function dueValue(t){const direct=t.slaSolutionDate||t.dueDate||t.expectedDate||t.forecastDate||'';if(direct)return String(direct);const vals=t.customFieldValues||[];const found=vals.filter(x=>(CF&&String(x.customFieldId)===String(CF))||/prazo|previs|venc|solu[cç][aã]o|entrega|data limite/i.test(String(x.customFieldName||x.name||x.label||''))).map(x=>String(x.value??''));return found.join(' | ')}
