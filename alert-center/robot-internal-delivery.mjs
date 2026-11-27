@@ -24,7 +24,7 @@ export async function deliverRobotNote(ticketId,{enabled=false,readAndEvaluate,r
  }
  let status='uncertain';
  try{
-  const outcome=await writeInternal({ticketId:id,type:1,text,marker});
+  const outcome=await writeInternal({ticketId:id,type:1,text,marker,ownerId:plan.ownerId});
   if(outcome?.confirmed===true)status='confirmed';
  }catch{/* Uncertain writes must never be retried automatically. */}
  const finalized=await finish({ticketId:id,day,status});
