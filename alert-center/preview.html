@@ -26,6 +26,31 @@ const waitingPreview=document.createElement('section');
 waitingPreview.id='robot-waiting-preview';
 waitingPreview.innerHTML='<h2>Aguardando cliente — fiscalização</h2><p>Consulta individual · 3 dias úteis desde o último apontamento · somente leitura.</p><label for="robot-waiting-id">Número do chamado</label><input id="robot-waiting-id" type="text" inputmode="numeric" maxlength="12" autocomplete="off"><button id="robot-waiting-load" type="button">Consultar chamado</button><p id="robot-waiting-result" role="status" aria-live="polite"></p>';
 robotSection.after(waitingPreview);
+
+const waitingBatch=document.createElement('button');
+waitingBatch.type='button';waitingBatch.textContent='Consultar os seis setores';
+const waitingBatchStatus=document.createElement('p');waitingBatchStatus.setAttribute('role','status');waitingBatchStatus.setAttribute('aria-live','polite');
+const waitingBatchRows=document.createElement('div');waitingBatchRows.className='scroll';
+waitingPreview.append(waitingBatch,waitingBatchStatus,waitingBatchRows);
+waitingBatch.addEventListener('click',async()=>{
+ waitingBatch.disabled=true;waitingBatchRows.replaceChildren();waitingBatchStatus.textContent='Consultando candidatos da base sincronizada...';
+ try{
+ const api=await channelClient();
+ const {data,error}=await api.functions.invoke('alert-center-robot-preview',{body:{mode:'read-only',action:'batch'}});
+ if(error){let message='Consulta coletiva indisponível.';try{const detail=await error.context.json();if(typeof detail.error==='string')message=detail.error;}catch{}throw Error(message);}
+ if(data?.ok!==true||data.mode!=='read-only'||data.deliveryEnabled!==false||data.threshold!==3||data.coverage!=='not-exhaustive'||!Array.isArray(data.rows)||data.rows.length!==data.candidateCount||data.rows.length>5)throw Error('Resposta coletiva não confirmada.');
+ const rows=data.rows;
+ const ids=new Set();
+ for(const row of rows){if(!/^\d{1,12}$/.test(row.ticketId)||ids.has(row.ticketId)||row.simulated!==true||typeof row.eligible!=='boolean'||typeof row.reason!=='string')throw Error('Resultado inválido.');ids.add(row.ticketId);}
+ const labels={'threshold-reached':'Prazo atingido','below-threshold':'Dentro do prazo','blocked-ticket':'Bloqueado','outside-scope':'Fora do escopo atual','no-verified-appointment':'Sem apontamento confirmado','provider-unavailable':'Movidesk indisponível','unconfirmed-ticket':'Chamado não confirmado'};
+ const table=document.createElement('table'),head=document.createElement('thead'),heading=document.createElement('tr'),body=document.createElement('tbody');
+ for(const label of ['Chamado','Setor','Último apontamento','Dias úteis','Resultado']){const th=document.createElement('th');th.textContent=label;heading.append(th);}head.append(heading);table.append(head,body);
+ for(const row of rows){const tr=document.createElement('tr');for(const value of ['#'+row.ticketId,row.sector||'Não confirmado',row.lastAppointmentDate?formatReportDate(row.lastAppointmentDate):'Não confirmado',Number.isSafeInteger(row.businessDays)?String(row.businessDays):'—',labels[row.reason]||'Revisar evidência']){const td=document.createElement('td');td.textContent=value;tr.append(td);}body.append(tr);}
+ if(rows.length)waitingBatchRows.append(table);
+ waitingBatchStatus.textContent=rows.length+' candidatos consultados · '+rows.filter(r=>r.eligible).length+' com prazo atingido · '+rows.filter(r=>r.reason==='below-threshold').length+' dentro do prazo. Base importada: cobertura não exaustiva; zero candidatos não confirma fila vazia. Nenhuma cobrança realizada.';
+ }catch(e){waitingBatchRows.replaceChildren();waitingBatchStatus.textContent=e.message;}finally{waitingBatch.disabled=false;}
+});
+
 const waitingId=waitingPreview.querySelector('#robot-waiting-id'),waitingButton=waitingPreview.querySelector('#robot-waiting-load'),waitingResult=waitingPreview.querySelector('#robot-waiting-result');
 waitingId.addEventListener('input',()=>{waitingResult.textContent='';});
 waitingButton.addEventListener('click',async()=>{
