@@ -277,7 +277,7 @@ async function loadLiveTriage(refresh=false,individualTicketId=null){
  if(individualTicketId&&(!liveTriageLastReference||!liveTriageLastRows.some(row=>row.ticketId===individualTicketId)))throw Error('Consulte a triagem novamente antes da conferência individual.');
  const threshold=Number(liveTriageLimit.value);if(!Number.isInteger(threshold)||threshold<1||threshold>365)throw Error('Informe de 1 a 365 dias úteis.');
  const api=await channelClient(),{data,error}=await api.functions.invoke('alert-center-triage-preview',{body:{mode:'read-only',threshold,refresh,...(individualTicketId?{individualTicketId}:{})}});
- if(epoch!==liveTriageEpoch)return;
+ if(epoch!==liveTriageEpoch){liveTriageStatus.textContent='A sessão ou os parâmetros mudaram. Consulte novamente a triagem.';return;}
  if(error){let message='Consulta indisponível. Confira a sessão administrativa e tente novamente.';try{const detail=await error.context.json();if(typeof detail.error==='string')message=detail.error;}catch{}throw Error(message);}
  if(data?.ok!==true||data.mode!=='read-only'||data.deliveryEnabled!==false||data.complete!==true||data.threshold!==threshold||!Array.isArray(data.rows)||data.rows.length>500)throw Error('Consulta incompleta ou resposta não validada. Não homologar.');
  const keys=new Set();for(const row of data.rows){if(typeof row.ticketId!=='string'||keys.has(row.ticketId)||typeof row.eligible!=='boolean'||typeof row.reason!=='string'||typeof row.subject!=='string')throw Error('Registros inválidos');keys.add(row.ticketId);}
@@ -305,7 +305,7 @@ async function loadLiveTriage(refresh=false,individualTicketId=null){
  if(reviewCounts.has('not-found-by-api'))liveTriageStatus.textContent+=' Chamados não localizados pela API continuam fora da prévia gerencial.';
  }
 
- }catch(e){if(epoch===liveTriageEpoch){resetLiveTriageResults();liveTriageStatus.textContent=e.message;}}finally{liveTriageRefresh.disabled=false;liveTriageButton.disabled=false;liveTriageLimit.disabled=false;}
+ }catch(e){if(epoch===liveTriageEpoch){resetLiveTriageResults();liveTriageStatus.textContent=e.message;}else{liveTriageStatus.textContent='A sessão ou os parâmetros mudaram. Consulte novamente a triagem.';}}finally{liveTriageRefresh.disabled=false;liveTriageButton.disabled=false;liveTriageLimit.disabled=false;}
 }
 liveTriageButton.addEventListener('click',()=>loadLiveTriage(false));
 liveTriageRefresh.addEventListener('click',()=>loadLiveTriage(true));
