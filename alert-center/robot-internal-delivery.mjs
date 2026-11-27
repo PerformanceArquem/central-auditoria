@@ -19,7 +19,7 @@ export async function deliverRobotNote(ticketId,{enabled=false,readAndEvaluate,r
  // Re-evaluate after reservation, before writing; never reuse stale owner or changed facts.
  let latest;
  try{latest=(await readAndEvaluate(id))?.plan;}catch{await finish({ticketId:id,day,status:'blocked'});return {status:'blocked'};}
- if(!latest||latest.key!==plan.key||latest.channel!==plan.channel||String(latest.ticketId)!==id||latest.text!==plan.text||JSON.stringify(latest.rules)!==JSON.stringify(plan.rules)){
+ if(!latest||latest.key!==plan.key||latest.channel!==plan.channel||String(latest.ticketId)!==id||latest.ownerId!==plan.ownerId||latest.text!==plan.text||JSON.stringify(latest.rules)!==JSON.stringify(plan.rules)){
   await finish({ticketId:id,day,status:'blocked'});return {status:'blocked'};
  }
  let status='uncertain';
