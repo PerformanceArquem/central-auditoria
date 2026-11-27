@@ -1,7 +1,37 @@
+import {robotRecordFacts} from './robot-record-facts.mjs';
 import {waitingPlan} from './robot-waiting-executor.mjs';
 import {robotDeadlineFacts} from './robot-deadline-facts.mjs';
 import {robotOwnerMessage} from './robot-owner-message.mjs';
 import {isWaitingCustomer} from './robot-live-preview.mjs';
+
+const localDate=value=>{
+ if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value))return null;
+ const date=new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(value)?value:value+'Z');
+ if(!Number.isFinite(+date))return null;
+ return new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
+};
+// ID 1 is the opening action; require the opening action and valid chronology.
+// Exclude automated notes and customer-only actions from staff follow-up.
+export function verifiedFollowup(ticket,today,holidays){
+ const opened=localDate(ticket?.createdDate),actions=ticket?.actions;
+ if(!opened||!Array.isArray(actions)||!actions.some(a=>String(a?.id)==='1'))return {};
+ const records=[];
+ for(const a of actions){
+  const id=String(a?.id??''),date=localDate(a?.createdDate);
+  if(!/^\d+$/.test(id)||!date||date<opened||date>today)return {};
+  const body=String(a.description||'')+' '+String(a.htmlDescription||'');
+  let kind='other';
+  if(/CENTRAL-(?:ROBOT-NOTE|AUDITORIA-COBRANCA):|Mensagem automática autorizada/i.test(body))kind='robot';
+  else if(id!=='1'){
+   if(!a.createdBy?.id||![1,2,3].includes(Number(a.createdBy.profileType)))return {};
+   if([1,3].includes(Number(a.createdBy.profileType))&&[1,2].includes(Number(a.type))&&body.replace(/<[^>]*>/g,'').trim())kind='human-followup';
+  }
+  records.push({id,date,kind});
+ }
+ const result=robotRecordFacts({today,opened,records,coverageConfirmed:true,holidays,idleThreshold:3});
+ return result.verified?result.facts:{};
+}
+
 const sectors=new Set(['Suporte','Qualidade','Testes (QA)','Sucesso do Cliente','Implantação','Treinamento']);
 // Deadline expansion: require explicit evidence and preserve waiting rule.
 /** @param {any} ticket @param {{now?:string,today?:string,holidays?:string[],complete?:boolean,blocked?:boolean}} options */
@@ -10,8 +40,10 @@ export function expandedPlan(ticket,{now,today,holidays=[],complete=false,blocke
  const waiting=isWaitingCustomer(ticket);
  const existing=waitingPlan(ticket,{today,holidays,complete});
  const deadline=robotDeadlineFacts(ticket,{now,waitingConfirmed:waiting,deadlineCoverage:Object.hasOwn(ticket,'slaSolutionDate'),holidays,maxFutureBusinessDays:10});
- const facts=deadline.verified?deadline.facts:{};
+ const facts={...(deadline.verified?deadline.facts:{}),...verifiedFollowup(ticket,today,holidays)};
  const rules=[];
+ if(facts.sem_registro===true)rules.push('no-record');
+ else if(Number.isSafeInteger(facts.dias_sem_registro)&&facts.dias_sem_registro>0)rules.push('idle-record');
  if(facts.data_previsao_vencida)rules.push('overdue');
  if(facts.sem_previsao)rules.push('missing-deadline');
  if(facts.previsao_distante)rules.push('distant-deadline');
