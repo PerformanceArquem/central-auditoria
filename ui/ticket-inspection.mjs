@@ -1,3 +1,4 @@
+import {summarizeSectorTraceability,identifyTraceabilitySignals} from '/lib/sector-traceability.mjs';
 import {RADAR_CATEGORIES,summarizeRadar,filterRadar,preventiveGuidance} from '/lib/preventive-risk-radar.mjs';
 import {inspectTickets,filterInspections,recordOccurrences} from '/lib/ticket-inspection.mjs';
 const panel=document.getElementById('ticketInspection');
@@ -103,10 +104,88 @@ function renderRadar(base){
  }
  radarSelection.textContent='Filtros do radar: '+(RADAR_CATEGORIES.find(([key])=>key===radarCategory)?.[1]||'Todas as categorias')+' · '+(radarOwner||'Todos os responsáveis');
 }
+const trace=document.createElement('section');trace.className='preventive-risk-radar';trace.setAttribute('aria-label','Rastreabilidade entre setores');
+const traceTitle=document.createElement('h3');traceTitle.textContent='Ticket Manager | Rastreabilidade entre setores';
+const traceNote=document.createElement('p');traceNote.textContent='Horas corridas observadas no histórico dos chamados abertos filtrados; não equivalem a horas trabalhadas ou responsabilidade pelo atraso.';
+const traceStats=document.createElement('p');traceStats.setAttribute('aria-live','polite');
+const traceRanks=document.createElement('div');traceRanks.className='radar-ranks';
+const signalTitle=document.createElement('h4');signalTitle.textContent='Chamados que merecem revisão';
+const signalNote=document.createElement('p');signalNote.textContent='Limites iniciais: 7 dias corridos no setor, 4 transferências ou retorno a setor anterior. Sinais não comprovam retrabalho.';
+const signalList=document.createElement('div');
+const signalCount=document.createElement('p');
+const traceExports=document.createElement('div');traceExports.className='row';
+const traceExportStatus=document.createElement('p');traceExportStatus.setAttribute('aria-live','polite');
+let traceExportRows=[];
+function traceMatrices(){
+ const data=summarizeSectorTraceability(traceExportRows),signals=identifyTraceabilitySignals(traceExportRows);
+ return [
+ ['Resumo',[['Indicador','Valor'],['Chamados filtrados',data.total],['Sem histórico',data.missing],['Horas sem setor',data.unknownHours],['Transferências observadas',data.routes.reduce((sum,r)=>sum+r.count,0)],['Critério','Horas corridas observadas; não equivalem a horas trabalhadas.'],['Limites','7 dias corridos, 4 transferências ou retorno a setor anterior.']]],
+ ['Setores',[['Setor','Horas históricas','Chamados','Permanência atual média (h)','Amostra atual confirmada'],...data.sectors.map(r=>[r.sector,r.hours,r.tickets,r.knownCurrentTickets?r.currentHours/r.knownCurrentTickets:null,r.knownCurrentTickets])]],
+ ['Transferências',[['Origem','Destino','Quantidade'],...data.routes.map(r=>[r.from,r.to,r.count])]],
+ ['Gargalos',[['Chamado','Setor','Responsável','Horas no setor','Transferências','Retornos','Sinais'],...signals.map(r=>[r.id,r.sector,r.owner,r.hours,r.transfers,r.returns,r.signals.join('; ')])]]
+ ];
+}
+for(const format of ['Excel','PDF']){
+ const button=document.createElement('button');button.type='button';button.className='s';button.textContent='Exportar '+format;traceExports.append(button);
+ button.addEventListener('click',()=>{
+  try{
+   if(!traceExportRows.length)throw Error('Nenhum chamado na seleção atual.');
+   const matrices=traceMatrices(),filename='Rastreabilidade_'+new Date().toISOString().slice(0,10);
+   if(format==='Excel'){
+    const x=window.XLSX;if(!x)throw Error('Biblioteca Excel indisponível.');
+    const wb=x.utils.book_new();
+    for(const [name,matrix] of matrices){const ws=x.utils.aoa_to_sheet(matrix);ws['!cols']=matrix[0].map(()=>({wch:24}));x.utils.book_append_sheet(wb,ws,name);}
+    x.writeFile(wb,filename+'.xlsx');
+   }else{
+    const PDF=window.jspdf?.jsPDF;if(!PDF)throw Error('Biblioteca PDF indisponível.');
+    const doc=new PDF({orientation:'landscape',unit:'pt',format:'a4'});
+    if(typeof doc.autoTable!=='function')throw Error('Biblioteca de tabelas PDF indisponível.');
+    matrices.forEach(([name,matrix],i)=>{if(i)doc.addPage();doc.setFontSize(15);doc.text('Central de Auditoria | Rastreabilidade — '+name,40,40);doc.autoTable({startY:55,head:[matrix[0]],body:matrix.slice(1).map(r=>r.map(v=>typeof v==='number'?number.format(v):String(v??'—'))),styles:{fontSize:8,overflow:'linebreak'},headStyles:{fillColor:[21,45,74]}});});
+    doc.save(filename+'.pdf');
+   }
+   traceExportStatus.textContent='Exportação solicitada: '+format+'.';
+  }catch(e){traceExportStatus.textContent=e.message;}
+ });
+}
+trace.append(traceTitle,traceNote,traceStats,traceExports,traceExportStatus,traceRanks,signalTitle,signalNote,signalCount,signalList);radar.after(trace);
+const number=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1});
+function renderTrace(rows){
+ traceExportRows=rows;
+ const data=summarizeSectorTraceability(rows);
+ const signals=identifyTraceabilitySignals(rows);
+ signalCount.textContent=signals.length+' chamados sinalizados'+(signals.length>20?' · Exibindo os primeiros 20':'');
+ signalList.replaceChildren();
+ for(const item of signals.slice(0,20)){
+  const line=document.createElement('div');line.className='radar-rank';line.style.cursor='default';
+  const label=document.createElement('span');label.textContent='#'+item.id+' · '+item.sector+' · '+item.owner+' — '+item.signals.join('; ');
+  const metric=document.createElement('span');metric.textContent=(item.hours===null?'Tempo atual desconhecido':number.format(item.hours)+' h no setor')+' · '+item.transfers+' transferências · '+item.returns+' retornos';
+  line.append(label,metric);signalList.append(line);
+ }
+ if(!signals.length)paragraph(signalList,'Nenhum sinal identificado nos dados disponíveis.');
+ traceStats.textContent=data.total+' chamados · '+data.missing+' sem histórico · '+number.format(data.unknownHours)+' h sem setor identificado · '+data.routes.reduce((sum,r)=>sum+r.count,0)+' transferências observadas';
+ traceRanks.replaceChildren();
+ for(const [title,entries] of [
+  ['Permanência histórica por setor',data.sectors.slice(0,10).map(r=>[r.sector+' · '+r.tickets+' chamados · '+number.format(r.hours)+' h',r.hours])],
+  ['Rotas de transferência mais frequentes',data.routes.slice(0,10).map(r=>[r.from+' → '+r.to+' · '+r.count,r.count])],
+  ['Permanência atual confirmada',data.sectors.filter(r=>r.knownCurrentTickets).sort((a,b)=>b.currentHours-a.currentHours).slice(0,10).map(r=>[r.sector+' · '+r.knownCurrentTickets+' chamados · '+number.format(r.currentHours/r.knownCurrentTickets)+' h em média',r.currentHours/r.knownCurrentTickets])]
+ ]){
+  const group=document.createElement('div');const heading=document.createElement('h4');heading.textContent=title;group.append(heading);
+  if(!entries.length)paragraph(group,'Sem dados suficientes nesta seleção.');
+  const max=Math.max(1,...entries.map(e=>e[1]));
+  for(const [label,value] of entries){
+   const line=document.createElement('div');line.className='radar-rank';line.style.cursor='default';
+   const text=document.createElement('span');text.textContent=label;
+   const bar=document.createElement('meter');bar.min=0;bar.max=max;bar.value=value;bar.setAttribute('aria-label',label);
+   line.append(text,bar);group.append(line);
+  }
+  traceRanks.append(group);
+ }
+}
 function render(){
   const baseRows=filterInspections(report,{sector:panel.querySelector('[name=sector]').value,client:panel.querySelector('[name=client]').value,criticality:panel.querySelector('[name=criticality]').value});
   renderRadar(baseRows);
   const rows=filterRadar(baseRows,{category:radarCategory,owner:radarOwner});
+  renderTrace(rows);
   panel.querySelector('[role=status]').textContent=rows.length+' chamados nos dados carregados. Risco por regras; pontuação não representa probabilidade estatística.';
   const body=panel.querySelector('tbody');body.replaceChildren();
   for(const r of rows.slice(0,200)){
