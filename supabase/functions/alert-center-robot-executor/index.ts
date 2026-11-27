@@ -42,6 +42,8 @@ Deno.serve(async(req:Request)=>{
  const batch=body?.action==='batch';
  if(scheduled&&!batch)return reply({error:'Somente consulta coletiva agendada'},400);
  const cursor=body?.cursor??null;
+ const allPages=body?.allPages===true;
+ if(allPages&&(!scheduled||!batch))return reply({error:'Execução completa restrita ao servidor'},403);
  if(body?.mode!=='read-only'||(batch?(cursor!==null&&(typeof cursor!=='string'||!/^\d{1,12}$/.test(cursor))):!/^\d{1,12}$/.test(id)))return reply({error:'Consulta de homologação inválida'},400);
  const readPolicy=async(ticketId:string)=>{
  const [holidays,blocks]=await Promise.all([
@@ -60,6 +62,11 @@ Deno.serve(async(req:Request)=>{
  // Explicit hard lock. No production PATCH capability is exposed by this endpoint.
  const executor=createWaitingExecutor({readPolicy,readTicket,...robotPersistence(db),enabled:false});
  if(batch){
+ let currentCursor=cursor;
+ const started=Date.now();
+ const rows: {ticketId:string,plan:unknown,review:boolean}[]=[];
+ let pages=0;
+ do {
  const sectors=['Suporte','Qualidade','Testes (QA)','Sucesso do Cliente','Implantação','Treinamento'];
  // Query the provider directly, using a numeric keyset rather than a mutable offset.
  const url=new URL('https://api.movidesk.com/public/v1/tickets');
@@ -67,7 +74,7 @@ Deno.serve(async(req:Request)=>{
  url.searchParams.set('$select','id,ownerTeam,status,justification,baseStatus');
  const sectorFilter=sectors.map(s=>"ownerTeam eq '"+s.replaceAll("'","''")+"'").join(' or ');
  const clauses=["("+sectorFilter+")","(status eq 'Aguardando cliente' or (status eq 'Agendado' and justification eq 'Aguardando ação do cliente'))"];
- if(cursor!==null)clauses.push('id gt '+cursor);
+ if(currentCursor!==null)clauses.push('id gt '+currentCursor);
  url.searchParams.set('$filter',clauses.join(' and '));
  url.searchParams.set('$orderby','id asc');
  url.searchParams.set('$top','6');
@@ -76,14 +83,16 @@ Deno.serve(async(req:Request)=>{
  const candidates=await response.json();
  if(!Array.isArray(candidates)||candidates.length>6)throw Error('Lista Movidesk inválida');
  const allIds=candidates.map(x=>String(x.id));
- if(allIds.some((x,i)=>!/^\d{1,12}$/.test(x)||(i>0&&Number(x)<=Number(allIds[i-1]))||(cursor!==null&&Number(x)<=Number(cursor))))throw Error('Paginação direta inválida');
+ if(allIds.some((x,i)=>!/^\d{1,12}$/.test(x)||(i>0&&Number(x)<=Number(allIds[i-1]))||(currentCursor!==null&&Number(x)<=Number(currentCursor))))throw Error('Paginação direta inválida');
  const ids=allIds.slice(0,5);
- const rows=[];
  for(const ticketId of ids){
  try{const result=await executor.preview(ticketId);rows.push({ticketId,plan:result.plan,review:false});}
  catch{rows.push({ticketId,plan:null,review:true});}
  }
- return reply({ok:true,mode:'read-only',deliveryEnabled:false,coverage:'live-provider-page',rows,nextCursor:candidates.length>5?ids[ids.length-1]:null});
+ pages++;
+ currentCursor=candidates.length>5?ids[ids.length-1]:null;
+ }while(allPages&&currentCursor!==null&&pages<10&&Date.now()-started<60000);
+ return reply({ok:true,mode:'read-only',deliveryEnabled:false,coverage:'live-provider-page',rows,nextCursor:currentCursor,pages,complete:currentCursor===null});
  }
  const result=await executor.preview(id);
  return reply({ok:true,deliveryEnabled:false,mode:'read-only',plan:result.plan});
