@@ -1,5 +1,6 @@
-import {createWaitingExecutor} from '../../../alert-center/robot-waiting-executor.mjs';
+import {createWaitingExecutor,waitingPlan} from '../../../alert-center/robot-waiting-executor.mjs';
 import {robotPersistence} from '../../../alert-center/robot-persistence-adapter.mjs';
+import {robotMovideskTransport} from '../../../alert-center/robot-movidesk-transport.mjs';
 const env=(k:string)=>Deno.env.get(k)?.trim()||'';
 Deno.serve(async(req:Request)=>{
  const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
@@ -63,8 +64,19 @@ Deno.serve(async(req:Request)=>{
  if(!response.ok)throw Error('Chamado não confirmado');
  return response.json();
  };
- // Explicit hard lock. No production PATCH capability is exposed by this endpoint.
- const executor=createWaitingExecutor({readPolicy,readTicket,...robotPersistence(db),enabled:false});
+ // Wire authorized identity and final evidence validation; keep execution locked until homologation.
+ const deliveryEnabled=false;
+ const dayAt=(now:Date)=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+ const validateBeforeWrite=async(ticket:Record<string,unknown>,note:{ticketId:string,text:string,marker:string,ownerId?:string})=>{
+ const policy=await readPolicy(note.ticketId);
+ if(!policy.complete||policy.blocked)return false;
+ const today=dayAt(new Date());
+ if(policy.holidays.includes(today)||[0,6].includes(new Date(today+'T12:00:00Z').getUTCDay()))return false;
+ const plan=waitingPlan(ticket,{today,holidays:policy.holidays,complete:true});
+ return plan!==null&&plan.ticketId===note.ticketId&&plan.ownerId===note.ownerId&&note.marker==='CENTRAL-ROBOT-NOTE:'+note.ticketId+':'+today&&note.text===plan.text+'\n\n'+note.marker;
+ };
+ const writeInternal=robotMovideskTransport({token,agentId:String(authors[0].movidesk_person_id),enabled:deliveryEnabled,validateBeforeWrite});
+ const executor=createWaitingExecutor({readPolicy,readTicket,...robotPersistence(db),writeInternal,enabled:deliveryEnabled});
  if(batch){
  let currentCursor=cursor;
  const started=Date.now();
