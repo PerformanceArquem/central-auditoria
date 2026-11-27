@@ -58,3 +58,16 @@ test('distant forecast is mentioned only with validated waiting and forecast fla
  assert.doesNotMatch(robotOwnerMessage({},{...facts,aguardando_cliente:false}),/21\/12\/2026/);
  assert.doesNotMatch(robotOwnerMessage({},{...facts,data_previsao:'2026-02-30'}),/previsão cadastrada/);
 });
+
+test('queue follow-up covers each authorized subgroup, with dynamic sector and owner',()=>{
+ const sectors=[['Suporte','do Suporte'],['Qualidade','da Qualidade'],['Testes (QA)','de Testes (QA)'],['Sucesso do Cliente','do Sucesso do Cliente'],['Implantação','da Implantação'],['Treinamento','de Treinamento']];
+ for(const [ownerTeam,label] of sectors){
+  const facts={dias_na_fila:6,data_entrada_fila:'2026-11-21'};
+  const assigned=robotOwnerMessage({ownerTeam,owner:{id:'1',businessName:'Maria Silva'}},facts);
+  assert.ok(assigned.includes('fila '+label+' há 6 dias, desde 21/11/2026'));
+  assert.match(assigned,/Olá, Maria!/);
+  const unassigned=robotOwnerMessage({ownerTeam,owner:null},facts);
+  assert.match(unassigned,/Olá, equipe!/);assert.match(unassigned,/não possui um responsável definido/);
+ }
+ for(const ownerTeam of ['Inteligência','Produção',undefined]) assert.doesNotMatch(robotOwnerMessage({ownerTeam,owner:null},{dias_na_fila:6}),/fila|responsável definido/);
+});
