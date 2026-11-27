@@ -1,0 +1,53 @@
+name: Robot internal note SQL tests
+on:
+  pull_request:
+    branches: [main]
+    paths: ['alert-center/robot-note-history-draft.sql', '.github/workflows/robot-note-history-tests.yml']
+permissions:
+  contents: read
+jobs:
+  sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: local-test-only
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: local-test-only
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: |
+          psql -v ON_ERROR_STOP=1 -c 'create role anon; create role authenticated; create role service_role bypassrls;'
+          psql -v ON_ERROR_STOP=1 -f alert-center/robot-note-history-draft.sql
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          begin
+            if has_function_privilege('anon','public.audit_reserve_robot_internal_note(text,date,text[],text)','EXECUTE') or has_function_privilege('authenticated','public.audit_finish_robot_internal_note(text,date,text)','EXECUTE') then
+              raise exception 'Unexpected public permission';
+            end if;
+          end $$;
+          set role service_role;
+          do $$
+          declare d date := (now() at time zone 'America/Sao_Paulo')::date;
+          begin
+            if public.audit_reserve_robot_internal_note('123',d-1,array['idle-record'],'Test only') then raise exception 'Stale date accepted'; end if;
+            if not public.audit_reserve_robot_internal_note('123',d,array['idle-record'],'Test only') then raise exception 'Reservation failed'; end if;
+            if public.audit_reserve_robot_internal_note('123',d,array['overdue'],'Test only') then raise exception 'Duplicate reservation'; end if;
+            if not public.audit_finish_robot_internal_note('123',d,'confirmed') then raise exception 'Finalization failed'; end if;
+            if public.audit_finish_robot_internal_note('123',d,'uncertain') then raise exception 'Duplicate finalization'; end if;
+            if public.audit_reserve_robot_internal_note('123',d,array['overdue'],'Test only') then raise exception 'Daily duplicate'; end if;
+            insert into audit_robot_internal.note_history(ticket_id,local_day,rules,note_body,status) values('456',d-1,array['idle-record'],'Test only','uncertain');
+            if public.audit_reserve_robot_internal_note('456',d,array['idle-record'],'Test only') then raise exception 'Uncertain prior delivery bypassed'; end if;
+            insert into audit_robot_internal.note_history(ticket_id,local_day,rules,note_body,status) values('789',d-1,array['idle-record'],'Test only','confirmed');
+            if not public.audit_reserve_robot_internal_note('789',d,array['idle-record'],'Test only') then raise exception 'New day reservation failed'; end if;
+          end $$;
+          SQL

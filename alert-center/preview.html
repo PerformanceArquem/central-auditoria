@@ -21,6 +21,77 @@ const triageAuthChange=createTriageAuthGuard(()=>resetLiveTriageResults());
 const robotSection=document.createElement('section');robotSection.id='robot-dashboard';
 document.querySelector('header').after(robotSection);
 const robotDashboard=mountRobotDashboard(robotSection);
+
+const waitingPreview=document.createElement('section');
+waitingPreview.id='robot-waiting-preview';
+waitingPreview.innerHTML='<h2>Aguardando cliente — fiscalização</h2><p>Consulta individual · 3 dias úteis desde o último apontamento · somente leitura.</p><label for="robot-waiting-id">Número do chamado</label><input id="robot-waiting-id" type="text" inputmode="numeric" maxlength="12" autocomplete="off"><button id="robot-waiting-load" type="button">Consultar chamado</button><p id="robot-waiting-result" role="status" aria-live="polite"></p>';
+robotSection.after(waitingPreview);
+
+const waitingBatch=document.createElement('button');
+waitingBatch.type='button';waitingBatch.textContent='Consultar os seis setores';
+const waitingBatchStatus=document.createElement('p');waitingBatchStatus.setAttribute('role','status');waitingBatchStatus.setAttribute('aria-live','polite');
+const waitingBatchRows=document.createElement('div');waitingBatchRows.className='scroll';
+const waitingNext=document.createElement('button');waitingNext.type='button';waitingNext.textContent='Consultar próximo lote';waitingNext.hidden=true;
+let waitingCursor=null,waitingAllRows=[];
+waitingPreview.append(waitingBatch,waitingNext,waitingBatchStatus,waitingBatchRows);
+async function loadWaitingBatch(reset){
+ if(reset){waitingCursor=null;waitingAllRows=[];}
+ const cursor=waitingCursor;waitingNext.disabled=true;waitingNext.hidden=true;
+ waitingBatch.disabled=true;waitingBatchRows.replaceChildren();waitingBatchStatus.textContent='Consultando diretamente o Movidesk...';
+ try{
+ const api=await channelClient();
+ const {data,error}=await api.functions.invoke('alert-center-robot-executor',{body:{mode:'read-only',action:'batch',cursor}});
+ if(error||data?.ok!==true||data.mode!=='read-only'||data.deliveryEnabled!==false||data.coverage!=='live-provider-page'||!Array.isArray(data.rows)||data.rows.length>5)throw Error('Consulta direta não confirmada.');
+ if(data.nextCursor!==null&&(typeof data.nextCursor!=='string'||!/^\d{1,12}$/.test(data.nextCursor)||(cursor&&Number(data.nextCursor)<=Number(cursor))))throw Error('Paginação inválida.');
+ const ids=new Set(waitingAllRows.map(r=>r.ticketId));
+ for(const row of data.rows){if(!/^\d{1,12}$/.test(row.ticketId)||ids.has(row.ticketId)||typeof row.review!=='boolean'||(row.plan!==null&&(row.plan?.ticketId!==row.ticketId||row.plan.channel!=='movidesk-internal'||row.plan.simulated!==true||typeof row.plan.text!=='string')))throw Error('Resultado inválido.');ids.add(row.ticketId);}
+ waitingAllRows=[...waitingAllRows,...data.rows];const rows=waitingAllRows;waitingCursor=data.nextCursor;
+ const table=document.createElement('table'),head=document.createElement('thead'),heading=document.createElement('tr'),body=document.createElement('tbody');
+ for(const label of ['Chamado','Resultado','Mensagem simulada']){const th=document.createElement('th');th.textContent=label;heading.append(th);}head.append(heading);table.append(head,body);
+ for(const row of rows){const tr=document.createElement('tr');for(const value of ['#'+row.ticketId,row.review?'Revisão necessária':row.plan?'Elegível':'Elegibilidade não confirmada',row.plan?.text||'—']){const td=document.createElement('td');td.textContent=value;td.style.whiteSpace='pre-wrap';tr.append(td);}body.append(tr);}
+ if(rows.length)waitingBatchRows.append(table);
+ waitingBatchStatus.textContent=rows.length+' candidatos consultados diretamente · '+rows.filter(r=>r.plan).length+' elegíveis · '+rows.filter(r=>r.review).length+' com erro de consulta. Nenhuma cobrança realizada.'+(waitingCursor?' Há mais candidatos; consulte o próximo lote.':' Última página da seleção retornada pelo Movidesk.');waitingNext.hidden=!waitingCursor;
+ }catch(e){waitingAllRows=[];waitingCursor=null;waitingBatchRows.replaceChildren();waitingBatchStatus.textContent=e.message+' Reinicie a consulta coletiva.';}finally{waitingBatch.disabled=false;waitingNext.disabled=false;}
+}
+waitingBatch.addEventListener('click',()=>loadWaitingBatch(true));
+waitingNext.addEventListener('click',()=>loadWaitingBatch(false));
+
+const waitingId=waitingPreview.querySelector('#robot-waiting-id'),waitingButton=waitingPreview.querySelector('#robot-waiting-load'),waitingResult=waitingPreview.querySelector('#robot-waiting-result');
+waitingId.addEventListener('input',()=>{waitingResult.textContent='';});
+waitingButton.addEventListener('click',async()=>{
+ const id=waitingId.value.trim();
+ if(!/^\d{1,12}$/.test(id)){waitingResult.textContent='Informe um número de chamado válido.';return;}
+ waitingButton.disabled=true;waitingId.disabled=true;waitingResult.textContent='Consultando apontamentos no Movidesk...';
+ try{
+ const api=await channelClient();
+ const {data,error}=await api.functions.invoke('alert-center-robot-preview',{body:{mode:'read-only',ticketId:id}});
+ if(error||data?.ok!==true||data.mode!=='read-only'||data.deliveryEnabled!==false||data.threshold!==3||data.row?.ticketId!==id||data.row.simulated!==true||typeof data.row.eligible!=='boolean')throw Error('Consulta não confirmada. Confira a sessão administrativa e a disponibilidade da função.');
+ const row=data.row;
+ const labels={'threshold-reached':'Prazo atingido — elegível para avaliação','below-threshold':'Dentro do prazo','blocked-ticket':'Chamado bloqueado','outside-scope':'Fora do escopo','no-verified-appointment':'Sem apontamento confirmado','provider-unavailable':'Movidesk indisponível','unconfirmed-ticket':'Chamado não confirmado'};
+ waitingResult.textContent=['#'+id,labels[row.reason]||'Revisar evidências',row.lastAppointmentDate?'Último apontamento: '+formatReportDate(row.lastAppointmentDate):'',Number.isSafeInteger(row.businessDays)?row.businessDays+' dias úteis':'','Nenhuma cobrança realizada.'].filter(Boolean).join(' · ');
+ }catch(e){waitingResult.textContent=e.message;}finally{waitingButton.disabled=false;waitingId.disabled=false;}
+});
+
+const executorButton=document.createElement('button');executorButton.type='button';executorButton.textContent='Simular mensagem interna';
+const executorResult=document.createElement('pre');executorResult.style.whiteSpace='pre-wrap';executorResult.setAttribute('role','status');
+waitingPreview.append(executorButton,executorResult);
+let executorGeneration=0;
+waitingId.addEventListener('input',()=>{executorGeneration++;executorResult.textContent='';});
+executorButton.addEventListener('click',async()=>{
+ const id=waitingId.value.trim();const generation=++executorGeneration;
+ if(!/^\d{1,12}$/.test(id)){executorResult.textContent='Informe um chamado válido.';return;}
+ executorButton.disabled=true;executorResult.textContent='Validando mensagem sem envio...';
+ try{
+ const api=await channelClient();
+ const {data,error}=await api.functions.invoke('alert-center-robot-executor',{body:{mode:'read-only',ticketId:id}});
+ if(generation!==executorGeneration)return;
+ if(error||data?.ok!==true||data.mode!=='read-only'||data.deliveryEnabled!==false)throw Error('Simulação não confirmada.');
+ const p=data.plan;
+ if(p!==null&&(p?.ticketId!==id||p.channel!=='movidesk-internal'||p.simulated!==true||typeof p.text!=='string'))throw Error('Plano inválido.');
+ executorResult.textContent=p?'SIMULAÇÃO — nenhuma cobrança realizada.\n\n'+p.text:'Nenhuma mensagem elegível confirmada para este chamado. Nenhuma cobrança realizada.';
+ }catch(e){if(generation===executorGeneration)executorResult.textContent=e.message;}finally{executorButton.disabled=false;}
+});
+
 import {composeTriageDraft} from "./triage-message.mjs";
 import {calculateSchedule} from "./schedule.mjs";
 import {simulateRecipient} from "./recipient-test.mjs";
