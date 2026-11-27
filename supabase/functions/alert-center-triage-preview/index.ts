@@ -46,6 +46,14 @@ Deno.serve(async(req:Request)=>{
  current.splice(0,current.length,...selected);
  }
  const ids=current.map(r=>String(r.ticket_id));
+ stage='review';
+ const blocked=new Map<string,string>();
+ for(let offset=0;offset<ids.length;offset+=50){
+ const batch=ids.slice(offset,offset+50);
+ if(batch.some(id=>!/^\d+$/.test(id)))throw Error('Identificador inválido');
+ const reviews=await read('audit_triage_lookup_review',{ticket_id:'in.('+batch.join(',')+')',resolved_at:'is.null',select:'ticket_id,reason',limit:'51'});
+ for(const review of reviews){if(!batch.includes(String(review.ticket_id))||!['not-found-by-api','not-returned-by-api'].includes(review.reason))throw Error('Revisão inválida');blocked.set(String(review.ticket_id),review.reason);}
+ }
  if(ids.some(id=>!/^\d+$/.test(id)))throw Error('Identificador inválido');
  stage='history';
  // Selection and histories come from one read, avoiding a second expensive scan.
@@ -57,7 +65,7 @@ Deno.serve(async(req:Request)=>{
  if(body.refresh===true){
  const candidates=current.filter(r=>{
  const result=evaluateImportedTriage(r,byId.get(String(r.ticket_id)),{now,threshold,holidays:holidayRows.map(h=>h.holiday_date)});
- return !result.eligible&&!['below-threshold','outside-triage'].includes(result.reason);
+ return blocked.has(String(r.ticket_id))||(!result.eligible&&!['below-threshold','outside-triage'].includes(result.reason));
  }).map(r=>String(r.ticket_id));
  if(candidates.length>50)return reply({error:'Mais de 50 históricos pendentes. Reduza o lote antes da consulta direta.'},409);
  let live;
@@ -76,10 +84,10 @@ Deno.serve(async(req:Request)=>{
  const rows=current.map(r=>{
  const id=String(r.ticket_id);
  const evaluated=evaluateImportedTriage(r,byId.get(id),{now,threshold,holidays:holidayRows.map(h=>h.holiday_date)});
- const reason=directMissing[id];
+ const reason=directMissing[id]||blocked.get(id);
  if(reason)return {...evaluated,eligible:false,reason,source:reason==='not-found-by-api'?'Movidesk · chamado não localizado':'Listas consultadas · conferência individual pendente'};
  return {...evaluated,source:directIds.has(id)?'Movidesk · consulta direta':'Base importada'};
  });
  return reply({ok:true,mode:'read-only',deliveryEnabled:false,sector:'Inteligência',status:'Em Análise',threshold,now,rows,complete:true,directReads:directIds.size,directRequests});
- }catch{return reply({error:'Consulta interrompida na etapa '+({auth:'de autenticação',snapshot:'de leitura da seleção importada',history:'de leitura dos históricos importados',direct:'de conferência direta',evaluation:'de validação dos históricos'}[stage]||'de consulta')+'. Nenhum resultado foi homologado.'},502);}
+ }catch{return reply({error:'Consulta interrompida na etapa '+({auth:'de autenticação',snapshot:'de leitura da seleção importada',review:'de leitura dos bloqueios persistentes',history:'de leitura dos históricos importados',direct:'de conferência direta',evaluation:'de validação dos históricos'}[stage]||'de consulta')+'. Nenhum resultado foi homologado.'},502);}
 });
