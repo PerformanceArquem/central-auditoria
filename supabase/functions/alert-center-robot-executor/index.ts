@@ -9,7 +9,14 @@ Deno.serve(async(req:Request)=>{
  if(!base||!anon||!role||!token)return reply({error:'Configuração indisponível'},503);
  const auth=req.headers.get('authorization')||'';
  if(!/^Bearer\s+\S+$/i.test(auth))return reply({error:'Sessão necessária'},401);
- const scheduled=auth==='Bearer '+role;
+ const cronSecret=req.headers.get('x-robot-cron-secret');
+ let scheduled=auth==='Bearer '+role;
+ if(cronSecret){
+ if(auth!=='Bearer '+anon||cronSecret.length!==64)return reply({error:'Acesso restrito'},403);
+ const check=await fetch(base+'/rest/v1/rpc/audit_robot_verify_cron_secret',{method:'POST',headers:{apikey:role,Authorization:'Bearer '+role,'Content-Type':'application/json'},body:JSON.stringify({p_secret:cronSecret}),signal:AbortSignal.timeout(10000)});
+ scheduled=check.ok&&(await check.json())===true;
+ if(!scheduled)return reply({error:'Acesso restrito'},403);
+ }
  let user: {id:string}|null=null;
  if(!scheduled){
  const userResponse=await fetch(base+'/auth/v1/user',{headers:{apikey:anon,Authorization:auth},signal:AbortSignal.timeout(10000)});
