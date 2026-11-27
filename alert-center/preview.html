@@ -21,6 +21,27 @@ const triageAuthChange=createTriageAuthGuard(()=>resetLiveTriageResults());
 const robotSection=document.createElement('section');robotSection.id='robot-dashboard';
 document.querySelector('header').after(robotSection);
 const robotDashboard=mountRobotDashboard(robotSection);
+
+const waitingPreview=document.createElement('section');
+waitingPreview.id='robot-waiting-preview';
+waitingPreview.innerHTML='<h2>Aguardando cliente — fiscalização</h2><p>Consulta individual · 3 dias úteis desde o último apontamento · somente leitura.</p><label for="robot-waiting-id">Número do chamado</label><input id="robot-waiting-id" type="text" inputmode="numeric" maxlength="12" autocomplete="off"><button id="robot-waiting-load" type="button">Consultar chamado</button><p id="robot-waiting-result" role="status" aria-live="polite"></p>';
+robotSection.after(waitingPreview);
+const waitingId=waitingPreview.querySelector('#robot-waiting-id'),waitingButton=waitingPreview.querySelector('#robot-waiting-load'),waitingResult=waitingPreview.querySelector('#robot-waiting-result');
+waitingId.addEventListener('input',()=>{waitingResult.textContent='';});
+waitingButton.addEventListener('click',async()=>{
+ const id=waitingId.value.trim();
+ if(!/^\d{1,12}$/.test(id)){waitingResult.textContent='Informe um número de chamado válido.';return;}
+ waitingButton.disabled=true;waitingId.disabled=true;waitingResult.textContent='Consultando apontamentos no Movidesk...';
+ try{
+ const api=await channelClient();
+ const {data,error}=await api.functions.invoke('alert-center-robot-preview',{body:{mode:'read-only',ticketId:id}});
+ if(error||data?.ok!==true||data.mode!=='read-only'||data.deliveryEnabled!==false||data.threshold!==3||data.row?.ticketId!==id||data.row.simulated!==true||typeof data.row.eligible!=='boolean')throw Error('Consulta não confirmada. Confira a sessão administrativa e a disponibilidade da função.');
+ const row=data.row;
+ const labels={'threshold-reached':'Prazo atingido — elegível para avaliação','below-threshold':'Dentro do prazo','blocked-ticket':'Chamado bloqueado','outside-scope':'Fora do escopo','no-verified-appointment':'Sem apontamento confirmado','provider-unavailable':'Movidesk indisponível','unconfirmed-ticket':'Chamado não confirmado'};
+ waitingResult.textContent=['#'+id,labels[row.reason]||'Revisar evidências',row.lastAppointmentDate?'Último apontamento: '+formatReportDate(row.lastAppointmentDate):'',Number.isSafeInteger(row.businessDays)?row.businessDays+' dias úteis':'','Nenhuma cobrança realizada.'].filter(Boolean).join(' · ');
+ }catch(e){waitingResult.textContent=e.message;}finally{waitingButton.disabled=false;waitingId.disabled=false;}
+});
+
 import {composeTriageDraft} from "./triage-message.mjs";
 import {calculateSchedule} from "./schedule.mjs";
 import {simulateRecipient} from "./recipient-test.mjs";
