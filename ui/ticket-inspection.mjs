@@ -1,3 +1,4 @@
+import {RADAR_CATEGORIES,summarizeRadar,filterRadar,preventiveGuidance} from '/lib/preventive-risk-radar.mjs';
 import {inspectTickets,filterInspections,recordOccurrences} from '/lib/ticket-inspection.mjs';
 const panel=document.getElementById('ticketInspection');
 let history=[], report=[],clientCriticality={};
@@ -58,8 +59,54 @@ function remoteDetails(details,id){
     finally{button.disabled=false;}
   });
 }
+// Build the radar after capturing the existing execution button.
+const executeInspection=panel.querySelector('button');
+const radar=document.createElement('section');
+radar.className='preventive-risk-radar';
+radar.setAttribute('aria-label','Radar Preventivo');
+const radarTitle=document.createElement('h3');radarTitle.textContent='Ticket Manager | Radar Preventivo';
+const radarNote=document.createElement('p');radarNote.textContent='Dados carregados na Central. Índice heurístico, não probabilidade. Nenhuma cobrança é realizada por este painel.';
+const radarCards=document.createElement('div');radarCards.className='radar-cards';
+const radarRanks=document.createElement('div');radarRanks.className='radar-ranks';
+const radarSelection=document.createElement('p');radarSelection.setAttribute('aria-live','polite');
+const radarReset=document.createElement('button');radarReset.type='button';radarReset.className='s';radarReset.textContent='Limpar filtros do radar';
+let radarCategory='',radarOwner='';
+radarReset.addEventListener('click',()=>{radarCategory='';radarOwner='';render();});
+radar.append(radarTitle,radarNote,radarCards,radarRanks,radarSelection,radarReset);
+const radarTable=panel.querySelector('table');
+if(radarTable){let target=radarTable;while(target.parentElement&&target.parentElement!==panel)target=target.parentElement;target.before(radar);}else panel.append(radar);
+function renderRadar(base){
+ const summary=summarizeRadar(base);
+ radarCards.replaceChildren();radarRanks.replaceChildren();
+ for(const [key,label] of RADAR_CATEGORIES){
+  const button=document.createElement('button');button.type='button';button.className='radar-card radar-'+key;
+  button.setAttribute('aria-pressed',String(radarCategory===key));
+  const value=document.createElement('strong');value.textContent=String(summary.counts[key]);
+  const caption=document.createElement('span');caption.textContent=label;
+  button.append(value,caption);button.addEventListener('click',()=>{radarCategory=radarCategory===key?'':key;render();});radarCards.append(button);
+ }
+ for(const [title,entries,kind] of [['Risco alto e crítico por setor',summary.sectors,'sector'],['Risco alto e crítico por responsável',summary.owners,'owner']]){
+  const group=document.createElement('div');const heading=document.createElement('h4');heading.textContent=title;group.append(heading);
+  if(!entries.length)paragraph(group,'Nenhum chamado nesta classificação.');
+  const max=entries[0]?.[1]||1;
+  for(const [name,count] of entries.slice(0,10)){
+   const button=document.createElement('button');button.type='button';button.className='radar-rank';
+   const active=kind==='owner'?radarOwner===name:panel.querySelector('[name=sector]').value===name;
+   button.setAttribute('aria-pressed',String(active));
+   const label=document.createElement('span');label.textContent=name+' · '+count;
+   const bar=document.createElement('meter');bar.min=0;bar.max=max;bar.value=count;bar.setAttribute('aria-label',name+': '+count);
+   button.append(label,bar);
+   button.addEventListener('click',()=>{if(kind==='owner')radarOwner=radarOwner===name?'':name;else{const select=panel.querySelector('[name=sector]');select.value=select.value===name?'':name;}render();});
+   group.append(button);
+  }
+  radarRanks.append(group);
+ }
+ radarSelection.textContent='Filtros do radar: '+(RADAR_CATEGORIES.find(([key])=>key===radarCategory)?.[1]||'Todas as categorias')+' · '+(radarOwner||'Todos os responsáveis');
+}
 function render(){
-  const rows=filterInspections(report,{sector:panel.querySelector('[name=sector]').value,client:panel.querySelector('[name=client]').value,criticality:panel.querySelector('[name=criticality]').value});
+  const baseRows=filterInspections(report,{sector:panel.querySelector('[name=sector]').value,client:panel.querySelector('[name=client]').value,criticality:panel.querySelector('[name=criticality]').value});
+  renderRadar(baseRows);
+  const rows=filterRadar(baseRows,{category:radarCategory,owner:radarOwner});
   panel.querySelector('[role=status]').textContent=rows.length+' chamados nos dados carregados. Risco por regras; pontuação não representa probabilidade estatística.';
   const body=panel.querySelector('tbody');body.replaceChildren();
   for(const r of rows.slice(0,200)){
@@ -67,6 +114,12 @@ function render(){
     for(const text of [r.id,r.subject,r.client,r.sector,r.owner,r.criticality+' ('+(r.risk?.score===null?'sem índice':r.score+'/100')+') · cobertura '+(r.risk?.coverage??0)+'%',r.findings.map(f=>f.label).join('; ')||'Sem ocorrências',r.reasons.join('; ')||'Sem agravantes identificados'])cell(tr,text);
     const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Histórico e transferências';details.append(summary);
     riskDetails(details,r.risk);
+    const guidance=document.createElement('div');guidance.className='radar-guidance';
+    const heading=document.createElement('h4');heading.textContent='Sugestões preventivas do Ticket Manager';guidance.append(heading);
+    const list=document.createElement('ul');
+    for(const suggestion of preventiveGuidance(r)){const li=document.createElement('li');li.textContent=suggestion;list.append(li);}
+    if(list.childElementCount)guidance.append(list);else paragraph(guidance,'Nenhuma orientação adicional identificada.');
+    details.append(guidance);
     for(const h of r.timeline){const p=document.createElement('p');p.textContent=date(h.at)+' → '+date(h.until)+' · '+(h.sector||'Setor não informado')+' · '+(h.owner||'Responsável não informado')+' · '+h.hours.toFixed(1)+' h';details.append(p);}
     for(const e of history.filter(e=>e.id===r.id)){const p=document.createElement('p');p.textContent=e.label+' · detectado '+date(e.openedAt)+(e.resolvedAt?' · encerrado '+date(e.resolvedAt):' · ativo');details.append(p);}
     for(const gap of r.gaps){const p=document.createElement('p');p.textContent=gap;details.append(p);}
@@ -86,8 +139,8 @@ function run(){
   for(const sector of [...new Set(report.map(r=>r.sector))].sort())select.add(new Option(sector,sector));
   select.value=selected;render();
 }
-panel.querySelector('button').addEventListener('click',async()=>{
-  const button=panel.querySelector('button');button.disabled=true;
+executeInspection.addEventListener('click',async()=>{
+  const button=executeInspection;button.disabled=true;
   try{
     clientCriticality={};
     const client=window.tmEmailAdminClient;

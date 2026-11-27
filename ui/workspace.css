@@ -126,3 +126,27 @@ body[data-density=compact] main .card{padding:14px 16px}body[data-density=compac
   @media(max-width:480px){#filters,#filtersAdvanced{grid-template-columns:1fr}#filters .dyn[data-field]{grid-column:auto;grid-row:auto}.filter-footer>div{width:100%}.filter-exports{display:grid;grid-template-columns:1fr 1fr 1fr}.filter-exports button{padding-left:6px!important;padding-right:6px!important}main .kpis .card b{font-size:24px}}
 }
 @media print{#workspaceFocus,#workspaceBackTop{display:none!important}}
+
+
+/* Preventive radar: use shared theme tokens for both light and dark modes. */
+#ticketInspection .preventive-risk-radar{margin:16px 0;padding:18px;border:1px solid var(--line);border-radius:var(--r,12px);background:var(--surface);color:var(--ink)}
+#ticketInspection .preventive-risk-radar h3{margin:0 0 6px;font-size:17px}
+#ticketInspection .preventive-risk-radar p{color:var(--muted);font-size:12px;line-height:1.5;margin:6px 0 14px}
+#ticketInspection .radar-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(140px,100%),1fr));gap:10px}
+#ticketInspection .radar-card{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;min-height:85px;padding:12px;border:1px solid var(--line);border-top:3px solid var(--radar-accent,var(--blue));border-radius:10px;background:var(--raised);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+#ticketInspection .radar-card strong{font-size:26px;font-variant-numeric:tabular-nums;line-height:1}
+#ticketInspection .radar-card span{font-size:12px;overflow-wrap:anywhere}
+#ticketInspection .radar-overdue,#ticketInspection .radar-critical{--radar-accent:#dc6262}
+#ticketInspection .radar-high{--radar-accent:#e38a42}
+#ticketInspection .radar-medium{--radar-accent:#c8a035}
+#ticketInspection .radar-low{--radar-accent:#39956b}
+#ticketInspection .radar-unknown{--radar-accent:#8494a6}
+#ticketInspection .radar-card[aria-pressed=true],#ticketInspection .radar-rank[aria-pressed=true]{outline:2px solid var(--blue);outline-offset:1px}
+#ticketInspection .radar-card:focus-visible,#ticketInspection .radar-rank:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
+#ticketInspection .radar-ranks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:20px;margin:18px 0}
+#ticketInspection .radar-ranks>div{min-width:0}
+#ticketInspection .radar-ranks h4{margin:0 0 10px;font-size:13px;color:var(--ink)}
+#ticketInspection .radar-rank{display:grid;grid-template-columns:minmax(0,1fr) minmax(65px,38%);align-items:center;gap:10px;width:100%;min-height:36px;padding:8px;margin-bottom:6px;text-align:left;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;font:inherit;font-size:12px;cursor:pointer}
+#ticketInspection .radar-rank span{overflow-wrap:anywhere}
+#ticketInspection .radar-rank meter{width:100%;height:14px;accent-color:var(--blue)}
+@media(max-width:520px){#ticketInspection .preventive-risk-radar{padding:12px}#ticketInspection .radar-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
