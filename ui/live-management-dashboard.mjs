@@ -16,11 +16,43 @@ if(target){
  filters.append(dateGroup,sectorGroup,vipButton);
  const status=make('p','','subtle');status.setAttribute('role','status');
  const cards=make('div','','kpis'),charts=make('div','','radar-ranks');
- root.append(title,note,filters,status,cards,charts);target.prepend(root);
+ const exports=make('div','','row'),exportStatus=make('p','','subtle');exportStatus.setAttribute('aria-live','polite');
+ let snapshot=null;
+ for(const format of ['Excel','PDF']){
+  const button=make('button','Exportar '+format,'s');button.type='button';exports.append(button);
+  button.addEventListener('click',()=>{
+   try{
+    if(!snapshot)throw Error('Indicadores indisponíveis para exportação.');
+    const {d,scope,freshness}=snapshot;
+    const matrices=[
+     ['Resumo',[['Indicador','Valor'],['Data',d.day],['Setor',scope],['Origem',freshness],['Base carregada',d.loaded],['Chamados abertos atualmente',d.backlog],['Entradas na data',d.opened],['Encerrados na data',d.closed],['Vencidos atualmente',d.radar.overdue],['Risco alto ou crítico',d.radar.high+d.radar.critical],['Clientes VIP em risco',d.vipRisk??'Indisponível'],['Gargalos sinalizados',d.gaps],['Horas apontadas na data',d.hours],['Risco indeterminado',d.radar.unknown],['Encerrados sem data confirmada',d.unknownClosure],['Escopo','Estoque e risco atuais; entradas, encerramentos e horas da data selecionada.']]],
+     ['Setores',[['Setor','Entradas','Encerramentos','Estoque atual','Horas apontadas'],...d.sectors.map(r=>[r.sector,r.opened,r.closed,r.backlog,r.hours])]],
+     ['Colaboradores',[['Colaborador','Horas apontadas'],...d.owners]],
+     ['Radar',[['Classificação','Chamados'],...Object.entries(d.radar)]]
+    ];
+    const filename='Dashboard_Gerencial_'+d.day;
+    if(format==='Excel'){
+     const x=window.XLSX;if(!x)throw Error('Biblioteca Excel indisponível.');
+     const wb=x.utils.book_new();
+     for(const [name,matrix] of matrices){const ws=x.utils.aoa_to_sheet(matrix);ws['!cols']=matrix[0].map((_,i)=>({wch:i===0?40:25}));x.utils.book_append_sheet(wb,ws,name);}
+     x.writeFile(wb,filename+'.xlsx');
+    }else{
+     const PDF=window.jspdf?.jsPDF;if(!PDF)throw Error('Biblioteca PDF indisponível.');
+     const doc=new PDF({orientation:'landscape',unit:'pt',format:'a4'});
+     if(typeof doc.autoTable!=='function')throw Error('Biblioteca de tabelas PDF indisponível.');
+     matrices.forEach(([name,matrix],i)=>{if(i)doc.addPage();doc.setFontSize(15);doc.text('Central de Auditoria | Dashboard Gerencial - '+name,40,40);doc.autoTable({startY:55,head:[matrix[0]],body:matrix.slice(1).map(r=>r.map(v=>typeof v==='number'?fmt.format(v):String(v??'Indisponível'))),styles:{fontSize:9,overflow:'linebreak'},headStyles:{fillColor:[21,45,74]}});});
+     doc.save(filename+'.pdf');
+    }
+    exportStatus.textContent='Exportação solicitada: '+format+'.';
+   }catch(e){exportStatus.textContent=e.message;}
+  });
+ }
+ root.append(title,note,filters,status,cards,charts,exports,exportStatus);target.prepend(root);
  let clientCriticality={},vipKnown=false,vipMessage='',dirty=true,scheduled=false;
  const fmt=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1});
  const team=t=>{const v=(t.payload||t).ownerTeam;return (typeof v==='string'?v.trim():String(v?.businessName||v?.name||'').trim())||'Sem setor';};
  function render(){
+  snapshot=null;
   const source=window.managementDashboardSource?.();
   if(!source){status.textContent='Aguardando a base sincronizada.';return;}
   const selected=sector.value,teams=[...new Set(source.tickets.map(team))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
@@ -29,6 +61,7 @@ if(target){
   if(!source.tickets.length&&!source.appointments.length){status.textContent='Base sem registros carregados; indicadores indisponíveis.';cards.replaceChildren();charts.replaceChildren();return;}
   const d=summarizeManagement({...source,day:date.value,sector:sector.value,clientCriticality,vipKnown});
   status.textContent='Base filtrada: '+d.loaded+' chamados · '+(source.lastSync?'Última consulta registrada: '+new Date(source.lastSync).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'Sincronização não confirmada nesta sessão')+' · '+d.unknownClosure+' encerrados sem data confirmada. '+vipMessage;
+  snapshot={d,scope:sector.value||'Todos os setores',freshness:status.textContent};
   cards.replaceChildren();
   for(const [label,value] of [['Chamados abertos atualmente',d.backlog],['Entradas na data',d.opened],['Encerrados na data',d.closed],['Vencidos atualmente',d.radar.overdue],['Risco alto ou crítico',d.radar.high+d.radar.critical],['Clientes VIP em risco',d.vipRisk],['Gargalos sinalizados',d.gaps],['Horas apontadas na data',fmt.format(d.hours)+' h'],['Risco indeterminado',d.radar.unknown]]){
    const card=make('div','','card');card.append(make('small',label),make('b',value===null?'Indisponível':String(value)));cards.append(card);
