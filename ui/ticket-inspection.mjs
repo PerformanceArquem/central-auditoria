@@ -1,4 +1,4 @@
-import {inspectTickets,filterInspections,recordOccurrences} from '/lib/ticket-inspection.mjs';
+import {inspectTickets,filterInspections,recordOccurrences,summarizeInspectionQuality} from '/lib/ticket-inspection.mjs';
 const panel=document.getElementById('ticketInspection');
 let history=[], report=[],clientCriticality={};
 const date=n=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(n);
@@ -60,7 +60,8 @@ function remoteDetails(details,id){
 }
 function render(){
   const rows=filterInspections(report,{sector:panel.querySelector('[name=sector]').value,client:panel.querySelector('[name=client]').value,criticality:panel.querySelector('[name=criticality]').value});
-  panel.querySelector('[role=status]').textContent=rows.length+' chamados nos dados carregados. Risco por regras; pontuação não representa probabilidade estatística.';
+  const quality=summarizeInspectionQuality(rows);
+  panel.querySelector('[role=status]').textContent=rows.length+' chamados ativos nos dados carregados. Qualidade: '+quality.noForecast+' sem prazo válido, '+quality.noOwner+' sem responsável, '+quality.noSector+' sem setor; '+quality.unknownRisk+' com risco indeterminado e '+quality.overdue+' vencidos. Indicadores da amostra carregada, sem cobrança automática. Risco por regras; pontuação não representa probabilidade estatística.';
   const body=panel.querySelector('tbody');body.replaceChildren();
   for(const r of rows.slice(0,200)){
     const tr=document.createElement('tr');
