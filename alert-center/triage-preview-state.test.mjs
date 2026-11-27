@@ -96,4 +96,5 @@ test('in-flight query cannot restore data after session invalidation',async()=>{
  assert.equal(ui.read('liveTriageLastRows.length'),0);
  assert.equal(ui.get('#live-triage-panel').disabled,true);
  assert.equal(ui.snapshots.length,0);
+ assert.match(ui.get('#live-triage-status').textContent,/Consulte novamente a triagem/);
 });
