@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'ai-reports.js'
+      - 'lib/ticket-manager-insights.mjs'
+      - 'tests/ticket-manager-insights.test.mjs'
       - 'index.html'
       - 'supabase/functions/audit-ai-reports/**'
       - 'tests/ai-reports.test.mjs'
@@ -19,4 +21,4 @@ jobs:
         with:
           node-version: '22'
       - run: node --check ai-reports.js
-      - run: node --test tests/ai-reports.test.mjs
+      - run: node --test tests/ai-reports.test.mjs tests/ticket-manager-insights.test.mjs
