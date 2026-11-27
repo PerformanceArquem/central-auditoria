@@ -15,7 +15,8 @@ export function waitingPlan(ticket,{today,holidays,blocked=false,complete=false}
  return {key:'robot-note:'+id+':'+today,ticketId:id,ownerId:String(ticket.owner.id),rules:['customer-followup'],channel:'movidesk-internal',simulated:true,text:robotOwnerMessage(ticket,{aguardando_cliente:true,dias_sem_apontamento:days,data_ultimo_apontamento:evidence.lastAppointmentDate})};
 }
 // Only the waiting-customer rule is wired here. Other robot rules remain independent.
-export function createWaitingExecutor({readTicket,readPolicy,reserve,finish,writeInternal,enabled=false,clock=()=>new Date()}={}){
+/** @param {{readTicket: Function, readPolicy: Function, reserve?: Function, finish?: Function, writeInternal?: Function, enabled?: boolean, clock?: ()=>Date}} options */
+export function createWaitingExecutor({readTicket,readPolicy,reserve,finish,writeInternal,enabled=false,clock=()=>new Date()}){
  if(typeof readTicket!=='function'||typeof readPolicy!=='function')throw Error('Verified readers required');
  const readAndEvaluate=async id=>{
   const policy=await readPolicy(id);
