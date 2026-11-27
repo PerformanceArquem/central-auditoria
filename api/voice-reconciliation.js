@@ -182,7 +182,7 @@ export function reconcile(calls,tickets,{maxGapMinutes=20}={}){
   confirmedOrRecording:confirmed,requiresReview:pending.length,
   identifierRate:records.length?stats.vinculado/records.length:null,
   pendingEvidence:Object.values(evidenceGroups),
-  caveat:'Correspondência de gravação é evidência adicional; telefone e horário são hipóteses. Chamados criados antes da janela podem não estar na base consultada. Ausência de vínculo não prova ausência de chamado.'};
+  caveat:'Correspondência de gravação é evidência adicional; telefone e horário são hipóteses. Chamados antigos são pesquisados quando atualizados desde o início da janela; registros sem atualização sincronizada podem faltar. Ausência de vínculo não prova ausência de chamado.'};
  return {stats,records,auditEvidence,coverage:{callsWithPhone:withPhone,
   callsWithoutPhone:records.length-withPhone,ticketsWithPhone,ticketsWithCallId,
   ticketsWithTelephonyAction,ticketsWithRecordingReference,telephonyActionsWithoutCallId,
@@ -276,9 +276,11 @@ async function movideskTickets(start,end,base,key,signal){
  for(let offset=0;offset<10000;offset+=500){
   const url=new URL(base+'/rest/v1/audit_direct_tickets');
   url.searchParams.set('select','ticket_id,payload,created_at_source');
-  url.searchParams.set('created_at_source','gte.'+begin);
-  url.searchParams.append('created_at_source','lt.'+until);
-  url.searchParams.set('order','created_at_source.asc');url.searchParams.set('limit','500');
+  // Include older tickets updated since the window began, even if their
+  // latest update occurred after the window. Actual call/action matching
+  // still requires independent evidence in reconcile().
+  url.searchParams.set('or','(and(created_at_source.gte.'+begin+',created_at_source.lt.'+until+'),and(created_at_source.lt.'+begin+',last_update_source.gte.'+begin+'))');
+  url.searchParams.set('order','created_at_source.asc,ticket_id.asc');url.searchParams.set('limit','500');
   url.searchParams.set('offset',String(offset));
   const response=await fetch(url,{headers:{apikey:key,Authorization:'Bearer '+key},signal});
   if(!response.ok)throw new Error('Não foi possível ler os chamados sincronizados');
@@ -357,7 +359,7 @@ export default async function handler(req,res){
   const [calls,tickets]=await Promise.all([zenviaCalls(start,end,token,controller.signal),movideskTickets(start,end,base,key,controller.signal)]);
   const result=reconcile(calls,tickets);
   return res.status(200).json({ok:true,from:start,to:end,source:'Zenvia Voice × Movidesk sincronizado',
-   ...result,metadata:{ticketsExamined:tickets.length,scope:'Chamadas recebidas nos DIDs confirmados como entrada da URA',
+   ...result,metadata:{ticketsExamined:tickets.length,ticketScope:'Criados na janela ou anteriores com última atualização desde o início da janela',scope:'Chamadas recebidas nos DIDs confirmados como entrada da URA',
     uraEntryVerified:false,
     caveat:'A chegada ao DID não confirma que o menu da URA foi executado. Apenas ID compartilhado confirma um vínculo; telefone e horário indicam hipótese. Sem vínculo não comprova falha de criação. Para afirmar 100% das entradas efetivas, validar evento de URA e regra de abertura do Movidesk.'}});
  }catch(error){
