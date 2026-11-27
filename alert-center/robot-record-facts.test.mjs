@@ -20,3 +20,12 @@ test('incomplete coverage or invalid evidence never triggers a claim',()=>{
   const r=robotRecordFacts({...base,records:[],...overrides});assert.equal(r.verified,false);assert.deepEqual(r.facts,{});
  }
 });
+
+test('default waiting customer threshold is five business days',()=>{
+ const {contactThreshold,...defaults}=base;
+ const args={...defaults,waitingSince:'2026-11-19',records:[]};
+ assert.equal(robotRecordFacts({...args,today:'2026-11-26'}).facts.dias_sem_contato,undefined);
+ assert.equal(robotRecordFacts(args).facts.dias_sem_contato,5);
+ assert.equal(robotRecordFacts({...args,records:[{id:'robot1',date:'2026-11-26',kind:'robot'}]}).facts.dias_sem_contato,5);
+ assert.equal(robotRecordFacts({...args,records:[{id:'human1',date:'2026-11-25',kind:'human-contact'}]}).facts.dias_sem_contato,undefined);
+});
