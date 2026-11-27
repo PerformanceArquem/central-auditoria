@@ -1,3 +1,4 @@
+import {forecastOwners} from "./morning-policy.ts";
 // Snapshot de previsões encerradas para relatório executivo, sem IA externa.
 type R = Record<string,any>;
 export const FORECAST_POLICY='production-only-v1';
@@ -36,7 +37,7 @@ export async function forecastSection(
  });
  if(!qualified.length)return empty;
  const ids=qualified.map(x=>String(x.ticket_id));
- const owners=await db('audit_direct_tickets?select=ticket_id,owner:payload->owner&ticket_id=in.('+ids.join(',')+')&limit=150') as R[];
+ const owners=await forecastOwners(ids,db) as R[];
  const ownerMap=new Map((Array.isArray(owners)?owners:[]).map(x=>[
   String(x.ticket_id),String(x.owner?.businessName||x.owner?.name||'Não informado')
  ]));
