@@ -4,6 +4,7 @@ import {robotOwnerMessage} from './robot-owner-message.mjs';
 import {isWaitingCustomer} from './robot-live-preview.mjs';
 const sectors=new Set(['Suporte','Qualidade','Testes (QA)','Sucesso do Cliente','Implantação','Treinamento']);
 // Deadline expansion: require explicit evidence and preserve waiting rule.
+/** @param {any} ticket @param {{now?:string,today?:string,holidays?:string[],complete?:boolean,blocked?:boolean}} options */
 export function expandedPlan(ticket,{now,today,holidays=[],complete=false,blocked=false}={}){
  if(!complete||blocked||!sectors.has(ticket?.ownerTeam)||!ticket.owner?.id||!ticket.owner?.businessName||!/^\d{1,12}$/.test(String(ticket.id))||ticket.closedIn||ticket.canceledIn||String(ticket.isDeleted)==='true'||!ticket.status||/^(fechado|resolvido|cancelado|conclu[ií]do(?: \(sem confirma[cç][aã]o\))?|encerrado|finalizado)$/i.test(ticket.status.trim()))return null;
  const waiting=isWaitingCustomer(ticket);
