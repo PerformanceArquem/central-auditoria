@@ -1,5 +1,6 @@
 // Server-side orchestration contract. Disabled by default. No email integration.
 // Transport and durable persistence must be supplied by the trusted server.
+/** @param {string} ticketId @param {{enabled?:boolean,readAndEvaluate?:Function,reserve?:Function,writeInternal?:Function,finish?:Function}} options */
 export async function deliverRobotNote(ticketId,{enabled=false,readAndEvaluate,reserve,writeInternal,finish}={}){
  const id=String(ticketId);
  if(!/^\d{1,12}$/.test(id))throw Error('Chamado inválido');
