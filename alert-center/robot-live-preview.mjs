@@ -1,6 +1,13 @@
 import {robotAppointmentEvidence} from './robot-appointment-evidence.mjs';
 import {businessDays} from './engine.mjs';
 const sectors=new Set(['Suporte','Qualidade','Testes (QA)','Sucesso do Cliente','Implantação','Treinamento']);
+const normalize=value=>String(value??'').trim().normalize('NFC').toLocaleLowerCase('pt-BR');
+export function isWaitingCustomer(ticket){
+ const status=normalize(ticket?.status), justification=normalize(ticket?.justification), base=normalize(ticket?.baseStatus);
+ if(justification==='aguardando ação interna')return false;
+ return (status==='agendado'&&base==='stopped'&&justification==='aguardando ação do cliente')||
+ (status==='aguardando cliente'&&(!justification||justification==='aguardando ação do cliente')&&(!base||base==='stopped'));
+}
 const dayAt=now=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now).map(x=>[x.type,x.value]));return p.year+'-'+p.month+'-'+p.day;};
 export async function previewWaitingAppointment(id,{token,holidays,blocked=false,fetcher=fetch,clock=()=>new Date()}={}){
  id=String(id);
@@ -13,10 +20,10 @@ export async function previewWaitingAppointment(id,{token,holidays,blocked=false
  if(!response.ok)return result('provider-unavailable');
  const t=await response.json();
  if(!t||String(t.id)!==id||!Array.isArray(t.actions))return result('unconfirmed-ticket');
- if(!sectors.has(t.ownerTeam)||String(t.status).trim().toLowerCase()!=='aguardando cliente'||t.closedIn||t.canceledIn||String(t.isDeleted)==='true')return result('outside-scope');
+ if(!sectors.has(t.ownerTeam)||!isWaitingCustomer(t)||t.closedIn||t.canceledIn||String(t.isDeleted)==='true')return result('outside-scope');
  const today=dayAt(clock());
  const evidence=robotAppointmentEvidence(t,{complete:true,today});
  if(!evidence.appointmentCoverage||!evidence.lastAppointmentDate)return result(evidence.reason||'no-verified-appointment');
  const days=businessDays(evidence.lastAppointmentDate,today,holidays);
- return {...result(days>=3?'threshold-reached':'below-threshold'),eligible:days>=3,lastAppointmentDate:evidence.lastAppointmentDate,businessDays:days,sector:t.ownerTeam,status:t.status};
+ return {...result(days>=3?'threshold-reached':'below-threshold'),eligible:days>=3,lastAppointmentDate:evidence.lastAppointmentDate,businessDays:days,sector:t.ownerTeam,status:t.status,justification:t.justification??null};
 }
