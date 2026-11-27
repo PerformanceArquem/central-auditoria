@@ -3106,7 +3106,7 @@ function applyFilters(){
   const s=$('fStart').value,e=$('fEnd').value;
   const sel=FIELDS.map(([k])=>[k,$('f_'+k).value]).filter(x=>x[1]);
   const q=(ACT==='load'||ACT==='cfg'||ACT==='diag')?[]:qn(ACT).split(' ').filter(Boolean);lastQ=q.join(' ');
-  rows=raw.filter(r=>(!s||!r.date||r.date>=s)&&(!e||!r.date||r.date<=e)&&sel.every(([k,v])=>r[k]===v)&&(!q.length||q.every(w=>hay(r).includes(w))));
+  rows=raw.filter(r=>(!s||!r.date||r.date>=s)&&(!e||!r.date||r.date<=e)&&sel.every(([k,v])=>r[k]===v)&&(!q.length||(()=>{const searchable=hay(r);return q.every(w=>searchable.includes(w))})()));
   const qe=$('qc_'+ACT);if(qe) qe.textContent=q.length?`${rows.length} lançamento(s) encontrados`:'';
   const advanced=sel.filter(([key])=>!['owner_name','sector','client_name'].includes(key)).length;
   $('filterAdvancedCount').textContent=advanced?'('+advanced+' ativo'+(advanced>1?'s':'')+')':'';
@@ -4872,8 +4872,9 @@ function sortTable(t,c,d){
     if(m) return +(m[3]+m[2]+m[1]);
     const q=/^#?(-?\d+(?:[.,]\d+)?)/.exec(x);return q?parseFloat(q[1].replace(',','.')):x.toLowerCase();
   };
-  rs.sort((a,b)=>{const x=val(a),y=val(b);return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'pt-BR'))*d});
-  rs.forEach(r=>tb.appendChild(r));
+  const keyed=rs.map(row=>({row,key:val(row)}));
+  keyed.sort((a,b)=>{const x=a.key,y=b.key;return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'pt-BR'))*d});
+  keyed.forEach(({row})=>tb.appendChild(row));
 }
 function enhanceTables(){
   const saved=colState();
@@ -4951,7 +4952,7 @@ function applyRowFilter(t,key){
   rows.forEach(r=>{
     if(r.cells.length!==n)return;
     const show=filters.every(({index,values})=>index>=0&&values.has(cellTxt(r.cells[index])));
-    r.style.display=show?'':'none';
+    const display=show?'':'none';if(r.style.display!==display)r.style.display=display;
     if(show)visible++;
   });
   headers.forEach(h=>{
