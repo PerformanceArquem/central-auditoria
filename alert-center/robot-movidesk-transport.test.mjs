@@ -42,3 +42,21 @@ test('successful HTTP response without marker remains unconfirmed',async()=>{
  assert.deepEqual(await write(note),{confirmed:false});
  assert.deepEqual(calls.map(x=>x.method),['GET','PATCH','GET']);
 });
+
+test('changed owner on final provider read blocks PATCH',async()=>{
+ const calls=[];
+ const write=robotMovideskTransport({token:'mock-token',agentId:'456',enabled:true,fetcher:async(url,opts)=>{
+ calls.push(opts.method);
+ return {ok:true,json:async()=>({id:123,status:'Aguardando cliente',owner:{id:'999'},actions:[]})};
+ }});
+ await assert.rejects(()=>write({...note,ownerId:'111'}),/Responsável alterado/);
+ assert.deepEqual(calls,['GET']);
+});
+test('final evidence guard blocks changed appointment or status',async()=>{
+ const calls=[];
+ const write=robotMovideskTransport({token:'mock-token',agentId:'456',enabled:true,validateBeforeWrite:async()=>false,fetcher:async(url,opts)=>{
+ calls.push(opts.method);return {ok:true,json:async()=>({id:123,status:'Aguardando cliente',owner:{id:'111'},actions:[]})};
+ }});
+ await assert.rejects(()=>write({...note,ownerId:'111'}),/Evidência alterada/);
+ assert.deepEqual(calls,['GET']);
+});
