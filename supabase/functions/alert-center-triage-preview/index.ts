@@ -72,6 +72,31 @@ Deno.serve(async(req:Request)=>{
  try{live=await readTriageHistories(candidates,env('MOVIDESK_TOKEN'));}
  catch(error){return reply({error:(error as {code?:string}).code==='rate-limit'?'Movidesk limitou as consultas. Aguarde antes de tentar novamente.':'Consulta direta do Movidesk indisponível. Nenhum histórico foi substituído.'},(error as {code?:string}).code==='rate-limit'?429:502);}
  directRequests=live.requests;directMissing=live.missingReasons||{};now=new Date().toISOString();
+ // Only authenticated administrative refreshes can record lookup observations.
+ const reviewWrite=async(method:string,params:Record<string,string>,payload:unknown)=>{
+ const url=new URL(base+'/rest/v1/audit_triage_lookup_review');
+ for(const [k,v] of Object.entries(params))url.searchParams.set(k,v);
+ const response=await fetch(url,{method,headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(payload),signal:AbortSignal.timeout(20000)});
+ if(!response.ok)throw Error('Registro de revisão indisponível');
+ };
+ for(const id of candidates){
+ const reason=directMissing[id];
+ if(reason){
+ if(!['not-found-by-api','not-returned-by-api'].includes(reason))throw Error('Motivo inválido');
+ // Preserve first observation on conflict; update only the current observation.
+ const url=new URL(base+'/rest/v1/audit_triage_lookup_review');
+ url.searchParams.set('on_conflict','ticket_id');
+ const response=await fetch(url,{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify({ticket_id:id,reason,first_seen_at:now,last_checked_at:now}),signal:AbortSignal.timeout(20000)});
+ if(!response.ok)throw Error('Registro de revisão indisponível');
+ await reviewWrite('PATCH',{ticket_id:'eq.'+id,last_checked_at:'lte.'+now},{reason,last_checked_at:now,resolved_at:null});
+ blocked.set(id,reason);
+ }else if(live.tickets.some(t=>String(t.id)===id)){
+ await reviewWrite('PATCH',{ticket_id:'eq.'+id,last_checked_at:'lte.'+now,resolved_at:'is.null'},{last_checked_at:now,resolved_at:now});
+ // Re-read to avoid clearing a newer concurrent observation.
+ const active=await read('audit_triage_lookup_review',{ticket_id:'eq.'+id,resolved_at:'is.null',select:'ticket_id,reason',limit:'2'});
+ if(active.length)blocked.set(id,active[0].reason);else blocked.delete(id);
+ }
+ }
  const fetched=new Map(live.tickets.map(t=>[String(t.id),t]));
  for(const row of current){
  const payload=fetched.get(String(row.ticket_id));if(!payload)continue;
