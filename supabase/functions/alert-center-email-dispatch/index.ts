@@ -62,13 +62,29 @@ export function createAlertEmailHandler(fetcher:typeof fetch=fetch,getEnv=env,cl
  return blocked;
  };
  const blocked=await lookupBlocks(records.map((r:Row)=>String(r.ticket_id)));
- const staleIds=records.filter((row:Row)=>(!selectedSector||row.payload?.ownerTeam===selectedSector)&&(!Number.isFinite(Date.parse(row.source_synced_at))||Date.parse(now)-Date.parse(row.source_synced_at)>86400000)).map((row:Row)=>String(row.ticket_id));
+ const staleIds=records.filter((row:Row)=>(!selectedSector||row.payload?.ownerTeam===selectedSector)&&(blocked.has(String(row.ticket_id))||!Number.isFinite(Date.parse(row.source_synced_at))||Date.parse(now)-Date.parse(row.source_synced_at)>86400000)).map((row:Row)=>String(row.ticket_id));
  let directReads=0,directUnavailable=false;
  // Read-only refresh: unchanged tickets may have old import timestamps even while still open.
  if(staleIds.length&&staleIds.length<=50&&getEnv('MOVIDESK_TOKEN')){
  try{
  const live=await readTriageHistories(staleIds,getEnv('MOVIDESK_TOKEN'),fetcher);
  const byId=new Map(live.tickets.map((ticket:Row)=>[String(ticket.id),ticket]));
+ // Persist lookup failures before calculating alerts. Preview never writes.
+ const observedAt=clock().toISOString();
+ for(const id of staleIds){
+ const reason=live.missingReasons?.[id];
+ if(reason){
+ if(!['not-found-by-api','not-returned-by-api'].includes(reason))throw Error('Motivo de revisão inválido.');
+ blocked.add(id);
+ if(body.action==='dispatch'){
+ await db('audit_triage_lookup_review?on_conflict=ticket_id',{method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify({ticket_id:id,reason,first_seen_at:observedAt,last_checked_at:observedAt})});
+ await db('audit_triage_lookup_review?ticket_id=eq.'+id+'&last_checked_at=lte.'+encodeURIComponent(now),{method:'PATCH',body:JSON.stringify({reason,last_checked_at:observedAt,resolved_at:null})});
+ }
+ }else if(byId.has(id)&&blocked.has(id)&&body.action==='dispatch'){
+ await db('audit_triage_lookup_review?ticket_id=eq.'+id+'&resolved_at=is.null&last_checked_at=lte.'+encodeURIComponent(now),{method:'PATCH',body:JSON.stringify({last_checked_at:observedAt,resolved_at:observedAt})});
+ if(!(await lookupBlocks([id])).has(id))blocked.delete(id);
+ }
+ }
  for(const row of records){
  const current=byId.get(String(row.ticket_id)) as Row|undefined;if(!current)continue;
  row.payload=current;row.source_synced_at=clock().toISOString();
