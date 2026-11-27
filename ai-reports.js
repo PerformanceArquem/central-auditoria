@@ -125,10 +125,43 @@
   }catch(err){post('assistant','Não foi possível gerar este relatório: '+String(err?.message||err));$('aiReportStatus').textContent='Falha na consulta. Os relatórios anteriores foram preservados.'}
   finally{processing=false;$('aiReportSend').disabled=false}
  }
+ async function runLocalInsight(intent,label){
+  if(processing)return;
+  processing=true;$('aiReportSend').disabled=true;
+  $('aiReportStatus').textContent='Consultando indicadores locais...';
+  post('user',label);
+  try{
+   const {localInsight}=await import('/lib/ticket-manager-insights.mjs');
+   const source=window.managementDashboardSource?.();
+   if(!source)throw Error('Base sincronizada indisponível.');
+   let clientCriticality={},vipKnown=false;
+   if(intent==='vip'){
+    const client=window.tmEmailAdminClient;
+    if(client){const {data,error}=await client.functions.invoke('audit-email-dispatch',{body:{action:'vip_config',mode:'list'}});
+     if(!error&&data?.ok&&Array.isArray(data.names)){clientCriticality=Object.fromEntries(data.names.filter(n=>typeof n==='string'&&n.trim()).map(n=>[n.trim(),'Alta']));vipKnown=true;}}
+   }
+   const result=localInsight(intent,{...source,sector:$('aiReportSector').value.trim(),client:$('aiReportClient').value.trim(),collaborator:$('aiReportCollaborator').value.trim(),day:$('aiReportTo').value,clientCriticality,vipKnown});
+   post('assistant',result.answer);
+   last=null;lastNarrative='';$('aiReportStats').replaceChildren();$('aiReportRanking').replaceChildren();$('aiReportExport').disabled=true;$('aiReportPrint').disabled=true;
+   $('aiReportStatus').textContent='Consulta local concluída. Nenhum dado enviado ao Gemini; exportação desta consulta ainda indisponível.';
+  }catch(err){post('assistant','Consulta indisponível: '+String(err?.message||err));$('aiReportStatus').textContent='Não foi possível concluir a consulta local.';}
+  finally{processing=false;$('aiReportSend').disabled=false;}
+ }
+ async function addLocalInsights(){
+  try{
+   const {INSIGHT_OPTIONS}=await import('/lib/ticket-manager-insights.mjs');
+   const group=document.createElement('div');group.className='row';
+   const heading=document.createElement('p');heading.textContent='Consultas rápidas — situação atual da base (resumo diário usa a data final).';
+   group.append(heading);
+   for(const [intent,label] of INSIGHT_OPTIONS){const button=document.createElement('button');button.type='button';button.className='s';button.textContent=label;button.addEventListener('click',()=>runLocalInsight(intent,label));group.append(button);}
+   $('aiReportForm').before(group);
+  }catch{$('aiReportStatus').textContent='Consultas rápidas indisponíveis; relatórios existentes preservados.';}
+ }
  function init(){
   if(!$('aiReportPanel'))return;
   const end=today();$('aiReportTo').value=end;$('aiReportFrom').value=addDays(end,-6);
   $('aiReportForm').addEventListener('submit',submit);
+  addLocalInsights();
   $('aiReportExport').addEventListener('click',exportCsv);
   $('aiReportPrint').addEventListener('click',printReport);
   $('aiReportOpen').addEventListener('click',()=>{$('aiReportPanel').scrollIntoView({block:'start',behavior:'smooth'});$('aiReportPrompt').focus()});
