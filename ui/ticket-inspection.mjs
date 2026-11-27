@@ -113,9 +113,44 @@ const signalTitle=document.createElement('h4');signalTitle.textContent='Chamados
 const signalNote=document.createElement('p');signalNote.textContent='Limites iniciais: 7 dias corridos no setor, 4 transferências ou retorno a setor anterior. Sinais não comprovam retrabalho.';
 const signalList=document.createElement('div');
 const signalCount=document.createElement('p');
-trace.append(traceTitle,traceNote,traceStats,traceRanks,signalTitle,signalNote,signalCount,signalList);radar.after(trace);
+const traceExports=document.createElement('div');traceExports.className='row';
+const traceExportStatus=document.createElement('p');traceExportStatus.setAttribute('aria-live','polite');
+let traceExportRows=[];
+function traceMatrices(){
+ const data=summarizeSectorTraceability(traceExportRows),signals=identifyTraceabilitySignals(traceExportRows);
+ return [
+ ['Resumo',[['Indicador','Valor'],['Chamados filtrados',data.total],['Sem histórico',data.missing],['Horas sem setor',data.unknownHours],['Transferências observadas',data.routes.reduce((sum,r)=>sum+r.count,0)],['Critério','Horas corridas observadas; não equivalem a horas trabalhadas.'],['Limites','7 dias corridos, 4 transferências ou retorno a setor anterior.']]],
+ ['Setores',[['Setor','Horas históricas','Chamados','Permanência atual média (h)','Amostra atual confirmada'],...data.sectors.map(r=>[r.sector,r.hours,r.tickets,r.knownCurrentTickets?r.currentHours/r.knownCurrentTickets:null,r.knownCurrentTickets])]],
+ ['Transferências',[['Origem','Destino','Quantidade'],...data.routes.map(r=>[r.from,r.to,r.count])]],
+ ['Gargalos',[['Chamado','Setor','Responsável','Horas no setor','Transferências','Retornos','Sinais'],...signals.map(r=>[r.id,r.sector,r.owner,r.hours,r.transfers,r.returns,r.signals.join('; ')])]]
+ ];
+}
+for(const format of ['Excel','PDF']){
+ const button=document.createElement('button');button.type='button';button.className='s';button.textContent='Exportar '+format;traceExports.append(button);
+ button.addEventListener('click',()=>{
+  try{
+   if(!traceExportRows.length)throw Error('Nenhum chamado na seleção atual.');
+   const matrices=traceMatrices(),filename='Rastreabilidade_'+new Date().toISOString().slice(0,10);
+   if(format==='Excel'){
+    const x=window.XLSX;if(!x)throw Error('Biblioteca Excel indisponível.');
+    const wb=x.utils.book_new();
+    for(const [name,matrix] of matrices){const ws=x.utils.aoa_to_sheet(matrix);ws['!cols']=matrix[0].map(()=>({wch:24}));x.utils.book_append_sheet(wb,ws,name);}
+    x.writeFile(wb,filename+'.xlsx');
+   }else{
+    const PDF=window.jspdf?.jsPDF;if(!PDF)throw Error('Biblioteca PDF indisponível.');
+    const doc=new PDF({orientation:'landscape',unit:'pt',format:'a4'});
+    if(typeof doc.autoTable!=='function')throw Error('Biblioteca de tabelas PDF indisponível.');
+    matrices.forEach(([name,matrix],i)=>{if(i)doc.addPage();doc.setFontSize(15);doc.text('Central de Auditoria | Rastreabilidade — '+name,40,40);doc.autoTable({startY:55,head:[matrix[0]],body:matrix.slice(1).map(r=>r.map(v=>typeof v==='number'?number.format(v):String(v??'—'))),styles:{fontSize:8,overflow:'linebreak'},headStyles:{fillColor:[21,45,74]}});});
+    doc.save(filename+'.pdf');
+   }
+   traceExportStatus.textContent='Exportação solicitada: '+format+'.';
+  }catch(e){traceExportStatus.textContent=e.message;}
+ });
+}
+trace.append(traceTitle,traceNote,traceStats,traceExports,traceExportStatus,traceRanks,signalTitle,signalNote,signalCount,signalList);radar.after(trace);
 const number=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1});
 function renderTrace(rows){
+ traceExportRows=rows;
  const data=summarizeSectorTraceability(rows);
  const signals=identifyTraceabilitySignals(rows);
  signalCount.textContent=signals.length+' chamados sinalizados'+(signals.length>20?' · Exibindo os primeiros 20':'');
