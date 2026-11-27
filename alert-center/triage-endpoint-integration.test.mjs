@@ -7,14 +7,21 @@ import {readTriageHistories} from './triage-live-reader.mjs';
 import {evaluateImportedTriage} from './triage-adapter.mjs';
 const source=stripTypeScriptTypes(readFileSync(new URL('../supabase/functions/alert-center-triage-preview/index.ts',import.meta.url),'utf8')).replace(/^import .*;\r?\n/gm,'');
 const payload=id=>({id,subject:'Fixture',ownerTeam:'Inteligência',status:'Em Análise',ownerHistories:[{changedDate:'2026-11-01T12:00:00',ownerTeam:'Inteligência'}],statusHistories:[{changedDate:'2026-11-01T12:00:00',status:'Em Análise'}]});
-function createHandler({admin=true,individualStatus=200,liveOwner=null,importedRows=null}={}){
- let handler;const requests=[];
+function createHandler({admin=true,individualStatus=200,liveOwner=null,importedRows=null,initialReviews=[]}={}){
+ let handler;const requests=[];const reviews=new Map(initialReviews.map(r=>[String(r.ticket_id),{...r}]));
  const mockFetch=async(url,opts={})=>{
  requests.push({url:String(url),method:opts.method||'GET'});
  const parsed=new URL(url),name=parsed.pathname.split('/').pop();
  if(parsed.pathname.endsWith('/auth/v1/user'))return Response.json({id:'fixture'});
  if(name==='audit_users')return Response.json(admin?[{user_id:'fixture'}]:[]);
  if(name==='audit_email_holidays')return Response.json([]);
+ if(name==='audit_triage_lookup_review'){
+ const method=opts.method||'GET',filter=parsed.searchParams.get('ticket_id')||'';
+ const ids=filter.startsWith('in.(')?filter.slice(4,-1).split(','):filter.startsWith('eq.')?[filter.slice(3)]:[];
+ if(method==='POST'){const record=JSON.parse(opts.body);if(!reviews.has(record.ticket_id))reviews.set(record.ticket_id,record);return new Response(null,{status:201});}
+ if(method==='PATCH'){for(const id of ids){const record=reviews.get(id);if(record&&(!parsed.searchParams.has('resolved_at')||!record.resolved_at))Object.assign(record,JSON.parse(opts.body));}return new Response(null,{status:204});}
+ return Response.json([...reviews.values()].filter(r=>ids.includes(String(r.ticket_id))&&!r.resolved_at));
+ }
  if(name==='audit_reporting_tickets')return Response.json(importedRows??[1,2].map(id=>({ticket_id:String(id),payload:payload(id),source_synced_at:new Date(Date.now()-48*3600000).toISOString()})));
  if(parsed.hostname==='api.movidesk.com'){
  if(!parsed.searchParams.has('id'))return Response.json([]);
@@ -23,13 +30,13 @@ function createHandler({admin=true,individualStatus=200,liveOwner=null,importedR
  throw Error('Unexpected read');
  };
  vm.runInNewContext(source,{Deno:{env:{get:key=>({SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_ANON_KEY:'fixture',SUPABASE_SERVICE_ROLE_KEY:'fixture',MOVIDESK_TOKEN:'fixture'}[key])},serve:h=>handler=h},Request,Response,URL,Headers,AbortSignal,fetch:mockFetch,evaluateImportedTriage,readTriageHistories:(ids,token)=>readTriageHistories(ids,token,mockFetch),console});
- return {handler,requests};
+ return {handler,requests,reviews};
 }
 const request=(auth=true,extra={})=>new Request('https://fixture.functions.supabase.co/',{method:'POST',headers:{...(auth?{authorization:'Bearer fixture'}:{}),'content-type':'application/json'},body:JSON.stringify({mode:'read-only',refresh:true,threshold:3,...extra})});
-test('authenticated individual fallback returns current rows without any writes',async()=>{
+test('authenticated individual fallback returns current rows without modifying imported tickets',async()=>{
  const {handler,requests}=createHandler();const response=await handler(request());const result=await response.json();
  assert.equal(response.status,200,JSON.stringify(result));assert.equal(result.directReads,2);
- assert.ok(result.rows.every(r=>r.source==='Movidesk · consulta direta'));assert.ok(requests.every(r=>r.method==='GET'));
+ assert.ok(result.rows.every(r=>r.source==='Movidesk · consulta direta'));assert.ok(requests.every(r=>r.method==='GET'||(r.method==='PATCH'&&r.url.includes('/audit_triage_lookup_review'))));
 });
 test('404 and deferred individual calls remain distinct review reasons',async()=>{
  const {handler,requests}=createHandler({individualStatus:404});const response=await handler(request());const result=await response.json();
@@ -65,7 +72,7 @@ test('direct consultation returns current owner identity without contact informa
  }
  const serialized=JSON.stringify(result);
  assert.ok(!serialized.includes('private@example.test'));assert.ok(!serialized.includes('41999999999'));
- assert.equal(result.deliveryEnabled,false);assert.ok(requests.every(r=>r.method==='GET'));
+ assert.equal(result.deliveryEnabled,false);assert.ok(requests.every(r=>r.method==='GET'||(r.method==='PATCH'&&r.url.includes('/audit_triage_lookup_review'))));
 });
 test('missing live owner remains explicit without inventing a recipient',async()=>{
  const {handler}=createHandler();const response=await handler(request());const result=await response.json();
@@ -125,3 +132,6 @@ test('unknown origins never receive CORS access',async()=>{
  assert.equal(response.headers.get('access-control-allow-origin'),null);
  }
 });
+
+test('persistent 404 stays in review when panel reloads without direct refresh',async()=>{const {handler}=createHandler({initialReviews:[{ticket_id:'1',reason:'not-found-by-api',last_checked_at:'2026-11-27T10:00:00Z'}]});const response=await handler(request(true,{refresh:false}));assert.equal(response.status,200);const result=await response.json();assert.equal(result.rows[0].eligible,false);assert.equal(result.rows[0].reason,'not-found-by-api');});
+test('404 is persisted and remains blocked on the next read',async()=>{const {handler,reviews}=createHandler({individualStatus:404});assert.equal((await handler(request())).status,200);assert.equal(reviews.get('1').reason,'not-found-by-api');const result=await (await handler(request(true,{refresh:false}))).json();assert.equal(result.rows[0].eligible,false);assert.equal(result.rows[0].reason,'not-found-by-api');});
