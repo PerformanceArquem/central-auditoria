@@ -19,3 +19,12 @@ test('unverified or missing appointments cannot generate eligible preview',async
  assert.equal((await run({...ticket,actions:[]})).reason,'no-verified-appointment');
  assert.equal((await run({...ticket,id:456})).reason,'unconfirmed-ticket');
 });
+
+test('actual stopped scheduled status with customer justification triggers preview',async()=>{
+ const r=await run({...ticket,status:'Agendado',baseStatus:'Stopped',justification:'Aguardando ação do cliente'});
+ assert.equal(r.eligible,true);assert.equal(r.businessDays,3);
+});
+test('internal justification, other base status and unapproved sector remain excluded',async()=>{
+ const waiting={...ticket,status:'Agendado',baseStatus:'Stopped',justification:'Aguardando ação do cliente'};
+ for(const patch of [{justification:'Aguardando ação interna'},{baseStatus:'InAttendance'},{ownerTeam:'Produção - CPO'},{justification:null}])assert.equal((await run({...waiting,...patch})).reason,'outside-scope');
+});
