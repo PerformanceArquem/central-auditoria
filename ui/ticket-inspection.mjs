@@ -1,4 +1,4 @@
-import {summarizeSectorTraceability} from '/lib/sector-traceability.mjs';
+import {summarizeSectorTraceability,identifyTraceabilitySignals} from '/lib/sector-traceability.mjs';
 import {RADAR_CATEGORIES,summarizeRadar,filterRadar,preventiveGuidance} from '/lib/preventive-risk-radar.mjs';
 import {inspectTickets,filterInspections,recordOccurrences} from '/lib/ticket-inspection.mjs';
 const panel=document.getElementById('ticketInspection');
@@ -109,10 +109,24 @@ const traceTitle=document.createElement('h3');traceTitle.textContent='Ticket Man
 const traceNote=document.createElement('p');traceNote.textContent='Horas corridas observadas no histórico dos chamados abertos filtrados; não equivalem a horas trabalhadas ou responsabilidade pelo atraso.';
 const traceStats=document.createElement('p');traceStats.setAttribute('aria-live','polite');
 const traceRanks=document.createElement('div');traceRanks.className='radar-ranks';
-trace.append(traceTitle,traceNote,traceStats,traceRanks);radar.after(trace);
+const signalTitle=document.createElement('h4');signalTitle.textContent='Chamados que merecem revisão';
+const signalNote=document.createElement('p');signalNote.textContent='Limites iniciais: 7 dias corridos no setor, 4 transferências ou retorno a setor anterior. Sinais não comprovam retrabalho.';
+const signalList=document.createElement('div');
+const signalCount=document.createElement('p');
+trace.append(traceTitle,traceNote,traceStats,traceRanks,signalTitle,signalNote,signalCount,signalList);radar.after(trace);
 const number=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1});
 function renderTrace(rows){
  const data=summarizeSectorTraceability(rows);
+ const signals=identifyTraceabilitySignals(rows);
+ signalCount.textContent=signals.length+' chamados sinalizados'+(signals.length>20?' · Exibindo os primeiros 20':'');
+ signalList.replaceChildren();
+ for(const item of signals.slice(0,20)){
+  const line=document.createElement('div');line.className='radar-rank';line.style.cursor='default';
+  const label=document.createElement('span');label.textContent='#'+item.id+' · '+item.sector+' · '+item.owner+' — '+item.signals.join('; ');
+  const metric=document.createElement('span');metric.textContent=(item.hours===null?'Tempo atual desconhecido':number.format(item.hours)+' h no setor')+' · '+item.transfers+' transferências · '+item.returns+' retornos';
+  line.append(label,metric);signalList.append(line);
+ }
+ if(!signals.length)paragraph(signalList,'Nenhum sinal identificado nos dados disponíveis.');
  traceStats.textContent=data.total+' chamados · '+data.missing+' sem histórico · '+number.format(data.unknownHours)+' h sem setor identificado · '+data.routes.reduce((sum,r)=>sum+r.count,0)+' transferências observadas';
  traceRanks.replaceChildren();
  for(const [title,entries] of [
