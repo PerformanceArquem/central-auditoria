@@ -3126,14 +3126,18 @@ function groupAgents(){
 
 function render(){
   window.dispatchEvent?.(new Event('audit:tickets-updated'));
-  const c=R(),kd=mk(c);
-  const tot=rows.reduce((s,r)=>s+r.hours,0);
-  $('kT').textContent=new Set(rows.map(r=>r.ticket_id)).size;
+  // Calendar/config aggregation is needed only by the active module.
+  const needsConfig=['entries','proj','cfg','occ','mgmt','vip','charts'].includes(ACT);
+  const c=needsConfig?R():null;
+  const tickets=new Set(),agents=new Set(),clients=new Set();
+  let tot=0;
+  for(const r of rows){tot+=r.hours;tickets.add(r.ticket_id);agents.add(r.owner_name);clients.add(r.client_name);}
+  $('kT').textContent=tickets.size;
   $('kH').textContent=H(tot);
-  $('kA').textContent=new Set(rows.map(r=>r.owner_name)).size;
-  $('kC').textContent=new Set(rows.map(r=>r.client_name)).size;
+  $('kA').textContent=agents.size;
+  $('kC').textContent=clients.size;
 
-  if(ACT==='entries')renderEntries(kd);
+  if(ACT==='entries')renderEntries(mk(c));
   if(ACT==='diag')renderDiag();
   if(ACT==='live'){renderLiveDaily();if(!window.managerReportEdited)generateManagerReport();}
   if(ACT==='proj'){renderProj(c);renderBudget(c);renderForecastAudit();}
