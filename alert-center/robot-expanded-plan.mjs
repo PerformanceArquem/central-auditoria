@@ -47,7 +47,7 @@ export function expandedPlan(ticket,{now,today,holidays=[],complete=false,blocke
  const facts={...(deadline.verified?deadline.facts:{}),...verifiedFollowup(ticket,today,holidays)};
  const queue=robotQueueFacts(ticket,{now,syncedAt:now,historyComplete:Array.isArray(ticket.ownerHistories),holidays,thresholds:Object.fromEntries([...sectors].map(s=>[s,defaults.triageBusinessDays]))});
  Object.assign(facts,queue.facts);
- const due=typeof ticket.slaSolutionDate==='string'?Date.parse(/(?:Z|[+-]\\d{2}:\\d{2})$/i.test(ticket.slaSolutionDate)?ticket.slaSolutionDate:ticket.slaSolutionDate+'Z'):NaN;
+ const due=typeof ticket.slaSolutionDate==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(ticket.slaSolutionDate)?Date.parse(/(?:Z|[+-]\d{2}:\d{2})$/i.test(ticket.slaSolutionDate)?ticket.slaSolutionDate:ticket.slaSolutionDate+'Z'):NaN;
  const hours=(due-Date.parse(now))/3600000;
  const activeDeadline=ticket.slaSolutionDateIsPaused===false||ticket.slaSolutionDateIsPaused==='false';
  const preventive=activeDeadline&&Number.isFinite(hours)&&hours>=0&&hours<=defaults.preventiveHours;
