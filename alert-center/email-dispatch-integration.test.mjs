@@ -7,7 +7,7 @@ import * as policy from './email-policy.mjs';
 const source=stripTypeScriptTypes(readFileSync(new URL('../supabase/functions/alert-center-email-dispatch/index.ts',import.meta.url),'utf8')).replace(/^import .*;\r?\n/gm,'').replace('export function createAlertEmailHandler','function createAlertEmailHandler');
 const NOW='2026-11-26T11:30:00Z';
 const row=(id='1',sector='Inteligência')=>({ticket_id:id,source_synced_at:NOW,payload:{subject:'Fixture',ownerTeam:sector,status:'Em Análise',slaSolutionDate:'2026-11-24T11:30:00Z',slaSolutionDateIsPaused:false,createdDate:'2026-11-01T12:00:00Z'}});
-function harness({paused=false,providerAccepts=true,time=NOW,rows=[row()],admin=true,enabled=true}={}){
+function harness({paused=false,providerAccepts=true,time=NOW,rows=[row()],admin=true,enabled=true,blockedIds=[],reviewUnavailable=false}={}){
  let handler;let mailCalls=0;const requests=[],reservations=new Map();
  const recipients=policy.EMAIL_SECTORS.map((s,i)=>({id:s.recipientId,name:s.sector,email:'sector'+i+'@arquem.com.br',sectors:[s.sector],active:true,daily_enabled:true}));
  const settings=policy.EMAIL_SECTORS.map(s=>({sector:s.sector,recipient_id:s.recipientId,enabled}));
@@ -22,6 +22,7 @@ function harness({paused=false,providerAccepts=true,time=NOW,rows=[row()],admin=
  if(name==='audit_email_recipients')return Response.json(parsed.searchParams.has('id')?recipients.filter(r=>r.id===parsed.searchParams.get('id').slice(3)):recipients);
  if(name==='audit_email_holidays')return Response.json([]);
  if(name==='audit_recent_reconcile_state')return Response.json([{completed:true,period_start:'2026-11-01',period_end:'2026-11-27',last_success_at:NOW,last_error:null}]);
+ if(name==='audit_triage_lookup_review'){if(reviewUnavailable)return new Response('',{status:503});const ids=parsed.searchParams.get('ticket_id')?.slice(4,-1).split(',')||[];return Response.json(blockedIds.filter(id=>ids.includes(id)).map(ticket_id=>({ticket_id})));}
  if(name==='audit_alert_email_snapshot')return Response.json(rows);
  if(name==='audit_email_delivery_control')return Response.json([{paused,revision:1}]);
  if(name==='audit_alert_email_history'){
@@ -99,3 +100,6 @@ test('CORS preflight has no body and only permits official origins',async()=>{
  const h=harness();const response=await h.handler(new Request('https://fixture/',{method:'OPTIONS',headers:{origin:'https://central-auditoria-iota.vercel.app'}}));
  assert.equal(response.status,204);assert.equal(response.headers.get('access-control-allow-origin'),'https://central-auditoria-iota.vercel.app');assert.equal(await response.text(),'');
 });
+
+test('persistently blocked fresh ticket is excluded from preview and dispatch',async()=>{const h=harness({rows:[row('81901'),row('2')],blockedIds:['81901']});const preview=await (await h.handler(h.request('preview'))).json();assert.deepEqual(preview.bundles[0].ticketIds,['2']);await h.handler(h.request());assert.deepEqual([...h.reservations.values()][0].ticket_ids,['2']);});
+test('unavailable review ledger prevents any send',async()=>{const h=harness({reviewUnavailable:true});assert.equal((await h.handler(h.request())).status,503);assert.equal(h.mails(),0);});
