@@ -102,7 +102,7 @@ Deno.serve(async(req:Request)=>{
  url.searchParams.set('token',token);
  url.searchParams.set('$select','id,ownerTeam,status,justification,baseStatus');
  const sectorFilter=sectors.map(s=>"ownerTeam eq '"+s.replaceAll("'","''")+"'").join(' or ');
- const clauses=["("+sectorFilter+")","(status eq 'Aguardando cliente' or (status eq 'Agendado' and justification eq 'Aguardando ação do cliente') or (slaSolutionDate lt "+new Date().toISOString()+" and slaSolutionDateIsPaused eq false))"];
+ const clauses=["("+sectorFilter+")","(baseStatus eq 'New' or baseStatus eq 'InAttendance' or baseStatus eq 'Stopped')"];
  if(currentCursor!==null)clauses.push('id gt '+currentCursor);
  url.searchParams.set('$filter',clauses.join(' and '));
  url.searchParams.set('$orderby','id asc');
