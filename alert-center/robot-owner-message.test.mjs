@@ -42,3 +42,19 @@ test('combines confirmed missing record, overdue date and queue without duplicat
  assert.equal(msg.match(/Ticket Manager/g).length,1);
  assert.match(robotOwnerMessage({},{dias_sem_registro:4,data_ultimo_registro:'2026-11-23'}),/4 dias sem atualização, com último registro em 23\/11\/2026/);
 });
+
+test('waiting customer follow-up uses recorded contact evidence without accusing agent',()=>{
+ const ticket={owner:{id:'2',businessName:'Maria Silva'}};
+ const msg=robotOwnerMessage(ticket,{aguardando_cliente:true,dias_aguardando_cliente:12,dias_sem_contato:7,dias_contato_uteis:true,data_ultimo_contato:'2026-11-18',sem_previsao:true});
+ assert.match(msg,/aguarda o retorno do cliente há 12 dias/);
+ assert.match(msg,/Não identificamos um novo registro de contato nos últimos 7 dias úteis/);
+ assert.match(msg,/18\/11\/2026/);assert.match(msg,/não identificamos uma previsão definida/);
+ assert.match(msg,/retomar o contato com o cliente/);
+ assert.doesNotMatch(msg,/e-mail|auditoria automática/i);
+});
+test('distant forecast is mentioned only with validated waiting and forecast flags',()=>{
+ const facts={aguardando_cliente:true,previsao_distante:true,data_previsao:'2026-12-21',dias_ate_previsao:24};
+ assert.match(robotOwnerMessage({},facts),/21\/12\/2026, daqui a 24 dias/);
+ assert.doesNotMatch(robotOwnerMessage({},{...facts,aguardando_cliente:false}),/21\/12\/2026/);
+ assert.doesNotMatch(robotOwnerMessage({},{...facts,data_previsao:'2026-02-30'}),/previsão cadastrada/);
+});
