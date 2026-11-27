@@ -1,6 +1,7 @@
 // Server-only transport; requires a separately verified agent identity.
 // No email, customer-facing action, time appointment or automatic retry.
 const escapeHtml=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/** @param {{token?:string,agentId?:string,enabled?:boolean,fetcher?:typeof fetch,validateBeforeWrite?:Function}} options */
 export function robotMovideskTransport({token,agentId,enabled=false,fetcher=fetch,validateBeforeWrite}={}){
  return async function writeInternal({ticketId,type,text,marker,ownerId}){
   if(enabled!==true)throw Error('Transporte desativado');
