@@ -20,7 +20,7 @@ export function planRobotNote(ticket,{now,syncedAt,blocked=false,historyComplete
  if(positive(facts.dias_sem_registro??facts.dias_sem_atualizacao))rules.push('idle-record');
  if(facts.sem_registro===true&&validDate(facts.data_abertura))rules.push('no-record');
  if(facts.data_previsao_vencida)rules.push('overdue');
- if(facts.aguardando_cliente===true&&(positive(facts.dias_sem_contato)||facts.sem_previsao===true||facts.previsao_distante===true&&positive(facts.dias_ate_previsao)&&validDate(facts.data_previsao)))rules.push('customer-followup');
+ if(facts.aguardando_cliente===true&&(positive(facts.dias_sem_apontamento)||facts.sem_previsao===true||facts.previsao_distante===true&&positive(facts.dias_ate_previsao)&&validDate(facts.data_previsao)))rules.push('customer-followup');
  const key='robot-note:'+id+':'+day;
  if(!rules.length||existingKeys.includes(key))return null;
  return {key,ticketId:id,rules,channel:'movidesk-internal',simulated:true,text:robotOwnerMessage(ticket,facts)};
