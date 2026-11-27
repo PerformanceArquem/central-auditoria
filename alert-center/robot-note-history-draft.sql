@@ -17,10 +17,11 @@ alter table audit_robot_internal.note_history enable row level security;
 revoke all on audit_robot_internal.note_history from public,anon,authenticated;
 grant select,insert,update on audit_robot_internal.note_history to service_role;
 -- The trusted server must revalidate source evidence, identity, and write authorization.
-create or replace function public.audit_reserve_robot_internal_note(p_ticket_id text,p_rules text[],p_note_body text)
+create or replace function public.audit_reserve_robot_internal_note(p_ticket_id text,p_day date,p_rules text[],p_note_body text)
 returns boolean language plpgsql security invoker set search_path='' as $$
 declare d date := (now() at time zone 'America/Sao_Paulo')::date;
 begin
+ if p_day is distinct from d then return false; end if;
  -- Do not permit another day to bypass an unresolved delivery.
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('robot-note:'||p_ticket_id,0));
  if exists(select 1 from audit_robot_internal.note_history where ticket_id=p_ticket_id and status in ('reserved','uncertain')) then return false; end if;
@@ -38,8 +39,8 @@ begin
  return found;
 end;
 $$;
-revoke all on function public.audit_reserve_robot_internal_note(text,text[],text) from public,anon,authenticated;
+revoke all on function public.audit_reserve_robot_internal_note(text,date,text[],text) from public,anon,authenticated;
 revoke all on function public.audit_finish_robot_internal_note(text,date,text) from public,anon,authenticated;
-grant execute on function public.audit_reserve_robot_internal_note(text,text[],text) to service_role;
+grant execute on function public.audit_reserve_robot_internal_note(text,date,text[],text) to service_role;
 grant execute on function public.audit_finish_robot_internal_note(text,date,text) to service_role;
 commit;
