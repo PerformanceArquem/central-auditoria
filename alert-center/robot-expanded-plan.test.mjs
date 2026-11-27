@@ -33,3 +33,10 @@ test('overdue by 48 hours flags managerial review, not delivered manager notific
  assert.equal(p?.escalationReview,true);assert.ok(!p.rules.includes('escalation'));
 });
 test('closed base status suppresses all rules even with misleading display status',()=>assert.equal(expandedPlan({...base,baseStatus:'Resolved',owner:null},options),null));
+
+test('escalation trigger marker is restricted to active deadlines overdue by at least 48 hours',()=>{
+ const late={...base,slaSolutionDate:'2026-11-25T12:00:00Z',slaSolutionDateIsPaused:false};
+ assert.match(expandedPlan(late,options).text,/CENTRAL-ROBOT-ESCALATION-48H/);
+ assert.doesNotMatch(expandedPlan({...late,slaSolutionDate:'2026-11-26T12:00:00Z'},options).text,/CENTRAL-ROBOT-ESCALATION-48H/);
+ assert.doesNotMatch(expandedPlan({...late,slaSolutionDateIsPaused:true},options).text,/CENTRAL-ROBOT-ESCALATION-48H/);
+});
